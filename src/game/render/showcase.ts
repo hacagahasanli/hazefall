@@ -4,7 +4,7 @@ import { DROP, FIGHTERS, WORLD } from '../sim/constants';
 import { createGame } from '../sim/step';
 
 import { buildRig, poseChute, poseTopDown } from './characters';
-import { buildChute } from './chute';
+import { buildChute, HARNESS_BACK } from './chute';
 import { buildGun } from './guns';
 import { buildPlane } from './plane';
 import { buildProps } from './props';
@@ -107,7 +107,8 @@ export const startShowcase = (canvas: HTMLCanvasElement, onReady: () => void) =>
       poseChute(j.rig, { dt, time, seed: j.i, steerX: Math.sin(time * 0.4 + j.i) * 2, steerZ: 0, shooting: false });
       j.rig.root.position.set(x, h, z);
       j.rig.root.rotation.y = Math.PI + Math.sin(time * 0.3 + j.i) * 0.4; // facing the camera, turning a little
-      j.chute.position.set(x, h + j.rig.chestY + 0.95, z);
+      j.rig.root.updateMatrixWorld(true);
+      j.rig.root.localToWorld(j.chute.position.set(0, j.rig.shoulderL.y, HARNESS_BACK));
       j.chute.rotation.set(0, j.rig.root.rotation.y, Math.sin(time * 1.1 + j.i) * 0.06);
     }
     world.update(state, -999, -999);

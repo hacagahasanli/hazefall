@@ -1,16 +1,34 @@
 import * as THREE from 'three';
 
-/** How far above the hands the canopy hangs. */
-export const CHUTE_UP = 4.2;
+/** How far above the backpack the canopy flies, and where the lines meet the risers. */
+export const CHUTE_UP = 4.6;
+const JUNCTION = { x: 0.3, y: 1.15 };
+/** Where the chute is attached to the body: the top of the backpack, behind the shoulders (body space z). */
+export const HARNESS_BACK = -0.25;
+
 const lineMat = new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.6 });
+const webMat = new THREE.MeshStandardMaterial({ color: 0x2a2d24, roughness: 0.9 });
+
+const strand = (from: THREE.Vector3, to: THREE.Vector3, radius: number, m: THREE.Material) => {
+  const len = from.distanceTo(to);
+  const o = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, len, 4), m);
+  o.position.copy(from).add(to).multiplyScalar(0.5);
+  o.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize());
+  return o;
+};
 
 /**
- * A parachute in the jumper's colour and white. Its origin is the point the jumper holds (the
- * raised hands), so canopy and body always move together; eight lines run from the canopy rim
- * down to the hands (tagged `line` so a canopy left on the ground can hide them).
+ * A parachute in the jumper's colour and white, rigged like a real one: its origin is the top of
+ * the backpack it came out of. Two webbing risers rise from the backpack straps to two junctions
+ * over the shoulders (where the hands hold on), and the canopy's lines fan out from those
+ * junctions to the rim. `userData.deploy` is the part that unfolds out of the pack when it opens
+ * (the canopy and its lines); everything tagged `line` hides when the canopy is left on the ground.
  */
 export const buildChute = (color: string) => {
   const g = new THREE.Group();
+  const deploy = new THREE.Group();
+  g.add(deploy);
+  g.userData.deploy = deploy;
   const colors = [color, '#f4f6fb'];
   for (let i = 0; i < 8; i++) {
     const panel = new THREE.Mesh(
@@ -20,18 +38,25 @@ export const buildChute = (color: string) => {
     panel.scale.y = 0.55;
     panel.position.y = CHUTE_UP;
     panel.castShadow = true;
-    g.add(panel);
+    deploy.add(panel);
   }
-  const end = new THREE.Vector3(0, 0, 0);
+  const jL = new THREE.Vector3(-JUNCTION.x, JUNCTION.y, 0);
+  const jR = new THREE.Vector3(JUNCTION.x, JUNCTION.y, 0);
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-    const start = new THREE.Vector3(Math.cos(a) * 2.35, CHUTE_UP + 0.35, Math.sin(a) * 2.35);
-    const len = start.distanceTo(end);
-    const line = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, len, 4), lineMat);
-    line.position.copy(start).add(end).multiplyScalar(0.5);
-    line.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), start.clone().sub(end).normalize());
+    const rim = new THREE.Vector3(Math.cos(a) * 2.35, CHUTE_UP + 0.35, Math.sin(a) * 2.35);
+    const line = strand(rim, rim.x < 0 ? jL : jR, 0.025, lineMat);
     line.userData.line = true;
-    g.add(line);
+    deploy.add(line);
+  }
+  // The risers: flat webbing from the backpack's shoulder straps up to the junctions.
+  for (const [j, x] of [[jL, -0.17], [jR, 0.17]] as const) {
+    const riser = strand(new THREE.Vector3(x, 0, 0), j, 0.035, webMat);
+    riser.userData.line = true;
+    g.add(riser);
   }
   return g;
 };
+
+/** Where the risers end, in body space relative to the shoulders: the hands hold on just below. */
+export const riserGrip = (side: -1 | 1, shoulderY: number) => new THREE.Vector3(side * JUNCTION.x * 0.9, shoulderY + JUNCTION.y - 0.18, HARNESS_BACK + 0.08);

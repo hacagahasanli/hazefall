@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 
+import { riserGrip } from './chute';
 import { mat, mesh, PALETTE } from './palette';
 
 import type { FighterId as CharacterId, WeaponKind } from '../sim/types';
@@ -787,8 +788,8 @@ export const poseChute = (rig: Rig, p: { dt: number; time: number; seed: number;
   rig.legR.rotation.set(-dangle * 0.8 - 0.05, 0, 0.05);
   rig.shinL.rotation.set(0.35 + dangle * 0.5, 0, 0);
   rig.shinR.rotation.set(0.25 - dangle * 0.4, 0, 0);
-  rig.armL.quaternion.setFromEuler(tmpE.set(Math.PI - 0.35, 0, -0.35));
-  rig.foreL.quaternion.setFromEuler(tmpE.set(0.25, 0, 0));
+  // Both hands up on the risers, which rise from the backpack straps over the shoulders.
+  reach(rig.armL, rig.foreL, rig.shoulderL, riserGrip(-1, rig.shoulderL.y), rig.armLen, -1);
   rig.weapon.visible = p.shooting;
   if (p.shooting) {
     const h = HOLD.pistol;
@@ -799,8 +800,7 @@ export const poseChute = (rig: Rig, p: { dt: number; time: number; seed: number;
     tmpGrip.set(0, -0.02, h.grip).applyMatrix4(rig.weapon.matrix);
     reach(rig.armR, rig.foreR, rig.shoulderR, tmpGrip, rig.armLen, 1);
   } else {
-    rig.armR.quaternion.setFromEuler(tmpE.set(Math.PI - 0.35, 0, 0.35));
-    rig.foreR.quaternion.setFromEuler(tmpE.set(0.25, 0, 0));
+    reach(rig.armR, rig.foreR, rig.shoulderR, riserGrip(1, rig.shoulderR.y), rig.armLen, 1);
   }
 };
 

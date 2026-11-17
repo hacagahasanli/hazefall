@@ -13,7 +13,7 @@ import { buildGun } from './guns';
 import { mat, mesh, PALETTE } from './palette';
 import { createVfx } from './vfx';
 import { setPeople } from './nature';
-import { buildChute } from './chute';
+import { buildChute, HARNESS_BACK } from './chute';
 import { paintMapImage } from './mapImage';
 import { buildPlane } from './plane';
 import { buildProps } from './props';
@@ -588,6 +588,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** Visual yaw per player (angle and angular velocity) and when each last fired. */
   const yaw = state.players.map((p) => ({ a: p.heading, v: 0 }));
   const lastShot: number[] = [];
+  const chuteAt: number[] = [];
+  const harness = new THREE.Vector3();
   /** When each player touched down (for the landing roll), and the canopies left on the ground. */
   const landAt: number[] = [];
   const ROLL_TIME = 0.75;
@@ -885,9 +887,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       setFlash(rig, hitFlash[i] > 0);
       rig.root.updateMatrixWorld(true);
       if (chutes[i].visible) {
-        // Hung from the hands: the same point as the body, turned with it, tipped the way you steer.
-        chutes[i].position.set(x, h + rig.chestY + 0.95, y);
+        // Attached to the top of the backpack, turned with the body, tipped the way you steer;
+        // the canopy unfolds out of the pack over 0.7 s when it opens.
+        rig.root.localToWorld(harness.set(0, rig.shoulderL.y, HARNESS_BACK));
+        chutes[i].position.copy(harness);
         chutes[i].rotation.set(p.vy * 0.03, Math.PI / 2 - yw.a, Math.sin(time * 1.3 + i) * 0.05 - p.vx * 0.03, 'YXZ');
+        if (chuteAt[i] === undefined) chuteAt[i] = time;
+        const k = Math.min(1, (time - chuteAt[i]) / 0.7);
+        const open = 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2); // ease out with a little overshoot
+        (chutes[i].userData.deploy as THREE.Group).scale.setScalar(Math.max(0.08, open));
       }
 
       // Gun in hand.
