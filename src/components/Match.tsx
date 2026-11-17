@@ -7,6 +7,7 @@ import { FIGHTERS } from '~/game/sim/constants';
 
 import { AimChoice, readAim, saveAim } from '~/components/AimChoice';
 import type { HudState } from '~/game/render/game';
+import type { VolumeKind } from '~/game/sfx';
 import type { FighterId } from '~/game/sim/types';
 
 const Bar = ({ value, max, color }: { value: number; max: number; color: string }) => (
@@ -20,6 +21,41 @@ const Key = ({ k }: { k: string }) => (
     {k}
   </kbd>
 );
+
+const VOLUME_LABELS: { kind: VolumeKind; label: string }[] = [
+  { kind: 'master', label: 'All sound' },
+  { kind: 'guns', label: 'Gunshots' },
+  { kind: 'steps', label: 'Footsteps' },
+];
+
+/** Volume sliders, applied at once and remembered in this browser. */
+const SoundSliders = ({ game }: { game: ReturnType<typeof startMatch> | null }) => {
+  const [v, setV] = useState(() => game?.volumes() ?? { master: 0.8, guns: 0.6, steps: 0.8 });
+  return (
+    <div className="flex w-full flex-col gap-2 text-left">
+      <span className="text-[10px] font-semibold tracking-widest text-cream/50">SOUND</span>
+      {VOLUME_LABELS.map(({ kind, label }) => (
+        <label key={kind} className="flex items-center gap-3 text-sm text-cream/80">
+          <span className="w-24 shrink-0">{label}</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={Math.round(v[kind] * 100)}
+            onChange={(e) => {
+              const value = Number(e.target.value) / 100;
+              game?.setVolume(kind, value);
+              setV((old) => ({ ...old, [kind]: value }));
+            }}
+            className="h-1.5 flex-1 cursor-pointer accent-[#ffd23f]"
+            aria-label={label}
+          />
+          <span className="w-9 text-right text-xs tabular-nums text-cream/60">{Math.round(v[kind] * 100)}</span>
+        </label>
+      ))}
+    </div>
+  );
+};
 
 export const Match = ({ fighter, onExit }: { fighter: FighterId; onExit: () => void }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -75,7 +111,13 @@ export const Match = ({ fighter, onExit }: { fighter: FighterId; onExit: () => v
 
       {/* Minimap */}
       <div className="panel-cut absolute bottom-3 right-3 bg-ink-deep/80 p-1.5">
-        <canvas ref={mapRef} width={192} height={192} className="block h-48 w-48" />
+        {/* Big while you're on the plane choosing where to jump. */}
+        <canvas
+          ref={mapRef}
+          width={hud?.stage === 'drone' ? 340 : 192}
+          height={hud?.stage === 'drone' ? 340 : 192}
+          className={hud?.stage === 'drone' ? 'block h-[340px] w-[340px]' : 'block h-48 w-48'}
+        />
       </div>
 
       {hud && (
@@ -86,7 +128,21 @@ export const Match = ({ fighter, onExit }: { fighter: FighterId; onExit: () => v
               <span className="font-display text-lg" style={{ color: f.color }}>
                 {f.name}
               </span>
-              <span className="text-xs text-cream/60">{hud.weapon}{hud.ammo !== Infinity ? ` · ${hud.ammo}` : ''}</span>
+              <span className="text-xs text-cream/60">{hud.weapon}</span>
+              {hud.mag !== Infinity && (
+                <span className={`font-display text-sm ${hud.mag === 0 ? 'text-orange' : 'text-cream'}`}>
+                  {hud.mag}
+                  <span className="text-cream/50"> / {hud.ammo}</span>
+                </span>
+              )}
+              {hud.reloading !== null && (
+                <span className="flex items-center gap-1 text-[10px] font-bold tracking-widest text-gold">
+                  RELOADING
+                  <span className="h-1 w-12 overflow-hidden rounded bg-cream/15">
+                    <span className="block h-full bg-gold" style={{ width: `${hud.reloading * 100}%` }} />
+                  </span>
+                </span>
+              )}
               {hud.item && <span className="rounded bg-cream/10 px-1.5 text-xs">{hud.item === 'bomb' ? 'Bomb' : 'Med kit'}</span>}
             </div>
             <Bar value={hud.hp} max={hud.maxHp} color={hud.hp / hud.maxHp > 0.35 ? '#3ddc84' : '#ff3d6e'} />
@@ -146,6 +202,9 @@ export const Match = ({ fighter, onExit }: { fighter: FighterId; onExit: () => v
               <Key k="E" /> pick up / use
             </span>
             <span className="flex items-center gap-1">
+              <Key k="R" /> reload
+            </span>
+            <span className="flex items-center gap-1">
               <Key k="T" /> {hud.aimMode === 'mouse' ? 'mouse aim' : 'auto-aim'}
             </span>
             <span className="flex items-center gap-1">
@@ -164,6 +223,7 @@ export const Match = ({ fighter, onExit }: { fighter: FighterId; onExit: () => v
               <div role="dialog" aria-label="Paused" className="panel-cut flex w-[22rem] flex-col items-center gap-4 bg-ink p-7 text-center">
                 <div className="font-display text-4xl text-gold">Paused</div>
                 <AimChoice value={hud.aimMode} onChange={(m) => gameRef.current?.setAimMode(m)} />
+                <SoundSliders game={gameRef.current} />
                 <button
                   type="button"
                   autoFocus

@@ -28,6 +28,12 @@ export interface District {
   y1: number;
 }
 
+/** A road or path centre line in world metres, for the renderer to draw as a clean strip. */
+export interface Route {
+  kind: 'asphalt' | 'dirt';
+  points: { x: number; y: number }[];
+}
+
 export interface Building {
   /** In tiles. */
   x0: number;
@@ -54,23 +60,32 @@ const buildMap = () => {
   const ri = (a: number, b: number) => a + Math.floor(r() * (b - a + 1));
   const buildings: Building[] = [];
   const districts: District[] = [];
+  const routes: Route[] = [];
   const district = (name: string, x0: number, y0: number, x1: number, y1: number) =>
     districts.push({ name, x0: x0 * TILE, y0: y0 * TILE, x1: x1 * TILE, y1: y1 * TILE });
 
   // Roads and paths first, so buildings sit beside them.
+  const road: Route = { kind: 'asphalt', points: [] };
   for (let x = 0; x < SIZE; x++) {
     const y = 31 + Math.round(Math.sin(x / 7) * 2);
     set(x, y, 'a');
     set(x, y + 1, 'a');
   }
+  for (let x = -4; x <= SIZE + 4; x += 0.5) road.points.push({ x: x * TILE + TILE / 2, y: (32 + Math.sin(x / 7) * 2) * TILE });
+  routes.push(road);
   const path = (x0: number, y0: number, x1: number, y1: number) => {
     const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+    const line: Route = { kind: 'dirt', points: [] };
     for (let i = 0; i <= n; i++) {
-      const x = Math.round(x0 + ((x1 - x0) * i) / n + Math.sin(i / 3) * 0.8);
-      const y = Math.round(y0 + ((y1 - y0) * i) / n);
+      const xf = x0 + ((x1 - x0) * i) / n + Math.sin(i / 3) * 0.8;
+      const yf = y0 + ((y1 - y0) * i) / n;
+      const x = Math.round(xf);
+      const y = Math.round(yf);
       if (get(x, y) === 'g') set(x, y, 'p');
       if (get(x + 1, y) === 'g') set(x + 1, y, 'p');
+      line.points.push({ x: (xf + 1) * TILE, y: (yf + 0.5) * TILE });
     }
+    routes.push(line);
   };
   path(32, 31, 32, 6);
   path(32, 33, 32, 58);
@@ -179,6 +194,19 @@ const buildMap = () => {
       const j = Math.floor(fr() * (i + 1));
       [spots[i], spots[j]] = [spots[j], spots[i]];
     }
+    // Crates never stand in a doorway or cut the building in two.
+    for (let y = y0 + 1; y < y0 + h - 1; y++) {
+      for (let x = x0 + 1; x < x0 + w - 1; x++) {
+        if (get(x, y) !== 'r') continue;
+        const byDoor = near(x, y, (_c, nx, ny) => doors.some(([dx, dy]) => dx === nx && dy === ny));
+        if (byDoor) set(x, y, '.');
+      }
+    }
+    for (let y = y0 + 1; y < y0 + h - 1; y++) {
+      for (let x = x0 + 1; x < x0 + w - 1; x++) {
+        if (get(x, y) === 'r' && !connected()) set(x, y, '.');
+      }
+    }
     const want = Math.max(1, Math.floor(((w - 2) * (h - 2)) / (barn ? 6 : 3.5)));
     let placed = 0;
     for (const [x, y] of spots) {
@@ -286,17 +314,32 @@ const buildMap = () => {
     set(x, y, k < 0.45 ? 't' : k < 0.85 ? 'b' : 'k');
   }
 
+  // Every door opens onto open ground: clear two tiles in front of it of fences, trees, rocks
+  // and crates that the yards, farms and lone trees may have put there.
+  for (const b of buildings) {
+    for (let y = b.y0; y < b.y0 + b.h; y++) {
+      for (let x = b.x0; x < b.x0 + b.w; x++) {
+        const ring = x === b.x0 || y === b.y0 || x === b.x0 + b.w - 1 || y === b.y0 + b.h - 1;
+        if (!ring || get(x, y) !== '.') continue;
+        const ox = x === b.x0 ? -1 : x === b.x0 + b.w - 1 ? 1 : 0;
+        const oy = y === b.y0 ? -1 : y === b.y0 + b.h - 1 ? 1 : 0;
+        for (let k = 1; k <= 2; k++) if ('ftkr'.includes(get(x + ox * k, y + oy * k))) set(x + ox * k, y + oy * k, 'g');
+      }
+    }
+  }
+
   // The edge of the world: a tree line you can't pass.
   for (let i = 0; i < SIZE; i++) {
     for (const [x, y] of [[i, 0], [i, 1], [i, SIZE - 1], [i, SIZE - 2], [0, i], [1, i], [SIZE - 1, i], [SIZE - 2, i]]) set(x, y, 't');
   }
-  return { map: grid.map((row) => row.join('')), districts, buildings };
+  return { map: grid.map((row) => row.join('')), districts, buildings, routes };
 };
 
 const built = buildMap();
 export const MAP: string[] = built.map;
 export const DISTRICTS: District[] = built.districts;
 export const BUILDINGS: Building[] = built.buildings;
+export const ROUTES: Route[] = built.routes;
 
 export const tileAt = (tx: number, ty: number) =>
   tx < 0 || ty < 0 || tx >= SIZE || ty >= SIZE ? '#' : MAP[ty][tx];
@@ -361,18 +404,21 @@ export interface WeaponStats {
   speed: number;
   range: number;
   rate: number; // seconds between shots
-  ammo: number; // shots in the weapon when found; empty -> back to fists
+  ammo: number; // rounds in the gun when found (magazine + spare)
+  /** Magazine size and seconds to reload it. */
+  mag: number;
+  reload: number;
   lob?: { radius: number };
 }
 
 export const WEAPONS: Record<WeaponKind, WeaponStats> = {
-  fists: { name: 'Fists', damage: 110, bullets: 1, spread: 0, speed: 30, range: 1.6, rate: 0.45, ammo: Infinity },
-  pistol: { name: 'Pistol', damage: 140, bullets: 1, spread: 0.03, speed: 30, range: 13, rate: 0.35, ammo: 30 },
-  smg: { name: 'SMG', damage: 75, bullets: 1, spread: 0.1, speed: 32, range: 12, rate: 0.09, ammo: 90 },
-  shotgun: { name: 'Shotgun', damage: 70, bullets: 7, spread: 0.5, speed: 24, range: 7, rate: 0.85, ammo: 16 },
-  rifle: { name: 'Rifle', damage: 120, bullets: 1, spread: 0.04, speed: 40, range: 20, rate: 0.16, ammo: 60 },
-  sniper: { name: 'Sniper', damage: 700, bullets: 1, spread: 0, speed: 70, range: 34, rate: 1.4, ammo: 8 },
-  rockets: { name: 'Rockets', damage: 900, bullets: 1, spread: 0, speed: 0, range: 16, rate: 1.2, ammo: 4, lob: { radius: 3 } },
+  fists: { name: 'Fists', damage: 110, bullets: 1, spread: 0, speed: 30, range: 1.6, rate: 0.45, ammo: Infinity, mag: Infinity, reload: 0 },
+  pistol: { name: 'Pistol', damage: 140, bullets: 1, spread: 0.03, speed: 30, range: 13, rate: 0.35, ammo: 36, mag: 12, reload: 1.1 },
+  smg: { name: 'SMG', damage: 75, bullets: 1, spread: 0.1, speed: 32, range: 12, rate: 0.09, ammo: 90, mag: 30, reload: 1.7 },
+  shotgun: { name: 'Shotgun', damage: 70, bullets: 7, spread: 0.5, speed: 24, range: 7, rate: 0.85, ammo: 18, mag: 6, reload: 2.2 },
+  rifle: { name: 'Rifle', damage: 120, bullets: 1, spread: 0.04, speed: 40, range: 20, rate: 0.16, ammo: 75, mag: 25, reload: 1.9 },
+  sniper: { name: 'Sniper', damage: 700, bullets: 1, spread: 0, speed: 70, range: 34, rate: 1.4, ammo: 10, mag: 5, reload: 2.6 },
+  rockets: { name: 'Rockets', damage: 900, bullets: 1, spread: 0, speed: 0, range: 16, rate: 1.2, ammo: 4, mag: 1, reload: 2.4, lob: { radius: 3 } },
 };
 
 /** Loot weights inside buildings (one entry = one ticket). Rockets and snipers are rare. */
@@ -386,7 +432,14 @@ export const LOOT_TABLE: string[] = [
   'armor', 'armor', 'armor',
   'medkit', 'medkit', 'medkit',
   'bomb', 'bomb',
+  'ammo', 'ammo', 'ammo', 'ammo', 'ammo',
 ];
+
+/** An ammo box gives the gun in your hands this many magazines of spare rounds. */
+export const AMMO_BOX_MAGS = 2;
+
+/** Vaulting: how long you push into a fence or sill before you climb over, and how long the climb takes. */
+export const VAULT = { after: 0.15, time: 0.42, reach: 3.2 };
 
 export const ARMOR = { points: 500, absorb: 0.6 };
 export const ITEMS = {
@@ -415,10 +468,10 @@ export const SUPERS = {
 export const DROP = {
   flight: 24,
   freefall: 3.2,
-  chute: 9,
+  chute: 5,
   freefallSpeed: 14,
-  chuteSpeed: 6,
-  glide: 12.2,
+  chuteSpeed: 7,
+  glide: 8.2,
   height: 75,
   chuteHeight: 30,
   cloudLow: 44,

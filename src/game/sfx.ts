@@ -12,9 +12,23 @@
 export type Sfx = ReturnType<typeof createSfx>;
 
 type Gun = 'pistol' | 'smg' | 'shotgun' | 'railgun' | 'launcher' | 'uzi' | 'bomb';
-type Bus = 'sfx' | 'ui' | 'amb';
+type Bus = 'sfx' | 'ui' | 'amb' | 'guns';
 
 const MUTE_KEY = 'merge-conflict:muted';
+const VOLUME_KEY = 'lcs:volume';
+
+export type VolumeKind = 'master' | 'guns' | 'steps';
+export type Volumes = Record<VolumeKind, number>;
+const DEFAULT_VOLUMES: Volumes = { master: 0.8, guns: 0.6, steps: 0.8 };
+
+const readVolumes = (): Volumes => {
+  try {
+    const v = JSON.parse(window.localStorage.getItem(VOLUME_KEY) ?? '{}') as Partial<Volumes>;
+    return { ...DEFAULT_VOLUMES, ...v };
+  } catch {
+    return { ...DEFAULT_VOLUMES };
+  }
+};
 /** Half the visible width of the arena, for turning world x into stereo pan. */
 const HALF_VIEW = 19.5;
 /** At most this many gunshot voices at once; extras are skipped. */
@@ -37,6 +51,9 @@ export const createSfx = () => {
   const buses: Partial<Record<Bus, GainNode>> = {};
   let noiseBuf: AudioBuffer | null = null;
   let muted = typeof window !== 'undefined' ? readMuted() : false;
+  const volumes: Volumes = typeof window !== 'undefined' ? readVolumes() : { ...DEFAULT_VOLUMES };
+  /** While a gun voice is being scheduled, everything it plays goes to the guns bus. */
+  let busOverride: Bus | null = null;
   let shotVoices = 0;
   /** Recorded sounds (see ASSETS.md), decoded once the audio context exists. */
   const samples = new Map<string, AudioBuffer>();
@@ -79,14 +96,14 @@ export const createSfx = () => {
     comp.attack.value = 0.002;
     comp.release.value = 0.12;
     master = ctx.createGain();
-    master.gain.value = muted ? 0 : MASTER;
+    master.gain.value = muted ? 0 : MASTER * volumes.master;
     comp.connect(master).connect(ctx.destination);
     const verb = ctx.createConvolver();
     verb.buffer = makeRoom(ctx);
     wet = ctx.createGain();
     wet.gain.value = 0.22;
     wet.connect(verb).connect(comp);
-    for (const [bus, level] of [['sfx', 1], ['ui', 0.7], ['amb', 0.5]] as const) {
+    for (const [bus, level] of [['sfx', 1], ['ui', 0.7], ['amb', 0.5], ['guns', volumes.guns]] as const) {
       const g = ctx.createGain();
       g.gain.value = level;
       g.connect(comp);
@@ -111,7 +128,7 @@ export const createSfx = () => {
     if (!ctx || !wet) return;
     const p = ctx.createStereoPanner();
     p.pan.value = Math.max(-0.8, Math.min(0.8, pan));
-    node.connect(p).connect(buses[bus]!);
+    node.connect(p).connect(buses[busOverride ?? bus]!);
     if (room > 0) {
       const send = ctx.createGain();
       send.gain.value = room;
@@ -183,7 +200,7 @@ export const createSfx = () => {
   };
 
   /** Play a recorded sound with a little pitch and level variation, panned and attenuated. */
-  const sample = (name: string, o: { pan?: number; gain?: number; delay?: number; room?: number } = {}) => {
+  const sample = (name: string, o: { pan?: number; gain?: number; delay?: number; room?: number; bus?: Bus } = {}) => {
     const c = ctx;
     const buf = samples.get(name);
     if (!c || !buf || muted) return false;
@@ -193,7 +210,7 @@ export const createSfx = () => {
     const g = c.createGain();
     g.gain.value = (o.gain ?? 1) * (0.9 + Math.random() * 0.15);
     src.connect(g);
-    out(g, { pan: o.pan ?? 0, room: o.room ?? 0.15 });
+    out(g, { pan: o.pan ?? 0, room: o.room ?? 0.15, bus: o.bus });
     src.start(c.currentTime + (o.delay ?? 0));
     return true;
   };
@@ -203,6 +220,14 @@ export const createSfx = () => {
   const shot = (gun: Gun, x?: number) => {
     if (!ctx || muted) return;
     if (shotVoices >= SHOT_BUDGET) return;
+    busOverride = 'guns';
+    try {
+      shotVoice(gun, x);
+    } finally {
+      busOverride = null;
+    }
+  };
+  const shotVoice = (gun: Gun, x?: number) => {
     shotVoices += 1;
     setTimeout(() => (shotVoices = Math.max(0, shotVoices - 1)), 120);
     const pan = panOf(x);
@@ -255,23 +280,90 @@ export const createSfx = () => {
       if (shotVoices >= SHOT_BUDGET) return;
       // Recorded shots are mastered hot: play them well under the rest of the mix (Reis: "too loud").
       const gain = GUN_LEVEL * Math.max(0.12, 1 - distance / 45);
-      const ok = sample(kind, { pan: panOf(x), gain, room: 0.1 + Math.min(0.5, distance / 60) });
+      const ok = sample(kind, { pan: panOf(x), gain, room: 0.1 + Math.min(0.5, distance / 60), bus: 'guns' });
       if (!ok) shot(kind === 'rifle' ? 'pistol' : kind === 'sniper' ? 'railgun' : kind, x);
       else {
         shotVoices += 1;
         setTimeout(() => (shotVoices = Math.max(0, shotVoices - 1)), 90);
       }
-      if (kind === 'shotgun') sample('pump', { pan: panOf(x), gain: gain * 0.8, delay: 0.45 });
-      if (kind === 'sniper') sample('bolt', { pan: panOf(x), gain: gain * 0.8, delay: 0.6 });
+      if (kind === 'shotgun') sample('pump', { pan: panOf(x), gain: gain * 0.8, delay: 0.45, bus: 'guns' });
+      if (kind === 'sniper') sample('bolt', { pan: panOf(x), gain: gain * 0.8, delay: 0.6, bus: 'guns' });
     },
-    reloadSample: () => sample('reload', { gain: 0.7 }),
+    /** A magazine change, panned and quieter with distance. */
+    reloadAt: (x = 0, distance = 0) => {
+      if (distance > 30) return;
+      if (!sample('reload', { pan: panOf(x), gain: 0.7 * Math.max(0.15, 1 - distance / 30), bus: 'guns' })) {
+        click(0, 3000, 0.25, panOf(x));
+        click(0.25, 2200, 0.3, panOf(x));
+      }
+    },
+    /** The trigger on an empty gun. */
+    dryFire: () => {
+      click(0, 4200, 0.18);
+      click(0.05, 2400, 0.12);
+    },
+    /**
+     * One footstep. Surface decides the colour (grass is a soft brush, asphalt and floors a
+     * click and a heel thud, bushes and crops a rustle); far steps are quieter and duller.
+     */
+    footstep: (surface: 'grass' | 'hard' | 'wood' | 'dirt' | 'leaves', x = 0, distance = 0, heavy = 1) => {
+      if (!ctx || muted || distance > 28) return;
+      const v = volumes.steps * Math.max(0.08, 1 - distance / 28) * heavy;
+      const pan = panOf(x);
+      const dull = Math.max(0.35, 1 - distance / 30);
+      switch (surface) {
+        case 'grass':
+          noise('lowpass', 1800 * dull, 500, 0.07, 0.28 * v, 0.7, { pan, room: 0.05 });
+          break;
+        case 'dirt':
+          noise('lowpass', 1200 * dull, 300, 0.06, 0.32 * v, 0.8, { pan, room: 0.05 });
+          tone('sine', 110, 60, 0.05, 0.12 * v, { pan, room: 0 });
+          break;
+        case 'hard':
+          noise('bandpass', 3200 * dull, 1800, 0.03, 0.26 * v, 2.5, { pan, room: 0.1 });
+          tone('sine', 130, 70, 0.05, 0.16 * v, { pan, room: 0 });
+          break;
+        case 'wood':
+          noise('bandpass', 1500 * dull, 900, 0.05, 0.3 * v, 2, { pan, room: 0.25 });
+          tone('sine', 180, 90, 0.07, 0.2 * v, { pan, room: 0.2 });
+          break;
+        case 'leaves':
+          noise('highpass', 3500 * dull, 2500, 0.14, 0.26 * v, 0.6, { pan, room: 0.05 });
+          noise('bandpass', 1400, 900, 0.1, 0.14 * v, 1, { pan, room: 0, delay: 0.03 });
+          break;
+      }
+    },
+    /** Climbing over a fence or sill: cloth, a hand slap, the landing. */
+    vault: (x = 0, distance = 0) => {
+      if (distance > 28) return;
+      const v = Math.max(0.1, 1 - distance / 28);
+      const pan = panOf(x);
+      noise('bandpass', 900, 2400, 0.18, 0.25 * v, 1, { pan, room: 0.1 });
+      noise('bandpass', 2600, 1800, 0.03, 0.2 * v, 3, { pan, room: 0.1, delay: 0.1 });
+      tone('sine', 110, 55, 0.08, 0.35 * v, { pan, room: 0.1, delay: 0.36 });
+      noise('lowpass', 900, 200, 0.07, 0.25 * v, 1, { pan, room: 0.1, delay: 0.36 });
+    },
+    get volumes() {
+      return { ...volumes };
+    },
+    /** Change a volume (0..1) now and remember it in this browser. */
+    setVolume: (kind: VolumeKind, value: number) => {
+      volumes[kind] = Math.max(0, Math.min(1, value));
+      if (master) master.gain.value = muted ? 0 : MASTER * volumes.master;
+      if (buses.guns) buses.guns.gain.value = volumes.guns;
+      try {
+        window.localStorage.setItem(VOLUME_KEY, JSON.stringify(volumes));
+      } catch {
+        /* storage unavailable */
+      }
+    },
     unlock: () => ensure(),
     get muted() {
       return muted;
     },
     toggleMute: () => {
       muted = !muted;
-      if (master) master.gain.value = muted ? 0 : MASTER;
+      if (master) master.gain.value = muted ? 0 : MASTER * volumes.master;
       try {
         window.localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
       } catch {

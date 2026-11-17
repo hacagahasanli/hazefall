@@ -73,7 +73,8 @@ export const createBot = (id: number, seed: number) => {
       for (const k of state.loot) {
         if (!k.active) continue;
         const useful =
-          (me.weapon === 'fists' && k.kind in WEAPONS) ||
+          ((me.weapon === 'fists' || me.mag + me.ammo === 0) && k.kind in WEAPONS) ||
+          (k.kind === 'ammo' && me.weapon !== 'fists' && me.ammo < WEAPONS[me.weapon].mag) ||
           (k.kind === 'armor' && me.armor < 250) ||
           ((k.kind === 'medkit' || k.kind === 'bomb') && me.item === null) ||
           (k.kind === 'sniper' || k.kind === 'rockets' || k.kind === 'rifle');

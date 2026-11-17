@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 
 import { createSfx } from '../sfx';
+
+import type { VolumeKind } from '../sfx';
 import { createBot } from '../sim/bot';
-import { AUTO_AIM_RANGE, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, MAP, SIZE, SUPERS, TILE, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
+import { AUTO_AIM_RANGE, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, MAP, SIZE, SUPERS, TILE, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
 import { canSee, createGame, inPlant, lineOfSight, lootUnder, step } from '../sim/step';
 import { NO_INPUT } from '../sim/types';
 
@@ -10,6 +12,7 @@ import { buildRig, poseRig, poseTopDown } from './characters';
 import { buildGun } from './guns';
 import { mat, mesh, PALETTE } from './palette';
 import { createVfx } from './vfx';
+import { setPeople } from './nature';
 import { buildWorld } from './world';
 
 import type { Rig } from './characters';
@@ -28,7 +31,11 @@ export interface HudState {
   maxHp: number;
   armor: number;
   weapon: string;
+  /** Rounds in the magazine and spare; Infinity for fists. */
+  mag: number;
   ammo: number;
+  /** 0..1 while reloading, else null. */
+  reloading: number | null;
   item: ItemKind | null;
   superCharge: number;
   superName: string;
@@ -65,7 +72,7 @@ const GUN_MODEL: Record<Exclude<WeaponKind, 'fists'>, GunKind> = {
 const RARITY: Record<LootKind, number> = {
   pistol: 0xe8eef7, medkit: 0xe8eef7,
   smg: 0x3ddc84, shotgun: 0x3ddc84, bomb: 0x3ddc84,
-  rifle: 0x3ec5ff, armor: 0x3ec5ff,
+  rifle: 0x3ec5ff, armor: 0x3ec5ff, ammo: 0x3ddc84,
   sniper: 0xc77dff, rockets: 0xc77dff,
 };
 
@@ -105,7 +112,7 @@ const SOUND: Record<Exclude<WeaponKind, 'fists' | 'rockets'>, 'pistol' | 'smg' |
 };
 const LOOT_NAME: Record<LootKind, string> = {
   pistol: 'Pistol', smg: 'SMG', shotgun: 'Shotgun', rifle: 'Rifle', sniper: 'Sniper', rockets: 'Rockets',
-  armor: 'Armor vest', medkit: 'Med kit', bomb: 'Bomb',
+  armor: 'Armor vest', medkit: 'Med kit', bomb: 'Bomb', ammo: 'Ammo box',
 };
 
 const randomSeed = () => (Math.random() * 1e9) | 0;
@@ -216,9 +223,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
   // ---------- clouds: a broken layer between the plane and the ground; you fall through it
   const clouds = new THREE.Group();
+  let cloudMat: THREE.MeshStandardMaterial;
   {
     const puff = new THREE.IcosahedronGeometry(1, 1);
-    const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true, transparent: true, opacity: 0.92, depthWrite: true });
+    cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true, transparent: true, opacity: 0.92, depthWrite: true });
     const rnd = (() => {
       let k = 4242;
       return () => ((k = (k * 16807) % 2147483647) - 1) / 2147483646;
@@ -323,6 +331,17 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       crossA.position.z = crossB.position.z = 0.13;
       item.add(caseM, handle, crossA, crossB);
       item.rotation.x = -0.6;
+    } else if (kind === 'ammo') {
+      // A green metal ammo can with a handle and stencil band.
+      const can = mesh(new THREE.BoxGeometry(0.62, 0.4, 0.3), mat(0x4f5a34));
+      const lid = mesh(new THREE.BoxGeometry(0.64, 0.06, 0.32), mat(0x3e4828));
+      lid.position.y = 0.23;
+      const handle = mesh(new THREE.BoxGeometry(0.3, 0.05, 0.06), mat(0x2a2f24));
+      handle.position.y = 0.29;
+      const band = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.07, 0.01), new THREE.MeshBasicMaterial({ color: 0xffd23f }));
+      band.position.set(0, 0.02, 0.156);
+      item.add(can, lid, handle, band);
+      item.rotation.x = -0.5;
     } else {
       const bomb = buildGun('bomb').root;
       bomb.scale.setScalar(2.4);
@@ -344,12 +363,16 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     g.add(glow, beam);
     return g;
   };
+  // Bullets: a brass round with a copper tip, and a short faint heat trail behind it.
+  const bulletGeo = new THREE.CylinderGeometry(0.055, 0.055, 0.3, 8).rotateZ(Math.PI / 2);
+  const tipGeo = new THREE.ConeGeometry(0.055, 0.12, 8).rotateZ(-Math.PI / 2).translate(0.21, 0, 0);
+  const trailGeo = new THREE.BoxGeometry(1, 0.035, 0.035).translate(-0.65, 0, 0);
+  const brass = new THREE.MeshStandardMaterial({ color: 0xc9a046, metalness: 0.7, roughness: 0.3, emissive: 0x3a2a08 });
+  const copper = new THREE.MeshStandardMaterial({ color: 0xb8653a, metalness: 0.7, roughness: 0.35, emissive: 0x2a1006 });
+  const trailMat = new THREE.MeshBasicMaterial({ color: 0xffe2a0, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
   const tracers = Array.from({ length: 90 }, () => {
-    // A bright streak with a glowing core: reads as a bullet even from far away.
-    const m = new THREE.Mesh(
-      new THREE.BoxGeometry(1.6, 0.07, 0.07),
-      new THREE.MeshBasicMaterial({ color: 0xfff2a0, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }),
-    );
+    const m = new THREE.Group();
+    m.add(new THREE.Mesh(bulletGeo, brass), new THREE.Mesh(tipGeo, copper), new THREE.Mesh(trailGeo, trailMat));
     m.visible = false;
     scene.add(m);
     return m;
@@ -449,6 +472,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       jump: keys.has('Space'),
       super: keys.has('KeyQ'),
       use: keys.has('KeyE'),
+      reload: keys.has('KeyR'),
       aimX: aim.x,
       aimY: aim.y,
     };
@@ -505,6 +529,16 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         vfx.ring(e.x, 0.2, 0xffd23f, { grow: 8, life: 0.4, z: e.y, flat: true });
         sfx.push(e.x - camX());
         break;
+      case 'reload':
+        sfx.reloadAt(e.x - camX(), e.player === me ? 0 : Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y));
+        break;
+      case 'dryFire':
+        if (e.player === me) sfx.dryFire();
+        break;
+      case 'vault':
+        sfx.vault(e.x - camX(), e.player === me ? 0 : Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y));
+        vfx.burst(e.x, 0.3, 6, 'dust', { z: e.y, speed: 2, up: 1, gravity: 5, life: 0.35, size: 0.6 });
+        break;
       case 'pickup':
         if (e.player === me) sfx.pickup();
         break;
@@ -530,6 +564,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     }
   };
   const hitFlash = state.players.map(() => 0);
+  const steps = state.players.map(() => 0);
+  const surfaceAt = (x: number, y: number) => {
+    const t = MAP[Math.floor(y / TILE)]?.[Math.floor(x / TILE)] ?? 'g';
+    return t === 'a' ? 'hard' : '.lu'.includes(t) ? 'wood' : t === 'p' ? 'dirt' : 'bc'.includes(t) ? 'leaves' : 'grass';
+  };
   /** Visual yaw per player (angle and angular velocity) and when each last fired. */
   const yaw = state.players.map((p) => ({ a: p.heading, v: 0 }));
   const lastShot: number[] = [];
@@ -685,7 +724,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     }
   };
 
-  const prev = state.players.map((p) => ({ x: p.x, y: p.y }));
+  const prev = state.players.map((p) => ({ x: p.x, y: p.y, fall: p.fall }));
+  let fallTime = 0;
   /** Dev only: ?cam=near brings the camera close to check animation. */
   const camNear = process.env.NODE_ENV !== 'production' && new URLSearchParams(window.location.search).get('cam') === 'near' ? 0.12 : 1;
   const camFocus = new THREE.Vector3(state.players[me].x, 0, state.players[me].y);
@@ -726,7 +766,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const chuteOpen = p.stage === 'falling' && p.fall <= DROP.chute;
       chutes[i].visible = visible && chuteOpen;
       // Free fall from the plane down to chute height, then drift slowly under the canopy.
-      const h = p.stage === 'falling' ? fallHeight(p.fall) : 0;
+      // Height interpolated between ticks like x and y, so the fall is smooth at any frame rate.
+      const fall = prev[i].fall + (p.fall - prev[i].fall) * alpha;
+      let h = p.stage === 'falling' ? fallHeight(Math.max(0, fall)) : 0;
+      if (p.vault > 0) h = Math.sin((1 - p.vault / VAULT.time) * Math.PI) * 0.7; // the hop over
       rig.root.position.set(x, h, y);
       // The body turns on a critically damped spring towards the sim heading: it starts and
       // settles smoothly instead of rotating at a constant rate and stopping dead.
@@ -753,9 +796,20 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       }
       rig.root.rotation.y = Math.PI / 2 - yw.a;
       if (p.stage === 'falling' && !chuteOpen) {
-        // Spread out, head first, with a little wobble from the wind.
-        rig.body.rotation.x = 1.25 + Math.sin(time * 9 + i) * 0.06;
-        rig.body.rotation.z = Math.sin(time * 5.3 + i) * 0.12;
+        // Spread out, head first, steady (a slow gentle drift, no shaking).
+        rig.body.rotation.x = 1.25;
+        rig.body.rotation.z = Math.sin(time * 0.8 + i) * 0.04;
+      }
+      if (p.vault > 0) rig.body.rotation.x = 0.5 * Math.sin((1 - p.vault / VAULT.time) * Math.PI);
+
+      // Footsteps, at each footfall of the stride: yours and everyone near you, panned left or right.
+      if (p.stage === 'ground' && p.alive && p.vault <= 0) {
+        const foot = Math.floor(rig.phase / Math.PI);
+        if (foot !== steps[i] && Math.hypot(p.vx, p.vy) > 1) {
+          const d = Math.hypot(p.x - self.x, p.y - self.y);
+          sfx.footstep(surfaceAt(p.x, p.y), p.x - camX(), i === me ? 0 : d, i === me ? 0.8 : 1);
+        }
+        steps[i] = foot;
       }
       // Your own fighter turns see-through inside plants, so you know you're hidden.
       rig.root.traverse((o) => {
@@ -799,6 +853,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       bar.armor.visible = p.armor > 0;
     });
     world.update(state, self.x, self.y);
+    setPeople(state.players.filter((q) => q.alive && q.stage === 'ground').map((q) => ({ x: q.x, y: q.y })));
 
     // Loot.
     const seen = new Set<number>();
@@ -876,11 +931,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     let want: THREE.Vector3;
     let look: THREE.Vector3;
     if (self.stage === 'drone' && state.phase === 'drop') {
-      const dirX = state.drone.x1 - state.drone.x0;
-      const dirY = state.drone.y1 - state.drone.y0;
-      const len = Math.hypot(dirX, dirY) || 1;
-      want = new THREE.Vector3(droneX - (dirX / len) * 34 + (dirY / len) * 10, DROP.height + 14, droneY - (dirY / len) * 34 - (dirX / len) * 10);
-      look = new THREE.Vector3(droneX + (dirX / len) * 10, DROP.height - 8, droneY + (dirY / len) * 10);
+      // High above the plane, looking down over most of the map, so you can choose where to jump.
+      const fx = droneX + (WORLD / 2 - droneX) * 0.55;
+      const fy = droneY + (WORLD / 2 - droneY) * 0.55;
+      want = new THREE.Vector3(fx, 150, fy + 60);
+      look = new THREE.Vector3(fx, 0, fy + 4);
     } else if (self.stage === 'falling') {
       // Stay close above and behind the jumper the whole way down, so you see yourself from the
       // first frame, falling through the clouds, then the canopy opening below them.
@@ -893,9 +948,21 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       want = camNear < 1 ? new THREE.Vector3(self.x + 2, 3.2, self.y + 4) : new THREE.Vector3(self.x, 36, self.y + 22);
       look = camNear < 1 ? new THREE.Vector3(self.x, 1.1, self.y) : new THREE.Vector3(self.x, 0, self.y + 1);
     }
-    const follow = self.stage === 'ground' ? 1 - Math.exp(-6 * dt) : self.stage === 'falling' ? 1 - Math.exp(-8 * dt) : kf;
+    // Falling: blend in from the plane view for a moment, then stay locked to the jumper (no lag,
+    // no wobble). Ground: a soft follow.
+    fallTime = self.stage === 'falling' ? fallTime + dt : 0;
+    const follow =
+      self.stage === 'ground' ? 1 - Math.exp(-6 * dt) : self.stage === 'falling' ? (fallTime > 0.9 ? 1 : 1 - Math.exp(-6 * dt)) : kf;
     camPos.lerp(want, follow);
-    camLook.lerp(look, self.stage === 'falling' ? 1 - Math.exp(-14 * dt) : follow);
+    camLook.lerp(look, follow);
+    // Wider lens and see-through clouds while you pick your spot from the plane.
+    const overview = self.stage === 'drone' && state.phase === 'drop';
+    const fov = THREE.MathUtils.damp(camera.fov, overview ? 52 : 42, 3, dt);
+    if (Math.abs(fov - camera.fov) > 0.01) {
+      camera.fov = fov;
+      camera.updateProjectionMatrix();
+    }
+    cloudMat.opacity = THREE.MathUtils.damp(cloudMat.opacity, overview ? 0.22 : 0.92, 3, dt);
     camera.position.set(camPos.x + n(23, 1) * 0.5 * shake, camPos.y, camPos.z + n(19, 4) * 0.4 * shake);
     camera.lookAt(camLook);
     camFocus.set(camLook.x, 0, camLook.z);
@@ -931,9 +998,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         ? 'Space · jump'
         : k
           ? `E · pick up ${LOOT_NAME[k.kind]}`
-          : self.item
-            ? `E · use ${self.item === 'bomb' ? 'bomb' : 'med kit'}`
-            : null;
+          : self.weapon !== 'fists' && self.mag + self.ammo === 0
+            ? 'Out of ammo · find an ammo box or another gun'
+            : self.item
+              ? `E · use ${self.item === 'bomb' ? 'bomb' : 'med kit'}`
+              : null;
     opts.onHud({
       phase: state.phase,
       stage: self.stage,
@@ -942,7 +1011,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       maxHp: self.maxHp,
       armor: self.armor,
       weapon: WEAPONS[self.weapon].name,
+      mag: self.mag,
       ammo: self.ammo,
+      reloading: self.reload > 0 ? 1 - self.reload / WEAPONS[self.weapon].reload : null,
       item: self.item,
       superCharge: self.superCharge,
       superName: FIGHTERS[self.fighter].superName,
@@ -976,7 +1047,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // Paused (offline only): the world freezes, the camera and effects keep drawing.
     acc = paused ? 0 : acc + dt;
     while (acc >= DT) {
-      state.players.forEach((p, i) => Object.assign(prev[i], { x: p.x, y: p.y }));
+      state.players.forEach((p, i) => Object.assign(prev[i], { x: p.x, y: p.y, fall: p.fall }));
       const inputs = state.players.map((p) => (p.id === me ? (p.alive ? readInput() : NO_INPUT) : bots[p.id]!(state)));
       step(state, inputs);
       state.events.forEach(handle);
@@ -1005,6 +1076,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       mouseDown = false;
       emitHud();
     },
+    volumes: () => sfx.volumes,
+    setVolume: (kind: VolumeKind, value: number) => sfx.setVolume(kind, value),
     setAimMode: (m: AimMode) => {
       aimMode = m;
       emitHud();

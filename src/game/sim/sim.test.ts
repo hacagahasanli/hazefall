@@ -108,6 +108,23 @@ describe('the map', () => {
     expect(pieces).toBeGreaterThan(30);
   });
 
+  it('every door opens onto open ground and leads straight inside', () => {
+    for (const b of BUILDINGS) {
+      for (let y = b.y0; y < b.y0 + b.h; y++) {
+        for (let x = b.x0; x < b.x0 + b.w; x++) {
+          const ring = x === b.x0 || y === b.y0 || x === b.x0 + b.w - 1 || y === b.y0 + b.h - 1;
+          if (!ring || MAP[y][x] !== '.') continue;
+          const ox = x === b.x0 ? -1 : x === b.x0 + b.w - 1 ? 1 : 0;
+          const oy = y === b.y0 ? -1 : y === b.y0 + b.h - 1 ? 1 : 0;
+          // Right outside: open ground. One step further may be a neighbour's wall (a 2 m alley), never clutter.
+          expect('ftkr#w'.includes(MAP[y + oy]?.[x + ox] ?? 'g')).toBe(false);
+          expect('ftkr'.includes(MAP[y + oy * 2]?.[x + ox * 2] ?? 'g')).toBe(false);
+          expect(MAP[y - oy][x - ox]).not.toBe('r');
+        }
+      }
+    }
+  });
+
   it('nobody walks out through the tree line at the edge', () => {
     const s = createGame('hotfix', 1);
     expect(circleBlocked(s, 3, WORLD / 2, PLAYER_RADIUS)).toBe(true);
@@ -152,7 +169,7 @@ describe('loot and fighting', () => {
     const s = landed();
     clearAround(s);
     const p = s.players[0];
-    Object.assign(p, { weapon: 'smg', ammo: 40 });
+    Object.assign(p, { weapon: 'smg', mag: 30, ammo: 10 });
     s.loot.push({ id: 999, kind: 'sniper', x: p.x, y: p.y, ammo: 8, active: true });
     step(s, idle());
     expect(p.weapon).toBe('smg');
@@ -170,7 +187,7 @@ describe('loot and fighting', () => {
     place(s, 0, 20, 30);
     place(s, 1, 24, 30);
     s.walls = [];
-    Object.assign(a, { weapon: 'pistol', ammo: 30 });
+    Object.assign(a, { weapon: 'pistol', mag: 12, ammo: 18 });
     b.armor = 500;
     const hp = b.hp;
     const inputs = idle();
@@ -179,14 +196,81 @@ describe('loot and fighting', () => {
     if (b.hp < hp) expect(b.armor).toBeLessThan(500);
   });
 
-  it('an empty gun leaves you with your fists', () => {
+  it('guns have magazines: an empty magazine reloads from the spare rounds, R reloads early', () => {
     const s = landed();
+    clearAround(s);
     const p = s.players[0];
-    Object.assign(p, { weapon: 'sniper', ammo: 1 });
-    const inputs = idle();
-    inputs[0] = { ...NO_INPUT, fire: true, aimX: p.x + 5, aimY: p.y };
-    step(s, inputs);
-    expect(p.weapon).toBe('fists');
+    Object.assign(p, { weapon: 'pistol', mag: 1, ammo: 20, cooldown: 0 });
+    const fire = idle();
+    fire[0] = { ...NO_INPUT, fire: true, aimX: p.x + 5, aimY: p.y };
+    step(s, fire);
+    expect(p.mag).toBe(0);
+    expect(p.reload).toBeGreaterThan(0);
+    for (let i = 0; i < 60 * (WEAPONS.pistol.reload + 0.1); i++) step(s, idle());
+    expect(p.mag).toBe(12);
+    expect(p.ammo).toBe(8);
+    p.mag = 5;
+    const r = idle();
+    r[0] = { ...NO_INPUT, reload: true };
+    step(s, r);
+    for (let i = 0; i < 60 * (WEAPONS.pistol.reload + 0.1); i++) step(s, idle());
+    expect(p.mag).toBe(12);
+    expect(p.ammo).toBe(1);
+  });
+
+  it('out of rounds the gun stays in your hands and you hit with it; an ammo box refills it', () => {
+    const s = landed();
+    clearAround(s);
+    const p = s.players[0];
+    Object.assign(p, { weapon: 'sniper', mag: 0, ammo: 0, cooldown: 0 });
+    const fire = idle();
+    fire[0] = { ...NO_INPUT, fire: true, aimX: p.x + 5, aimY: p.y };
+    step(s, fire);
+    expect(p.weapon).toBe('sniper');
+    expect(s.events.some((e) => e.type === 'shot' && e.weapon === 'fists')).toBe(true);
+    s.loot.push({ id: 998, kind: 'ammo', x: p.x, y: p.y, ammo: 0, active: true });
+    step(s, idle());
+    expect(p.ammo + p.mag).toBe(WEAPONS.sniper.mag * 2);
+  });
+});
+
+describe('moving among things', () => {
+  /** A lone tile of `c` with open grass on the given side and behind it. */
+  const findTile = (c: string, test: (tx: number, ty: number) => boolean) => {
+    for (let ty = 4; ty < SIZE - 4; ty++) for (let tx = 4; tx < SIZE - 4; tx++) if (MAP[ty][tx] === c && test(tx, ty)) return { tx, ty };
+    throw new Error(`no ${c}`);
+  };
+  const open = (tx: number, ty: number) => 'gp'.includes(MAP[ty][tx]);
+
+  it('running diagonally into a wall slides along it instead of stopping', () => {
+    const s = landed();
+    clearAround(s);
+    // A long straight wall with open ground south of it.
+    const w = findTile('#', (tx, ty) => [0, 1, 2, 3].every((i) => MAP[ty][tx + i] === '#' && open(tx + i, ty + 1) && open(tx + i, ty + 2)));
+    const p = s.players[0];
+    Object.assign(p, { x: w.tx * TILE + 1, y: (w.ty + 1) * TILE + PLAYER_RADIUS + 0.05, vx: 0, vy: 0 });
+    const x0 = p.x;
+    const go = idle();
+    go[0] = { ...NO_INPUT, mx: 1, my: -1, aimX: p.x + 10, aimY: p.y };
+    for (let i = 0; i < 30; i++) step(s, go);
+    expect(p.x - x0).toBeGreaterThan(1);
+  });
+
+  it('pushing into a fence climbs over it', () => {
+    const s = landed();
+    clearAround(s);
+    const f = findTile('f', (tx, ty) => MAP[ty][tx - 1] !== 'f' && MAP[ty][tx + 1] !== 'f' ? false : open(tx, ty - 1) && open(tx, ty + 1) && open(tx, ty - 2) && open(tx, ty + 2));
+    const p = s.players[0];
+    Object.assign(p, { x: f.tx * TILE + 1, y: f.ty * TILE - 0.6, vx: 0, vy: 0 });
+    const go = idle();
+    go[0] = { ...NO_INPUT, my: 1, aimX: p.x, aimY: p.y + 10 };
+    let vaulted = false;
+    for (let i = 0; i < 90; i++) {
+      step(s, go);
+      if (s.events.some((e) => e.type === 'vault')) vaulted = true;
+    }
+    expect(vaulted).toBe(true);
+    expect(p.y).toBeGreaterThan(f.ty * TILE + TILE);
   });
 });
 

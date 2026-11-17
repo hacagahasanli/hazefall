@@ -2,6 +2,7 @@ import {
   ARMOR,
   BOT_NAMES,
   DROP,
+  AMMO_BOX_MAGS,
   DT,
   fenceVertical,
   MOVE,
@@ -20,6 +21,7 @@ import {
   SUPERS,
   TILE,
   tileAt,
+  VAULT,
   WEAPONS,
   WORLD,
   ZONE_PHASES,
@@ -115,9 +117,104 @@ export const circleBlocked = (state: GameState, x: number, y: number, r: number)
   return state.walls.some((w) => Math.abs(x - w.x) < w.w / 2 + r && Math.abs(y - w.y) < w.h / 2 + r);
 };
 
+/**
+ * Push a circle out of everything it overlaps (walls, rails, trunks, rocks, crates, furniture,
+ * Deprecated walls, the map edge). Pushing along each contact's normal is what makes you slide
+ * along walls and glide round trunks instead of stopping dead. Returns the vaultable tile you
+ * pressed against, if any.
+ */
+const pushOut = (state: GameState, pos: { x: number; y: number }, r: number) => {
+  let vaultable: string | null = null;
+  for (let iter = 0; iter < 3; iter++) {
+    let moved = false;
+    const outBox = (x0: number, y0: number, x1: number, y1: number) => {
+      const nx = Math.max(x0, Math.min(pos.x, x1));
+      const ny = Math.max(y0, Math.min(pos.y, y1));
+      const dx = pos.x - nx;
+      const dy = pos.y - ny;
+      const d = Math.hypot(dx, dy);
+      if (d >= r) return false;
+      if (d > 1e-6) {
+        pos.x += (dx / d) * (r - d);
+        pos.y += (dy / d) * (r - d);
+      } else {
+        // The centre is inside the box: leave by the nearest side.
+        const l = pos.x - x0 + r;
+        const rr = x1 - pos.x + r;
+        const t = pos.y - y0 + r;
+        const b = y1 - pos.y + r;
+        const m = Math.min(l, rr, t, b);
+        if (m === l) pos.x -= l;
+        else if (m === rr) pos.x += rr;
+        else if (m === t) pos.y -= t;
+        else pos.y += b;
+      }
+      moved = true;
+      return true;
+    };
+    const outCircle = (cx: number, cy: number, cr: number) => {
+      const dx = pos.x - cx;
+      const dy = pos.y - cy;
+      const d = Math.hypot(dx, dy);
+      if (d >= r + cr) return false;
+      const k = d > 1e-6 ? (r + cr - d) / d : 0;
+      if (d > 1e-6) {
+        pos.x += dx * k;
+        pos.y += dy * k;
+      } else pos.x += r + cr;
+      moved = true;
+      return true;
+    };
+    for (let ty = toTile(pos.y - r) - 1; ty <= toTile(pos.y + r) + 1; ty++) {
+      for (let tx = toTile(pos.x - r) - 1; tx <= toTile(pos.x + r) + 1; tx++) {
+        const t = tileAt(tx, ty);
+        const x0 = tx * TILE;
+        const y0 = ty * TILE;
+        const c = TILE / 2;
+        if (t === '#') outBox(x0, y0, x0 + TILE, y0 + TILE);
+        else if (t === 'w') {
+          if (outBox(x0, y0, x0 + TILE, y0 + TILE)) vaultable = 'w';
+        } else if (t === 'f') {
+          const h = SHAPES.fence;
+          const hit = fenceVertical(tx, ty) ? outBox(x0 + c - h, y0, x0 + c + h, y0 + TILE) : outBox(x0, y0 + c - h, x0 + TILE, y0 + c + h);
+          if (hit) vaultable = 'f';
+        } else if (t === 'u') {
+          const m = SHAPES.furniture;
+          if (outBox(x0 + m, y0 + m, x0 + TILE - m, y0 + TILE - m)) vaultable = 'u';
+        } else if (t === 't') {
+          const sp = treeSpot(tx, ty);
+          outCircle(sp.x, sp.y, SHAPES.trunk);
+        } else if (t === 'k') outCircle(x0 + c, y0 + c, SHAPES.rock);
+        else if (t === 'r' && state.racks[tileIndex(tx, ty)] > 0) outCircle(x0 + c, y0 + c, SHAPES.crate);
+      }
+    }
+    for (const w of state.walls) outBox(w.x - w.w / 2, w.y - w.h / 2, w.x + w.w / 2, w.y + w.h / 2);
+    const edge = TILE * 2 + r;
+    const cx = Math.min(WORLD - edge, Math.max(edge, pos.x));
+    const cy = Math.min(WORLD - edge, Math.max(edge, pos.y));
+    if (cx !== pos.x || cy !== pos.y) {
+      pos.x = cx;
+      pos.y = cy;
+      moved = true;
+    }
+    if (!moved) break;
+  }
+  return vaultable;
+};
+
+/** Move by (dx, dy) in small steps (so nothing thin is skipped), sliding along whatever is hit. */
 const moveBy = (state: GameState, p: Player, dx: number, dy: number) => {
-  if (!circleBlocked(state, p.x + dx, p.y, PLAYER_RADIUS)) p.x += dx;
-  if (!circleBlocked(state, p.x, p.y + dy, PLAYER_RADIUS)) p.y += dy;
+  const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 0.2));
+  const pos = { x: p.x, y: p.y };
+  let vaultable: string | null = null;
+  for (let i = 0; i < steps; i++) {
+    pos.x += dx / steps;
+    pos.y += dy / steps;
+    vaultable = pushOut(state, pos, PLAYER_RADIUS) ?? vaultable;
+  }
+  p.x = pos.x;
+  p.y = pos.y;
+  return vaultable;
 };
 
 export const lineOfSight = (state: GameState, x0: number, y0: number, x1: number, y1: number) => {
@@ -222,7 +319,9 @@ const newPlayer = (id: number, name: string, fighter: FighterId, bot: boolean, x
   armor: 0,
   alive: true,
   weapon: 'fists',
-  ammo: Infinity,
+  mag: Infinity,
+  ammo: 0,
+  reload: 0,
   cooldown: 0,
   item: null,
   superCharge: 0,
@@ -233,6 +332,10 @@ const newPlayer = (id: number, name: string, fighter: FighterId, bot: boolean, x
   dashAngle: 0,
   dashHit: [],
   slowed: 0,
+  vault: 0,
+  vaultFrom: { x, y },
+  vaultTo: { x, y },
+  pushing: 0,
   kills: 0,
   damage: 0,
   placement: 0,
@@ -362,7 +465,7 @@ const knockOut = (state: GameState, p: Player) => {
   if (by !== null && state.players[by].alive) state.players[by].kills += 1;
   state.events.push({ type: 'ko', victim: p.id, by, x: p.x, y: p.y });
   // Everything you carried is up for grabs.
-  if (p.weapon !== 'fists' && p.ammo > 0) addLoot(state, p.weapon, p.x + 0.8, p.y, p.ammo);
+  if (p.weapon !== 'fists' && roundsLeft(p) > 0) addLoot(state, p.weapon, p.x + 0.8, p.y, roundsLeft(p));
   if (p.item) addLoot(state, p.item, p.x - 0.8, p.y);
   if (p.armor > 50) addLoot(state, 'armor', p.x, p.y + 0.8);
   const alive = alivePlayers(state);
@@ -431,22 +534,52 @@ const lob = (state: GameState, p: Player, aimX: number, aimY: number, range: num
   });
 };
 
-const shoot = (state: GameState, p: Player, input: Input) => {
+/** Rounds this player has for the gun in hand (magazine + spare). */
+export const roundsLeft = (p: Player) => (p.weapon === 'fists' ? Infinity : p.mag + p.ammo);
+
+const startReload = (state: GameState, p: Player) => {
   const w = WEAPONS[p.weapon];
+  if (p.weapon === 'fists' || p.reload > 0 || p.ammo <= 0 || p.mag >= w.mag) return;
+  p.reload = w.reload;
+  state.events.push({ type: 'reload', player: p.id, weapon: p.weapon, x: p.x, y: p.y });
+};
+
+const shoot = (state: GameState, p: Player, input: Input) => {
+  if (p.reload > 0) return;
+  // Out of rounds altogether: the empty gun stays in your hands and you hit with it.
+  const empty = p.weapon !== 'fists' && p.mag <= 0 && p.ammo <= 0;
+  if (p.weapon !== 'fists' && p.mag <= 0 && !empty) {
+    startReload(state, p);
+    return;
+  }
+  if (empty && !p.prev.fire) state.events.push({ type: 'dryFire', player: p.id });
+  const kind: WeaponKind = empty ? 'fists' : p.weapon;
+  const w = WEAPONS[kind];
   p.cooldown = w.rate;
   p.revealed = 1;
+  const keep = p.weapon;
+  p.weapon = kind; // fireBullet reads the weapon
   if (w.lob) lob(state, p, input.aimX, input.aimY, w.range, w.damage, w.lob.radius);
   else if (w.bullets > 1) {
     for (let i = 0; i < w.bullets; i++) fireBullet(state, p, p.heading - w.spread / 2 + (w.spread * i) / (w.bullets - 1));
   } else fireBullet(state, p, p.heading + (nextRandom(state) - 0.5) * w.spread);
-  state.events.push({ type: 'shot', owner: p.id, x: p.x, y: p.y, angle: p.heading, weapon: p.weapon });
-  if (p.weapon !== 'fists') {
-    p.ammo -= 1;
-    if (p.ammo <= 0) {
-      p.weapon = 'fists';
-      p.ammo = Infinity;
-    }
+  p.weapon = keep;
+  state.events.push({ type: 'shot', owner: p.id, x: p.x, y: p.y, angle: p.heading, weapon: kind });
+  if (kind !== 'fists') {
+    p.mag -= 1;
+    if (p.mag <= 0) startReload(state, p);
   }
+};
+
+/** Fill the magazine when the reload finishes. */
+const updateReload = (p: Player) => {
+  if (p.reload <= 0) return;
+  p.reload -= DT;
+  if (p.reload > 0) return;
+  p.reload = 0;
+  const take = Math.min(WEAPONS[p.weapon].mag - p.mag, p.ammo);
+  p.mag += take;
+  p.ammo -= take;
 };
 
 const useSuper = (state: GameState, p: Player, input: Input) => {
@@ -508,10 +641,16 @@ export const lootUnder = (state: GameState, p: Player): Loot | null => {
 
 const takeLoot = (state: GameState, p: Player, k: Loot) => {
   if (isWeapon(k.kind)) {
-    // Swap: drop what you hold (if it's a real gun) where you stand.
-    if (p.weapon !== 'fists' && p.ammo > 0) addLoot(state, p.weapon, p.x, p.y + 0.4, p.ammo);
+    // Swap: drop what you hold (if it still has rounds) where you stand.
+    if (p.weapon !== 'fists' && roundsLeft(p) > 0) addLoot(state, p.weapon, p.x, p.y + 0.4, roundsLeft(p));
     p.weapon = k.kind;
-    p.ammo = k.ammo;
+    p.mag = Math.min(WEAPONS[k.kind].mag, k.ammo);
+    p.ammo = k.ammo - p.mag;
+    p.reload = 0;
+  } else if (k.kind === 'ammo') {
+    if (p.weapon === 'fists') return;
+    p.ammo += WEAPONS[p.weapon].mag * AMMO_BOX_MAGS;
+    if (p.mag <= 0) startReload(state, p);
   } else if (k.kind === 'armor') {
     p.armor = ARMOR.points;
   } else {
@@ -524,7 +663,8 @@ const takeLoot = (state: GameState, p: Player, k: Loot) => {
 
 /** Picked up without pressing anything: a gun when you only have fists, armor when you need it, an item into an empty slot. */
 const autoTakes = (p: Player, k: Loot) =>
-  (isWeapon(k.kind) && p.weapon === 'fists') ||
+  (isWeapon(k.kind) && (p.weapon === 'fists' || roundsLeft(p) === 0)) ||
+  (k.kind === 'ammo' && p.weapon !== 'fists' && p.ammo < WEAPONS[p.weapon].mag * 2) ||
   (k.kind === 'armor' && p.armor < ARMOR.points * 0.5) ||
   ((k.kind === 'medkit' || k.kind === 'bomb') && p.item === null);
 
@@ -541,7 +681,7 @@ const useItem = (state: GameState, p: Player, input: Input) => {
 // ---------- per tick
 
 const updatePlayer = (state: GameState, p: Player, input: Input) => {
-  const pressed = (k: 'super' | 'use') => input[k] && !p.prev[k];
+  const pressed = (k: 'super' | 'use' | 'reload') => input[k] && !p.prev[k];
   p.cooldown = Math.max(0, p.cooldown - DT);
   p.revealed = Math.max(0, p.revealed - DT);
   p.slowed = Math.max(0, p.slowed - DT);
@@ -562,6 +702,20 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     d = Math.atan2(Math.sin(d), Math.cos(d));
     const maxTurn = MOVE.turn * DT;
     p.heading += Math.max(-maxTurn, Math.min(maxTurn, d));
+  }
+
+  updateReload(p);
+  if (pressed('reload')) startReload(state, p);
+
+  if (p.vault > 0) {
+    // Climbing over: a short arc from one side to the other, no shooting meanwhile.
+    p.vault = Math.max(0, p.vault - DT);
+    const k = 1 - p.vault / VAULT.time;
+    const e = k * k * (3 - 2 * k);
+    p.x = p.vaultFrom.x + (p.vaultTo.x - p.vaultFrom.x) * e;
+    p.y = p.vaultFrom.y + (p.vaultTo.y - p.vaultFrom.y) * e;
+    p.prev = { ...input };
+    return;
   }
 
   if (p.dashTime > 0) {
@@ -590,15 +744,31 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
       p.vx += dvx * k;
       p.vy += dvy * k;
     }
-    const bx = p.x;
-    const by = p.y;
-    moveBy(state, p, p.vx * DT, p.vy * DT);
-    // Hitting a wall kills the velocity along it.
-    if (Math.abs(p.x - bx) < Math.abs(p.vx * DT) * 0.5) p.vx = 0;
-    if (Math.abs(p.y - by) < Math.abs(p.vy * DT) * 0.5) p.vy = 0;
+    const toX = p.x + p.vx * DT;
+    const toY = p.y + p.vy * DT;
+    const vaultable = moveBy(state, p, p.vx * DT, p.vy * DT);
+    // Whatever was pushed back is the contact normal: drop the velocity going into it and keep
+    // the part along it, so you slide.
+    const cx = p.x - toX;
+    const cy = p.y - toY;
+    const c = Math.hypot(cx, cy);
+    if (c > 1e-5) {
+      const nx = cx / c;
+      const ny = cy / c;
+      const into = p.vx * nx + p.vy * ny;
+      if (into < 0) {
+        p.vx -= into * nx;
+        p.vy -= into * ny;
+      }
+    }
+    // Keep pushing into a fence, window or low furniture and you climb over it.
+    const pushingInto = vaultable && len > 0.01 && c > 1e-5 && (input.mx * cx + input.my * cy) / (len * c) < -0.6;
+    p.pushing = pushingInto ? p.pushing + DT : 0;
+    if (pushingInto && p.pushing >= VAULT.after) tryVault(state, p, -cx / c, -cy / c);
   }
 
   if (input.fire && p.cooldown <= 0) shoot(state, p, input);
+  else if (input.fire && p.weapon !== 'fists' && p.mag <= 0 && p.ammo <= 0 && !p.prev.fire) state.events.push({ type: 'dryFire', player: p.id });
   if (pressed('super') && p.superCharge >= 1 && p.dashTime <= 0) useSuper(state, p, input);
 
   const k = lootUnder(state, p);
@@ -608,6 +778,27 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     else if (p.item) useItem(state, p, input);
   }
   p.prev = { ...input };
+};
+
+/** Climb over what's in front (direction dx, dy), landing on the first free spot beyond it. */
+const tryVault = (state: GameState, p: Player, dx: number, dy: number) => {
+  // Snap to the nearest axis: fences, sills and furniture all line up with the grid.
+  const ax = Math.abs(dx) > Math.abs(dy) ? Math.sign(dx) : 0;
+  const ay = ax === 0 ? Math.sign(dy) : 0;
+  for (let d = 1.1; d <= VAULT.reach; d += 0.15) {
+    const x = p.x + ax * d;
+    const y = p.y + ay * d;
+    if (!circleBlocked(state, x, y, PLAYER_RADIUS + 0.05)) {
+      p.vault = VAULT.time;
+      p.vaultFrom = { x: p.x, y: p.y };
+      p.vaultTo = { x, y };
+      p.vx = ax * 3;
+      p.vy = ay * 3;
+      p.pushing = 0;
+      state.events.push({ type: 'vault', player: p.id, x: p.x, y: p.y });
+      return;
+    }
+  }
 };
 
 const updateProjectile = (state: GameState, pr: Projectile) => {

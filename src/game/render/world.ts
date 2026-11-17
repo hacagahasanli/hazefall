@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { BUILDINGS, fenceVertical, MAP, SIZE, TILE, tileHash, treeSpot, WORLD } from '../sim/constants';
 
 import { buildFurniture, buildRugs } from './furniture';
+import { buildRoads } from './roads';
 import { buildBushes, buildGrass, buildRocks, buildTrees, outerForest, paintTerrain, updateNature } from './nature';
 
 import type { GameState } from '../sim/types';
@@ -108,6 +109,7 @@ export const buildWorld = (scene: THREE.Scene): World => {
   scene.add(buildBushes(tilesOf('b').map(spot)));
   scene.add(buildRocks(tilesOf('k').map(spot)));
   scene.add(buildGrass());
+  scene.add(buildRoads());
 
   // ---------- furniture and rugs (hidden under the roofs until you walk in)
   scene.add(buildFurniture(), buildRugs());

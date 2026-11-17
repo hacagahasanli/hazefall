@@ -3,6 +3,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 import { BUILDINGS, MAP, SIZE, TILE, tileHash, WORLD } from '../sim/constants';
 
+import { routeDistance } from './roads';
+
 /**
  * Procedural nature, built in code (no asset pack): a painted terrain with soft transitions,
  * swaying grass blades, trees, bushes and rocks with irregular silhouettes. Everything that
@@ -96,7 +98,7 @@ export const paintTerrain = () => {
   const DRY = [146, 150, 74];
   const DIRT = [132, 102, 68];
   const DIRT_DARK = [104, 80, 54];
-  const ASPHALT = [62, 66, 74];
+  const ASPHALT = [128, 116, 98];
   const SOIL = [96, 72, 46];
   const GRAVEL = [128, 124, 116];
   const WOOD = [170, 128, 86];
@@ -124,7 +126,8 @@ export const paintTerrain = () => {
       if (wGravel > 0) col = mix(col, mix(GRAVEL, DIRT, fine * 0.6), wGravel * 0.85);
       const wPath = sstep(0.4, 0.5, sampleGrid(path, tx, ty) + e);
       if (wPath > 0) col = mix(col, mix(DIRT, DIRT_DARK, fbm(wx * 0.9, wy * 0.9, 2)), wPath);
-      const wRoad = sstep(0.42, 0.52, sampleGrid(road, tx, ty));
+      // Under the road strip (roads.ts): packed gravel, which shows only as a soft shoulder.
+      const wRoad = sstep(0.3, 0.6, sampleGrid(road, tx, ty) + e);
       if (wRoad > 0) col = mix(col, [ASPHALT[0] + grain * 0.5, ASPHALT[1] + grain * 0.5, ASPHALT[2] + grain * 0.5], wRoad);
       // Floors inside buildings: hard-edged planks.
       const ftx = Math.floor(tx);
@@ -144,27 +147,6 @@ export const paintTerrain = () => {
   }
   g.putImageData(img, 0, 0);
 
-  // Road edge lines and a dashed centre line.
-  const ppt = px * TILE;
-  g.lineWidth = 1.5;
-  for (let tx = 0; tx < SIZE; tx++) {
-    const ty = MAP.findIndex((row, y) => row[tx] === 'a' && MAP[y + 1]?.[tx] === 'a');
-    if (ty < 0) continue;
-    g.strokeStyle = 'rgba(235,235,225,0.5)';
-    g.beginPath();
-    g.moveTo(tx * ppt, ty * ppt + 3);
-    g.lineTo(tx * ppt + ppt, ty * ppt + 3);
-    g.moveTo(tx * ppt, (ty + 2) * ppt - 3);
-    g.lineTo(tx * ppt + ppt, (ty + 2) * ppt - 3);
-    g.stroke();
-    if (tx % 2 === 0) {
-      g.strokeStyle = 'rgba(255,210,63,0.7)';
-      g.beginPath();
-      g.moveTo(tx * ppt + 2, (ty + 1) * ppt);
-      g.lineTo(tx * ppt + ppt - 2, (ty + 1) * ppt);
-      g.stroke();
-    }
-  }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;
@@ -175,7 +157,10 @@ export const paintTerrain = () => {
 // Shared wind and the canopy cut-out around you
 // ---------------------------------------------------------------------------
 
+/** Up to 10 people on the ground (x, z, 1 if present) that grass and bushes bend away from. */
+const PEOPLE = 10;
 export const natureUniforms = {
+  uPeople: { value: Array.from({ length: PEOPLE }, () => new THREE.Vector3()) },
   uTime: { value: 0 },
   uFocus: { value: new THREE.Vector3() },
   uFade: { value: 0 },
@@ -185,11 +170,11 @@ export const natureUniforms = {
  * Adds wind sway (bigger the higher above `pivot` a vertex is) and, for canopies, a dithered
  * cut-out within `uFade` metres of the player above 2.2 m, so you can always see your fighter.
  */
-const windy = (m: THREE.MeshStandardMaterial, amount: number, pivot: number, cutout: boolean) => {
+const windy = (m: THREE.MeshStandardMaterial, amount: number, pivot: number, cutout: boolean, bend = 0) => {
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, natureUniforms);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime;\nvarying vec3 vWorld;')
+      .replace('#include <common>', `#include <common>\nuniform float uTime;\nuniform vec3 uPeople[${PEOPLE}];\nvarying vec3 vWorld;`)
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
@@ -201,7 +186,18 @@ const windy = (m: THREE.MeshStandardMaterial, amount: number, pivot: number, cut
         float ph = base.x * 0.37 + base.z * 0.29;
         float gust = 0.6 + 0.4 * sin(uTime * 0.7 + base.x * 0.05);
         transformed.x += sin(uTime * 1.9 + ph) * ${amount.toFixed(3)} * bend * gust;
-        transformed.z += cos(uTime * 1.5 + ph * 1.3) * ${(amount * 0.7).toFixed(3)} * bend * gust;`,
+        transformed.z += cos(uTime * 1.5 + ph * 1.3) * ${(amount * 0.7).toFixed(3)} * bend * gust;
+        // Pushed aside by anyone walking through: bend away from them, more at the tips.
+        ${bend > 0 ? `for (int i = 0; i < ${PEOPLE}; i++) {
+          vec3 pp = uPeople[i];
+          if (pp.z < 0.5) continue;
+          vec2 d = base.xz - pp.xy;
+          float dl = length(d);
+          float k = smoothstep(${(bend * 1.6).toFixed(2)}, 0.0, dl);
+          vec2 dir = dl > 0.001 ? d / dl : vec2(1.0, 0.0);
+          transformed.xz += dir * k * bend * ${bend.toFixed(2)} * 1.4;
+          transformed.y -= k * bend * 0.35;
+        }` : ''}`,
       )
       .replace(
         '#include <worldpos_vertex>',
@@ -437,7 +433,7 @@ export const buildBushes = (spots: Placement[]) => {
   const lists = kinds.map(() => [] as THREE.Matrix4[]);
   for (const p of spots) lists[Math.floor(p.seed * kinds.length)].push(placeMatrix(p.x, p.y, 1.05 + p.seed * 0.3, p.seed * 50));
   const g = new THREE.Group();
-  const m = windy(new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 }), 0.03, 0.2, false);
+  const m = windy(new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 }), 0.03, 0.2, false, 0.35);
   kinds.forEach((k, i) => g.add(instanced(k, m, lists[i])));
   return g;
 };
@@ -516,19 +512,21 @@ export const buildGrass = () => {
     for (let tx = 2; tx < SIZE - 2; tx++) {
       const t = MAP[ty][tx];
       if (t !== 'g' && t !== 't' && t !== 'b') continue;
+      if (routeDistance(tx * TILE + 1, ty * TILE + 1) < -0.4) continue;
       // Denser in the lush patches, sparse in the dry ones.
       const lush = fbm(tx * 0.09, ty * 0.09, 3);
       const count = Math.round(5 + lush * 9);
       for (let i = 0; i < count; i++) {
         const x = tx * TILE + r() * TILE;
         const y = ty * TILE + r() * TILE;
+        if (routeDistance(x, y) < 0.1) continue; // keep the roads and paths clear
         const s = 0.8 + r() * 0.7;
         mats.push(placeMatrix(x, y, s, r() * Math.PI * 2, s * (0.8 + lush * 0.6)));
         colors.push(new THREE.Color().setHSL(0.24 + r() * 0.05, 0.4, 0.75 + r() * 0.35));
       }
     }
   }
-  const m = windy(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }), 0.25, 0, false);
+  const m = windy(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }), 0.25, 0, false, 0.9);
   const im = instanced(tuftGeo(), m, mats, false);
   colors.forEach((c, i) => im.setColorAt(i, c));
   return im;
@@ -546,6 +544,14 @@ export const outerForest = (): Placement[] => {
     out.push({ x, y, seed: r() });
   }
   return out;
+};
+
+/** Where the people on the ground are, so grass and bushes part around them. */
+export const setPeople = (people: { x: number; y: number }[]) => {
+  natureUniforms.uPeople.value.forEach((v, i) => {
+    const p = people[i];
+    v.set(p?.x ?? 0, p?.y ?? 0, p ? 1 : 0);
+  });
 };
 
 export const updateNature = (time: number, focusX: number, focusY: number, fade: number) => {

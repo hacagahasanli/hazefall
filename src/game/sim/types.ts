@@ -3,7 +3,7 @@
 export type FighterId = 'hotfix' | 'legacy' | 'standup' | 'intern';
 export type WeaponKind = 'fists' | 'pistol' | 'smg' | 'shotgun' | 'rifle' | 'sniper' | 'rockets';
 export type ItemKind = 'bomb' | 'medkit';
-export type LootKind = Exclude<WeaponKind, 'fists'> | ItemKind | 'armor';
+export type LootKind = Exclude<WeaponKind, 'fists'> | ItemKind | 'armor' | 'ammo';
 
 export interface Input {
   /** Movement, each -1..1 (x right, y down the map). */
@@ -14,13 +14,15 @@ export interface Input {
   super: boolean;
   /** Pick up, swap, or use the item. */
   use: boolean;
+  /** Reload the gun (R). */
+  reload: boolean;
   jump: boolean;
   /** Aim point on the map. */
   aimX: number;
   aimY: number;
 }
 
-export const NO_INPUT: Input = { mx: 0, my: 0, fire: false, super: false, use: false, jump: false, aimX: 0, aimY: 0 };
+export const NO_INPUT: Input = { mx: 0, my: 0, fire: false, super: false, use: false, reload: false, jump: false, aimX: 0, aimY: 0 };
 
 export interface Player {
   id: number;
@@ -41,7 +43,11 @@ export interface Player {
   armor: number;
   alive: boolean;
   weapon: WeaponKind;
+  /** Rounds in the magazine, and spare rounds carried for this gun. */
+  mag: number;
   ammo: number;
+  /** Seconds of reloading left (0 = not reloading). */
+  reload: number;
   cooldown: number;
   item: ItemKind | null;
   superCharge: number; // 0..1
@@ -52,6 +58,12 @@ export interface Player {
   dashAngle: number;
   dashHit: number[];
   slowed: number;
+  /** Vaulting over a fence, window sill or low furniture: seconds left, and from/to. */
+  vault: number;
+  vaultFrom: { x: number; y: number };
+  vaultTo: { x: number; y: number };
+  /** How long you've been pushing into something you could vault. */
+  pushing: number;
   kills: number;
   damage: number;
   placement: number; // 0 while alive
@@ -136,6 +148,9 @@ export type GameEvent =
   | { type: 'rackBroken'; x: number; y: number }
   | { type: 'super'; owner: number; fighter: FighterId; x: number; y: number; angle: number }
   | { type: 'pickup'; player: number; kind: LootKind }
+  | { type: 'reload'; player: number; weapon: WeaponKind; x: number; y: number }
+  | { type: 'dryFire'; player: number }
+  | { type: 'vault'; player: number; x: number; y: number }
   | { type: 'jump'; player: number }
   | { type: 'land'; player: number; x: number; y: number }
   | { type: 'ko'; victim: number; by: number | null; x: number; y: number }
