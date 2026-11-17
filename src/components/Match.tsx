@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { startMatch } from '~/game/render/game';
 import { FIGHTERS } from '~/game/sim/constants';
 
+import { AimChoice, readAim, saveAim } from '~/components/AimChoice';
 import type { HudState } from '~/game/render/game';
 import type { FighterId } from '~/game/sim/types';
 
@@ -23,20 +24,54 @@ const Key = ({ k }: { k: string }) => (
 export const Match = ({ fighter, onExit }: { fighter: FighterId; onExit: () => void }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mapRef = useRef<HTMLCanvasElement>(null);
+  const gameRef = useRef<ReturnType<typeof startMatch> | null>(null);
   const [hud, setHud] = useState<HudState | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const lastEsc = useRef(0);
 
   useEffect(() => {
     if (!canvasRef.current || !mapRef.current) return;
-    const m = startMatch(canvasRef.current, { fighter, name: 'you', minimap: mapRef.current, onHud: setHud });
-    return () => m.dispose();
+    const m = startMatch(canvasRef.current, { fighter, name: 'you', aimMode: readAim(), minimap: mapRef.current, onHud: setHud });
+    gameRef.current = m;
+    return () => {
+      gameRef.current = null;
+      m.dispose();
+    };
   }, [fighter]);
 
   const f = FIGHTERS[fighter];
   const over = hud && (hud.dead || hud.phase === 'over');
 
+  // Esc twice opens the menu and pauses the match (it's offline, so pausing is fair). Esc closes it.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== 'Escape') return;
+      if (menuOpen) {
+        setMenuOpen(false);
+        return;
+      }
+      const now = performance.now();
+      const double = now - lastEsc.current < 450;
+      lastEsc.current = double ? 0 : now;
+      if (double) setMenuOpen(true);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menuOpen]);
+
+  useEffect(() => {
+    gameRef.current?.setPaused(menuOpen);
+  }, [menuOpen]);
+
+  // Remember the aim choice, whether it was made in the menu or with T.
+  useEffect(() => {
+    if (!hud) return;
+    saveAim(hud.aimMode);
+  }, [hud?.aimMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <main className="relative h-screen w-screen select-none overflow-hidden bg-ink-deep">
-      <canvas ref={canvasRef} className="block h-full w-full" />
+      <canvas ref={canvasRef} className={`block h-full w-full ${hud?.aimMode === 'mouse' ? 'cursor-crosshair' : ''}`} />
 
       {/* Minimap */}
       <div className="panel-cut absolute bottom-3 right-3 bg-ink-deep/80 p-1.5">
@@ -111,10 +146,39 @@ export const Match = ({ fighter, onExit }: { fighter: FighterId; onExit: () => v
               <Key k="E" /> pick up / use
             </span>
             <span className="flex items-center gap-1">
+              <Key k="T" /> {hud.aimMode === 'mouse' ? 'mouse aim' : 'auto-aim'}
+            </span>
+            <span className="flex items-center gap-1">
               <Key k="M" /> mute
+            </span>
+            <span className="flex items-center gap-1">
+              <Key k="Esc" />
+              <Key k="Esc" /> menu
             </span>
             <span>{hud.fps} fps</span>
           </div>
+
+          {/* Esc Esc menu */}
+          {menuOpen && !over && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-ink-deep/70">
+              <div role="dialog" aria-label="Paused" className="panel-cut flex w-[22rem] flex-col items-center gap-4 bg-ink p-7 text-center">
+                <div className="font-display text-4xl text-gold">Paused</div>
+                <AimChoice value={hud.aimMode} onChange={(m) => gameRef.current?.setAimMode(m)} />
+                <button
+                  type="button"
+                  autoFocus
+                  onClick={() => setMenuOpen(false)}
+                  className="panel-cut w-full bg-gold px-5 py-2 font-bold uppercase tracking-wider text-ink-deep"
+                >
+                  Resume
+                </button>
+                <button type="button" onClick={onExit} className="panel-cut w-full bg-orange/90 px-5 py-2 font-bold uppercase tracking-wider text-ink-deep">
+                  Leave match
+                </button>
+                <p className="text-[10px] text-cream/40">Esc to resume</p>
+              </div>
+            </div>
+          )}
 
           {/* Result */}
           {over && (

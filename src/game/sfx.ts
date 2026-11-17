@@ -18,7 +18,9 @@ const MUTE_KEY = 'merge-conflict:muted';
 /** Half the visible width of the arena, for turning world x into stereo pan. */
 const HALF_VIEW = 19.5;
 /** At most this many gunshot voices at once; extras are skipped. */
-const SHOT_BUDGET = 6;
+const SHOT_BUDGET = 5;
+/** Level of the recorded gunshots against everything else (about -8 dB). */
+const GUN_LEVEL = 0.4;
 
 const readMuted = () => {
   try {
@@ -251,7 +253,8 @@ export const createSfx = () => {
     /** A recorded gunshot; falls back to synthesis until the files are loaded. */
     gunshot: (kind: 'pistol' | 'smg' | 'shotgun' | 'rifle' | 'sniper', x = 0, distance = 0) => {
       if (shotVoices >= SHOT_BUDGET) return;
-      const gain = Math.max(0.12, 1 - distance / 45);
+      // Recorded shots are mastered hot: play them well under the rest of the mix (Reis: "too loud").
+      const gain = GUN_LEVEL * Math.max(0.12, 1 - distance / 45);
       const ok = sample(kind, { pan: panOf(x), gain, room: 0.1 + Math.min(0.5, distance / 60) });
       if (!ok) shot(kind === 'rifle' ? 'pistol' : kind === 'sniper' ? 'railgun' : kind, x);
       else {

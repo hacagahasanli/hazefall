@@ -1,5 +1,5 @@
 import { createBot } from './bot';
-import { BUILDINGS, DROP, DT, MAP, SIZE, TILE, WEAPONS, WORLD, ZONE_PHASES } from './constants';
+import { BUILDINGS, DROP, DT, MAP, PLAYER_RADIUS, SHAPES, SIZE, TILE, treeSpot, WEAPONS, WORLD, ZONE_PHASES } from './constants';
 import { circleBlocked, createGame, lootUnder, solidAt, step } from './step';
 import { NO_INPUT } from './types';
 
@@ -46,8 +46,42 @@ describe('the map', () => {
       expect(circleBlocked(s, p.x, p.y, 0.5)).toBe(true);
       expect(solidAt(s, p.x, p.y)).toBe(false);
     }
-    const tree = at('t');
-    expect(solidAt(s, tree.x, tree.y)).toBe(true);
+    const t = at('t');
+    const trunk = treeSpot(Math.floor(t.x / TILE), Math.floor(t.y / TILE));
+    expect(solidAt(s, trunk.x, trunk.y)).toBe(true);
+  });
+
+  it('you bump into trunks and rocks, not the whole tile around them', () => {
+    const s = createGame('hotfix', 1);
+    // A lone tree or rock out in the fields, with open grass all around it.
+    const lone = (c: string) => {
+      for (let ty = 4; ty < SIZE - 4; ty++) {
+        for (let tx = 4; tx < SIZE - 4; tx++) {
+          if (MAP[ty][tx] !== c) continue;
+          let open = true;
+          for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) if ((i || j) && MAP[ty + j][tx + i] !== 'g') open = false;
+          if (open) return { tx, ty };
+        }
+      }
+      throw new Error(`no lone ${c}`);
+    };
+    const tree = lone('t');
+    const trunk = treeSpot(tree.tx, tree.ty);
+    expect(circleBlocked(s, trunk.x, trunk.y, PLAYER_RADIUS)).toBe(true);
+    // Standing 1.1 m from the trunk's centre is free: the old tile collision stopped you there.
+    expect(circleBlocked(s, trunk.x + SHAPES.trunk + PLAYER_RADIUS + 0.1, trunk.y, PLAYER_RADIUS)).toBe(false);
+    const rock = lone('k');
+    const rx = rock.tx * TILE + TILE / 2;
+    const ry = rock.ty * TILE + TILE / 2;
+    expect(circleBlocked(s, rx + 1.2, ry, PLAYER_RADIUS)).toBe(true);
+    // A tile corner touched the old box; the round rock leaves it free.
+    expect(circleBlocked(s, rx + 1.25, ry + 1.25, PLAYER_RADIUS)).toBe(false);
+  });
+
+  it('nobody walks out through the tree line at the edge', () => {
+    const s = createGame('hotfix', 1);
+    expect(circleBlocked(s, 3, WORLD / 2, PLAYER_RADIUS)).toBe(true);
+    expect(circleBlocked(s, WORLD - 3, WORLD / 2, PLAYER_RADIUS)).toBe(true);
   });
 
   it('starts with loot on the ground and the same map every match', () => {

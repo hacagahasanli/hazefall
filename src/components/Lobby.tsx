@@ -3,9 +3,11 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
+import { AimChoice, readAim, saveAim } from '~/components/AimChoice';
 import { Match } from '~/components/Match';
 import { BOT_NAMES, FIGHTERS } from '~/game/sim/constants';
 
+import type { AimMode } from '~/game/render/game';
 import type { FighterId } from '~/game/sim/types';
 
 const IDS: FighterId[] = ['hotfix', 'legacy', 'standup', 'intern'];
@@ -20,11 +22,13 @@ export const Lobby = () => {
   const [fighter, setFighter] = useState<FighterId>('hotfix');
   const [round, setRound] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [aim, setAim] = useState<AimMode>('auto');
 
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(PICK_KEY) as FighterId | null;
       if (saved && IDS.includes(saved)) setFighter(saved);
+      setAim(readAim());
     } catch {
       /* no storage */
     }
@@ -94,6 +98,16 @@ export const Lobby = () => {
         })}
       </section>
 
+      <section className="panel-cut max-w-md bg-ink/80 p-4">
+        <AimChoice
+          value={aim}
+          onChange={(m) => {
+            setAim(m);
+            saveAim(m);
+          }}
+        />
+      </section>
+
       <section className="panel-cut bg-ink/80 p-4">
         <div className="mb-3 flex items-baseline justify-between">
           <h2 className="font-display text-lg">In this lobby · 10 / 10</h2>
@@ -126,7 +140,7 @@ export const Lobby = () => {
         </div>
         <div className="panel-cut bg-ink/60 p-3">
           <b className="text-cream">Survive.</b> The Deadline closes in until nothing is left. Space shoots at the nearest enemy
-          you can see, Q is your super. Hide in plants.
+          you can see (or aim with the mouse), Q is your super. Hide in plants. Esc Esc pauses.
         </div>
       </section>
     </main>

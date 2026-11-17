@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
-import { BUILDINGS, MAP, SIZE, TILE, WORLD } from '../sim/constants';
+import { BUILDINGS, fenceVertical, MAP, SIZE, TILE, treeSpot, WORLD } from '../sim/constants';
 
 import type { GameState } from '../sim/types';
 
@@ -258,9 +258,9 @@ export const buildWorld = (scene: THREE.Scene): World => {
     for (const t of tilesOf('t')) {
       const name = TREES[Math.floor(hash(t.tx, t.ty) * TREES.length)];
       const s = 6 + hash(t.tx, t.ty, 1) * 3;
-      const jx = (hash(t.tx, t.ty, 2) - 0.5) * 0.8;
-      const jy = (hash(t.tx, t.ty, 3) - 0.5) * 0.8;
-      (byTree.get(name) ?? byTree.set(name, []).get(name)!).push(place(t.x + jx, t.y + jy, s, hash(t.tx, t.ty, 4) * Math.PI * 2));
+      // Same spot as the trunk the simulation collides with.
+      const spot = treeSpot(t.tx, t.ty);
+      (byTree.get(name) ?? byTree.set(name, []).get(name)!).push(place(spot.x, spot.y, s, hash(t.tx, t.ty, 4) * Math.PI * 2));
     }
     for (const [name, ms] of byTree) scene.add(instance(models[name], ms));
 
@@ -269,17 +269,16 @@ export const buildWorld = (scene: THREE.Scene): World => {
     scene.add(instance(models.plant_bushDetailed, bushes.filter((_, i) => i % 2 === 1).map((t) => place(t.x, t.y, 6, hash(t.tx, t.ty) * 6))));
 
     const rocks = tilesOf('k');
-    scene.add(instance(models.rock_largeA, rocks.filter((_, i) => i % 3 === 0).map((t) => place(t.x, t.y, 3, hash(t.tx, t.ty) * 6))));
-    scene.add(instance(models.rock_largeC, rocks.filter((_, i) => i % 3 === 1).map((t) => place(t.x, t.y, 3, hash(t.tx, t.ty) * 6))));
-    scene.add(instance(models.rock_tallB, rocks.filter((_, i) => i % 3 === 2).map((t) => place(t.x, t.y, 2.6, hash(t.tx, t.ty) * 6))));
+    scene.add(instance(models.rock_largeA, rocks.filter((_, i) => i % 3 === 0).map((t) => place(t.x, t.y, 2.4, hash(t.tx, t.ty) * 6))));
+    scene.add(instance(models.rock_largeC, rocks.filter((_, i) => i % 3 === 1).map((t) => place(t.x, t.y, 2.2, hash(t.tx, t.ty) * 6))));
+    scene.add(instance(models.rock_tallB, rocks.filter((_, i) => i % 3 === 2).map((t) => place(t.x, t.y, 2.4, hash(t.tx, t.ty) * 6))));
 
     scene.add(instance(models.crops_cornStageD, tilesOf('c').map((t) => place(t.x, t.y, 2.6, (hash(t.tx, t.ty) - 0.5) * 0.3))));
 
     // Fences turn to follow their neighbours.
-    const fences = tilesOf('f').map((t) => {
-      const vertical = MAP[t.ty - 1]?.[t.tx] === 'f' || MAP[t.ty + 1]?.[t.tx] === 'f';
-      return place(t.x, t.y, 2, vertical ? Math.PI / 2 : 0);
-    });
+    // The Kenney rail sits on the edge of its tile; shift it to the middle, where the simulation's rail is.
+    const centre = new THREE.Matrix4().makeTranslation(0, 0, 0.465);
+    const fences = tilesOf('f').map((t) => place(t.x, t.y, 2, fenceVertical(t.tx, t.ty) ? Math.PI / 2 : 0).multiply(centre));
     scene.add(instance(models.fence_simple, fences));
 
     const crateGroup = instance(models['box-large'], crateMatrices);

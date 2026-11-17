@@ -3,7 +3,10 @@ import {
   BOT_NAMES,
   DROP,
   DT,
+  fenceVertical,
   MOVE,
+  SHAPES,
+  treeSpot,
   FIGHTERS,
   ITEMS,
   LOOT_TABLE,
@@ -46,28 +49,63 @@ const isWeapon = (k: LootKind): k is Exclude<WeaponKind, 'fists'> => k in WEAPON
 /** Bushes and crops hide you. */
 export const inPlant = (x: number, y: number) => 'bc'.includes(tileAt(toTile(x), toTile(y)));
 
-/** Walls, standing racks and Deprecated walls block movement and bullets. Plants don't. */
+const boxHit = (x: number, y: number, r: number, x0: number, y0: number, x1: number, y1: number) => {
+  if (r === 0) return x >= x0 && x <= x1 && y >= y0 && y <= y1;
+  const nx = Math.max(x0, Math.min(x, x1));
+  const ny = Math.max(y0, Math.min(y, y1));
+  return (nx - x) ** 2 + (ny - y) ** 2 < r * r;
+};
+const circleHit = (x: number, y: number, r: number, cx: number, cy: number, cr: number) => (x - cx) ** 2 + (y - cy) ** 2 < (r + cr) ** 2;
+
+/**
+ * Does a circle (x, y, r) overlap what stands on tile (tx, ty)? Each obstacle has its real shape
+ * (see SHAPES). `bullet` leaves out windows and fences, which stop you but not bullets.
+ */
+const tileHit = (state: GameState, tx: number, ty: number, x: number, y: number, r: number, bullet: boolean) => {
+  const t = tileAt(tx, ty);
+  const x0 = tx * TILE;
+  const y0 = ty * TILE;
+  const c = TILE / 2;
+  switch (t) {
+    case '#':
+      return boxHit(x, y, r, x0, y0, x0 + TILE, y0 + TILE);
+    case 'w':
+      return !bullet && boxHit(x, y, r, x0, y0, x0 + TILE, y0 + TILE);
+    case 'f': {
+      if (bullet) return false;
+      const h = SHAPES.fence;
+      return fenceVertical(tx, ty)
+        ? boxHit(x, y, r, x0 + c - h, y0, x0 + c + h, y0 + TILE)
+        : boxHit(x, y, r, x0, y0 + c - h, x0 + TILE, y0 + c + h);
+    }
+    case 't': {
+      const s = treeSpot(tx, ty);
+      return circleHit(x, y, r, s.x, s.y, SHAPES.trunk);
+    }
+    case 'k':
+      return circleHit(x, y, r, x0 + c, y0 + c, SHAPES.rock);
+    case 'r':
+      return state.racks[tileIndex(tx, ty)] > 0 && circleHit(x, y, r, x0 + c, y0 + c, SHAPES.crate);
+    default:
+      return false;
+  }
+};
+
+/** Walls, trunks, rocks, standing crates and Deprecated walls stop bullets. Windows, fences and plants don't. */
 export const solidAt = (state: GameState, x: number, y: number) => {
   const tx = toTile(x);
   const ty = toTile(y);
-  const t = tileAt(tx, ty);
-  // Bullets stop at walls, trees, rocks and standing crates; windows and fences let them through.
-  if (t === '#' || t === 't' || t === 'k') return true;
-  if (t === 'r' && state.racks[tileIndex(tx, ty)] > 0) return true;
+  // Trunks can stand up to 0.4 m off their tile, so check the neighbours too.
+  for (let j = ty - 1; j <= ty + 1; j++) for (let i = tx - 1; i <= tx + 1; i++) if (tileHit(state, i, j, x, y, 0, true)) return true;
   return state.walls.some((w) => Math.abs(x - w.x) <= w.w / 2 && Math.abs(y - w.y) <= w.h / 2);
 };
 
 export const circleBlocked = (state: GameState, x: number, y: number, r: number) => {
-  for (let ty = toTile(y - r); ty <= toTile(y + r); ty++) {
-    for (let tx = toTile(x - r); tx <= toTile(x + r); tx++) {
-      const t = tileAt(tx, ty);
-      // You can't walk through walls, windows, fences, trees, rocks or standing crates.
-      const solid = '#wftk'.includes(t) || (t === 'r' && state.racks[tileIndex(tx, ty)] > 0);
-      if (!solid) continue;
-      const nx = Math.max(tx * TILE, Math.min(x, tx * TILE + TILE));
-      const ny = Math.max(ty * TILE, Math.min(y, ty * TILE + TILE));
-      if ((nx - x) ** 2 + (ny - y) ** 2 < r * r) return true;
-    }
+  // The tree line around the map is the edge of the world, whatever gaps its trunks leave.
+  const edge = TILE * 2;
+  if (x < edge + r || y < edge + r || x > WORLD - edge - r || y > WORLD - edge - r) return true;
+  for (let ty = toTile(y - r) - 1; ty <= toTile(y + r) + 1; ty++) {
+    for (let tx = toTile(x - r) - 1; tx <= toTile(x + r) + 1; tx++) if (tileHit(state, tx, ty, x, y, r, false)) return true;
   }
   return state.walls.some((w) => Math.abs(x - w.x) < w.w / 2 + r && Math.abs(y - w.y) < w.h / 2 + r);
 };

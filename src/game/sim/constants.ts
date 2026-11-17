@@ -241,6 +241,30 @@ export const BUILDINGS: Building[] = built.buildings;
 export const tileAt = (tx: number, ty: number) =>
   tx < 0 || ty < 0 || tx >= SIZE || ty >= SIZE ? '#' : MAP[ty][tx];
 
+/** A stable 0..1 number per tile, integer-only so the server and every browser agree. */
+export const tileHash = (x: number, y: number, k = 0) => {
+  let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(k + 1, 1274126177)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1103515245);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+};
+
+/**
+ * What you actually bump into. A tile is 2 m, but a tree is only its trunk, a rock and a crate are
+ * round, and a fence is a thin rail through the middle of its tile. The renderer places the models
+ * at the same spots, so what you see is what stops you.
+ */
+export const SHAPES = { trunk: 0.45, rock: 0.95, crate: 0.8, fence: 0.16 };
+
+/** Trees stand a little off their tile centre so the forest doesn't look like a grid. */
+export const treeSpot = (tx: number, ty: number) => ({
+  x: tx * TILE + TILE / 2 + (tileHash(tx, ty, 2) - 0.5) * 0.8,
+  y: ty * TILE + TILE / 2 + (tileHash(tx, ty, 3) - 0.5) * 0.8,
+});
+
+/** A fence runs up-down when it has a fence above or below it, otherwise left-right. */
+export const fenceVertical = (tx: number, ty: number) => tileAt(tx, ty - 1) === 'f' || tileAt(tx, ty + 1) === 'f';
+
 export const RACK_HP = 900;
 
 // ---------------------------------------------------------------------------

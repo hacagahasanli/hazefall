@@ -43,11 +43,17 @@ export interface HudState {
   won: boolean;
   fps: number;
   muted: boolean;
+  aimMode: AimMode;
+  paused: boolean;
 }
+
+export type AimMode = 'auto' | 'mouse';
 
 export interface MatchOptions {
   fighter: FighterId;
   name: string;
+  /** Auto-aim (Space shoots the nearest visible enemy) or mouse aim (point and click). */
+  aimMode: AimMode;
   minimap: HTMLCanvasElement;
   onHud: (hud: HudState) => void;
 }
@@ -266,13 +272,41 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     return m;
   });
 
-  // ---------- input: keyboard; aim is automatic
+  // ---------- input: keyboard; aim is automatic unless mouse aim is on
   const keys = new Set<string>();
+  let aimMode: AimMode = opts.aimMode;
+  let paused = false;
+  /** The mouse on the canvas in normalised device coordinates, and the left button. */
+  const mouse = new THREE.Vector2(0, 0);
+  let mouseDown = false;
+  const onMouseMove = (e: MouseEvent) => {
+    const r = canvas.getBoundingClientRect();
+    mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  };
+  const onMouseDown = (e: MouseEvent) => {
+    sfx.unlock();
+    if (e.button === 0) mouseDown = true;
+  };
+  const onMouseUp = (e: MouseEvent) => {
+    if (e.button === 0) mouseDown = false;
+  };
+  canvas.addEventListener('mousemove', onMouseMove);
+  canvas.addEventListener('mousedown', onMouseDown);
+  window.addEventListener('mouseup', onMouseUp);
+  const raycaster = new THREE.Raycaster();
+  const aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -1.1);
+  const aimHit = new THREE.Vector3();
+  /** Where the mouse points on the battlefield, at chest height. */
+  const mouseAim = () => {
+    raycaster.setFromCamera(mouse, camera);
+    return raycaster.ray.intersectPlane(aimPlane, aimHit) ? { x: aimHit.x, y: aimHit.z } : null;
+  };
   let muted = sfx.muted;
   const onDown = (e: KeyboardEvent) => {
     sfx.unlock();
     if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyQ', 'KeyE', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     if (e.code === 'KeyM') muted = sfx.toggleMute();
+    if (e.code === 'KeyT' && !e.repeat) aimMode = aimMode === 'auto' ? 'mouse' : 'auto';
     keys.add(e.code);
   };
   const onUp = (e: KeyboardEvent) => keys.delete(e.code);
@@ -300,11 +334,12 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const mx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
     const my = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
     if (mx || my) lastMove = { x: mx, y: my };
-    const target = p.stage === 'ground' ? autoAim(p) : null;
-    const aim = target ? { x: target.x, y: target.y } : { x: p.x + lastMove.x * 6, y: p.y + lastMove.y * 6 };
+    const pointed = aimMode === 'mouse' && p.stage === 'ground' ? mouseAim() : null;
+    const target = p.stage === 'ground' && !pointed ? autoAim(p) : null;
+    const aim = pointed ?? (target ? { x: target.x, y: target.y } : { x: p.x + lastMove.x * 6, y: p.y + lastMove.y * 6 });
     return {
       mx, my,
-      fire: keys.has('Space'),
+      fire: keys.has('Space') || (aimMode === 'mouse' && mouseDown),
       jump: keys.has('Space'),
       super: keys.has('KeyQ'),
       use: keys.has('KeyE'),
@@ -659,7 +694,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const outside = self.alive && Math.hypot(self.x - z.cx, self.y - z.cy) > z.r;
     const zone =
       state.phase === 'drop'
-        ? { label: 'Jump with Space', seconds: Math.ceil((1 - state.drone.t) * DROP.flight), outside: false }
+        ? self.stage === 'drone'
+          ? { label: 'Jump with Space', seconds: Math.ceil((1 - state.drone.t) * DROP.flight), outside: false }
+          : { label: 'Everyone is landing', seconds: 0, outside: false }
         : z.state === 'wait'
           ? { label: 'Deadline moves in', seconds: Math.ceil(z.timer), outside }
           : z.state === 'shrink'
@@ -698,6 +735,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       won: state.winner === me,
       fps: Math.round(fps),
       muted,
+      aimMode,
+      paused,
     });
   };
 
@@ -712,7 +751,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     last = now;
     time += dt;
     if (dt > 0) fps += (1 / dt - fps) * 0.05;
-    acc += dt;
+    // Paused (offline only): the world freezes, the camera and effects keep drawing.
+    acc = paused ? 0 : acc + dt;
     while (acc >= DT) {
       state.players.forEach((p, i) => Object.assign(prev[i], { x: p.x, y: p.y }));
       const inputs = state.players.map((p) => (p.id === me ? (p.alive ? readInput() : NO_INPUT) : bots[p.id]!(state)));
@@ -737,8 +777,21 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   if (process.env.NODE_ENV !== 'production') (window as unknown as { __lcs?: unknown }).__lcs = { state: () => state };
 
   return {
+    setPaused: (on: boolean) => {
+      paused = on;
+      keys.clear();
+      mouseDown = false;
+      emitHud();
+    },
+    setAimMode: (m: AimMode) => {
+      aimMode = m;
+      emitHud();
+    },
     dispose: () => {
       cancelAnimationFrame(raf);
+      canvas.removeEventListener('mousemove', onMouseMove);
+      canvas.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mouseup', onMouseUp);
       window.removeEventListener('keydown', onDown);
       window.removeEventListener('keyup', onUp);
       window.removeEventListener('blur', onBlur);
