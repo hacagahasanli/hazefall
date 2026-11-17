@@ -33,6 +33,12 @@ export interface Rig {
   chestY: number;
   phase: number;
   turn: number;
+  head: THREE.Group;
+  /** The plate carrier, shown while you wear armor. */
+  vest: THREE.Group;
+  /** Where the hips and legs face on the map (they lag the upper body and follow the run). */
+  hipYaw: number;
+  hipInit: boolean;
 }
 
 interface Spec {
@@ -265,6 +271,54 @@ export const buildRig = (id: CharacterId): Rig => {
 
   s.extras({ head, torso, spec: s });
 
+  // ---- kit: everyone is dressed for a fight (the Intern brought their own huge backpack).
+  const olive = mat(0x4f5638);
+  const oliveDark = mat(0x3b412a);
+  const strapMat = mat(0x2a2d24);
+  const tan = mat(0xa08c64);
+  const back = -s.torsoD / 2;
+  if (id !== 'intern') {
+    const pack = mesh(box(s.torsoW * 0.78, s.torsoH * 0.72, 0.26), olive);
+    pack.position.set(0, s.torsoH * 0.52, back - 0.13);
+    const flap = mesh(box(s.torsoW * 0.7, s.torsoH * 0.22, 0.05), oliveDark);
+    flap.position.set(0, s.torsoH * 0.78, back - 0.27);
+    const pouchL = mesh(box(0.1, s.torsoH * 0.36, 0.18), oliveDark);
+    pouchL.position.set(-s.torsoW * 0.44, s.torsoH * 0.42, back - 0.12);
+    const pouchR = pouchL.clone();
+    pouchR.position.x = s.torsoW * 0.44;
+    const roll = mesh(new THREE.CylinderGeometry(0.09, 0.09, s.torsoW * 0.82, 10).rotateZ(Math.PI / 2), tan);
+    roll.position.set(0, s.torsoH * 0.93, back - 0.13);
+    torso.add(pack, flap, pouchL, pouchR, roll);
+  }
+  for (const sx of [-1, 1]) {
+    // Shoulder straps over the chest.
+    const strap = mesh(box(0.06, s.torsoH * 0.62, 0.03), strapMat, false);
+    strap.position.set(sx * s.torsoW * 0.26, s.torsoH * 0.62, s.torsoD / 2 + 0.012);
+    torso.add(strap);
+  }
+  const belt = mesh(box(s.torsoW + 0.04, 0.08, s.torsoD + 0.04), strapMat);
+  belt.position.y = 0.05;
+  const buckle = mesh(box(0.07, 0.06, 0.02), mat(0x9a9a8a), false);
+  buckle.position.set(0, 0.05, s.torsoD / 2 + 0.03);
+  const holster = mesh(box(0.08, 0.2, 0.13), oliveDark);
+  holster.position.set(s.torsoW / 2 + 0.05, -0.05, 0.02);
+  const beltPouchL = mesh(box(0.1, 0.11, 0.07), olive);
+  beltPouchL.position.set(-s.torsoW * 0.3, 0.02, s.torsoD / 2 + 0.05);
+  const beltPouchR = beltPouchL.clone();
+  beltPouchR.position.x = s.torsoW * 0.3;
+  torso.add(belt, buckle, holster, beltPouchL, beltPouchR);
+  const vest = new THREE.Group();
+  const plate = mesh(box(s.torsoW + 0.07, s.torsoH * 0.58, s.torsoD + 0.08), oliveDark);
+  plate.position.y = s.torsoH * 0.6;
+  vest.add(plate);
+  for (let i = -1; i <= 1; i++) {
+    const mag = mesh(box(0.1, 0.15, 0.06), olive);
+    mag.position.set(i * 0.12, s.torsoH * 0.45, s.torsoD / 2 + 0.07);
+    vest.add(mag);
+  }
+  vest.visible = false;
+  torso.add(vest);
+
   const makeLimb = (len: number, r: number, color: number, endColor: number, end: 'hand' | 'shoe') => {
     const g = new THREE.Group();
     const limb = mesh(cyl(r, len), mat(color));
@@ -334,6 +388,9 @@ export const buildRig = (id: CharacterId): Rig => {
   const legR = lr.thigh;
   legL.position.set(-s.torsoW * 0.24, s.legLen, 0);
   legR.position.set(s.torsoW * 0.24, s.legLen, 0);
+  // Legs yaw first, then stride, so a twisted stance still swings along the hips' direction.
+  legL.rotation.order = 'YXZ';
+  legR.rotation.order = 'YXZ';
   body.add(legL, legR);
 
   const chestY = s.legLen + s.torsoH * 0.6;
@@ -347,6 +404,7 @@ export const buildRig = (id: CharacterId): Rig => {
   return {
     root, body, armL, armR, foreL: left.fore, foreR: right.fore, armLen: s.armLen,
     shinL: ll.shin, shinR: lr.shin, legLen: s.legLen,
+    head, vest, hipYaw: 0, hipInit: false,
     shoulderL: armL.position.clone(), shoulderR: armR.position.clone(),
     legL, legR, weapon, hand, chestY, phase: 0, turn: 0,
   };
@@ -535,7 +593,32 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   const { dt } = p;
   const speed = Math.hypot(p.vx, p.vy);
   const amp = Math.min(1, speed / 6.5);
-  const rel = Math.atan2(p.vy, p.vx) - p.yaw;
+  const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+
+  // ---- the hips: they follow the run, the upper body follows the aim. Running sideways or
+  // back-pedalling twists the waist (legs one way, gun the other) up to ~60 degrees; standing,
+  // the feet stay planted until the twist gets too big, then step round under you.
+  if (!rig.hipInit) {
+    rig.hipYaw = p.yaw;
+    rig.hipInit = true;
+  }
+  let hipWant = rig.hipYaw;
+  if (speed > 0.6) {
+    const move = Math.atan2(p.vy, p.vx);
+    hipWant = Math.abs(wrap(move - p.yaw)) > 1.9 ? move + Math.PI : move; // back-pedal: hips face the gun
+  } else if (Math.abs(wrap(p.yaw - rig.hipYaw)) > 0.75) hipWant = p.yaw;
+  const stepping = speed <= 0.6 && Math.abs(wrap(hipWant - rig.hipYaw)) > 0.05;
+  rig.hipYaw += wrap(hipWant - rig.hipYaw) * (1 - Math.exp(-(speed > 0.6 ? 10 : 7) * dt));
+  // Never twist past what a waist can do: beyond it the hips are dragged round.
+  const maxTwist = 1.05;
+  const tw = wrap(rig.hipYaw - p.yaw);
+  if (Math.abs(tw) > maxTwist) rig.hipYaw = p.yaw + Math.sign(tw) * maxTwist;
+  const twist = wrap(rig.hipYaw - p.yaw);
+  if (stepping) rig.phase += dt * 9; // a quick shuffle while turning on the spot
+  // The head turns a little ahead of the body into a turn.
+  rig.head.rotation.y = damp(rig.head.rotation.y, Math.max(-0.45, Math.min(0.45, -p.yawRate * 0.08)), 10, dt);
+
+  const rel = Math.atan2(p.vy, p.vx) - rig.hipYaw;
   const fwd = speed > 0.05 ? Math.cos(rel) : 0;
   const side = speed > 0.05 ? Math.sin(rel) : 0;
   const running = p.onGround && speed > 0.3 && p.vault === null && p.roll === null;
@@ -591,6 +674,15 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   }
   rig.shinL.rotation.x = damp(rig.shinL.rotation.x, kneeL, 18, dt);
   rig.shinR.rotation.x = damp(rig.shinR.rotation.x, kneeR, 18, dt);
+  // Legs face the hips (local yaw is the opposite sign of map yaw). A small step on the spot lifts
+  // the feet while turning.
+  rig.legL.rotation.y = -twist;
+  rig.legR.rotation.y = -twist;
+  if (stepping) {
+    const lift = Math.max(0, Math.sin(rig.phase)) * 0.5;
+    rig.shinL.rotation.x += lift;
+    rig.legL.rotation.x -= lift * 0.4;
+  }
   // Keep the lower foot on the ground: the body drops as far as the bent legs shorten it.
   const reachOf = (thigh: number, knee: number) => (Math.cos(thigh) + Math.cos(thigh + knee)) / 2;
   const legDrop = rig.legLen * (1 - Math.max(reachOf(rig.legL.rotation.x, rig.shinL.rotation.x), reachOf(rig.legR.rotation.x, rig.shinR.rotation.x)));

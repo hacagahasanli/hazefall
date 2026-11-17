@@ -891,9 +891,12 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         yw.a = p.heading;
         yw.v = 0;
       } else {
+        // A spring a little under critical damping: the body swings into a turn and settles with a
+        // touch of overshoot, like a person, not a turret.
         const d = Math.atan2(Math.sin(p.heading - yw.a), Math.cos(p.heading - yw.a));
-        const w = 16;
-        yw.v += (w * w * d - 2 * w * yw.v) * dt;
+        const w = 13;
+        const zeta = 0.72;
+        yw.v += (w * w * d - 2 * zeta * w * yw.v) * dt;
         yw.a += yw.v * dt;
       }
       const sinceShot = lastShot[i] === undefined ? 9 : time - lastShot[i];
@@ -922,6 +925,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         });
       }
       rig.root.rotation.y = Math.PI / 2 - yw.a;
+      rig.vest.visible = p.armor > 0;
 
       // Footsteps, at each footfall of the stride: yours and everyone near you, panned left or right.
       if (p.stage === 'ground' && p.alive && p.vault <= 0) {
