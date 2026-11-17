@@ -130,7 +130,7 @@ export interface Drone {
 
 export type GameEvent =
   | { type: 'shot'; owner: number; x: number; y: number; angle: number; weapon: WeaponKind }
-  | { type: 'hit'; target: number; x: number; y: number; damage: number; armor: boolean }
+  | { type: 'hit'; target: number; by: number | null; x: number; y: number; damage: number; armor: boolean; ko: boolean }
   | { type: 'impact'; x: number; y: number }
   | { type: 'explosion'; x: number; y: number; radius: number }
   | { type: 'rackBroken'; x: number; y: number }

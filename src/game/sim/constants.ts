@@ -435,12 +435,13 @@ export const fallHeight = (fall: number) =>
 export const MOVE = { accel: 24, friction: 20, turn: 8 };
 
 /** The Deadline: wait, then shrink, phase after phase, until nothing is left. */
+/** About 2.1x faster than the first version (Reis: the map is big, the Deadline dragged): ~2 minutes in all. */
 export const ZONE_PHASES = [
-  { wait: 50, shrink: 35, radius: 44, dps: 20 },
-  { wait: 35, shrink: 25, radius: 24, dps: 40 },
-  { wait: 25, shrink: 20, radius: 10, dps: 70 },
-  { wait: 20, shrink: 15, radius: 3, dps: 110 },
-  { wait: 10, shrink: 15, radius: 0, dps: 200 },
+  { wait: 22, shrink: 16, radius: 44, dps: 20 },
+  { wait: 16, shrink: 12, radius: 24, dps: 40 },
+  { wait: 12, shrink: 10, radius: 10, dps: 70 },
+  { wait: 9, shrink: 8, radius: 3, dps: 110 },
+  { wait: 5, shrink: 8, radius: 0, dps: 200 },
 ];
 export const ZONE_START_RADIUS = WORLD * 0.72;
 

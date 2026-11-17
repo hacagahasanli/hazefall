@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 import { mat, mesh, PALETTE } from './palette';
 
-import type { FighterId as CharacterId } from '../sim/types';
+import type { FighterId as CharacterId, WeaponKind } from '../sim/types';
 
 /**
  * Low-poly fighters built from primitives. Each one has a different silhouette:
@@ -14,8 +14,14 @@ import type { FighterId as CharacterId } from '../sim/types';
 export interface Rig {
   root: THREE.Group;
   body: THREE.Group;
+  /** Upper arms (pivot at the shoulder) and forearms (pivot at the elbow). */
   armL: THREE.Group;
   armR: THREE.Group;
+  foreL: THREE.Group;
+  foreR: THREE.Group;
+  armLen: number;
+  shoulderL: THREE.Vector3;
+  shoulderR: THREE.Vector3;
   legL: THREE.Group;
   legR: THREE.Group;
   weapon: THREE.Group;
@@ -267,9 +273,32 @@ export const buildRig = (id: CharacterId): Rig => {
     return g;
   };
 
+  // Two-bone arms: an upper arm with a forearm hinged at the elbow, so hands can reach a grip.
+  const makeArm = () => {
+    const half = s.armLen / 2;
+    const upper = new THREE.Group();
+    const u = mesh(cyl(s.armR, half + 0.02), mat(s.top));
+    u.position.y = -half / 2;
+    upper.add(u);
+    const elbow = mesh(ico(s.armR * 1.02, 0), mat(s.top));
+    elbow.position.y = -half;
+    upper.add(elbow);
+    const fore = new THREE.Group();
+    fore.position.y = -half;
+    const f = mesh(cyl(s.armR * 0.92, half), mat(s.top));
+    f.position.y = -half / 2;
+    fore.add(f);
+    const hand = mesh(ico(s.armR * 1.15, 0), mat(s.skin));
+    hand.position.y = -half - 0.02;
+    fore.add(hand);
+    upper.add(fore);
+    return { upper, fore };
+  };
   const shoulderY = s.legLen + s.torsoH - 0.06;
-  const armL = makeLimb(s.armLen, s.armR, s.top, s.skin, 'hand');
-  const armR = makeLimb(s.armLen, s.armR, s.top, s.skin, 'hand');
+  const left = makeArm();
+  const right = makeArm();
+  const armL = left.upper;
+  const armR = right.upper;
   armL.position.set(-(s.torsoW / 2 + s.armR), shoulderY, 0);
   armR.position.set(s.torsoW / 2 + s.armR, shoulderY, 0);
   body.add(armL, armR);
@@ -288,7 +317,11 @@ export const buildRig = (id: CharacterId): Rig => {
   weapon.add(hand);
   body.add(weapon);
 
-  return { root, body, armL, armR, legL, legR, weapon, hand, chestY, phase: 0, turn: 0 };
+  return {
+    root, body, armL, armR, foreL: left.fore, foreR: right.fore, armLen: s.armLen,
+    shoulderL: armL.position.clone(), shoulderR: armR.position.clone(),
+    legL, legR, weapon, hand, chestY, phase: 0, turn: 0,
+  };
 };
 
 export interface PoseInput {
@@ -383,6 +416,54 @@ export const disposeObject = (obj: THREE.Object3D) => {
   });
 };
 
+/**
+ * Where each gun sits relative to the chest (body space, model facing +z): x to the right,
+ * y up, `grip` how far forward the firing hand is, `support` how much further the other hand
+ * reaches along the gun (0 = both hands on the grip).
+ */
+const HOLD: Record<WeaponKind, { x: number; y: number; grip: number; support: number }> = {
+  fists: { x: 0, y: 0, grip: 0.3, support: 0 },
+  pistol: { x: 0.02, y: 0.06, grip: 0.46, support: 0 },
+  smg: { x: 0.13, y: 0.02, grip: 0.24, support: 0.4 },
+  shotgun: { x: 0.13, y: 0.03, grip: 0.24, support: 0.44 },
+  rifle: { x: 0.13, y: 0.03, grip: 0.24, support: 0.42 },
+  sniper: { x: 0.13, y: 0.04, grip: 0.24, support: 0.44 },
+  rockets: { x: 0.2, y: 0.16, grip: 0.18, support: 0.32 },
+};
+
+const tmpE = new THREE.Euler();
+const tmpGrip = new THREE.Vector3();
+const tmpSupport = new THREE.Vector3();
+const DOWN = new THREE.Vector3(0, -1, 0);
+const vA = new THREE.Vector3();
+const vB = new THREE.Vector3();
+const vC = new THREE.Vector3();
+const vD = new THREE.Vector3();
+const qA = new THREE.Quaternion();
+
+/**
+ * Point an upper arm and forearm so the hand lands on `target` (both in body space). Elbows
+ * bend down and outwards. If the target is out of reach the arm straightens towards it.
+ */
+const reach = (upper: THREE.Group, fore: THREE.Group, shoulder: THREE.Vector3, target: THREE.Vector3, len: number, side: 1 | -1) => {
+  const a = len / 2;
+  const toT = vA.subVectors(target, shoulder);
+  const d = Math.min(Math.max(toT.length(), 0.05), len * 0.999);
+  const u = vD.copy(toT).normalize();
+  // Elbow direction: out to the side and down, made perpendicular to the shoulder-hand line.
+  const pole = vB.set(side * 0.8, -1, -0.2);
+  pole.sub(vC.copy(u).multiplyScalar(pole.dot(u))).normalize();
+  const cosA = Math.min(1, d / (2 * a));
+  const sinA = Math.sqrt(1 - cosA * cosA);
+  const elbowDir = vC.copy(u).multiplyScalar(cosA).addScaledVector(pole, sinA).normalize();
+  upper.quaternion.setFromUnitVectors(DOWN, elbowDir);
+  // Forearm: from the elbow towards the hand, expressed in the upper arm's frame.
+  const elbow = vB.copy(shoulder).addScaledVector(elbowDir, a);
+  const handDir = vA.copy(shoulder).addScaledVector(u, d).sub(elbow).normalize();
+  handDir.applyQuaternion(qA.copy(upper.quaternion).invert());
+  fore.quaternion.setFromUnitVectors(DOWN, handDir);
+};
+
 export interface TopDownPose {
   dt: number;
   time: number;
@@ -395,9 +476,10 @@ export interface TopDownPose {
   yawRate: number;
   onGround: boolean;
   dashing: boolean;
-  twoHanded: boolean;
   /** Seconds since the last shot: drives the recoil kick. */
   sinceShot: number;
+  /** What's in the hands: decides the grip and where each hand goes. */
+  gun: WeaponKind;
 }
 
 /**
@@ -432,24 +514,31 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   const breathe = running ? 0 : Math.sin(p.time * 2.1) * 0.012;
   rig.body.position.y = running ? Math.abs(Math.sin(rig.phase)) * 0.055 * amp : breathe;
 
-  // Gun at the hip-to-chest line, kicked back by each shot, swaying when idle.
+  // The gun: held at the chest with the stock at the right shoulder (a pistol out in front with
+  // both hands, the launcher on the shoulder). Kicked back by each shot, swaying a little.
+  const h = HOLD[p.gun];
   const kick = Math.max(0, 1 - p.sinceShot / 0.12);
-  const sway = running ? Math.sin(rig.phase * 0.5) * 0.04 * amp : Math.sin(p.time * 1.3) * 0.025;
-  rig.weapon.rotation.x = damp(rig.weapon.rotation.x, -kick * 0.18 + sway, 28, dt);
-  rig.weapon.rotation.y = damp(rig.weapon.rotation.y, sway * 0.6, 10, dt);
-  rig.weapon.position.z = -kick * 0.1;
-  rig.weapon.position.x = p.twoHanded ? 0 : 0.16;
-  const toWeapon = rig.weapon.rotation.x - Math.PI / 2;
+  const sway = running ? Math.sin(rig.phase * 0.5) * 0.03 * amp : Math.sin(p.time * 1.3) * 0.02;
+  rig.weapon.visible = p.gun !== 'fists';
+  rig.weapon.position.set(h.x, rig.chestY + h.y, -kick * 0.07);
+  rig.weapon.rotation.x = damp(rig.weapon.rotation.x, -kick * 0.12 + sway, 28, dt);
+  rig.weapon.rotation.y = damp(rig.weapon.rotation.y, sway * 0.5, 10, dt);
+  rig.hand.position.set(0, 0, h.grip);
 
-  let armL = p.onGround ? -swing * 0.75 * along : -0.4;
-  let armLz = p.onGround ? 0.05 : -0.6;
-  const armRz = p.twoHanded ? -0.25 : -0.08;
-  if (p.twoHanded) {
-    armL = toWeapon;
-    armLz = 0.25;
+  if (p.gun === 'fists') {
+    // Relaxed arms swinging with the stride, elbows a little bent.
+    const swingArm = (upper: THREE.Group, fore: THREE.Group, sign: number) => {
+      upper.quaternion.setFromEuler(tmpE.set(p.onGround ? sign * swing * 0.7 * along : -0.4, 0, sign * 0.08));
+      fore.quaternion.setFromEuler(tmpE.set(-0.35 - Math.max(0, sign * swing) * 0.4, 0, 0));
+    };
+    swingArm(rig.armL, rig.foreL, -1);
+    swingArm(rig.armR, rig.foreR, 1);
+    return;
   }
-  rig.armL.rotation.x = damp(rig.armL.rotation.x, armL, 18, dt);
-  rig.armR.rotation.x = damp(rig.armR.rotation.x, toWeapon, 30, dt);
-  rig.armL.rotation.z = damp(rig.armL.rotation.z, armLz, 12, dt);
-  rig.armR.rotation.z = damp(rig.armR.rotation.z, armRz, 12, dt);
+  // Two-bone IK: right hand on the grip, left hand on the fore-end (or cupping the pistol grip).
+  rig.weapon.updateMatrix();
+  tmpGrip.set(0, -0.02, h.grip).applyMatrix4(rig.weapon.matrix);
+  tmpSupport.set(h.support === 0 ? -0.05 : 0, h.support === 0 ? -0.04 : 0.03, h.grip + h.support).applyMatrix4(rig.weapon.matrix);
+  reach(rig.armR, rig.foreR, rig.shoulderR, tmpGrip, rig.armLen, 1);
+  reach(rig.armL, rig.foreL, rig.shoulderL, tmpSupport, rig.armLen, -1);
 };

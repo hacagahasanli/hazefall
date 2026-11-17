@@ -350,7 +350,7 @@ const hurt = (state: GameState, target: Player, amount: number, by: number | nul
     a.superCharge = Math.min(1, a.superCharge + amount / FIGHTERS[a.fighter].superCost);
     target.lastHitBy = by;
   }
-  if (!quiet) state.events.push({ type: 'hit', target: target.id, x: target.x, y: target.y, damage: amount, armor: soaked > 0 });
+  if (!quiet) state.events.push({ type: 'hit', target: target.id, by, x: target.x, y: target.y, damage: amount, armor: soaked > 0, ko: target.hp <= 0 });
   if (target.hp <= 0) knockOut(state, target);
 };
 

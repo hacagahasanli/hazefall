@@ -481,7 +481,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         break;
       }
       case 'hit':
-        vfx.burst(e.x, 1.1, 5 + Math.round(e.damage / 60), e.armor ? 'guard' : 'spark', { speed: 3, life: 0.3 });
+        vfx.burst(e.x, 1.1, 5 + Math.round(e.damage / 60), e.armor ? 'guard' : 'spark', { z: e.y, speed: 3, life: 0.3 });
+        // Damage numbers for the hits you land, and for the ones you take.
+        if (e.by === me || e.target === me) popDamage(e.target, e.x, e.y, e.damage, e.target === me ? 'taken' : e.ko ? 'ko' : e.armor ? 'armor' : 'dealt');
         if (e.target === me) trauma = Math.min(1, trauma + 0.25);
         sfx.hit(Math.min(20, e.damage / 30), e.x - camX());
         hitFlash[e.target] = 0.08;
@@ -531,6 +533,88 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** Visual yaw per player (angle and angular velocity) and when each last fired. */
   const yaw = state.players.map((p) => ({ a: p.heading, v: 0 }));
   const lastShot: number[] = [];
+
+  // ---------- damage numbers: a pool of text sprites that rise and fade; quick hits on the same
+  // target add up into one number (an SMG burst reads as -225, not five overlapping numbers)
+  type DamageKind = 'dealt' | 'armor' | 'ko' | 'taken';
+  const DAMAGE_STYLE: Record<DamageKind, { color: string; size: number }> = {
+    dealt: { color: '#ffd23f', size: 1 },
+    armor: { color: '#7fd4ff', size: 1 },
+    ko: { color: '#ff3d6e', size: 1.5 },
+    taken: { color: '#ff6a6a', size: 0.85 },
+  };
+  const textCache = new Map<string, { tex: THREE.Texture; aspect: number }>();
+  const textTexture = (text: string, color: string) => {
+    const key = `${text}|${color}`;
+    let t = textCache.get(key);
+    if (!t) {
+      const c = document.createElement('canvas');
+      const g = c.getContext('2d')!;
+      g.font = '900 64px "Bungee", "Chakra Petch", system-ui, sans-serif';
+      const w = Math.ceil(g.measureText(text).width) + 24;
+      c.width = w;
+      c.height = 84;
+      g.font = '900 64px "Bungee", "Chakra Petch", system-ui, sans-serif';
+      g.textBaseline = 'middle';
+      g.lineWidth = 10;
+      g.strokeStyle = 'rgba(10,13,24,0.9)';
+      g.strokeText(text, 12, 44);
+      g.fillStyle = color;
+      g.fillText(text, 12, 44);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      t = { tex, aspect: w / 84 };
+      if (textCache.size > 300) textCache.clear();
+      textCache.set(key, t);
+    }
+    return t;
+  };
+  const damageNums = Array.from({ length: 24 }, () => {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthTest: false, depthWrite: false }));
+    sprite.renderOrder = 30;
+    sprite.visible = false;
+    scene.add(sprite);
+    return { sprite, life: 0, age: 0, x: 0, y: 0, h: 0, total: 0, target: -1, kind: 'dealt' as DamageKind };
+  });
+  let nextNum = 0;
+  const popDamage = (target: number, x: number, y: number, damage: number, kind: DamageKind) => {
+    let n = damageNums.find((d) => d.life > 0 && d.target === target && d.age < 0.35 && (d.kind === 'taken') === (kind === 'taken'));
+    if (n) {
+      n.total += damage;
+      // The colour follows the latest hit (armor gone -> yellow), and a KO stays red.
+      if (n.kind !== 'ko') n.kind = kind;
+      n.age = 0;
+      n.life = 0.9;
+    } else {
+      n = damageNums[nextNum++ % damageNums.length];
+      Object.assign(n, { life: 0.9, age: 0, x: x + (Math.random() - 0.5) * 0.8, y, h: 2.9, total: damage, target, kind });
+    }
+    const style = DAMAGE_STYLE[n.kind];
+    const t = textTexture(`-${Math.round(n.total)}`, style.color);
+    const m = n.sprite.material as THREE.SpriteMaterial;
+    m.map = t.tex;
+    m.needsUpdate = true;
+    // About 1.3 m tall at the normal camera distance (~33 px), bigger for bigger hits.
+    const hgt = 1.3 * style.size * (1 + Math.min(0.5, n.total / 800));
+    n.sprite.userData.base = hgt;
+    n.sprite.userData.aspect = t.aspect;
+    n.sprite.visible = true;
+  };
+  const updateDamage = (dt: number) => {
+    for (const n of damageNums) {
+      if (n.life <= 0) continue;
+      n.life -= dt;
+      n.age += dt;
+      n.h += dt * 1.6;
+      const m = n.sprite.material as THREE.SpriteMaterial;
+      m.opacity = Math.min(1, n.life / 0.3);
+      // A quick pop when it appears or grows.
+      const hgt = (n.sprite.userData.base as number) * (1 + Math.max(0, 0.12 - n.age) * 3);
+      n.sprite.scale.set(hgt * (n.sprite.userData.aspect as number), hgt, 1);
+      n.sprite.position.set(n.x, n.h, n.y);
+      if (n.life <= 0) n.sprite.visible = false;
+    }
+  };
 
   // ---------- minimap
   const mm = opts.minimap;
@@ -602,6 +686,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   };
 
   const prev = state.players.map((p) => ({ x: p.x, y: p.y }));
+  /** Dev only: ?cam=near brings the camera close to check animation. */
+  const camNear = process.env.NODE_ENV !== 'production' && new URLSearchParams(window.location.search).get('cam') === 'near' ? 0.12 : 1;
   const camFocus = new THREE.Vector3(state.players[me].x, 0, state.players[me].y);
   const camPos = new THREE.Vector3(state.drone.x0, DROP.height + 20, state.drone.y0 + 30);
   const camLook = new THREE.Vector3(state.drone.x0, DROP.height, state.drone.y0);
@@ -657,7 +743,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       if (p.stage === 'ground') {
         poseTopDown(rig, {
           dt, time, vx: p.vx, vy: p.vy, yaw: yw.a, yawRate: yw.v, onGround: true, dashing: p.dashTime > 0,
-          twoHanded: p.weapon !== 'pistol' && p.weapon !== 'fists', sinceShot: lastShot[i] === undefined ? 9 : time - lastShot[i],
+          gun: p.weapon, sinceShot: lastShot[i] === undefined ? 9 : time - lastShot[i],
         });
       } else {
         poseRig(rig, {
@@ -804,8 +890,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       want = new THREE.Vector3(self.x, hh + (chute ? 17 : 12), self.y + (chute ? 13 : 7));
       look = new THREE.Vector3(self.x, hh - (chute ? 1 : 4), self.y);
     } else {
-      want = new THREE.Vector3(self.x, 36, self.y + 22);
-      look = new THREE.Vector3(self.x, 0, self.y + 1);
+      want = camNear < 1 ? new THREE.Vector3(self.x + 2, 3.2, self.y + 4) : new THREE.Vector3(self.x, 36, self.y + 22);
+      look = camNear < 1 ? new THREE.Vector3(self.x, 1.1, self.y) : new THREE.Vector3(self.x, 0, self.y + 1);
     }
     const follow = self.stage === 'ground' ? 1 - Math.exp(-6 * dt) : self.stage === 'falling' ? 1 - Math.exp(-8 * dt) : kf;
     camPos.lerp(want, follow);
@@ -818,6 +904,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     sun.target.position.set(camFocus.x, 0, camFocus.z);
 
     vfx.update(dt);
+    updateDamage(dt);
     renderer.render(scene, camera);
   };
 
