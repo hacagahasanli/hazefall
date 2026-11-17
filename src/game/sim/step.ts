@@ -367,6 +367,13 @@ const newPlayer = (id: number, name: string, fighter: FighterId, bot: boolean, x
   damage: 0,
   placement: 0,
   lastHitBy: null,
+  lastHitWith: null,
+  killedBy: null,
+  killedWith: null,
+  diedAt: 0,
+  shots: 0,
+  hits: 0,
+  distance: 0,
   prev: { ...NO_INPUT },
 });
 
@@ -467,6 +474,7 @@ const updateZone = (state: GameState) => {
       if (Math.hypot(p.x - z.cx, p.y - z.cy) > z.r) {
         // Armor first, then health; reported once a second so it can be shown.
         const before = p.hp + p.armor;
+        p.lastHitWith = 'zone';
         hurt(state, p, z.dps * DT, null, true, false);
         p.zoneSum += before - (p.hp + p.armor);
         p.zoneClock += DT;
@@ -512,9 +520,13 @@ const knockOut = (state: GameState, p: Player) => {
   p.placement = alivePlayers(state).length;
   p.alive = false;
   p.hp = 0;
-  const by = p.lastHitBy;
+  p.diedAt = state.tick;
+  p.killedWith = p.lastHitWith;
+  // The Deadline's last bite: nobody gets the kill.
+  const by = p.lastHitWith === 'zone' ? null : p.lastHitBy;
+  p.killedBy = by;
   if (by !== null && state.players[by].alive) state.players[by].kills += 1;
-  state.events.push({ type: 'ko', victim: p.id, by, x: p.x, y: p.y });
+  state.events.push({ type: 'ko', victim: p.id, by, with: p.killedWith, x: p.x, y: p.y });
   // Everything you carried is up for grabs.
   if (p.weapon !== 'fists' && roundsLeft(p) > 0) addLoot(state, p.weapon, p.x + 0.8, p.y, roundsLeft(p));
   if (p.item) addLoot(state, p.item, p.x - 0.8, p.y);
@@ -556,6 +568,7 @@ const explode = (state: GameState, owner: number, x: number, y: number, radius: 
     const d = Math.hypot(o.x - x, o.y - y);
     if (d > radius + PLAYER_RADIUS) continue;
     const self = o.id === owner ? 0.5 : 1;
+    o.lastHitWith = 'explosion';
     hurt(state, o, damage * self * (1 - 0.7 * Math.min(1, d / radius)), owner === o.id ? null : owner);
   }
   damageRacksAround(state, x, y, radius * 0.6, damage);
@@ -630,6 +643,7 @@ const shoot = (state: GameState, p: Player, input: Input) => {
   } else fireBullet(state, p, aim + (nextRandom(state) - 0.5) * w.spread);
   p.weapon = keep;
   state.events.push({ type: 'shot', owner: p.id, x: p.x, y: p.y, angle: aim, weapon: kind });
+  if (kind !== 'fists') p.shots += w.bullets;
   if (kind !== 'fists') {
     p.mag -= 1;
     if (p.mag <= 0) startReload(state, p);
@@ -679,6 +693,7 @@ const useSuper = (state: GameState, p: Player, input: Input) => {
         const dy = o.y - p.y;
         const d = Math.hypot(dx, dy);
         if (d > s.radius) continue;
+        o.lastHitWith = 'super';
         hurt(state, o, s.damage, p.id);
         const k = (s.knockback * (1 - d / s.radius)) / Math.max(0.3, d);
         for (let i = 0; i < 6; i++) moveBy(state, o, (dx * k) / 6, (dy * k) / 6);
@@ -811,6 +826,7 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
       if (!o.alive || o.id === p.id || p.dashHit.includes(o.id)) continue;
       if (Math.hypot(o.x - p.x, o.y - p.y) < PLAYER_RADIUS * 2.2) {
         p.dashHit.push(o.id);
+        o.lastHitWith = 'super';
         hurt(state, o, SUPERS.deploy.damage, p.id);
       }
     }
@@ -948,6 +964,8 @@ const updateProjectile = (state: GameState, pr: Projectile) => {
       if (o.id === pr.owner || !targetable(o)) continue;
       const h = hitPoint(o);
       if (Math.hypot(h.x - pr.x, h.y - pr.y) < PLAYER_RADIUS + 0.15) {
+        o.lastHitWith = pr.weapon;
+        state.players[pr.owner].hits += 1;
         hurt(state, o, falloffDamage(pr.weapon, pr.damage, Math.hypot(pr.x - pr.sx, pr.y - pr.sy)), pr.owner);
         return false;
       }
@@ -962,7 +980,13 @@ export const step = (state: GameState, inputs: Input[]): GameState => {
   state.tick += 1;
   // Landed players play while others are still in the air; the Deadline waits for everyone.
   if (state.phase === 'drop') updateDrop(state, inputs);
-  for (const p of state.players) if (p.alive && p.stage === 'ground') updatePlayer(state, p, inputs[p.id] ?? NO_INPUT);
+  for (const p of state.players) {
+    if (!p.alive || p.stage !== 'ground') continue;
+    const x0 = p.x;
+    const y0 = p.y;
+    updatePlayer(state, p, inputs[p.id] ?? NO_INPUT);
+    p.distance += Math.hypot(p.x - x0, p.y - y0);
+  }
   state.projectiles = state.projectiles.filter((pr) => updateProjectile(state, pr));
   for (const fld of state.fields) {
     fld.life -= DT;

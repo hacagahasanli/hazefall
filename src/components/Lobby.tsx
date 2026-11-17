@@ -44,7 +44,7 @@ export const Lobby = () => {
   };
 
   if (playing) {
-    return <Match key={round} fighter={fighter} onExit={() => setPlaying(false)} />;
+    return <Match key={round} fighter={fighter} onExit={() => setPlaying(false)} onPlayAgain={() => setRound((r) => r + 1)} />;
   }
 
   return (

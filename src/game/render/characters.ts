@@ -823,3 +823,26 @@ export const poseFreefall = (rig: Rig, p: { dt: number; time: number; seed: numb
   rig.shinL.rotation.set(1.25, 0, 0);
   rig.shinR.rotation.set(1.25, 0, 0);
 };
+
+/**
+ * Knocked out: the body folds and falls back over 0.6 s, then lies still, arms flung out,
+ * one knee up. `t` is seconds since the knock-out; `seed` varies which way it twists.
+ */
+export const poseDeath = (rig: Rig, t: number, seed: number) => {
+  const k = Math.min(1, t / 0.6);
+  const e = k < 1 ? 1 - Math.pow(1 - k, 3) : 1;
+  const bounce = k >= 1 ? 0 : Math.sin(k * Math.PI) * 0.05;
+  const twist = (seed % 2 ? 1 : -1) * 0.35;
+  rig.body.rotation.set(-1.52 * e, twist * e, 0);
+  rig.body.position.set(0, 0.16 * e + bounce, 0);
+  rig.weapon.visible = false;
+  rig.head.rotation.y = twist * 0.8 * e;
+  rig.armL.quaternion.setFromEuler(tmpE.set(-0.4 * e, 0, -1.3 * e));
+  rig.armR.quaternion.setFromEuler(tmpE.set(-0.9 * e, 0, 1.1 * e));
+  rig.foreL.quaternion.setFromEuler(tmpE.set(-0.5 * e, 0, 0));
+  rig.foreR.quaternion.setFromEuler(tmpE.set(-0.2 * e, 0, 0));
+  rig.legL.rotation.set(-0.6 * e, 0, -0.1 * e);
+  rig.legR.rotation.set(0.05 * e, 0, 0.12 * e);
+  rig.shinL.rotation.set(1.1 * e, 0, 0);
+  rig.shinR.rotation.set(0.1 * e, 0, 0);
+};

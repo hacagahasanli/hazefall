@@ -84,6 +84,16 @@ export interface Player {
   damage: number;
   placement: number; // 0 while alive
   lastHitBy: number | null;
+  /** What hit you last: a gun, 'explosion', 'super' or 'zone'. */
+  lastHitWith: string | null;
+  /** For the result screen: who took you out and with what (null by = the Deadline), and when. */
+  killedBy: number | null;
+  killedWith: string | null;
+  diedAt: number;
+  /** Bullets and pellets fired, how many hit someone, metres moved on the ground. */
+  shots: number;
+  hits: number;
+  distance: number;
   prev: Input;
 }
 
@@ -174,7 +184,7 @@ export type GameEvent =
   | { type: 'roll'; player: number; x: number; y: number }
   | { type: 'jump'; player: number }
   | { type: 'land'; player: number; x: number; y: number }
-  | { type: 'ko'; victim: number; by: number | null; x: number; y: number }
+  | { type: 'ko'; victim: number; by: number | null; with: string | null; x: number; y: number }
   | { type: 'zone'; phase: number; state: Zone['state'] }
   | { type: 'win'; player: number };
 

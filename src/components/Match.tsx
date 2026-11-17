@@ -57,7 +57,82 @@ const SoundSliders = ({ game }: { game: ReturnType<typeof startMatch> | null }) 
   );
 };
 
-export const Match = ({ fighter, onExit }: { fighter: FighterId; onExit: () => void }) => {
+const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
+/**
+ * The round report: where you placed, who took you out and with what, and how your round went,
+ * then straight into the next match or back to the lobby.
+ */
+const Result = ({ hud, onPlayAgain, onExit }: { hud: HudState; onPlayAgain: () => void; onExit: () => void }) => {
+  const stats: [string, string][] = [
+    ['Kills', String(hud.kills)],
+    ['Damage dealt', String(hud.damage)],
+    ['Accuracy', `${hud.accuracy}%`],
+    ['Survived', fmtTime(hud.survived)],
+    ['Distance', `${hud.distance} m`],
+  ];
+  const killerColor = hud.killerFighter ? FIGHTERS[hud.killerFighter].color : '#6fb6ff';
+  return (
+    <div className="absolute inset-0 z-30 flex animate-[fadeIn_0.6s_ease-out] items-center justify-center bg-[radial-gradient(ellipse_at_center,rgba(10,13,24,0.72),rgba(10,13,24,0.95))] px-6 backdrop-blur-sm">
+      <div className="flex w-full max-w-4xl flex-col gap-8">
+        <div className="flex flex-wrap items-end gap-8">
+          <div className="flex items-baseline font-display leading-none">
+            <span className={`text-[9rem] sm:text-[11rem] ${hud.won ? 'text-gold' : 'text-cream'}`}>#{hud.won ? 1 : hud.placement}</span>
+            <span className="text-4xl text-cream/40">/10</span>
+          </div>
+          <div className="flex flex-col gap-2 pb-6">
+            <span className={`text-xs font-bold tracking-[0.35em] ${hud.won ? 'text-green' : 'text-orange'}`}>{hud.won ? 'ROUND WON' : 'ELIMINATED'}</span>
+            <h2 className="font-display text-4xl leading-none sm:text-5xl">{hud.won ? 'MERGED TO MAIN' : 'YOUR COMMIT WAS REVERTED'}</h2>
+            <p className="text-lg text-cream/80">
+              {hud.won ? (
+                <>Nine down, one standing. You shipped it.</>
+              ) : hud.killedBy ? (
+                <>
+                  Taken out by{' '}
+                  <b className="font-display" style={{ color: killerColor }}>
+                    {hud.killedBy}
+                  </b>{' '}
+                  with {hud.killedWith}.
+                </>
+              ) : (
+                <>Caught outside by {hud.killedWith ?? 'the Deadline'}.</>
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          {stats.map(([label, value], i) => (
+            <div
+              key={label}
+              className="panel-cut flex animate-[riseIn_0.5s_ease-out_both] flex-col gap-1 bg-ink/90 p-4"
+              style={{ animationDelay: `${0.25 + i * 0.08}s` }}
+            >
+              <span className="font-display text-3xl text-cream">{value}</span>
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-cream/55">{label}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            autoFocus
+            onClick={onPlayAgain}
+            className="panel-cut flex items-center gap-3 bg-gold px-10 py-4 font-display text-xl uppercase text-ink-deep shadow-[0_0_40px_rgba(255,210,63,0.3)] hover:brightness-110"
+          >
+            Play again →
+          </button>
+          <button type="button" onClick={onExit} className="panel-cut bg-cream/10 px-8 py-4 font-bold uppercase tracking-wider text-cream/90 hover:bg-cream/20">
+            Back to lobby
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export const Match = ({ fighter, onExit, onPlayAgain }: { fighter: FighterId; onExit: () => void; onPlayAgain: () => void }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mapRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<ReturnType<typeof startMatch> | null>(null);
@@ -90,6 +165,8 @@ export const Match = ({ fighter, onExit }: { fighter: FighterId; onExit: () => v
 
   const f = FIGHTERS[fighter];
   const over = hud && (hud.dead || hud.phase === 'over');
+  // Let the fall play out first (or the win sink in) before the report comes up.
+  const showResult = !!hud && ((hud.dead && hud.deadFor > 1.6) || (hud.won && hud.phase === 'over'));
 
   // Esc twice opens the menu and pauses the match (it's offline, so pausing is fair). Esc closes it.
   useEffect(() => {
@@ -287,26 +364,8 @@ export const Match = ({ fighter, onExit }: { fighter: FighterId; onExit: () => v
             </div>
           )}
 
-          {/* Result */}
-          {over && (
-            <div className="absolute inset-0 flex items-center justify-center bg-ink-deep/70">
-              <div className="panel-cut flex w-[26rem] flex-col items-center gap-3 bg-ink p-8 text-center">
-                <div className="text-xs font-bold tracking-[0.3em] text-blue">{hud.won ? 'SHIPPED' : 'ROUND OVER FOR YOU'}</div>
-                <div className="font-display text-4xl text-gold">{hud.won ? 'Last commit standing' : `#${hud.placement} of 10`}</div>
-                <div className="flex gap-6 text-sm text-cream/80">
-                  <span>
-                    <b className="font-display text-xl text-cream">{hud.kills}</b> KOs
-                  </span>
-                  <span>
-                    <b className="font-display text-xl text-cream">{hud.damage}</b> damage
-                  </span>
-                </div>
-                <button type="button" onClick={onExit} className="panel-cut mt-2 w-full bg-gold px-5 py-2 font-bold uppercase tracking-wider text-ink-deep">
-                  Back to lobby
-                </button>
-              </div>
-            </div>
-          )}
+          {/* Result: after the fall (or the win) settles, a full-screen round report. */}
+          {showResult && <Result hud={hud} onPlayAgain={onPlayAgain} onExit={onExit} />}
         </>
       )}
     </main>

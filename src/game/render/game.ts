@@ -8,7 +8,7 @@ import { ARMOR, ROLL, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, ITEM
 import { canSee, createGame, inPlant, lineOfSight, lootUnder, step, throwDistance } from '../sim/step';
 import { NO_INPUT } from '../sim/types';
 
-import { buildRig, poseChute, poseFreefall, poseRig, poseTopDown } from './characters';
+import { buildRig, poseChute, poseDeath, poseFreefall, poseRig, poseTopDown } from './characters';
 import { buildGun } from './guns';
 import { mat, mesh, PALETTE } from './palette';
 import { createVfx } from './vfx';
@@ -52,6 +52,15 @@ export interface HudState {
   feed: { id: number; text: string }[];
   prompt: string | null;
   dead: boolean;
+  /** Seconds since you went down (the result screen waits a moment). */
+  deadFor: number;
+  accuracy: number;
+  /** Seconds alive this round, metres moved on foot. */
+  survived: number;
+  distance: number;
+  killedBy: string | null;
+  killedWith: string | null;
+  killerFighter: FighterId | null;
   placement: number;
   kills: number;
   damage: number;
@@ -579,6 +588,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         if (e.player === me) sfx.land();
         break;
       case 'ko': {
+        deadAt[e.victim] = time;
         const v = state.players[e.victim];
         const by = e.by !== null ? state.players[e.by] : null;
         feed.push({ id: feedId++, text: by ? `${by.name} ⟶ ${v.name}` : `${v.name} missed the Deadline`, at: time });
@@ -604,6 +614,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** Visual yaw per player (angle and angular velocity) and when each last fired. */
   const yaw = state.players.map((p) => ({ a: p.heading, v: 0 }));
   const lastShot: number[] = [];
+  const deadAt: number[] = [];
   const chuteAt: number[] = [];
   const harness = new THREE.Vector3();
   /** When each player touched down (for the landing roll), and the canopies left on the ground. */
@@ -829,7 +840,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const rig = rigs[i];
       const x = prev[i].x + (p.x - prev[i].x) * alpha;
       const y = prev[i].y + (p.y - prev[i].y) * alpha;
-      const visible = p.alive && p.stage !== 'drone' && (i === me || p.stage === 'falling' || canSee(state, self, p));
+      // The fallen stay where they fell (you can see who went down where).
+      const fallen = !p.alive && p.stage === 'ground' && deadAt[i] !== undefined;
+      const visible = fallen || (p.alive && p.stage !== 'drone' && (i === me || p.stage === 'falling' || canSee(state, self, p)));
       rig.root.visible = visible;
       const chuteOpen = p.stage === 'falling' && p.fall <= DROP.chute;
       chutes[i].visible = visible && chuteOpen;
@@ -861,7 +874,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       }
       const sinceShot = lastShot[i] === undefined ? 9 : time - lastShot[i];
       const sinceLand = landAt[i] === undefined ? 9 : time - landAt[i];
-      if (p.stage === 'ground') {
+      if (fallen) {
+        poseDeath(rig, time - deadAt[i], i);
+      } else if (p.stage === 'ground') {
         poseTopDown(rig, {
           dt, time, vx: p.vx, vy: p.vy, yaw: yw.a, yawRate: yw.v, onGround: true, dashing: p.dashTime > 0,
           gun: p.weapon, sinceShot,
@@ -928,12 +943,12 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         rig.hand.getWorldQuaternion(tmpQ);
         gun.position.copy(tmpV);
         gun.quaternion.copy(tmpQ);
-        gun.visible = visible && (p.stage === 'ground' ? p.vault <= 0 && sinceLand >= ROLL_TIME : chuteOpen && sinceShot < 1.5);
+        gun.visible = visible && p.alive && (p.stage === 'ground' ? p.vault <= 0 && sinceLand >= ROLL_TIME : chuteOpen && sinceShot < 1.5);
       }
 
       // Health bar over the head, facing the camera.
       const bar = bars[i];
-      bar.g.visible = visible && p.stage === 'ground';
+      bar.g.visible = visible && p.alive && p.stage === 'ground';
       bar.g.position.set(x, 2.7, y);
       bar.g.quaternion.copy(camera.quaternion);
       const k = Math.max(0.001, p.hp / p.maxHp);
@@ -1103,6 +1118,16 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   // ---------- HUD
   let fps = 60;
   let zoneHits = 0;
+  /** In words, what took a player out. */
+  const causeName = (p: Player) => {
+    const w = p.killedWith;
+    if (w === 'zone') return 'the Deadline';
+    if (w === 'explosion') return 'an explosion';
+    if (w === 'super' && p.killedBy !== null) return FIGHTERS[state.players[p.killedBy].fighter].superName;
+    if (w === 'fists') return 'bare hands';
+    if (w && w in WEAPONS) return `a ${WEAPONS[w as WeaponKind].name.toLowerCase()}`;
+    return 'something';
+  };
   const emitHud = () => {
     const self = state.players[me];
     const z = state.zone;
@@ -1156,6 +1181,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       placement: self.placement,
       kills: self.kills,
       damage: Math.round(self.damage),
+      deadFor: deadAt[me] === undefined ? 0 : time - deadAt[me],
+      accuracy: self.shots > 0 ? Math.round((self.hits / self.shots) * 100) : 0,
+      survived: Math.round(((self.alive ? state.tick : self.diedAt) * DT)),
+      distance: Math.round(self.distance),
+      killedBy: self.killedBy !== null ? state.players[self.killedBy].name : null,
+      killedWith: !self.alive ? causeName(self) : null,
+      killerFighter: self.killedBy !== null ? state.players[self.killedBy].fighter : null,
       won: state.winner === me,
       fps: Math.round(fps),
       zoneHits,
