@@ -72,7 +72,10 @@ const tileHit = (state: GameState, tx: number, ty: number, x: number, y: number,
   const c = TILE / 2;
   switch (t) {
     case '#':
+    case 'v':
       return boxHit(x, y, r, x0, y0, x0 + TILE, y0 + TILE);
+    case 'o':
+      return !bullet && boxHit(x, y, r, x0, y0, x0 + TILE, y0 + TILE);
     case 'w':
       return !bullet && boxHit(x, y, r, x0, y0, x0 + TILE, y0 + TILE);
     case 'u': {
@@ -173,7 +176,7 @@ const pushOut = (state: GameState, pos: { x: number; y: number }, r: number) => 
         const x0 = tx * TILE;
         const y0 = ty * TILE;
         const c = TILE / 2;
-        if (t === '#') outBox(x0, y0, x0 + TILE, y0 + TILE);
+        if (t === '#' || t === 'v' || t === 'o') outBox(x0, y0, x0 + TILE, y0 + TILE);
         else if (t === 'w') {
           if (outBox(x0, y0, x0 + TILE, y0 + TILE)) vaultable = 'w';
         } else if (t === 'f') {

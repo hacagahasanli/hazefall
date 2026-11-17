@@ -2,9 +2,11 @@ import type { FighterId, WeaponKind } from './types';
 
 export const DT = 1 / 60;
 
-/** Tiles are 2 m; the island is 64 x 64 tiles = 128 x 128 m. */
+/** Tiles are 2 m; the map is 88 x 88 tiles = 176 x 176 m. */
 export const TILE = 2;
-export const SIZE = 64;
+export const SIZE = 88;
+/** The original 64-tile heart of the map (town, farms, forest, quarry) sits this far in. */
+const O = 12;
 export const WORLD = TILE * SIZE;
 export const PLAYER_RADIUS = 0.55;
 export const PLAYERS = 10;
@@ -18,6 +20,8 @@ export const PLAYERS = 10;
 //   r crate (cover, breaks, may drop loot)    b bush / c crops (you can hide inside)
 //   l loot inside a building    s loot outdoors
 //   u furniture (blocks you, not bullets; placed so every room stays reachable)
+//   v vehicle / container / big prop (blocks both: cover)    o water (blocks you, not bullets)
+//   d wooden pier (walkable)
 // ---------------------------------------------------------------------------
 
 export interface District {
@@ -32,6 +36,17 @@ export interface District {
 export interface Route {
   kind: 'asphalt' | 'dirt';
   points: { x: number; y: number }[];
+}
+
+/** Big props the renderer draws over their 'v' tiles (and decor with no collision). */
+export interface Prop {
+  kind: 'car' | 'container' | 'tent' | 'windmill' | 'campfire' | 'pond';
+  /** Tile rectangle. */
+  x0: number;
+  y0: number;
+  w: number;
+  h: number;
+  seed: number;
 }
 
 export interface Building {
@@ -61,17 +76,25 @@ const buildMap = () => {
   const buildings: Building[] = [];
   const districts: District[] = [];
   const routes: Route[] = [];
+  const props: Prop[] = [];
+  /** Place a solid prop over a w x h tile rectangle if it's all open grass, path or asphalt. */
+  const solidProp = (kind: Prop['kind'], x0: number, y0: number, w: number, h: number, on = 'gpa') => {
+    for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) if (!on.includes(get(x, y))) return false;
+    for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) set(x, y, 'v');
+    props.push({ kind, x0, y0, w, h, seed: r() });
+    return true;
+  };
   const district = (name: string, x0: number, y0: number, x1: number, y1: number) =>
     districts.push({ name, x0: x0 * TILE, y0: y0 * TILE, x1: x1 * TILE, y1: y1 * TILE });
 
   // Roads and paths first, so buildings sit beside them.
   const road: Route = { kind: 'asphalt', points: [] };
   for (let x = 0; x < SIZE; x++) {
-    const y = 31 + Math.round(Math.sin(x / 7) * 2);
+    const y = 31 + O + Math.round(Math.sin(x / 7) * 2);
     set(x, y, 'a');
     set(x, y + 1, 'a');
   }
-  for (let x = -4; x <= SIZE + 4; x += 0.5) road.points.push({ x: x * TILE + TILE / 2, y: (32 + Math.sin(x / 7) * 2) * TILE });
+  for (let x = -4; x <= SIZE + 4; x += 0.5) road.points.push({ x: x * TILE + TILE / 2, y: (32 + O + Math.sin(x / 7) * 2) * TILE });
   routes.push(road);
   const path = (x0: number, y0: number, x1: number, y1: number) => {
     const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
@@ -87,11 +110,12 @@ const buildMap = () => {
     }
     routes.push(line);
   };
-  path(32, 31, 32, 6);
-  path(32, 33, 32, 58);
-  path(30, 14, 12, 12);
-  path(34, 14, 52, 10);
-  path(30, 50, 12, 54);
+  path(32 + O, 31 + O, 32 + O, 4);
+  path(32 + O, 33 + O, 32 + O, 76);
+  path(30 + O, 14 + O, 12 + O, 12 + O);
+  path(34 + O, 14 + O, 52 + O, 10 + O);
+  path(30 + O, 50 + O, 12 + O, 54 + O);
+  path(12 + O, 34 + O, 13, 57);
 
   const house = (x0: number, y0: number, w: number, h: number, barn: boolean) => {
     for (let y = y0; y < y0 + h; y++) {
@@ -222,8 +246,71 @@ const buildMap = () => {
     return x0 > 2 && y0 > 2 && x0 + w < SIZE - 3 && y0 + h < SIZE - 3;
   };
 
+  // The new outer districts first, so the town and the lone houses are placed around them.
+  // ---- Lakeside (west): a pond with reeds, a pier and two cabins.
+  district('Lakeside', 2, 28, 14, 72);
+  {
+    const cx = 7;
+    const cy = 57; // south of the main road
+    for (let y = cy - 8; y <= cy + 8; y++) {
+      for (let x = cx - 5; x <= cx + 5; x++) {
+        const d = ((x - cx) / 4.6) ** 2 + ((y - cy) / 7.4) ** 2;
+        if (d <= 1 && get(x, y) === 'g') set(x, y, 'o');
+        else if (d <= 1.35 && get(x, y) === 'g' && r() < 0.45) set(x, y, 'b'); // reeds
+      }
+    }
+    props.push({ kind: 'pond', x0: cx - 5, y0: cy - 8, w: 11, h: 17, seed: r() });
+    for (let x = cx; x <= cx + 6; x++) if ('ob'.includes(get(x, cy))) set(x, cy, 'd'); // the pier
+    set(cx - 1, cy, 's');
+    if (free(4, 29, 4, 4)) house(4, 29, 4, 4, false);
+    if (free(4, 68, 5, 4)) house(4, 68, 5, 4, false);
+  }
+
+  // ---- Windmill Hill (north): a windmill, a camp of tents round a fire.
+  district('Windmill Hill', 26, 2, 62, 11);
+  solidProp('windmill', 46, 4, 2, 2);
+  for (const [x, y] of [[33, 4], [37, 7], [29, 7]]) solidProp('tent', x, y, 2, 2);
+  props.push({ kind: 'campfire', x0: 33, y0: 7, w: 1, h: 1, seed: r() });
+  for (let i = 0; i < 4; i++) {
+    const x = ri(28, 40);
+    const y = ri(3, 10);
+    if (get(x, y) === 'g') set(x, y, 's');
+  }
+
+  // ---- Truck Stop (south): a car park by the main path, a shop.
+  district('Truck Stop', 36, 76, 60, 86);
+  for (let y = 78; y <= 83; y++) for (let x = 38; x <= 52; x++) if ('gp'.includes(get(x, y))) set(x, y, 'a');
+  for (let i = 0; i < 6; i++) solidProp('car', 39 + i * 2 + (i > 2 ? 2 : 0), r() < 0.5 ? 78 : 82, 1, 2, 'a');
+  if (free(54, 77, 6, 5)) house(54, 77, 6, 5, false);
+  for (let i = 0; i < 3; i++) {
+    const x = ri(38, 52);
+    const y = ri(79, 81);
+    if (get(x, y) === 'a') set(x, y, 's');
+  }
+
+  // ---- Container Yard (east): rows of shipping containers, alleys between them.
+  district('Container Yard', 76, 26, 86, 60);
+  for (let row = 0; row < 5; row++) {
+    for (let col = 0; col < 2; col++) {
+      if (r() < 0.2) continue;
+      solidProp('container', 77 + col * 5, 27 + row * 6 + ri(0, 1), 3, 2);
+    }
+  }
+  for (let i = 0; i < 6; i++) {
+    const x = ri(77, 85);
+    const y = ri(27, 58);
+    if (get(x, y) === 'g') set(x, y, 's');
+  }
+
+  // Parked cars along the main road: cover on the way through town.
+  for (let i = 0, made = 0; i < 40 && made < 7; i++) {
+    const x = ri(4, SIZE - 6);
+    const y = 31 + O + Math.round(Math.sin(x / 7) * 2);
+    if (solidProp('car', x, y + (r() < 0.5 ? 0 : 1), 2, 1, 'a')) made += 1;
+  }
+
   // Old Town: a tight grid of houses of every size, with alleys between them.
-  district('Old Town', 16, 14, 50, 50);
+  district('Old Town', 16 + O, 14 + O, 50 + O, 50 + O);
   for (let gy = 0; gy < 4; gy++) {
     for (let gx = 0; gx < 4; gx++) {
       // The road crosses the town around row 31 and the main path around column 32: step around them.
@@ -235,8 +322,8 @@ const buildMap = () => {
       for (let attempt = 0; attempt < 8 && !placed; attempt++) {
         w = ri(4, 7 - Math.floor(attempt / 4));
         h = ri(4, 6 - Math.floor(attempt / 5));
-        x0 = 16 + gx * 8 + (gx >= 2 ? 3 : 0) + ri(0, 1);
-        y0 = 14 + gy * 8 + (gy >= 2 ? 4 : 0) + ri(0, 1);
+        x0 = 16 + O + gx * 8 + (gx >= 2 ? 3 : 0) + ri(0, 1);
+        y0 = 14 + O + gy * 8 + (gy >= 2 ? 4 : 0) + ri(0, 1);
         placed = free(x0, y0, w, h);
       }
       if (!placed) continue;
@@ -248,7 +335,7 @@ const buildMap = () => {
   }
 
   // A few lone houses out in the fields.
-  for (let i = 0, made = 0; i < 60 && made < 6; i++) {
+  for (let i = 0, made = 0; i < 80 && made < 9; i++) {
     const w = ri(4, 6);
     const h = ri(4, 5);
     const x0 = ri(4, SIZE - 10);
@@ -282,31 +369,31 @@ const buildMap = () => {
       if (get(x, y) === 'g') set(x, y, 's');
     }
   };
-  farm('North Farm', 6, 4);
-  farm('East Farm', 44, 6);
-  farm('South Farm', 5, 46);
+  farm('North Farm', 6 + O, 4 + O);
+  farm('East Farm', 44 + O, 6 + O);
+  farm('South Farm', 5 + O, 46 + O);
 
   // Forest in the south-east, a quarry of rocks in the east.
-  district('Deadwood', 44, 42, 60, 60);
+  district('Deadwood', 44 + O, 42 + O, 60 + O, 60 + O);
   for (let i = 0; i < 140; i++) {
-    const x = ri(44, 60);
-    const y = ri(40, 60);
+    const x = ri(44 + O, 60 + O);
+    const y = ri(40 + O, 60 + O);
     if (get(x, y) === 'g') set(x, y, r() < 0.75 ? 't' : 'b');
   }
-  district('Quarry', 48, 22, 60, 34);
+  district('Quarry', 48 + O, 22 + O, 60 + O, 34 + O);
   for (let i = 0; i < 26; i++) {
-    const x = ri(48, 60);
-    const y = ri(21, 29);
+    const x = ri(48 + O, 60 + O);
+    const y = ri(21 + O, 29 + O);
     if (get(x, y) === 'g') set(x, y, 'k');
   }
   for (let i = 0; i < 4; i++) {
-    const x = ri(49, 59);
-    const y = ri(22, 28);
+    const x = ri(49 + O, 59 + O);
+    const y = ri(22 + O, 28 + O);
     if (get(x, y) === 'g') set(x, y, 's');
   }
 
   // Lone trees, bushes and rocks across the fields.
-  for (let i = 0; i < 110; i++) {
+  for (let i = 0; i < 200; i++) {
     const x = ri(2, SIZE - 3);
     const y = ri(2, SIZE - 3);
     if (get(x, y) !== 'g') continue;
@@ -332,7 +419,7 @@ const buildMap = () => {
   for (let i = 0; i < SIZE; i++) {
     for (const [x, y] of [[i, 0], [i, 1], [i, SIZE - 1], [i, SIZE - 2], [0, i], [1, i], [SIZE - 1, i], [SIZE - 2, i]]) set(x, y, 't');
   }
-  return { map: grid.map((row) => row.join('')), districts, buildings, routes };
+  return { map: grid.map((row) => row.join('')), districts, buildings, routes, props };
 };
 
 const built = buildMap();
@@ -340,6 +427,7 @@ export const MAP: string[] = built.map;
 export const DISTRICTS: District[] = built.districts;
 export const BUILDINGS: Building[] = built.buildings;
 export const ROUTES: Route[] = built.routes;
+export const PROPS: Prop[] = built.props;
 
 export const tileAt = (tx: number, ty: number) =>
   tx < 0 || ty < 0 || tx >= SIZE || ty >= SIZE ? '#' : MAP[ty][tx];
@@ -478,7 +566,7 @@ export const SUPERS = {
  * opens once you're below it, and you drift down. Heights are in metres, times in seconds.
  */
 export const DROP = {
-  flight: 24,
+  flight: 30,
   freefall: 3.2,
   chute: 5,
   freefallSpeed: 14,
@@ -505,10 +593,10 @@ export const MOVE = { accel: 24, friction: 20, turn: 8 };
  * every second, more with every phase, like the blue zone in battle royales: 1, 2, 4, 7, 12 HP/s.
  */
 export const ZONE_PHASES = [
-  { wait: 34, shrink: 24, radius: 44, dps: 1 },
-  { wait: 24, shrink: 18, radius: 24, dps: 2 },
-  { wait: 18, shrink: 14, radius: 10, dps: 4 },
-  { wait: 13, shrink: 12, radius: 3, dps: 7 },
+  { wait: 34, shrink: 26, radius: 60, dps: 1 },
+  { wait: 24, shrink: 20, radius: 32, dps: 2 },
+  { wait: 18, shrink: 14, radius: 13, dps: 4 },
+  { wait: 13, shrink: 12, radius: 4, dps: 7 },
   { wait: 8, shrink: 12, radius: 0, dps: 12 },
 ];
 export const ZONE_START_RADIUS = WORLD * 0.72;

@@ -342,6 +342,6 @@ describe('bots', () => {
     expect(shots).toBeGreaterThan(20);
     expect(s.players.filter((p) => p.placement === 1)).toHaveLength(1);
     expect(s.players.some((p) => p.weapon !== 'fists' || p.kills > 0)).toBe(true);
-    expect(WORLD).toBe(128);
+    expect(WORLD).toBe(176);
   });
 });

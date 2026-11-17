@@ -92,6 +92,7 @@ export const paintTerrain = () => {
   const road = weightGrid((t) => t === 'a');
   const soil = weightGrid((t) => t === 'c');
   const gravel = weightGrid((t) => t === 'k');
+  const pond = weightGrid((t) => t === 'o' || t === 'd');
   const floor = weightGrid((t, tx, ty) => '.lwr#u'.includes(t) && insideBuilding(tx, ty));
   const GRASS_A = [62, 112, 42];
   const GRASS_B = [98, 146, 58];
@@ -122,6 +123,9 @@ export const paintTerrain = () => {
         const rows = 0.5 + 0.5 * Math.sin(wx * 4.2); // furrows
         col = mix(col, mix(SOIL, DIRT_DARK, rows * 0.6), wSoil);
       }
+      // The pond bed: dark mud under the water surface (props.ts), a muddy bank around it.
+      const wPond = sstep(0.2, 0.55, sampleGrid(pond, tx, ty) + e * 0.5);
+      if (wPond > 0) col = mix(col, mix([92, 84, 58], [38, 52, 48], sstep(0.5, 0.9, sampleGrid(pond, tx, ty))), wPond);
       const wGravel = sstep(0.3, 0.6, sampleGrid(gravel, tx, ty) + e);
       if (wGravel > 0) col = mix(col, mix(GRAVEL, DIRT, fine * 0.6), wGravel * 0.85);
       const wPath = sstep(0.4, 0.5, sampleGrid(path, tx, ty) + e);

@@ -13,6 +13,7 @@ import { buildGun } from './guns';
 import { mat, mesh, PALETTE } from './palette';
 import { createVfx } from './vfx';
 import { setPeople } from './nature';
+import { buildProps } from './props';
 import { buildWorld } from './world';
 
 import type { Rig } from './characters';
@@ -155,6 +156,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
   // ---------- the world: ground, houses, trees, bushes, rocks, fences, crates
   const world = buildWorld(scene);
+  // Cars, containers, tents, the windmill, the pond, animals and birds.
+  const props = buildProps(scene);
 
   // ---------- the Deadline
   const zoneWall = new THREE.Mesh(
@@ -573,7 +576,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const steps = state.players.map(() => 0);
   const surfaceAt = (x: number, y: number) => {
     const t = MAP[Math.floor(y / TILE)]?.[Math.floor(x / TILE)] ?? 'g';
-    return t === 'a' ? 'hard' : '.lu'.includes(t) ? 'wood' : t === 'p' ? 'dirt' : 'bc'.includes(t) ? 'leaves' : 'grass';
+    return t === 'a' ? 'hard' : '.lud'.includes(t) ? 'wood' : t === 'p' ? 'dirt' : 'bc'.includes(t) ? 'leaves' : 'grass';
   };
   /** Visual yaw per player (angle and angular velocity) and when each last fired. */
   const yaw = state.players.map((p) => ({ a: p.heading, v: 0 }));
@@ -711,7 +714,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       for (let tx = 0; tx < SIZE; tx++) {
         const t = MAP[ty][tx];
         g.fillStyle =
-          t === '#' || t === 'w' ? '#e8dcc4' : t === '.' || t === 'l' || t === 'u' ? '#b89a72' : t === 't' ? '#2f6a32' : t === 'b' ? '#4f9a48'
+          t === '#' || t === 'w' ? '#e8dcc4' : t === 'o' ? '#3f7fb5' : t === 'v' ? '#9aa0ab' : t === 'd' ? '#9a7048' : t === '.' || t === 'l' || t === 'u' ? '#b89a72' : t === 't' ? '#2f6a32' : t === 'b' ? '#4f9a48'
             : t === 'c' ? '#c9c06a' : t === 'k' ? '#8a8a8a' : t === 'a' ? '#4a4f5e' : t === 'p' ? '#a8865a' : t === 'f' ? '#7a5a3a' : '#5a9a50';
         g.fillRect(tx * 4, ty * 4, 4, 4);
       }
@@ -1046,6 +1049,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     vfx.update(dt);
     updateDamage(dt);
     updateGroundChutes(dt);
+    props.update(time, dt);
     renderer.render(scene, camera);
   };
 
