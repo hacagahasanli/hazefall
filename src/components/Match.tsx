@@ -6,12 +6,13 @@ import { startMatch } from '~/game/render/game';
 import { FIGHTERS } from '~/game/sim/constants';
 
 import { AimChoice, readAim, saveAim } from '~/components/AimChoice';
+import { TouchControls, useTouch } from '~/components/TouchControls';
 import type { HudState } from '~/game/render/game';
 import type { VolumeKind } from '~/game/sfx';
 import type { FighterId } from '~/game/sim/types';
 
 const Bar = ({ value, max, color }: { value: number; max: number; color: string }) => (
-  <div className="panel-cut h-3 w-64 bg-ink-deep/80">
+  <div className="panel-cut h-3 w-44 bg-ink-deep/80 sm:w-64">
     <div className="h-full transition-[width] duration-150" style={{ width: `${Math.max(0, Math.min(1, value / max)) * 100}%`, background: color }} />
   </div>
 );
@@ -73,16 +74,16 @@ const Result = ({ hud, onPlayAgain, onExit }: { hud: HudState; onPlayAgain: () =
   ];
   const killerColor = hud.killerFighter ? FIGHTERS[hud.killerFighter].color : '#6fb6ff';
   return (
-    <div className="absolute inset-0 z-30 flex animate-[fadeIn_0.6s_ease-out] items-center justify-center bg-[radial-gradient(ellipse_at_center,rgba(10,13,24,0.72),rgba(10,13,24,0.95))] px-6 backdrop-blur-sm">
-      <div className="flex w-full max-w-4xl flex-col gap-8">
-        <div className="flex flex-wrap items-end gap-8">
+    <div className="absolute inset-0 z-30 flex animate-[fadeIn_0.6s_ease-out] items-center justify-center overflow-y-auto bg-[radial-gradient(ellipse_at_center,rgba(10,13,24,0.72),rgba(10,13,24,0.95))] px-6 py-4 backdrop-blur-sm">
+      <div className="flex w-full max-w-4xl flex-col gap-8 [@media(max-height:520px)]:gap-3">
+        <div className="flex flex-wrap items-end gap-8 [@media(max-height:520px)]:gap-4">
           <div className="flex items-baseline font-display leading-none">
-            <span className={`text-[9rem] sm:text-[11rem] ${hud.won ? 'text-gold' : 'text-cream'}`}>#{hud.won ? 1 : hud.placement}</span>
+            <span className={`text-[7rem] sm:text-[11rem] [@media(max-height:520px)]:text-[5.5rem] ${hud.won ? 'text-gold' : 'text-cream'}`}>#{hud.won ? 1 : hud.placement}</span>
             <span className="text-4xl text-cream/40">/10</span>
           </div>
-          <div className="flex flex-col gap-2 pb-6">
+          <div className="flex flex-col gap-2 pb-6 [@media(max-height:520px)]:pb-2">
             <span className={`text-xs font-bold tracking-[0.35em] ${hud.won ? 'text-green' : 'text-orange'}`}>{hud.won ? 'ROUND WON' : 'ELIMINATED'}</span>
-            <h2 className="font-display text-4xl leading-none sm:text-5xl">{hud.won ? 'MERGED TO MAIN' : 'YOUR COMMIT WAS REVERTED'}</h2>
+            <h2 className="font-display text-3xl leading-none sm:text-5xl [@media(max-height:520px)]:text-3xl">{hud.won ? 'MERGED TO MAIN' : 'YOUR COMMIT WAS REVERTED'}</h2>
             <p className="text-lg text-cream/80">
               {hud.won ? (
                 <>Nine down, one standing. You shipped it.</>
@@ -101,14 +102,14 @@ const Result = ({ hud, onPlayAgain, onExit }: { hud: HudState; onPlayAgain: () =
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5 [@media(max-height:520px)]:grid-cols-5 [@media(max-height:520px)]:gap-2">
           {stats.map(([label, value], i) => (
             <div
               key={label}
-              className="panel-cut flex animate-[riseIn_0.5s_ease-out_both] flex-col gap-1 bg-ink/90 p-4"
+              className="panel-cut flex animate-[riseIn_0.5s_ease-out_both] flex-col gap-1 bg-ink/90 p-4 [@media(max-height:520px)]:p-2.5"
               style={{ animationDelay: `${0.25 + i * 0.08}s` }}
             >
-              <span className="font-display text-3xl text-cream">{value}</span>
+              <span className="font-display text-3xl text-cream [@media(max-height:520px)]:text-2xl">{value}</span>
               <span className="text-[11px] font-semibold uppercase tracking-widest text-cream/55">{label}</span>
             </div>
           ))}
@@ -119,11 +120,11 @@ const Result = ({ hud, onPlayAgain, onExit }: { hud: HudState; onPlayAgain: () =
             type="button"
             autoFocus
             onClick={onPlayAgain}
-            className="panel-cut flex items-center gap-3 bg-gold px-10 py-4 font-display text-xl uppercase text-ink-deep shadow-[0_0_40px_rgba(255,210,63,0.3)] hover:brightness-110"
+            className="panel-cut flex items-center gap-3 bg-gold px-10 py-4 font-display text-xl uppercase [@media(max-height:520px)]:py-3 text-ink-deep shadow-[0_0_40px_rgba(255,210,63,0.3)] hover:brightness-110"
           >
             Play again →
           </button>
-          <button type="button" onClick={onExit} className="panel-cut bg-cream/10 px-8 py-4 font-bold uppercase tracking-wider text-cream/90 hover:bg-cream/20">
+          <button type="button" onClick={onExit} className="panel-cut bg-cream/10 px-8 py-4 font-bold uppercase tracking-wider text-cream/90 hover:bg-cream/20 [@media(max-height:520px)]:py-3">
             Back to lobby
           </button>
         </div>
@@ -139,6 +140,7 @@ export const Match = ({ fighter, onExit, onPlayAgain }: { fighter: FighterId; on
   const [hud, setHud] = useState<HudState | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const lastEsc = useRef(0);
+  const touch = useTouch();
 
   // Building the map takes a moment and blocks the page: let the loading screen paint first
   // (two animation frames), then build. The screen goes when the first HUD update arrives.
@@ -196,7 +198,7 @@ export const Match = ({ fighter, onExit, onPlayAgain }: { fighter: FighterId; on
   }, [hud?.aimMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <main className="relative h-screen w-screen select-none overflow-hidden bg-ink-deep">
+    <main className="relative h-[100dvh] w-screen touch-none select-none overflow-hidden bg-ink-deep">
       {!hud && (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-ink-deep" role="status" aria-live="polite">
           <div className="h-12 w-12 animate-spin rounded-full border-4 border-cream/15 border-t-gold" />
@@ -221,20 +223,28 @@ export const Match = ({ fighter, onExit, onPlayAgain }: { fighter: FighterId; on
       <canvas ref={canvasRef} className={`block h-full w-full ${hud?.aimMode === 'mouse' ? 'cursor-crosshair' : ''}`} />
 
       {/* Minimap */}
-      <div className="panel-cut absolute bottom-3 right-3 bg-ink-deep/80 p-1.5">
+      {/* On phones it sits top right, out of the thumbs' way. */}
+      <div
+        className={`panel-cut absolute bg-ink-deep/80 p-1.5 ${touch ? 'right-2 top-2' : 'bottom-3 right-3'}`}
+        style={touch ? { marginRight: 'env(safe-area-inset-right)' } : undefined}
+      >
         {/* Big while you're on the plane choosing where to jump. */}
         <canvas
           ref={mapRef}
           width={hud?.stage === 'drone' ? 340 : 192}
           height={hud?.stage === 'drone' ? 340 : 192}
-          className={hud?.stage === 'drone' ? 'block h-[340px] w-[340px]' : 'block h-48 w-48'}
+          className={
+            hud?.stage === 'drone'
+              ? touch ? 'block h-[min(340px,62vh,62vw)] w-[min(340px,62vh,62vw)]' : 'block h-[340px] w-[340px]'
+              : touch ? 'block h-[min(120px,28vh,30vw)] w-[min(120px,28vh,30vw)]' : 'block h-48 w-48'
+          }
         />
       </div>
 
       {hud && (
         <>
           {/* You */}
-          <div className="pointer-events-none absolute left-4 top-3 flex flex-col gap-1.5">
+          <div className="pointer-events-none absolute left-4 top-3 flex flex-col gap-1.5" style={touch ? { marginLeft: 'env(safe-area-inset-left)' } : undefined}>
             <div className="flex items-baseline gap-2">
               <span className="font-display text-lg" style={{ color: f.color }}>
                 {f.name}
@@ -259,14 +269,14 @@ export const Match = ({ fighter, onExit, onPlayAgain }: { fighter: FighterId; on
             <Bar value={hud.hp} max={hud.maxHp} color={hud.hp / hud.maxHp > 0.35 ? '#3ddc84' : '#ff3d6e'} />
             {hud.armor > 0 && <Bar value={hud.armor} max={100} color="#3ec5ff" />}
             <div className="flex items-center gap-2 text-[11px]">
-              <span className="text-cream/60">G · {hud.superName}</span>
+              <span className="text-cream/60">{touch ? 'Super' : 'G'} · {hud.superName}</span>
               <div className="h-1.5 w-28 overflow-hidden rounded bg-cream/15">
                 <div className="h-full" style={{ width: `${hud.superCharge * 100}%`, background: hud.superCharge >= 1 ? '#ffd23f' : '#8b93ad' }} />
               </div>
               {hud.superCharge >= 1 && <span className="font-bold text-gold">ready</span>}
             </div>
             <div className="flex items-center gap-2 text-[11px]">
-              <span className="text-cream/60">Shift · Roll</span>
+              <span className="text-cream/60">{touch ? 'Roll' : 'Shift · Roll'}</span>
               <div className="h-1.5 w-28 overflow-hidden rounded bg-cream/15">
                 <div className="h-full" style={{ width: `${Math.min(1, hud.roll) * 100}%`, background: hud.roll >= 1 ? '#3ec5ff' : '#8b93ad' }} />
               </div>
@@ -274,8 +284,8 @@ export const Match = ({ fighter, onExit, onPlayAgain }: { fighter: FighterId; on
           </div>
 
           {/* Deadline and players left */}
-          <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center">
-            <div className="panel-cut flex items-center gap-4 bg-ink-deep/85 px-4 py-1.5">
+          <div className={`pointer-events-none absolute inset-x-0 flex justify-center ${touch ? 'top-[124px] sm:top-3' : 'top-3'}`}>
+            <div className="panel-cut flex items-center gap-3 bg-ink-deep/85 px-3 py-1 sm:gap-4 sm:px-4 sm:py-1.5">
               <span className="font-display text-xl text-cream">{hud.alive}</span>
               <span className="text-[10px] font-semibold tracking-widest text-cream/50">LEFT</span>
               <span className={`text-sm ${hud.zone.outside ? 'font-bold text-orange' : 'text-cream/80'}`}>
@@ -286,7 +296,7 @@ export const Match = ({ fighter, onExit, onPlayAgain }: { fighter: FighterId; on
           </div>
 
           {/* Kill feed */}
-          <div className="pointer-events-none absolute right-4 top-3 flex flex-col items-end gap-1 text-xs">
+          <div className={`pointer-events-none absolute flex flex-col items-end gap-1 text-xs ${touch ? 'right-2 top-[176px] sm:top-[min(140px,32vh,33vw)]' : 'right-4 top-3'}`}>
             {hud.feed.map((k) => (
               <span key={k.id} className="rounded bg-ink-deep/80 px-2 py-0.5 text-cream/80">
                 {k.text}
@@ -296,13 +306,24 @@ export const Match = ({ fighter, onExit, onPlayAgain }: { fighter: FighterId; on
 
           {/* Prompt */}
           {hud.prompt && !over && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-24 flex justify-center">
+            <div className={`pointer-events-none absolute inset-x-0 flex justify-center ${touch ? 'bottom-[150px] sm:bottom-6' : 'bottom-24'}`}>
               <span className="panel-cut bg-ink-deep/85 px-4 py-1.5 text-sm text-cream">{hud.prompt}</span>
             </div>
           )}
 
+          {touch && !over && !menuOpen && (
+            <TouchControls
+              press={(b, on) => gameRef.current?.press(b, on)}
+              onMove={(x, y) => gameRef.current?.setStick(x, y)}
+              onPause={() => setMenuOpen(true)}
+              onPlane={hud.stage === 'drone'}
+              superReady={hud.superCharge}
+              rollReady={Math.min(1, hud.roll)}
+            />
+          )}
+
           {/* Controls */}
-          <div className="pointer-events-none absolute bottom-3 left-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-cream/50">
+          {!touch && <div className="pointer-events-none absolute bottom-3 left-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-cream/50">
             <span className="flex items-center gap-1">
               <Key k="W" />
               <Key k="A" />
@@ -339,14 +360,18 @@ export const Match = ({ fighter, onExit, onPlayAgain }: { fighter: FighterId; on
               <Key k="Esc" /> menu
             </span>
             <span>{hud.fps} fps</span>
-          </div>
+          </div>}
 
           {/* Esc Esc menu */}
           {menuOpen && !over && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-ink-deep/70">
-              <div role="dialog" aria-label="Paused" className="panel-cut flex w-[22rem] flex-col items-center gap-4 bg-ink p-7 text-center">
+              <div role="dialog" aria-label="Paused" className="panel-cut flex max-h-[94vh] w-[22rem] max-w-[94vw] flex-col items-center gap-4 overflow-y-auto bg-ink p-6 text-center sm:p-7">
                 <div className="font-display text-4xl text-gold">Paused</div>
-                <AimChoice value={hud.aimMode} onChange={(m) => gameRef.current?.setAimMode(m)} />
+                {touch ? (
+                  <p className="text-xs text-cream/60">On a touch screen FIRE aims by itself at whoever you can see.</p>
+                ) : (
+                  <AimChoice value={hud.aimMode} onChange={(m) => gameRef.current?.setAimMode(m)} />
+                )}
                 <SoundSliders game={gameRef.current} />
                 <button
                   type="button"
@@ -359,7 +384,7 @@ export const Match = ({ fighter, onExit, onPlayAgain }: { fighter: FighterId; on
                 <button type="button" onClick={onExit} className="panel-cut w-full bg-orange/90 px-5 py-2 font-bold uppercase tracking-wider text-ink-deep">
                   Leave match
                 </button>
-                <p className="text-[10px] text-cream/40">Esc to resume</p>
+                {!touch && <p className="text-[10px] text-cream/40">Esc to resume</p>}
               </div>
             </div>
           )}

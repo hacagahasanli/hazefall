@@ -72,6 +72,7 @@ export interface HudState {
 }
 
 export type AimMode = 'auto' | 'mouse';
+export type TouchButton = 'fire' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR';
 
 export interface MatchOptions {
   fighter: FighterId;
@@ -145,7 +146,9 @@ const at = <T extends THREE.Object3D>(o: T, x: number, y: number, z: number) => 
 
 export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  /** Phones and tablets: touch controls, always auto-aim, a lighter pixel ratio. */
+  const touch = window.matchMedia?.('(pointer: coarse)').matches || 'ontouchstart' in window;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, touch ? 1.5 : 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -476,11 +479,20 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     reticle.visible = false;
     scene.add(reticle);
   }
+  /**
+   * Touch: the stick (analog, -1..1 each way) and the buttons. A press is latched until the game
+   * has read it once, so a tap shorter than a tick still counts.
+   */
+  const stick = { x: 0, y: 0 };
+  const touchHeld = new Set<TouchButton>();
+  const touchLatched = new Set<TouchButton>();
+  const btn = (b: TouchButton) => touchHeld.has(b) || touchLatched.has(b);
   let lastMove = { x: 1, y: 0 };
   const readInput = (): Input => {
     const p = state.players[me];
-    const mx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
-    const my = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
+    const clamp = (v: number) => Math.max(-1, Math.min(1, v));
+    const mx = clamp((keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0) + stick.x);
+    const my = clamp((keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) + stick.y);
     // Facing with no target: the direction you're actually moving (the velocity turns smoothly);
     // standing still, a tapped key turns you; after stopping you keep facing where you went.
     const sp = Math.hypot(p.vx, p.vy);
@@ -488,22 +500,24 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     else if (mx || my) lastMove = { x: mx, y: my };
     // On the ground or under the parachute you aim (and auto-aim) at people.
     const canAim = p.stage === 'ground' || (p.stage === 'falling' && p.fall <= DROP.chute);
-    const pointed = aimMode === 'mouse' && canAim ? mouseAim() : null;
+    const pointed = aimMode === 'mouse' && !touch && canAim ? mouseAim() : null;
     const target = canAim && !pointed ? autoAim(p) : null;
     const aim = pointed ?? (target ? { x: target.x, y: target.y } : { x: p.x + lastMove.x * 6, y: p.y + lastMove.y * 6 });
-    return {
+    const input = {
       mx, my,
-      fire: keys.has('Space') || (aimMode === 'mouse' && mouseDown),
-      jump: keys.has('Space'),
+      fire: keys.has('Space') || (aimMode === 'mouse' && mouseDown) || btn('fire'),
+      jump: keys.has('Space') || btn('fire'),
       // Battle-royale keys: Q / E lean, F picks up or uses, G is the super.
-      super: keys.has('KeyG'),
-      use: keys.has('KeyF'),
-      lean: (keys.has('KeyE') ? 1 : 0) - (keys.has('KeyQ') ? 1 : 0),
-      roll: keys.has('ShiftLeft') || keys.has('ShiftRight'),
-      reload: keys.has('KeyR'),
+      super: keys.has('KeyG') || btn('super'),
+      use: keys.has('KeyF') || btn('use'),
+      lean: clamp((keys.has('KeyE') || btn('leanR') ? 1 : 0) - (keys.has('KeyQ') || btn('leanL') ? 1 : 0)),
+      roll: keys.has('ShiftLeft') || keys.has('ShiftRight') || btn('roll'),
+      reload: keys.has('KeyR') || btn('reload'),
       aimX: aim.x,
       aimY: aim.y,
     };
+    touchLatched.clear();
+    return input;
   };
 
   // ---------- events -> effects and sound
@@ -1080,7 +1094,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       want = new THREE.Vector3(selfX, hh + (chute ? 17 : 12), selfY + (chute ? 13 : 7));
       look = new THREE.Vector3(selfX, hh - (chute ? 1 : 4), selfY);
     } else {
-      want = camNear < 1 ? new THREE.Vector3(selfX + 2, 3.2, selfY + 4) : new THREE.Vector3(selfX, 36, selfY + 22);
+      // Narrow screens (a phone held upright) pull the camera up so you still see around you.
+      const k = camera.aspect < 1.3 ? Math.min(1.75, 1.3 / camera.aspect) : 1;
+      want = camNear < 1 ? new THREE.Vector3(selfX + 2, 3.2, selfY + 4) : new THREE.Vector3(selfX, 36 * k, selfY + 22 * k);
       look = camNear < 1 ? new THREE.Vector3(selfX, 1.1, selfY) : new THREE.Vector3(selfX, 0, selfY + 1);
     }
     // Falling: blend in from the plane view for a moment, then stay locked to the jumper (no lag,
@@ -1152,7 +1168,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const zone =
       state.phase === 'drop'
         ? self.stage === 'drone'
-          ? { label: 'Jump with Space', seconds: Math.ceil((1 - state.drone.t) * DROP.flight), outside: false }
+          ? { label: touch ? 'Tap JUMP to jump' : 'Jump with Space', seconds: Math.ceil((1 - state.drone.t) * DROP.flight), outside: false }
           : { label: 'Everyone is landing', seconds: 0, outside: false }
         : z.state === 'wait'
           ? { label: 'Deadline moves in', seconds: Math.ceil(z.timer), outside }
@@ -1163,17 +1179,19 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const prompt = !self.alive
       ? null
       : self.stage === 'drone'
-        ? 'Space · jump'
+        ? (touch ? 'Tap JUMP' : 'Space · jump')
+        : self.stage === 'ground' && inWater(self.x, self.y)
+          ? 'Swimming · no shooting in the water'
         : k
-          ? `F · pick up ${LOOT_NAME[k.kind]}`
+          ? `${touch ? 'USE' : 'F'} · pick up ${LOOT_NAME[k.kind]}`
           : self.charging
             ? 'Hold to throw farther · let go to throw'
             : self.weapon === 'rockets' && self.mag > 0
-              ? 'Hold Space to aim the rocket, let go to fire'
+              ? `Hold ${touch ? 'FIRE' : 'Space'} to aim the rocket, let go to fire`
           : self.weapon !== 'fists' && self.mag + self.ammo === 0
             ? 'Out of ammo · find an ammo box or another gun'
             : self.item
-              ? self.item === 'bomb' ? 'Hold F to throw the bomb' : 'F · use med kit'
+              ? self.item === 'bomb' ? `Hold ${touch ? 'USE' : 'F'} to throw the bomb` : `${touch ? 'USE' : 'F'} · use med kit`
               : null;
     opts.onHud({
       phase: state.phase,
@@ -1251,9 +1269,26 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   if (process.env.NODE_ENV !== 'production') (window as unknown as { __lcs?: unknown }).__lcs = { state: () => state, buildings: BUILDINGS, map: MAP, animals: props.animals };
 
   return {
+    touch,
+    /** The touch stick, -1..1 each way (y down the screen = down the map). */
+    setStick: (x: number, y: number) => {
+      stick.x = x;
+      stick.y = y;
+    },
+    /** A touch button went down (true) or up (false). */
+    press: (b: TouchButton, on: boolean) => {
+      sfx.unlock?.();
+      if (on) {
+        touchHeld.add(b);
+        touchLatched.add(b);
+      } else touchHeld.delete(b);
+    },
     setPaused: (on: boolean) => {
       paused = on;
       keys.clear();
+      touchHeld.clear();
+      stick.x = 0;
+      stick.y = 0;
       mouseDown = false;
       emitHud();
     },
