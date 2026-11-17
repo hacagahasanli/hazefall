@@ -372,7 +372,7 @@ export const fallHeight = (fall: number) =>
     : DROP.chuteHeight + (DROP.height - DROP.chuteHeight) * Math.min(1, (fall - DROP.chute) / DROP.freefall);
 
 /** Movement feel: you speed up and slow down over a fraction of a second, and turn smoothly. */
-export const MOVE = { accel: 38, friction: 32, turn: 9 };
+export const MOVE = { accel: 24, friction: 20, turn: 8 };
 
 /** The Deadline: wait, then shrink, phase after phase, until nothing is left. */
 export const ZONE_PHASES = [

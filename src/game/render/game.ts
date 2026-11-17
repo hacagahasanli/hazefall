@@ -6,7 +6,7 @@ import { AUTO_AIM_RANGE, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, MAP, SIZE, S
 import { canSee, createGame, inPlant, lineOfSight, lootUnder, step } from '../sim/step';
 import { NO_INPUT } from '../sim/types';
 
-import { buildRig, poseRig } from './characters';
+import { buildRig, poseRig, poseTopDown } from './characters';
 import { buildGun } from './guns';
 import { mat, mesh, PALETTE } from './palette';
 import { createVfx } from './vfx';
@@ -366,7 +366,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const p = state.players[me];
     const mx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
     const my = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
-    if (mx || my) lastMove = { x: mx, y: my };
+    // Facing with no target: the direction you're actually moving (the velocity turns smoothly);
+    // standing still, a tapped key turns you; after stopping you keep facing where you went.
+    const sp = Math.hypot(p.vx, p.vy);
+    if (sp > 0.8) lastMove = { x: p.vx / sp, y: p.vy / sp };
+    else if (mx || my) lastMove = { x: mx, y: my };
     const pointed = aimMode === 'mouse' && p.stage === 'ground' ? mouseAim() : null;
     const target = p.stage === 'ground' && !pointed ? autoAim(p) : null;
     const aim = pointed ?? (target ? { x: target.x, y: target.y } : { x: p.x + lastMove.x * 6, y: p.y + lastMove.y * 6 });
@@ -389,6 +393,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const handle = (e: GameEvent) => {
     switch (e.type) {
       case 'shot': {
+        lastShot[e.owner] = time;
         const d = Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y);
         if (e.weapon !== 'fists') {
           // Muzzle flash at the barrel, a brass casing kicked out to the side.
@@ -454,6 +459,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     }
   };
   const hitFlash = state.players.map(() => 0);
+  /** Visual yaw per player (angle and angular velocity) and when each last fired. */
+  const yaw = state.players.map((p) => ({ a: p.heading, v: 0 }));
+  const lastShot: number[] = [];
 
   // ---------- minimap
   const mm = opts.minimap;
@@ -565,13 +573,30 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // Free fall from the plane down to chute height, then drift slowly under the canopy.
       const h = p.stage === 'falling' ? fallHeight(p.fall) : 0;
       rig.root.position.set(x, h, y);
-      const speed = Math.hypot(p.x - prev[i].x, p.y - prev[i].y) / DT;
-      poseRig(rig, {
-        dt, time, vx: p.stage === 'ground' ? speed : 0, vy: 0, onGround: p.stage === 'ground', facing: 1, aim: 0, sideways: false,
-        wall: 0, dashing: p.dashTime > 0, stunned: false, twoHanded: p.weapon !== 'pistol' && p.weapon !== 'fists',
-        sinceShot: p.cooldown > 0 ? 0.05 : 1, recoil: 0.5, reloading: false, pushing: 0,
-      });
-      rig.root.rotation.y = Math.PI / 2 - p.heading;
+      // The body turns on a critically damped spring towards the sim heading: it starts and
+      // settles smoothly instead of rotating at a constant rate and stopping dead.
+      const yw = yaw[i];
+      if (p.stage !== 'ground') {
+        yw.a = p.heading;
+        yw.v = 0;
+      } else {
+        const d = Math.atan2(Math.sin(p.heading - yw.a), Math.cos(p.heading - yw.a));
+        const w = 16;
+        yw.v += (w * w * d - 2 * w * yw.v) * dt;
+        yw.a += yw.v * dt;
+      }
+      if (p.stage === 'ground') {
+        poseTopDown(rig, {
+          dt, time, vx: p.vx, vy: p.vy, yaw: yw.a, yawRate: yw.v, onGround: true, dashing: p.dashTime > 0,
+          twoHanded: p.weapon !== 'pistol' && p.weapon !== 'fists', sinceShot: lastShot[i] === undefined ? 9 : time - lastShot[i],
+        });
+      } else {
+        poseRig(rig, {
+          dt, time, vx: 0, vy: 0, onGround: false, facing: 1, aim: 0, sideways: false, wall: 0, dashing: false, stunned: false,
+          twoHanded: false, sinceShot: 1, recoil: 0, reloading: false, pushing: 0,
+        });
+      }
+      rig.root.rotation.y = Math.PI / 2 - yw.a;
       if (p.stage === 'falling' && !chuteOpen) {
         // Spread out, head first, with a little wobble from the wind.
         rig.body.rotation.x = 1.25 + Math.sin(time * 9 + i) * 0.06;

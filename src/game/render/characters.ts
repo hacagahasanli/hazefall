@@ -382,3 +382,74 @@ export const disposeObject = (obj: THREE.Object3D) => {
     if (o instanceof THREE.Mesh) o.geometry.dispose();
   });
 };
+
+export interface TopDownPose {
+  dt: number;
+  time: number;
+  /** World velocity on the map (m/s). */
+  vx: number;
+  vy: number;
+  /** Where the body faces on the map (radians, 0 = +x). */
+  yaw: number;
+  /** How fast the visual yaw is turning (rad/s): the body banks into turns. */
+  yawRate: number;
+  onGround: boolean;
+  dashing: boolean;
+  twoHanded: boolean;
+  /** Seconds since the last shot: drives the recoil kick. */
+  sinceShot: number;
+}
+
+/**
+ * Top-down animation: the stride follows the real velocity, so strafing steps sideways and
+ * back-pedalling plays the cycle backwards; the body leans into speed and banks into turns;
+ * standing still, the fighter breathes and the gun sways a little.
+ */
+export const poseTopDown = (rig: Rig, p: TopDownPose) => {
+  const { dt } = p;
+  const speed = Math.hypot(p.vx, p.vy);
+  const amp = Math.min(1, speed / 6.5);
+  // Movement relative to the facing: fwd 1 = forward, -1 = backwards; side = strafing.
+  const rel = Math.atan2(p.vy, p.vx) - p.yaw;
+  const fwd = speed > 0.05 ? Math.cos(rel) : 0;
+  const side = speed > 0.05 ? Math.sin(rel) : 0;
+  const running = p.onGround && speed > 0.3;
+  rig.phase += dt * (running ? 3.2 + speed * 1.2 : 0) * (fwd < -0.35 ? -1 : 1);
+  const swing = running ? Math.sin(rig.phase) * amp : 0;
+
+  // Legs swing along the direction of travel, not always forward.
+  const along = Math.max(Math.abs(fwd), 0.25);
+  rig.legL.rotation.x = damp(rig.legL.rotation.x, swing * 0.85 * along, 16, dt);
+  rig.legR.rotation.x = damp(rig.legR.rotation.x, -swing * 0.85 * along, 16, dt);
+  rig.legL.rotation.z = damp(rig.legL.rotation.z, swing * 0.45 * side, 16, dt);
+  rig.legR.rotation.z = damp(rig.legR.rotation.z, -swing * 0.45 * side, 16, dt);
+
+  // Lean into the run and bank into turns; a hard forward tilt during a dash.
+  const leanX = p.dashing ? 0.45 : 0.12 * fwd * amp;
+  const bank = Math.max(-0.18, Math.min(0.18, -p.yawRate * 0.035)) + 0.08 * side * amp;
+  rig.body.rotation.x = damp(rig.body.rotation.x, leanX, 10, dt);
+  rig.body.rotation.z = damp(rig.body.rotation.z, bank, 8, dt);
+  const breathe = running ? 0 : Math.sin(p.time * 2.1) * 0.012;
+  rig.body.position.y = running ? Math.abs(Math.sin(rig.phase)) * 0.055 * amp : breathe;
+
+  // Gun at the hip-to-chest line, kicked back by each shot, swaying when idle.
+  const kick = Math.max(0, 1 - p.sinceShot / 0.12);
+  const sway = running ? Math.sin(rig.phase * 0.5) * 0.04 * amp : Math.sin(p.time * 1.3) * 0.025;
+  rig.weapon.rotation.x = damp(rig.weapon.rotation.x, -kick * 0.18 + sway, 28, dt);
+  rig.weapon.rotation.y = damp(rig.weapon.rotation.y, sway * 0.6, 10, dt);
+  rig.weapon.position.z = -kick * 0.1;
+  rig.weapon.position.x = p.twoHanded ? 0 : 0.16;
+  const toWeapon = rig.weapon.rotation.x - Math.PI / 2;
+
+  let armL = p.onGround ? -swing * 0.75 * along : -0.4;
+  let armLz = p.onGround ? 0.05 : -0.6;
+  const armRz = p.twoHanded ? -0.25 : -0.08;
+  if (p.twoHanded) {
+    armL = toWeapon;
+    armLz = 0.25;
+  }
+  rig.armL.rotation.x = damp(rig.armL.rotation.x, armL, 18, dt);
+  rig.armR.rotation.x = damp(rig.armR.rotation.x, toWeapon, 30, dt);
+  rig.armL.rotation.z = damp(rig.armL.rotation.z, armLz, 12, dt);
+  rig.armR.rotation.z = damp(rig.armR.rotation.z, armRz, 12, dt);
+};
