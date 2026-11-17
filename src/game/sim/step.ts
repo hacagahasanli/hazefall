@@ -597,14 +597,16 @@ const shoot = (state: GameState, p: Player, input: Input) => {
   const w = WEAPONS[kind];
   p.cooldown = w.rate;
   p.revealed = 1;
+  // Bullets go straight at the aim point; the body catches up with its turn a moment later.
+  const aim = Math.hypot(input.aimX - p.x, input.aimY - p.y) > 0.3 ? Math.atan2(input.aimY - p.y, input.aimX - p.x) : p.heading;
   const keep = p.weapon;
   p.weapon = kind; // fireBullet reads the weapon
   if (w.lob) lob(state, p, input.aimX, input.aimY, w.range, w.damage, w.lob.radius);
   else if (w.bullets > 1) {
-    for (let i = 0; i < w.bullets; i++) fireBullet(state, p, p.heading - w.spread / 2 + (w.spread * i) / (w.bullets - 1));
-  } else fireBullet(state, p, p.heading + (nextRandom(state) - 0.5) * w.spread);
+    for (let i = 0; i < w.bullets; i++) fireBullet(state, p, aim - w.spread / 2 + (w.spread * i) / (w.bullets - 1));
+  } else fireBullet(state, p, aim + (nextRandom(state) - 0.5) * w.spread);
   p.weapon = keep;
-  state.events.push({ type: 'shot', owner: p.id, x: p.x, y: p.y, angle: p.heading, weapon: kind });
+  state.events.push({ type: 'shot', owner: p.id, x: p.x, y: p.y, angle: aim, weapon: kind });
   if (kind !== 'fists') {
     p.mag -= 1;
     if (p.mag <= 0) startReload(state, p);

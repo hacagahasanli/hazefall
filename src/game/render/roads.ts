@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { ROUTES } from '../sim/constants';
+import { ROUTES, TILE } from '../sim/constants';
 
 /**
  * Roads and dirt paths as real geometry, not painted into the terrain texture: the asphalt has
@@ -144,9 +144,24 @@ export const buildRoads = () => {
 /** Distance from (x, y) to the nearest road or path centre line, for keeping grass off them. */
 export const routeDistance = (() => {
   const segs = ROUTES.flatMap((r) => r.points.slice(1).map((p, i) => ({ a: r.points[i], b: p, half: r.kind === 'asphalt' ? 2.9 : 1.3 })));
+  // A spatial hash: each tile lists the segments within a few metres of it, so a query checks a
+  // handful instead of all of them (this runs for every one of the ~60k grass tufts).
+  const buckets = new Map<number, typeof segs>();
+  const key = (tx: number, ty: number) => ty * 1000 + tx;
+  for (const s of segs) {
+    const pad = s.half + 3;
+    for (let ty = Math.floor((Math.min(s.a.y, s.b.y) - pad) / TILE); ty <= Math.floor((Math.max(s.a.y, s.b.y) + pad) / TILE); ty++) {
+      for (let tx = Math.floor((Math.min(s.a.x, s.b.x) - pad) / TILE); tx <= Math.floor((Math.max(s.a.x, s.b.x) + pad) / TILE); tx++) {
+        const k = key(tx, ty);
+        const list = buckets.get(k);
+        if (list) list.push(s);
+        else buckets.set(k, [s]);
+      }
+    }
+  }
   return (x: number, y: number) => {
-    let best = Infinity;
-    for (const { a, b, half } of segs) {
+    let best = 3; // "far": nothing within the bucket's reach
+    for (const { a, b, half } of buckets.get(key(Math.floor(x / TILE), Math.floor(y / TILE))) ?? []) {
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const l2 = dx * dx + dy * dy || 1;

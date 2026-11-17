@@ -80,9 +80,9 @@ const sampleGrid = (g: Float32Array, x: number, y: number) => {
 const sstep = (a: number, b: number, v: number) => smooth(Math.max(0, Math.min(1, (v - a) / (b - a))));
 const mix = (a: number[], b: number[], k: number) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
 
-/** The ground texture: 8 px per metre, meadow greens with dry patches, soft dirt paths, asphalt. */
+/** The ground texture: 6 px per metre (roads and paths are geometry), meadow greens with dry patches, soft dirt, mud. */
 export const paintTerrain = () => {
-  const px = 8;
+  const px = 6;
   const n = WORLD * px;
   const c = document.createElement('canvas');
   c.width = c.height = n;

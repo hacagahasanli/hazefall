@@ -65,13 +65,26 @@ export const Match = ({ fighter, onExit }: { fighter: FighterId; onExit: () => v
   const [menuOpen, setMenuOpen] = useState(false);
   const lastEsc = useRef(0);
 
+  // Building the map takes a moment and blocks the page: let the loading screen paint first
+  // (two animation frames), then build. The screen goes when the first HUD update arrives.
   useEffect(() => {
-    if (!canvasRef.current || !mapRef.current) return;
-    const m = startMatch(canvasRef.current, { fighter, name: 'you', aimMode: readAim(), minimap: mapRef.current, onHud: setHud });
-    gameRef.current = m;
+    const canvas = canvasRef.current;
+    const minimap = mapRef.current;
+    if (!canvas || !minimap) return;
+    let m: ReturnType<typeof startMatch> | null = null;
+    let cancelled = false;
+    const raf = requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        m = startMatch(canvas, { fighter, name: 'you', aimMode: readAim(), minimap, onHud: setHud });
+        gameRef.current = m;
+      }),
+    );
     return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
       gameRef.current = null;
-      m.dispose();
+      m?.dispose();
     };
   }, [fighter]);
 
@@ -107,6 +120,13 @@ export const Match = ({ fighter, onExit }: { fighter: FighterId; onExit: () => v
 
   return (
     <main className="relative h-screen w-screen select-none overflow-hidden bg-ink-deep">
+      {!hud && (
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-ink-deep" role="status" aria-live="polite">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-cream/15 border-t-gold" />
+          <div className="font-display text-2xl text-gold">Loading the map</div>
+          <p className="text-sm text-cream/60">Boarding the plane with nine others…</p>
+        </div>
+      )}
       <canvas ref={canvasRef} className={`block h-full w-full ${hud?.aimMode === 'mouse' ? 'cursor-crosshair' : ''}`} />
 
       {/* Minimap */}

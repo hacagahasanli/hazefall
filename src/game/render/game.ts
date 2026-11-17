@@ -4,7 +4,7 @@ import { createSfx } from '../sfx';
 
 import type { VolumeKind } from '../sfx';
 import { createBot } from '../sim/bot';
-import { ARMOR, AUTO_AIM_RANGE, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, ITEMS, MAP, SIZE, SUPERS, TILE, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
+import { ARMOR, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, ITEMS, MAP, SIZE, SUPERS, TILE, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
 import { canSee, createGame, inPlant, lineOfSight, lootUnder, step, throwDistance } from '../sim/step';
 import { NO_INPUT } from '../sim/types';
 
@@ -489,11 +489,19 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   window.addEventListener('keyup', onUp);
   window.addEventListener('blur', onBlur);
 
+  /**
+   * Auto-aim: anyone you can see on your screen, in any direction (whichever way you're running or
+   * facing), with a clear line to them; the nearest wins. Out of sight behind a wall or hidden in
+   * plants, no.
+   */
+  const onScreen = new THREE.Vector3();
   const autoAim = (p: Player) => {
     let best: Player | null = null;
-    let bd = AUTO_AIM_RANGE;
+    let bd = Infinity;
     for (const o of state.players) {
       if (o.id === p.id || !canSee(state, p, o)) continue;
+      onScreen.set(o.x, 1, o.y).project(camera);
+      if (Math.abs(onScreen.x) > 0.98 || Math.abs(onScreen.y) > 0.98 || onScreen.z > 1) continue;
       const d = Math.hypot(o.x - p.x, o.y - p.y);
       if (d < bd && lineOfSight(state, p.x, p.y, o.x, o.y)) {
         best = o;
