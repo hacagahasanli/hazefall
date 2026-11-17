@@ -9,9 +9,8 @@ OUT="$(cd "$(dirname "$0")/.." && pwd)/public/assets"
 mkdir -p "$OUT/models" "$OUT/sounds"
 
 NAT="$SRC/kenney_nature-kit/Models/GLTF format"
-for m in tree_oak tree_detailed tree_default tree_fat tree_tall tree_pineDefaultA tree_pineRoundC tree_cone_dark \
-         plant_bushLarge plant_bushDetailed plant_bush rock_largeA rock_largeC rock_tallB stump_round log_stack \
-         crops_cornStageD crops_wheatStageB flower_redA flower_yellowB grass_large fence_simple fence_planks; do
+# Trees, bushes, rocks and grass are built in code now (src/game/render/nature.ts).
+for m in stump_round log_stack crops_cornStageD crops_wheatStageB flower_redA flower_yellowB fence_simple fence_planks; do
   [ -f "$NAT/$m.glb" ] && cp "$NAT/$m.glb" "$OUT/models/$m.glb"
 done
 

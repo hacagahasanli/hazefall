@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
-import { BUILDINGS, fenceVertical, MAP, SIZE, TILE, treeSpot, WORLD } from '../sim/constants';
+import { BUILDINGS, fenceVertical, MAP, SIZE, TILE, tileHash, treeSpot, WORLD } from '../sim/constants';
+
+import { buildBushes, buildGrass, buildRocks, buildTrees, outerForest, paintTerrain, updateNature } from './nature';
 
 import type { GameState } from '../sim/types';
 
@@ -15,7 +17,6 @@ const loader = new GLTFLoader();
 const load = (name: string) => loader.loadAsync(`/assets/models/${name}.glb`).then((g) => g.scene);
 
 const TINTS = [0xffffff, 0xffc9b0, 0xc8dcff, 0xfff0b8, 0xe0ffd0, 0xffd6e8, 0xd8d0ff];
-const TREES = ['tree_oak', 'tree_detailed', 'tree_default', 'tree_fat', 'tree_tall', 'tree_pineRoundC'];
 
 /** A stable pseudo-random number per tile, so the dressing is the same every match. */
 const hash = (x: number, y: number, k = 0) => {
@@ -52,61 +53,6 @@ const place = (x: number, y: number, scale: number, rotY = 0, h = 0) =>
   new THREE.Matrix4().compose(new THREE.Vector3(x, h, y), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rotY, 0)), new THREE.Vector3(scale, scale, scale));
 
 // ---------------------------------------------------------------------------
-
-const paintGround = () => {
-  const px = 16;
-  const c = document.createElement('canvas');
-  c.width = c.height = SIZE * px;
-  const g = c.getContext('2d')!;
-  for (let ty = 0; ty < SIZE; ty++) {
-    for (let tx = 0; tx < SIZE; tx++) {
-      const t = MAP[ty][tx];
-      const n = hash(tx, ty);
-      let col: string;
-      if (t === 'a') col = '#4a4f5e';
-      else if (t === 'p') col = `hsl(32, 38%, ${44 + n * 6}%)`;
-      else if ('.lwr#'.includes(t) && insideBuilding(tx, ty)) col = `hsl(30, 35%, ${58 + n * 5}%)`;
-      else if (t === 'c') col = `hsl(55, 45%, ${45 + n * 6}%)`;
-      else if (t === 'k') col = `hsl(30, 10%, ${50 + n * 6}%)`;
-      else col = `hsl(${100 + n * 18}, ${42 + n * 10}%, ${40 + n * 8}%)`;
-      g.fillStyle = col;
-      g.fillRect(tx * px, ty * px, px, px);
-      if (t === '.' || t === 'l') {
-        g.strokeStyle = 'rgba(80,50,20,0.18)';
-        g.beginPath();
-        g.moveTo(tx * px, ty * px + px / 2);
-        g.lineTo(tx * px + px, ty * px + px / 2);
-        g.stroke();
-      }
-    }
-  }
-  // Soft blades of grass.
-  for (let i = 0; i < 9000; i++) {
-    const x = hash(i, 1) * c.width;
-    const y = hash(i, 2) * c.height;
-    const t = MAP[Math.floor(y / px)][Math.floor(x / px)];
-    if (t !== 'g' && t !== 't') continue;
-    g.fillStyle = `rgba(${hash(i, 3) < 0.5 ? '40,90,40' : '150,200,90'},0.35)`;
-    g.fillRect(x, y, 1.5, 3);
-  }
-  // Road centre line.
-  g.strokeStyle = 'rgba(255,210,63,0.55)';
-  g.setLineDash([10, 10]);
-  g.lineWidth = 2;
-  g.beginPath();
-  for (let tx = 0; tx < SIZE; tx++) {
-    const ty = MAP.findIndex((row, y) => row[tx] === 'a' && MAP[y + 1]?.[tx] === 'a');
-    if (ty < 0) continue;
-    const y = (ty + 1) * px;
-    if (tx === 0) g.moveTo(0, y);
-    else g.lineTo(tx * px + px / 2, y);
-  }
-  g.stroke();
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
-  return tex;
-};
 
 const insideBuilding = (tx: number, ty: number) => BUILDINGS.some((b) => tx >= b.x0 && ty >= b.y0 && tx < b.x0 + b.w && ty < b.y0 + b.h);
 
@@ -148,15 +94,22 @@ export interface World {
 
 export const buildWorld = (scene: THREE.Scene): World => {
   // ---------- ground
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(WORLD, WORLD), new THREE.MeshStandardMaterial({ map: paintGround(), roughness: 1 }));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(WORLD, WORLD), new THREE.MeshStandardMaterial({ map: paintTerrain(), roughness: 1 }));
   ground.rotation.x = -Math.PI / 2;
   ground.position.set(WORLD / 2, 0, WORLD / 2);
   ground.receiveShadow = true;
   scene.add(ground);
-  const outside = new THREE.Mesh(new THREE.PlaneGeometry(800, 800), new THREE.MeshStandardMaterial({ color: 0x3f7a3a, roughness: 1 }));
+  const outside = new THREE.Mesh(new THREE.PlaneGeometry(800, 800), new THREE.MeshStandardMaterial({ color: 0x4a7a36, roughness: 1 }));
   outside.rotation.x = -Math.PI / 2;
   outside.position.set(WORLD / 2, -0.05, WORLD / 2);
   scene.add(outside);
+
+  // ---------- nature built in code: trees, bushes, rocks, grass (see nature.ts)
+  const spot = (t: { tx: number; ty: number; x: number; y: number }) => ({ x: t.x, y: t.y, seed: tileHash(t.tx, t.ty, 1) });
+  scene.add(buildTrees([...tilesOf('t').map((t) => ({ ...treeSpot(t.tx, t.ty), seed: tileHash(t.tx, t.ty, 1) })), ...outerForest()]));
+  scene.add(buildBushes(tilesOf('b').map(spot)));
+  scene.add(buildRocks(tilesOf('k').map(spot)));
+  scene.add(buildGrass());
 
   // ---------- building interiors: walls and windows, shown only when you're inside
   const wallMat = new THREE.MeshStandardMaterial({ color: 0xece4d4, flatShading: true });
@@ -250,28 +203,8 @@ export const buildWorld = (scene: THREE.Scene): World => {
   const crateAlive = crates.map(() => true);
 
   void (async () => {
-    const names = [...new Set([...TREES, 'plant_bushLarge', 'plant_bushDetailed', 'rock_largeA', 'rock_largeC', 'rock_tallB', 'box-large', 'fence_simple', 'crops_cornStageD', 'flower_redA', 'flower_yellowB', 'grass_large', 'stump_round', 'log_stack', ...Array.from({ length: 21 }, (_, i) => `house_type${String(i + 1).padStart(2, '0')}`)])];
+    const names = [...new Set(['box-large', 'fence_simple', 'crops_cornStageD', 'flower_redA', 'flower_yellowB', 'stump_round', 'log_stack', ...Array.from({ length: 21 }, (_, i) => `house_type${String(i + 1).padStart(2, '0')}`)])];
     const models = Object.fromEntries(await Promise.all(names.map(async (n) => [n, await load(n)] as const)));
-
-    // Trees: tall, varied, a little random in size and turn.
-    const byTree = new Map<string, THREE.Matrix4[]>();
-    for (const t of tilesOf('t')) {
-      const name = TREES[Math.floor(hash(t.tx, t.ty) * TREES.length)];
-      const s = 6 + hash(t.tx, t.ty, 1) * 3;
-      // Same spot as the trunk the simulation collides with.
-      const spot = treeSpot(t.tx, t.ty);
-      (byTree.get(name) ?? byTree.set(name, []).get(name)!).push(place(spot.x, spot.y, s, hash(t.tx, t.ty, 4) * Math.PI * 2));
-    }
-    for (const [name, ms] of byTree) scene.add(instance(models[name], ms));
-
-    const bushes = tilesOf('b');
-    scene.add(instance(models.plant_bushLarge, bushes.filter((_, i) => i % 2 === 0).map((t) => place(t.x, t.y, 6.5, hash(t.tx, t.ty) * 6))));
-    scene.add(instance(models.plant_bushDetailed, bushes.filter((_, i) => i % 2 === 1).map((t) => place(t.x, t.y, 6, hash(t.tx, t.ty) * 6))));
-
-    const rocks = tilesOf('k');
-    scene.add(instance(models.rock_largeA, rocks.filter((_, i) => i % 3 === 0).map((t) => place(t.x, t.y, 2.4, hash(t.tx, t.ty) * 6))));
-    scene.add(instance(models.rock_largeC, rocks.filter((_, i) => i % 3 === 1).map((t) => place(t.x, t.y, 2.2, hash(t.tx, t.ty) * 6))));
-    scene.add(instance(models.rock_tallB, rocks.filter((_, i) => i % 3 === 2).map((t) => place(t.x, t.y, 2.4, hash(t.tx, t.ty) * 6))));
 
     scene.add(instance(models.crops_cornStageD, tilesOf('c').map((t) => place(t.x, t.y, 2.6, (hash(t.tx, t.ty) - 0.5) * 0.3))));
 
@@ -289,7 +222,6 @@ export const buildWorld = (scene: THREE.Scene): World => {
     const fields = tilesOf('g').filter((t) => hash(t.tx, t.ty, 7) < 0.12);
     scene.add(instance(models.flower_redA, fields.filter((_, i) => i % 4 === 0).map((t) => place(t.x, t.y, 2.4, hash(t.tx, t.ty) * 6))));
     scene.add(instance(models.flower_yellowB, fields.filter((_, i) => i % 4 === 1).map((t) => place(t.x, t.y, 2.4, hash(t.tx, t.ty) * 6))));
-    scene.add(instance(models.grass_large, fields.filter((_, i) => i % 4 === 2).map((t) => place(t.x, t.y, 3, hash(t.tx, t.ty) * 6))));
     scene.add(instance(models.stump_round, fields.filter((_, i) => i % 16 === 3).map((t) => place(t.x, t.y, 2.4, hash(t.tx, t.ty) * 6))));
     scene.add(instance(models.log_stack, fields.filter((_, i) => i % 16 === 7).map((t) => place(t.x, t.y, 2.4, hash(t.tx, t.ty) * 6))));
 
@@ -304,6 +236,8 @@ export const buildWorld = (scene: THREE.Scene): World => {
   const zero = new THREE.Matrix4().makeScale(0, 0, 0);
   return {
     update: (state, selfX, selfY) => {
+      // Wind, and the canopy cut-out around you (4.5 m) so trees never hide your fighter.
+      updateNature(performance.now() / 1000, selfX, selfY, 4.5);
       const inside = inBuilding(selfX, selfY);
       BUILDINGS.forEach((_, i) => {
         const want = i === inside ? 0 : 1;
