@@ -271,8 +271,13 @@ export const buildProps = (scene: THREE.Scene) => {
   }
   if (planks.length) scene.add(mesh(join(planks)));
 
-  updates.push(...animals(scene), birds(scene));
-  return { update: (time: number, dt: number) => updates.forEach((u) => u(time, dt)) };
+  const herd = animals(scene);
+  updates.push(herd.update, birds(scene));
+  return {
+    update: (time: number, dt: number) => updates.forEach((u) => u(time, dt)),
+    /** Dev checks: where every animal stands. */
+    animals: () => herd.list.map((a) => ({ x: a.g.position.x, y: a.g.position.z })),
+  };
 };
 
 // ---------------------------------------------------------------------------
@@ -306,13 +311,25 @@ const animals = (scene: THREE.Scene) => {
   const list: { g: THREE.Group; legs: THREE.Mesh[]; head: number; tx: number; ty: number; wait: number; area: (typeof herds)[number]['area']; speed: number }[] = [];
   let seed = 1;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
-  const spot = (a: (typeof herds)[number]['area']) => {
-    for (let i = 0; i < 30; i++) {
-      const x = a.x0 + rnd() * (a.x1 - a.x0);
-      const y = a.y0 + rnd() * (a.y1 - a.y0);
-      if (open(x, y)) return { x, y };
+  /** Is the straight walk from (x0, y0) to (x1, y1) on open ground all the way? */
+  const clearWalk = (x0: number, y0: number, x1: number, y1: number) => {
+    const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 0.5);
+    for (let i = 1; i <= n; i++) if (!open(x0 + ((x1 - x0) * i) / n, y0 + ((y1 - y0) * i) / n)) return false;
+    return true;
+  };
+  /**
+   * A new spot to wander to: in the herd's area, on open ground, and reachable in a straight line
+   * from where the animal stands (else it would walk into a fence and get stuck there).
+   */
+  const spot = (a: (typeof herds)[number]['area'], from?: { x: number; y: number }) => {
+    for (let i = 0; i < 40; i++) {
+      const near = from && i < 30;
+      const x = near ? from.x + (rnd() - 0.5) * 16 : a.x0 + rnd() * (a.x1 - a.x0);
+      const y = near ? from.y + (rnd() - 0.5) * 16 : a.y0 + rnd() * (a.y1 - a.y0);
+      if (x < a.x0 || y < a.y0 || x > a.x1 || y > a.y1 || !open(x, y)) continue;
+      if (!from || clearWalk(from.x, from.y, x, y)) return { x, y };
     }
-    return { x: (a.x0 + a.x1) / 2, y: (a.y0 + a.y1) / 2 };
+    return from ?? { x: (a.x0 + a.x1) / 2, y: (a.y0 + a.y1) / 2 };
   };
   for (const h of herds) {
     for (let i = 0; i < h.count; i++) {
@@ -334,12 +351,13 @@ const animals = (scene: THREE.Scene) => {
       g.position.set(s0.x, 0, s0.y);
       g.scale.setScalar(h.kind === 'cow' ? 1 : 0.95);
       scene.add(g);
-      const t = spot(h.area);
+      const t = spot(h.area, s0);
       list.push({ g, legs, head: rnd() * 6, tx: t.x, ty: t.y, wait: rnd() * 4, area: h.area, speed: h.kind === 'cow' ? 0.7 : 0.9 });
     }
   }
-  return [
-    (time: number, dt: number) => {
+  return {
+    list,
+    update: (time: number, dt: number) => {
       for (const a of list) {
         const dx = a.tx - a.g.position.x;
         const dz = a.ty - a.g.position.z;
@@ -348,7 +366,7 @@ const animals = (scene: THREE.Scene) => {
         if (a.wait > 0) a.wait -= dt;
         else if (d < 0.3) {
           a.wait = 2 + Math.random() * 6; // graze a while
-          const t = spot(a.area);
+          const t = spot(a.area, { x: a.g.position.x, y: a.g.position.z });
           a.tx = t.x;
           a.ty = t.y;
         } else {
@@ -361,7 +379,14 @@ const animals = (scene: THREE.Scene) => {
           const nx = a.g.position.x + Math.cos(a.head) * step;
           const nz = a.g.position.z - Math.sin(a.head) * step;
           if (open(nx, nz)) a.g.position.set(nx, 0, nz);
-          else a.wait = 0.01; // pick another spot
+          else {
+            // Blocked anyway (turning wide round a corner): stand, then head somewhere reachable.
+            walking = false;
+            a.wait = 0.5 + Math.random();
+            const t = spot(a.area, { x: a.g.position.x, y: a.g.position.z });
+            a.tx = t.x;
+            a.ty = t.y;
+          }
         }
         a.g.rotation.y = a.head;
         const sw = walking ? Math.sin(time * 6 + a.head * 3) * 0.4 : 0;
@@ -370,7 +395,7 @@ const animals = (scene: THREE.Scene) => {
         a.g.children[0].rotation.z = walking ? 0 : -0.12 + Math.sin(time * 1.3 + a.head) * 0.05;
       }
     },
-  ];
+  };
 };
 
 // ---------------------------------------------------------------------------

@@ -1222,7 +1222,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     raf = requestAnimationFrame(frame);
   };
   raf = requestAnimationFrame(frame);
-  if (process.env.NODE_ENV !== 'production') (window as unknown as { __lcs?: unknown }).__lcs = { state: () => state, buildings: BUILDINGS, map: MAP };
+  if (process.env.NODE_ENV !== 'production') (window as unknown as { __lcs?: unknown }).__lcs = { state: () => state, buildings: BUILDINGS, map: MAP, animals: props.animals };
 
   return {
     setPaused: (on: boolean) => {
