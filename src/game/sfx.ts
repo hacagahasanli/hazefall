@@ -330,7 +330,7 @@ export const createSfx = () => {
      * One footstep. Surface decides the colour (grass is a soft brush, asphalt and floors a
      * click and a heel thud, bushes and crops a rustle); far steps are quieter and duller.
      */
-    footstep: (surface: 'grass' | 'hard' | 'wood' | 'dirt' | 'leaves', x = 0, distance = 0, heavy = 1, gear = false) => {
+    footstep: (surface: 'grass' | 'hard' | 'wood' | 'dirt' | 'leaves' | 'water', x = 0, distance = 0, heavy = 1, gear = false) => {
       if (!ctx || muted || distance > 28) return;
       const v = volumes.steps * Math.max(0.08, 1 - distance / 28) * heavy;
       const pan = panOf(x);
@@ -363,6 +363,13 @@ export const createSfx = () => {
           noise('bandpass', 700 * dull, 500, 0.07, 0.3 * v, 6, o(heel, 0.3));
           tone('triangle', 240, 170, 0.08, 0.12 * v, o(heel, 0.3));
           noise('bandpass', 1600 * dull, 1200, 0.03, 0.14 * v, 3, o(toe, 0.2));
+          break;
+        case 'water':
+          // A swimming stroke: the hand slapping in, a gulp of water, a trickle off the arm.
+          noise('bandpass', 1800 * dull, 900, 0.05, 0.22 * v, 1.4, o(heel, 0.15));
+          noise('lowpass', 700 * dull, 300, 0.16, 0.2 * v, 0.7, o(0.02, 0.15));
+          tone('sine', 420, 180, 0.07, 0.05 * v, o(0.05, 0.2));
+          for (let i = 0; i < 4; i++) noise('bandpass', (3000 + Math.random() * 2500) * dull, 2000, 0.012, 0.05 * v, 5, o(0.12 + i * 0.04 + Math.random() * 0.03));
           break;
         case 'leaves':
           noise('highpass', 3500 * dull, 2500, 0.16, 0.24 * v, 0.6, o(heel));

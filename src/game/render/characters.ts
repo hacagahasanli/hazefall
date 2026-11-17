@@ -618,6 +618,7 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   if (stepping) rig.phase += dt * 9; // a quick shuffle while turning on the spot
   // The head turns a little ahead of the body into a turn.
   rig.head.rotation.y = damp(rig.head.rotation.y, Math.max(-0.45, Math.min(0.45, -p.yawRate * 0.08)), 10, dt);
+  rig.head.rotation.x = damp(rig.head.rotation.x, 0, 10, dt);
 
   const rel = Math.atan2(p.vy, p.vx) - rig.hipYaw;
   const fwd = speed > 0.05 ? Math.cos(rel) : 0;
@@ -845,4 +846,57 @@ export const poseDeath = (rig: Rig, t: number, seed: number) => {
   rig.legR.rotation.set(0.05 * e, 0, 0.12 * e);
   rig.shinL.rotation.set(1.1 * e, 0, 0);
   rig.shinR.rotation.set(0.1 * e, 0, 0);
+};
+
+/**
+ * Swimming. Moving, it is a front crawl: the body lies face down along the water with the back
+ * just breaking the surface, the arms turn over one after the other (reach far ahead, pull down
+ * and back under the body to the hip, then swing forward again through the air), the legs flutter
+ * from the hips and the head turns to one side to breathe every other stroke. Still, you tread
+ * water: upright with only the head and shoulders out, the hands sculling flat at the sides and
+ * the legs cycling slowly. `speed` (m/s) blends the two. The water surface (drawn opaque) hides
+ * whatever is under it, so the body only has to sit at the right depth.
+ */
+export const poseSwim = (rig: Rig, p: { dt: number; time: number; speed: number; seed: number }) => {
+  const { dt, time } = p;
+  const s = Math.min(1, p.speed / 1.6);
+  rig.weapon.visible = false;
+  // One stroke cycle (both arms) takes ~1.3 s at full swimming speed.
+  rig.phase += dt * (2.2 + 2.6 * s);
+  const a = rig.phase;
+  // Lying flat at speed, upright when treading water.
+  rig.body.rotation.x = damp(rig.body.rotation.x, 0.25 + 1.22 * s, 5, dt);
+  rig.body.rotation.y = 0;
+  // Roll from side to side with the strokes (the shoulders lead each pull).
+  rig.body.rotation.z = damp(rig.body.rotation.z, Math.sin(a) * 0.32 * s, 10, dt);
+  // Depth: treading, the water is at the collarbones; swimming, the back just breaks the surface
+  // and the body is shifted back so the chest sits where the player is.
+  const tread = 0.12 - (rig.chestY + 0.05);
+  const swim = -0.18;
+  rig.body.position.set(0, tread + (swim - tread) * s + Math.sin(a * 2) * 0.03, -rig.chestY * 0.75 * s);
+  // Head: tucked, turned to breathe on every other stroke; looking ahead when treading.
+  const breathe = Math.max(0, Math.sin(a)) ** 3;
+  rig.head.rotation.y = damp(rig.head.rotation.y, breathe * 0.9 * s, 8, dt);
+  rig.head.rotation.x = damp(rig.head.rotation.x, -0.6 * s, 8, dt);
+  // Arms. In the body frame an arm angle of PI points past the head, 3PI/2 down under the belly,
+  // 2PI back at the hip and PI/2 up out of the water behind: one crawl stroke is a full turn.
+  const arm = (upper: THREE.Group, fore: THREE.Group, phase: number, side: 1 | -1) => {
+    const crawl = Math.PI + phase;
+    const recovering = Math.sin(crawl) > 0; // in the air: elbow high, forearm hanging
+    const bend = recovering ? 1.1 * Math.sin(crawl) : 0.35;
+    const scull = Math.sin(time * 5 + (side > 0 ? 0 : Math.PI)) * 0.35;
+    // Treading: arms out to the sides just under the surface, hands sweeping in and out.
+    const tx = -0.35;
+    const tz = side * (1.25 + scull);
+    upper.quaternion.setFromEuler(tmpE.set(tx + (crawl - tx) * s, 0, tz * (1 - s) + side * 0.18 * s));
+    fore.quaternion.setFromEuler(tmpE.set(-(bend * s + 0.5 * (1 - s)), 0, 0));
+  };
+  arm(rig.armR, rig.foreR, a, 1);
+  arm(rig.armL, rig.foreL, a + Math.PI, -1);
+  // Legs: a quick flutter kick from the hips, or slow cycling when treading water.
+  const kick = Math.sin(time * (6 + 4 * s) + p.seed);
+  rig.legL.rotation.set(kick * (0.28 * s + 0.45 * (1 - s)), 0, -0.06);
+  rig.legR.rotation.set(-kick * (0.28 * s + 0.45 * (1 - s)), 0, 0.06);
+  rig.shinL.rotation.set(0.25 + Math.max(0, kick) * 0.5, 0, 0);
+  rig.shinR.rotation.set(0.25 + Math.max(0, -kick) * 0.5, 0, 0);
 };

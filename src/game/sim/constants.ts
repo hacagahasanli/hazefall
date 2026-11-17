@@ -40,7 +40,7 @@ export interface Route {
 
 /** Big props the renderer draws over their 'v' tiles (and decor with no collision). */
 export interface Prop {
-  kind: 'car' | 'container' | 'tent' | 'windmill' | 'campfire' | 'pond';
+  kind: 'car' | 'container' | 'tent' | 'windmill' | 'campfire' | 'pond' | 'river';
   /** Tile rectangle. */
   x0: number;
   y0: number;
@@ -65,6 +65,24 @@ const rng = (seed: number) => () => {
   return (seed - 1) / 2147483646;
 };
 
+/** The river: its centre row at tile column x, half its width in tiles, and its bridges (first column, width). */
+export const RIVER = {
+  half: 3.2,
+  bridges: [
+    [15, 2],
+    [43, 4],
+    [70, 2],
+  ] as [number, number][],
+};
+/** Which sides of a deck tile ('d') have a rail: the long sides of a bridge, and a pier's sides that face water. */
+export const railSides = (tx: number, ty: number) => {
+  const bridge = RIVER.bridges.find(([bx, bw]) => tx >= bx && tx < bx + bw);
+  if (bridge) return { w: tx === bridge[0], e: tx === bridge[0] + bridge[1] - 1, n: false, s: false };
+  const wet = (x: number, y: number) => tileAt(x, y) === 'o';
+  return { w: wet(tx - 1, ty), e: wet(tx + 1, ty), n: wet(tx, ty - 1), s: wet(tx, ty + 1) };
+};
+export const riverCentre = (x: number) => 32 + O + Math.sin(x / 7) * 2 + Math.sin(x / 3.1) * 0.5;
+
 const buildMap = () => {
   const grid: string[][] = Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => 'g'));
   const get = (x: number, y: number) => (x >= 0 && y >= 0 && x < SIZE && y < SIZE ? grid[y][x] : '#');
@@ -87,21 +105,38 @@ const buildMap = () => {
   const district = (name: string, x0: number, y0: number, x1: number, y1: number) =>
     districts.push({ name, x0: x0 * TILE, y0: y0 * TILE, x1: x1 * TILE, y1: y1 * TILE });
 
-  // Roads and paths first, so buildings sit beside them.
-  const road: Route = { kind: 'asphalt', points: [] };
+  // The river first, so everything else is placed around it: twelve metres of water winding
+  // across the whole map from west to east, crossed by three wooden bridges. You can swim it
+  // (slowly, with no gun up), or take a bridge and be seen.
   for (let x = 0; x < SIZE; x++) {
-    const y = 31 + O + Math.round(Math.sin(x / 7) * 2);
-    set(x, y, 'a');
-    set(x, y + 1, 'a');
+    const c = riverCentre(x);
+    for (let y = Math.floor(c - RIVER.half - 1); y <= c + RIVER.half + 1; y++) {
+      const d = Math.abs(y + 0.5 - c);
+      if (d < RIVER.half) set(x, y, 'o');
+    }
   }
-  for (let x = -4; x <= SIZE + 4; x += 0.5) road.points.push({ x: x * TILE + TILE / 2, y: (32 + O + Math.sin(x / 7) * 2) * TILE });
-  routes.push(road);
+  // Bridges are straight decks from bank to bank, a tile onto the land at each end.
+  for (const [bx, bw] of RIVER.bridges) {
+    let y0 = SIZE;
+    let y1 = 0;
+    for (let x = bx; x < bx + bw; x++) {
+      for (let y = 0; y < SIZE; y++) {
+        if (get(x, y) !== 'o') continue;
+        y0 = Math.min(y0, y);
+        y1 = Math.max(y1, y);
+      }
+    }
+    for (let x = bx; x < bx + bw; x++) for (let y = y0 - 1; y <= y1 + 1; y++) set(x, y, 'd');
+  }
+  props.push({ kind: 'river', x0: 0, y0: 0, w: SIZE, h: SIZE, seed: r() });
   const path = (x0: number, y0: number, x1: number, y1: number) => {
     const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
     const line: Route = { kind: 'dirt', points: [] };
     for (let i = 0; i <= n; i++) {
-      const xf = x0 + ((x1 - x0) * i) / n + Math.sin(i / 3) * 0.8;
       const yf = y0 + ((y1 - y0) * i) / n;
+      // Straight onto a bridge: no wobble near the river.
+      const calm = Math.max(0, Math.min(1, (Math.abs(yf - riverCentre(x0 + ((x1 - x0) * i) / n)) - RIVER.half - 1) / 4));
+      const xf = x0 + ((x1 - x0) * i) / n + Math.sin(i / 3) * 0.8 * calm;
       const x = Math.round(xf);
       const y = Math.round(yf);
       if (get(x, y) === 'g') set(x, y, 'p');
@@ -110,12 +145,13 @@ const buildMap = () => {
     }
     routes.push(line);
   };
-  path(32 + O, 31 + O, 32 + O, 4);
-  path(32 + O, 33 + O, 32 + O, 76);
+  path(32 + O, 4, 32 + O, 76); // over the big bridge
+  path(15, 22, 15, 62); // over the west bridge
+  path(70, 18, 70, 64); // over the east bridge
   path(30 + O, 14 + O, 12 + O, 12 + O);
   path(34 + O, 14 + O, 52 + O, 10 + O);
   path(30 + O, 50 + O, 12 + O, 54 + O);
-  path(12 + O, 34 + O, 13, 57);
+  path(12 + O, 37 + O, 13, 57);
 
   const house = (x0: number, y0: number, w: number, h: number, barn: boolean) => {
     for (let y = y0; y < y0 + h; y++) {
@@ -288,25 +324,36 @@ const buildMap = () => {
     if (get(x, y) === 'a') set(x, y, 's');
   }
 
-  // ---- Container Yard (east): rows of shipping containers, alleys between them.
-  district('Container Yard', 76, 26, 86, 60);
-  for (let row = 0; row < 5; row++) {
-    for (let col = 0; col < 2; col++) {
-      if (r() < 0.2) continue;
-      solidProp('container', 77 + col * 5, 27 + row * 6 + ri(0, 1), 3, 2);
+  // ---- Container Yard (east): a river port. Three columns of shipping containers on both banks
+  // (a third of them stacked two high), narrow alleys between them, and in the middle of each
+  // bank an open square with the good loot, so you have to go in to get it.
+  district('Container Yard', 73, 20, 86, 66);
+  const squares = [
+    { x0: 77, y0: 27, x1: 81, y1: 31 },
+    { x0: 77, y0: 53, x1: 81, y1: 57 },
+  ];
+  // A paved yard: nothing grows between the containers.
+  for (let y = 20; y <= 65; y++) for (let x = 73; x <= 85; x++) if (get(x, y) === 'g') set(x, y, 'a');
+  const inSquare = (x: number, y: number) => squares.some((q) => x >= q.x0 && x <= q.x1 && y >= q.y0 && y <= q.y1);
+  for (let y = 21; y <= 64; y += 3) {
+    for (const x of [74, 78, 82]) {
+      if (r() < 0.12) continue;
+      let clear = true;
+      for (let yy = y; yy < y + 2; yy++) for (let xx = x; xx < x + 3; xx++) if (inSquare(xx, yy)) clear = false;
+      if (clear) solidProp('container', x, y, 3, 2);
     }
   }
-  for (let i = 0; i < 6; i++) {
-    const x = ri(77, 85);
-    const y = ri(27, 58);
-    if (get(x, y) === 'g') set(x, y, 's');
+  for (const q of squares) {
+    // The loot pile in the middle and a couple of crates to fight round.
+    const cx = Math.round((q.x0 + q.x1) / 2);
+    const cy = Math.round((q.y0 + q.y1) / 2);
+    for (const [dx, dy] of [[0, 0], [-1, -1], [1, 1], [-1, 1], [1, -1]]) if (get(cx + dx, cy + dy) === 'a') set(cx + dx, cy + dy, 's');
+    for (const [dx, dy] of [[-2, 0], [2, 0]]) if (get(cx + dx, cy + dy) === 'a') set(cx + dx, cy + dy, 'r');
   }
-
-  // Parked cars along the main road: cover on the way through town.
-  for (let i = 0, made = 0; i < 40 && made < 7; i++) {
-    const x = ri(4, SIZE - 6);
-    const y = 31 + O + Math.round(Math.sin(x / 7) * 2);
-    if (solidProp('car', x, y + (r() < 0.5 ? 0 : 1), 2, 1, 'a')) made += 1;
+  for (let i = 0; i < 6; i++) {
+    const x = ri(74, 85);
+    const y = ri(21, 64);
+    if (get(x, y) === 'a') set(x, y, 's');
   }
 
   // Old Town: a tight grid of houses of every size, with alleys between them.
@@ -606,6 +653,8 @@ export const fallHeight = (fall: number) =>
     : DROP.chuteHeight + (DROP.height - DROP.chuteHeight) * Math.min(1, (fall - DROP.chute) / DROP.freefall);
 
 /** Movement feel: you speed up and slow down over a fraction of a second, and turn smoothly. */
+/** Swimming: a little under half running speed (a good swimmer's ~2 m/s). */
+export const SWIM = { speed: 0.42 };
 export const MOVE = { accel: 24, friction: 20, turn: 12 };
 
 /** The Deadline: wait, then shrink, phase after phase, until nothing is left. */

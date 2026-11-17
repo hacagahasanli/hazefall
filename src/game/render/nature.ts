@@ -89,7 +89,9 @@ export const paintTerrain = () => {
   const g = c.getContext('2d')!;
   const img = g.createImageData(n, n);
   const path = weightGrid((t) => t === 'p');
-  const road = weightGrid((t) => t === 'a');
+  // Paving runs on under what is parked on it (cars at the truck stop, the containers in the yard).
+  const paved = (tx: number, ty: number) => MAP[ty]?.[tx] === 'a';
+  const road = weightGrid((t, tx, ty) => t === 'a' || ((t === 'v' || t === 's' || t === 'r') && (paved(tx - 1, ty) || paved(tx + 1, ty) || paved(tx, ty - 1) || paved(tx, ty + 1) || paved(tx - 2, ty) || paved(tx + 3, ty))));
   const soil = weightGrid((t) => t === 'c');
   const gravel = weightGrid((t) => t === 'k');
   const pond = weightGrid((t) => t === 'o' || t === 'd');

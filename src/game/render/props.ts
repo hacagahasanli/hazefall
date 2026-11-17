@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-import { DISTRICTS, MAP, PROPS, SIZE, TILE, tileHash } from '../sim/constants';
+import { DISTRICTS, MAP, PROPS, RIVER, SIZE, TILE, railSides, riverCentre, tileHash } from '../sim/constants';
 
 import type { Prop } from '../sim/constants';
 
@@ -39,6 +39,80 @@ const join = (parts: THREE.BufferGeometry[]) => {
   g.computeVertexNormals();
   return g;
 };
+/** Height of the water surface and of the bridge decks (people on a deck stand at DECK_Y). */
+export const WATER_Y = 0.12;
+export const DECK_Y = 0.32;
+
+/**
+ * The river flows: pale flecks of foam drift downstream (west to east) along the current,
+ * fastest in the middle, and fade in and out.
+ */
+const riverFlow = (scene: THREE.Scene) => {
+  const n = 90;
+  const mat = new THREE.MeshBasicMaterial({ color: 0xe6f4ff, transparent: true, opacity: 0.35, depthWrite: false });
+  const flecks = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.9, 0.12).rotateX(-Math.PI / 2), mat, n);
+  const seeds = Array.from({ length: n }, (_, i) => ({ x: tileHash(i, 3) * SIZE * TILE, off: (tileHash(i, 5) - 0.5) * 2 * RIVER.half * 0.85, v: 0.6 + tileHash(i, 9) * 0.5 }));
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const sc = new THREE.Vector3();
+  const pos = new THREE.Vector3();
+  scene.add(flecks);
+  return (_time: number, dt: number) => {
+    seeds.forEach((s, i) => {
+      s.x += dt * s.v * (1.4 - Math.abs(s.off) / RIVER.half);
+      if (s.x > SIZE * TILE) s.x = 0;
+      const tx = s.x / TILE;
+      const c = riverCentre(tx) + s.off;
+      const slope = (riverCentre(tx + 0.5) - riverCentre(tx - 0.5)) / 1;
+      const life = Math.sin((s.x / (SIZE * TILE)) * Math.PI * 9 + i) * 0.5 + 0.5;
+      q.setFromAxisAngle(pos.set(0, 1, 0), -Math.atan(slope));
+      sc.setScalar(0.4 + life * 0.8);
+      const t = MAP[Math.floor(c)]?.[Math.floor(tx)];
+      if (t !== 'o') sc.setScalar(0.0001);
+      m.compose(pos.set(s.x, WATER_Y + 0.015, c * TILE), q, sc);
+      flecks.setMatrixAt(i, m);
+    });
+    flecks.instanceMatrix.needsUpdate = true;
+  };
+};
+
+/**
+ * The river surface as one smooth ribbon that follows its curve (the tiles underneath only decide
+ * where you swim), with a lighter tint near the banks where it is shallow.
+ */
+const riverSheet = () => {
+  const pos: number[] = [];
+  const col: number[] = [];
+  const idx: number[] = [];
+  const deep = new THREE.Color(0x2c6f9e);
+  const shallow = new THREE.Color(0x5d9fb8);
+  const across = 6;
+  let row = 0;
+  for (let tx = -3; tx <= SIZE + 3; tx += 0.25, row++) {
+    const c = riverCentre(tx);
+    for (let k = 0; k <= across; k++) {
+      const f = k / across; // 0 = north bank, 1 = south bank
+      const edge = Math.abs(f - 0.5) * 2;
+      pos.push(tx * TILE, WATER_Y, (c + (f - 0.5) * 2 * (RIVER.half + 0.15)) * TILE);
+      const cc = deep.clone().lerp(shallow, edge ** 2.5);
+      col.push(cc.r, cc.g, cc.b);
+    }
+    if (row > 0) {
+      const a = (row - 1) * (across + 1);
+      const b = row * (across + 1);
+      for (let k = 0; k < across; k++) idx.push(a + k, a + k + 1, b + k, a + k + 1, b + k + 1, b + k);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.15, metalness: 0.2 }));
+  m.receiveShadow = true;
+  return m;
+};
+
 const flat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, flatShading: true });
 const shiny = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.25 });
 const mesh = (g: THREE.BufferGeometry, m: THREE.Material = flat) => {
@@ -138,6 +212,8 @@ const tent = (p: Prop) => {
 export const buildProps = (scene: THREE.Scene) => {
   const updates: ((time: number, dt: number) => void)[] = [];
 
+  /** Water tiles already covered by a sheet (the pond and the river each draw their own). */
+  const wet = new Set<number>();
   for (const p of PROPS) {
     const c = centre(p);
     let o: THREE.Object3D | null = null;
@@ -223,13 +299,21 @@ export const buildProps = (scene: THREE.Scene) => {
       });
     }
 
+    if (p.kind === 'river') {
+      scene.add(riverSheet());
+      updates.push(riverFlow(scene));
+      continue;
+    }
     if (p.kind === 'pond') {
-      // Water over the pond tiles: one sheet, gently shimmering, with slow ripple rings.
+      // Water over the pond or river tiles: one sheet, gently shimmering, with slow ripple rings.
       const cells: THREE.Matrix4[] = [];
       for (let y = p.y0; y < p.y0 + p.h; y++) {
         for (let x = p.x0; x < p.x0 + p.w; x++) {
           const t = MAP[y]?.[x];
-          if (t === 'o' || t === 'd') cells.push(new THREE.Matrix4().makeTranslation((x + 0.5) * TILE, 0.12, (y + 0.5) * TILE));
+          if ((t === 'o' || t === 'd') && !wet.has(y * SIZE + x)) {
+            wet.add(y * SIZE + x);
+            cells.push(new THREE.Matrix4().makeTranslation((x + 0.5) * TILE, WATER_Y, (y + 0.5) * TILE));
+          }
         }
       }
       // Opaque, so the overlapping tiles don't show as a grid.
@@ -252,7 +336,7 @@ export const buildProps = (scene: THREE.Scene) => {
           const k = r.userData.t as number;
           if (k < 0.01) r.userData.at = cells[Math.floor(Math.random() * cells.length)];
           r.position.setFromMatrixPosition(r.userData.at as THREE.Matrix4);
-          r.position.y = 0.14;
+          r.position.y = WATER_Y + 0.02;
           r.scale.setScalar(0.3 + k * 2.2);
           (r.material as THREE.MeshBasicMaterial).opacity = 0.4 * (1 - k);
         }
@@ -260,13 +344,36 @@ export const buildProps = (scene: THREE.Scene) => {
     }
   }
 
-  // The pier: planks on posts.
+  // The pier and the bridges: a plank deck on posts, with a rail on every side that faces water
+  // (the simulation has the same rails: you can vault them into the river).
   const planks: THREE.BufferGeometry[] = [];
+  const wood = (x: number, y: number) => MAP[y]?.[x] === 'o';
   for (let ty = 0; ty < SIZE; ty++) {
     for (let tx = 0; tx < SIZE; tx++) {
       if (MAP[ty][tx] !== 'd') continue;
-      for (let i = 0; i < 5; i++) planks.push(box(0.36, 0.08, TILE * 1.1, tx * TILE + 0.2 + i * 0.4, 0.42, ty * TILE + TILE / 2, i % 2 ? 0x9a7048 : 0x8a623e));
-      for (const z of [0.1, TILE - 0.1]) planks.push(box(0.16, 0.6, 0.16, tx * TILE + TILE / 2, 0.15, ty * TILE + z, 0x5a3e28));
+      const x0 = tx * TILE;
+      const z0 = ty * TILE;
+      const rail = railSides(tx, ty);
+      const bridge = RIVER.bridges.some(([bx, bw]) => tx >= bx && tx < bx + bw) || wood(tx - 1, ty) || wood(tx + 1, ty); // runs north-south
+      for (let i = 0; i < 5; i++) {
+        const c = i % 2 ? 0x9a7048 : 0x8a623e;
+        planks.push(bridge ? box(TILE * 1.02, 0.08, 0.36, x0 + TILE / 2, DECK_Y - 0.04, z0 + 0.2 + i * 0.4, c) : box(0.36, 0.08, TILE * 1.02, x0 + 0.2 + i * 0.4, DECK_Y - 0.04, z0 + TILE / 2, c));
+      }
+      // Beams under the deck and posts down into the water.
+      planks.push(bridge ? box(0.18, 0.16, TILE, x0 + TILE / 2, DECK_Y - 0.16, z0 + TILE / 2, 0x4a3220) : box(TILE, 0.16, 0.18, x0 + TILE / 2, DECK_Y - 0.16, z0 + TILE / 2, 0x4a3220));
+      const sides: [number, number, boolean][] = [];
+      if (rail.w) sides.push([x0 + 0.06, z0 + TILE / 2, false]);
+      if (rail.e) sides.push([x0 + TILE - 0.06, z0 + TILE / 2, false]);
+      if (rail.n) sides.push([x0 + TILE / 2, z0 + 0.06, true]);
+      if (rail.s) sides.push([x0 + TILE / 2, z0 + TILE - 0.06, true]);
+      for (const [x, z, alongX] of sides) {
+        // A post at the tile corner, a top rail and a mid rail.
+        const px = alongX ? x - TILE / 2 + 0.08 : x;
+        const pz = alongX ? z : z - TILE / 2 + 0.08;
+        planks.push(box(0.14, 1.2, 0.14, px, DECK_Y + 0.3, pz, 0x5a3e28));
+        planks.push(alongX ? box(TILE, 0.1, 0.1, x, DECK_Y + 0.85, z, 0x7a5434) : box(0.1, 0.1, TILE, x, DECK_Y + 0.85, z, 0x7a5434));
+        planks.push(alongX ? box(TILE, 0.07, 0.07, x, DECK_Y + 0.45, z, 0x6a4a2e) : box(0.07, 0.07, TILE, x, DECK_Y + 0.45, z, 0x6a4a2e));
+      }
     }
   }
   if (planks.length) scene.add(mesh(join(planks)));

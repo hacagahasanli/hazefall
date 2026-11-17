@@ -5,10 +5,10 @@ import { createSfx } from '../sfx';
 import type { VolumeKind } from '../sfx';
 import { createBot } from '../sim/bot';
 import { ARMOR, ROLL, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, ITEMS, MAP, SIZE, SUPERS, TILE, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
-import { canSee, createGame, inPlant, lineOfSight, lootUnder, step, throwDistance } from '../sim/step';
+import { canSee, createGame, inPlant, inWater, lineOfSight, lootUnder, step, throwDistance } from '../sim/step';
 import { NO_INPUT } from '../sim/types';
 
-import { buildRig, poseChute, poseDeath, poseFreefall, poseRig, poseTopDown } from './characters';
+import { buildRig, poseChute, poseDeath, poseFreefall, poseRig, poseSwim, poseTopDown } from './characters';
 import { buildGun } from './guns';
 import { mat, mesh, PALETTE } from './palette';
 import { createVfx } from './vfx';
@@ -16,7 +16,7 @@ import { setPeople } from './nature';
 import { buildChute, HARNESS_BACK } from './chute';
 import { paintMapImage } from './mapImage';
 import { buildPlane } from './plane';
-import { buildProps } from './props';
+import { buildProps, DECK_Y, WATER_Y } from './props';
 import { buildWorld } from './world';
 
 import type { Rig } from './characters';
@@ -606,10 +606,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     }
   };
   const hitFlash = state.players.map(() => 0);
+  const deck = state.players.map(() => 0);
   const steps = state.players.map(() => 0);
   const surfaceAt = (x: number, y: number) => {
     const t = MAP[Math.floor(y / TILE)]?.[Math.floor(x / TILE)] ?? 'g';
-    return t === 'a' ? 'hard' : '.lud'.includes(t) ? 'wood' : t === 'p' ? 'dirt' : 'bch'.includes(t) ? 'leaves' : 'grass';
+    return t === 'o' ? 'water' : t === 'a' ? 'hard' : '.lud'.includes(t) ? 'wood' : t === 'p' ? 'dirt' : 'bch'.includes(t) ? 'leaves' : 'grass';
   };
   /** Visual yaw per player (angle and angular velocity) and when each last fired. */
   const yaw = state.players.map((p) => ({ a: p.heading, v: 0 }));
@@ -850,7 +851,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // Height interpolated between ticks like x and y, so the fall is smooth at any frame rate.
       const fall = prev[i].fall + (p.fall - prev[i].fall) * alpha;
       let h = p.stage === 'falling' ? fallHeight(Math.max(0, fall)) : 0;
-      if (p.vault > 0) h = Math.sin((1 - p.vault / VAULT.time) * Math.PI) * 0.7; // the hop over
+      // Standing on a bridge or the pier lifts you onto its deck, smoothly at its ends.
+      const onDeck = p.stage === 'ground' && MAP[Math.floor(y / TILE)]?.[Math.floor(x / TILE)] === 'd' ? DECK_Y : 0;
+      deck[i] += (onDeck - deck[i]) * Math.min(1, dt * 14);
+      if (p.stage === 'ground') h += deck[i];
+      if (p.vault > 0) h = Math.sin((1 - p.vault / VAULT.time) * Math.PI) * 0.7 + deck[i]; // the hop over
       rig.root.position.set(x, h, y);
       if (i === me) {
         selfX = x;
@@ -876,6 +881,18 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const sinceLand = landAt[i] === undefined ? 9 : time - landAt[i];
       if (fallen) {
         poseDeath(rig, time - deadAt[i], i);
+      } else if (p.stage === 'ground' && p.vault <= 0 && inWater(p.x, p.y)) {
+        const before = Math.floor(rig.phase / Math.PI);
+        poseSwim(rig, { dt, time, speed: Math.hypot(p.vx, p.vy), seed: i });
+        // Each arm entering the water: a splash, a ripple ring, foam.
+        if (Math.floor(rig.phase / Math.PI) !== before) {
+          const d = Math.hypot(p.x - self.x, p.y - self.y);
+          sfx.footstep('water', p.x - camX(), i === me ? 0 : d, i === me ? 0.8 : 1);
+          if (visible) {
+            vfx.ring(x, WATER_Y + 0.03, 0xdff2ff, { z: y, flat: true, life: 1.1, grow: 2.6 });
+            vfx.burst(x + Math.cos(yw.a) * 0.7, WATER_Y + 0.1, 4, 'foam', { z: y + Math.sin(yw.a) * 0.7, speed: 1.2, up: 1.5, gravity: 8, life: 0.35, size: 0.4 });
+          }
+        }
       } else if (p.stage === 'ground') {
         poseTopDown(rig, {
           dt, time, vx: p.vx, vy: p.vy, yaw: yw.a, yawRate: yw.v, onGround: true, dashing: p.dashTime > 0,
@@ -903,7 +920,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       rig.vest.visible = p.armor > 0;
 
       // Footsteps, at each footfall of the stride: yours and everyone near you, panned left or right.
-      if (p.stage === 'ground' && p.alive && p.vault <= 0) {
+      if (p.stage === 'ground' && p.alive && p.vault <= 0 && !inWater(p.x, p.y)) {
         const foot = Math.floor(rig.phase / Math.PI);
         if (foot !== steps[i] && Math.hypot(p.vx, p.vy) > 1) {
           const d = Math.hypot(p.x - self.x, p.y - self.y);

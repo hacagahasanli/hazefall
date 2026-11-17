@@ -1,6 +1,6 @@
 import { createBot } from './bot';
-import { BUILDINGS, DROP, DT, MAP, PLAYER_RADIUS, SHAPES, SIZE, TILE, treeSpot, WEAPONS, WORLD, ZONE_PHASES } from './constants';
-import { circleBlocked, createGame, falloffDamage, hitPoint, inPlant, lootUnder, solidAt, step } from './step';
+import { BUILDINGS, DROP, DT, FIGHTERS, MAP, PLAYER_RADIUS, RIVER, riverCentre, SHAPES, SIZE, TILE, treeSpot, WEAPONS, WORLD, ZONE_PHASES } from './constants';
+import { circleBlocked, createGame, falloffDamage, hitPoint, inPlant, inWater, lootUnder, solidAt, step } from './step';
 import { NO_INPUT } from './types';
 
 import type { GameState, Input } from './types';
@@ -341,13 +341,57 @@ describe('moving among things', () => {
   });
 });
 
+describe('the river', () => {
+  it('crosses the whole map, twelve metres wide, with three bridges you walk over on a deck', () => {
+    for (let x = 2; x < SIZE - 2; x++) {
+      const col = MAP.map((row) => row[x]);
+      const wet = col.filter((t) => t === 'o' || t === 'd').length;
+      expect(wet).toBeGreaterThanOrEqual(6);
+    }
+    for (const [bx, bw] of RIVER.bridges) {
+      for (let x = bx; x < bx + bw; x++) expect(MAP.some((row) => row[x] === 'o')).toBe(false); // dry all the way over
+      const c = Math.round(riverCentre(bx));
+      expect(MAP[c][bx]).toBe('d');
+    }
+  });
+
+  it('you can swim across it: slower, no shooting, facing where you swim; bullets fly over it', () => {
+    const s = createGame('hotfix', 1);
+    const p = s.players[0];
+    const x = 40;
+    const c = riverCentre(x / TILE) * TILE;
+    Object.assign(p, { stage: 'ground', fall: 0, x, y: c - RIVER.half * TILE - 1.5, vx: 0, vy: 0, cooldown: 0 });
+    s.players.slice(1).forEach((o) => Object.assign(o, { x: 160, y: 20 }));
+    const inputs = idle();
+    inputs[0] = { ...NO_INPUT, my: 1, fire: true, aimX: p.x, aimY: p.y - 20 };
+    let maxSpeed = 0;
+    let shotsInWater = 0;
+    let wet = 0;
+    for (let i = 0; i < 60 * 12 && p.y < c + RIVER.half * TILE + 1; i++) {
+      step(s, inputs);
+      if (inWater(p.x, p.y)) {
+        wet += DT;
+        if (wet > 0.3) maxSpeed = Math.max(maxSpeed, Math.hypot(p.vx, p.vy)); // the run-up speed is lost in a moment
+        shotsInWater += s.events.filter((e) => e.type === 'shot').length;
+        if (wet > 0.6) expect(Math.abs(Math.sin(p.heading - Math.PI / 2))).toBeLessThan(0.2); // turned to face downstream of the swim
+      }
+    }
+    expect(p.y).toBeGreaterThan(c + RIVER.half * TILE);
+    expect(maxSpeed).toBeLessThan(FIGHTERS.hotfix.speed * 0.5);
+    expect(maxSpeed).toBeGreaterThan(2);
+    expect(shotsInWater).toBe(0);
+    expect(solidAt(s, x, c)).toBe(false);
+  });
+});
+
 describe('the drop', () => {
   it('under the parachute you can shoot and be shot', () => {
     const s = createGame('hotfix', 1);
     const [a, b] = s.players;
     for (const p of [a, b]) Object.assign(p, { stage: 'falling', fall: DROP.chute - 1 });
-    Object.assign(a, { x: 60, y: 60, cooldown: 0 });
-    Object.assign(b, { x: 66, y: 60 });
+    // Over the open river, so nothing stands between them.
+    Object.assign(a, { x: 40, y: 89, cooldown: 0 });
+    Object.assign(b, { x: 46, y: 89 });
     s.players.slice(2).forEach((p) => Object.assign(p, { stage: 'falling', fall: DROP.chute + 2, x: 10, y: 10 }));
     s.drone.t = 1;
     const inputs = idle();

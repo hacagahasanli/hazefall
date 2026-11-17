@@ -7,6 +7,8 @@ import {
   fenceVertical,
   LEAN,
   ROLL,
+  railSides,
+  SWIM,
   START_WEAPON,
   THROW,
   MOVE,
@@ -54,6 +56,22 @@ const isWeapon = (k: LootKind): k is Exclude<WeaponKind, 'fists'> => k in WEAPON
 
 /** Bushes and crops hide you. */
 export const inPlant = (x: number, y: number) => 'bch'.includes(tileAt(toTile(x), toTile(y)));
+/** In the river or the pond: you swim, slowly, with no gun up. */
+export const inWater = (x: number, y: number) => tileAt(toTile(x), toTile(y)) === 'o';
+
+/** The rails of a bridge or pier tile: a thin box on each side that borders water. */
+const railBoxes = (tx: number, ty: number) => {
+  const x0 = tx * TILE;
+  const y0 = ty * TILE;
+  const t = 0.12;
+  const out: [number, number, number, number][] = [];
+  const r = railSides(tx, ty);
+  if (r.w) out.push([x0, y0, x0 + t, y0 + TILE]);
+  if (r.e) out.push([x0 + TILE - t, y0, x0 + TILE, y0 + TILE]);
+  if (r.n) out.push([x0, y0, x0 + TILE, y0 + t]);
+  if (r.s) out.push([x0, y0 + TILE - t, x0 + TILE, y0 + TILE]);
+  return out;
+};
 
 /** How far a rocket or bomb held for `charge` seconds will go (metres). */
 export const throwDistance = (charge: number, range: number) => THROW.min + (range - THROW.min) * Math.min(1, charge / THROW.full);
@@ -79,8 +97,9 @@ const tileHit = (state: GameState, tx: number, ty: number, x: number, y: number,
     case '#':
     case 'v':
       return boxHit(x, y, r, x0, y0, x0 + TILE, y0 + TILE);
-    case 'o':
-      return !bullet && boxHit(x, y, r, x0, y0, x0 + TILE, y0 + TILE);
+    case 'd':
+      // Bridge and pier rails: thin, on the sides that face the water; bullets pass.
+      return !bullet && railBoxes(tx, ty).some((b) => boxHit(x, y, r, b[0], b[1], b[2], b[3]));
     case 'w':
       return !bullet && boxHit(x, y, r, x0, y0, x0 + TILE, y0 + TILE);
     case 'u': {
@@ -181,13 +200,15 @@ const pushOut = (state: GameState, pos: { x: number; y: number }, r: number) => 
         const x0 = tx * TILE;
         const y0 = ty * TILE;
         const c = TILE / 2;
-        if (t === '#' || t === 'v' || t === 'o') outBox(x0, y0, x0 + TILE, y0 + TILE);
+        if (t === '#' || t === 'v') outBox(x0, y0, x0 + TILE, y0 + TILE);
         else if (t === 'w') {
           if (outBox(x0, y0, x0 + TILE, y0 + TILE)) vaultable = 'w';
         } else if (t === 'f') {
           const h = SHAPES.fence;
           const hit = fenceVertical(tx, ty) ? outBox(x0 + c - h, y0, x0 + c + h, y0 + TILE) : outBox(x0, y0 + c - h, x0 + TILE, y0 + c + h);
           if (hit) vaultable = 'f';
+        } else if (t === 'd') {
+          for (const b of railBoxes(tx, ty)) if (outBox(b[0], b[1], b[2], b[3])) vaultable = 'd';
         } else if (t === 'u') {
           const m = SHAPES.furniture;
           if (outBox(x0 + m, y0 + m, x0 + TILE - m, y0 + TILE - m)) vaultable = 'u';
@@ -775,9 +796,11 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     p.hp = Math.min(p.maxHp, p.hp + REGEN.perSecond * DT);
   }
 
-  // Turn towards the aim at a limited rate, never snapping.
-  if (Math.hypot(input.aimX - p.x, input.aimY - p.y) > 0.05) {
-    const want = Math.atan2(input.aimY - p.y, input.aimX - p.x);
+  // Turn towards the aim at a limited rate, never snapping. Swimming, you face where you swim.
+  const swimming = inWater(p.x, p.y);
+  const swimTurn = swimming && Math.hypot(p.vx, p.vy) > 0.4;
+  if (swimTurn || Math.hypot(input.aimX - p.x, input.aimY - p.y) > 0.05) {
+    const want = swimTurn ? Math.atan2(p.vy, p.vx) : Math.atan2(input.aimY - p.y, input.aimX - p.x);
     let d = want - p.heading;
     d = Math.atan2(Math.sin(d), Math.cos(d));
     const maxTurn = MOVE.turn * DT;
@@ -789,7 +812,7 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
   p.rollCooldown = Math.max(0, p.rollCooldown - DT);
 
   // The dodge roll: the way you're moving (or facing), sliding along whatever it meets.
-  if (pressed('roll') && p.rollCooldown <= 0 && p.rolling <= 0 && p.vault <= 0 && p.dashTime <= 0 && !p.charging) {
+  if (pressed('roll') && !swimming && p.rollCooldown <= 0 && p.rolling <= 0 && p.vault <= 0 && p.dashTime <= 0 && !p.charging) {
     const len = Math.hypot(input.mx, input.my);
     p.rollDir = len > 0.01 ? Math.atan2(input.my, input.mx) : p.heading;
     p.rolling = ROLL.time;
@@ -833,8 +856,9 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
   } else {
     // Accelerate towards the wanted velocity, ease off when the keys are released.
     const len = Math.hypot(input.mx, input.my);
-    p.lean += (Math.max(-1, Math.min(1, input.lean)) - p.lean) * Math.min(1, LEAN.rate * DT);
-    const top = FIGHTERS[p.fighter].speed * (p.slowed > 0 ? SUPERS.timebox.slow : 1) * (Math.abs(p.lean) > 0.3 ? LEAN.speed : 1);
+    p.lean += ((swimming ? 0 : Math.max(-1, Math.min(1, input.lean))) - p.lean) * Math.min(1, LEAN.rate * DT);
+    const top =
+      FIGHTERS[p.fighter].speed * (p.slowed > 0 ? SUPERS.timebox.slow : 1) * (Math.abs(p.lean) > 0.3 ? LEAN.speed : 1) * (swimming ? SWIM.speed : 1);
     const wantX = len > 0.01 ? (input.mx / Math.max(1, len)) * top : 0;
     const wantY = len > 0.01 ? (input.my / Math.max(1, len)) * top : 0;
     const rate = (len > 0.01 ? MOVE.accel : MOVE.friction) * DT;
@@ -871,7 +895,11 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
 
   // People charge rockets and bombs: hold to throw farther, let go to throw. Bots throw at once.
   const rocketReady = WEAPONS[p.weapon].lob && p.mag > 0 && p.reload <= 0;
-  if (!p.bot && rocketReady && (input.fire || p.charging === 'rockets')) {
+  if (swimming) {
+    // Both hands are swimming: no shooting, no throwing.
+    p.charging = null;
+    p.charge = 0;
+  } else if (!p.bot && rocketReady && (input.fire || p.charging === 'rockets')) {
     if (input.fire && p.cooldown <= 0) {
       p.charging = 'rockets';
       p.charge += DT;
@@ -893,11 +921,11 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     p.charging = null;
     p.charge = 0;
   }
-  if (pressed('super') && p.superCharge >= 1 && p.dashTime <= 0) useSuper(state, p, input);
+  if (pressed('super') && !swimming && p.superCharge >= 1 && p.dashTime <= 0) useSuper(state, p, input);
 
   const k = lootUnder(state, p);
   if (k && autoTakes(p, k)) takeLoot(state, p, k);
-  else if (!p.bot && p.item === 'bomb' && !k && (input.use || p.charging === 'bomb')) {
+  else if (!p.bot && !swimming && p.item === 'bomb' && !k && (input.use || p.charging === 'bomb')) {
     // A bomb: hold F to throw it farther, let go to throw.
     if (input.use) {
       p.charging = 'bomb';
@@ -912,7 +940,7 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     }
   } else if (pressed('use')) {
     if (k) takeLoot(state, p, k);
-    else if (p.item) useItem(state, p, input);
+    else if (p.item && !swimming) useItem(state, p, input);
   }
   p.prev = { ...input };
 };
