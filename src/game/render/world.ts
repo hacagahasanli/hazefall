@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 import { BUILDINGS, fenceVertical, MAP, SIZE, TILE, tileHash, treeSpot, WORLD } from '../sim/constants';
 
+import { buildFurniture, buildRugs } from './furniture';
 import { buildBushes, buildGrass, buildRocks, buildTrees, outerForest, paintTerrain, updateNature } from './nature';
 
 import type { GameState } from '../sim/types';
@@ -81,9 +82,6 @@ const buildBarn = (w: number, d: number) => {
   roofMesh.rotation.y = Math.PI / 2;
   roofMesh.position.y = 4.2;
   g.add(roofMesh);
-  const door = new THREE.Mesh(new THREE.BoxGeometry(2.4, 3, 0.1), white);
-  door.position.set(0, 1.5, d / 2 + 0.06);
-  g.add(door);
   return g;
 };
 
@@ -110,6 +108,54 @@ export const buildWorld = (scene: THREE.Scene): World => {
   scene.add(buildBushes(tilesOf('b').map(spot)));
   scene.add(buildRocks(tilesOf('k').map(spot)));
   scene.add(buildGrass());
+
+  // ---------- furniture and rugs (hidden under the roofs until you walk in)
+  scene.add(buildFurniture(), buildRugs());
+
+  // ---------- doorways: a frame, a dark opening and a doormat where the real doors are, so you
+  // can see from outside where to walk in (the house models' own doors are only decoration)
+  const doorFrames = BUILDINGS.map((b) => {
+    const g = new THREE.Group();
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0xf4f0e6, roughness: 0.7 });
+    const darkMat = new THREE.MeshStandardMaterial({ color: 0x1a1410, roughness: 1 });
+    const matMat = new THREE.MeshStandardMaterial({ color: 0x6a4a2a, roughness: 1 });
+    const ring = (x: number, y: number) => x === b.x0 || y === b.y0 || x === b.x0 + b.w - 1 || y === b.y0 + b.h - 1;
+    const seen = new Set<string>();
+    for (let ty = b.y0; ty < b.y0 + b.h; ty++) {
+      for (let tx = b.x0; tx < b.x0 + b.w; tx++) {
+        if (!ring(tx, ty) || MAP[ty][tx] !== '.' || seen.has(`${tx},${ty}`)) continue;
+        // A door is two tiles along the wall: find its partner.
+        const horizontal = ty === b.y0 || ty === b.y0 + b.h - 1;
+        const nx = horizontal ? tx + 1 : tx;
+        const ny = horizontal ? ty : ty + 1;
+        seen.add(`${tx},${ty}`);
+        seen.add(`${nx},${ny}`);
+        const out = horizontal ? (ty === b.y0 ? -1 : 1) : tx === b.x0 ? -1 : 1;
+        const cx = horizontal ? (tx + 1) * TILE : tx * TILE + TILE / 2 + out * (TILE / 2);
+        const cz = horizontal ? ty * TILE + TILE / 2 + out * (TILE / 2) : (ty + 1) * TILE;
+        const holder = new THREE.Group();
+        holder.position.set(cx, 0, cz);
+        holder.rotation.y = horizontal ? 0 : Math.PI / 2;
+        // After the quarter turn local +z is world +x, so 'out' is the outward side in both cases.
+        const sgn = out;
+        const opening = new THREE.Mesh(new THREE.BoxGeometry(3.4, 2.4, 0.08), darkMat);
+        opening.position.set(0, 1.2, sgn * 0.06);
+        const lintel = new THREE.Mesh(new THREE.BoxGeometry(3.9, 0.25, 0.22), frameMat);
+        lintel.position.set(0, 2.5, sgn * 0.1);
+        const postL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 2.5, 0.22), frameMat);
+        postL.position.set(-1.83, 1.25, sgn * 0.1);
+        const postR = postL.clone();
+        postR.position.x = 1.83;
+        const mat = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.03, 0.9), matMat);
+        mat.position.set(0, 0.015, sgn * 0.75);
+        holder.add(opening, lintel, postL, postR, mat);
+        holder.traverse((o) => o instanceof THREE.Mesh && (o.castShadow = true));
+        g.add(holder);
+      }
+    }
+    scene.add(g);
+    return g;
+  });
 
   // ---------- building interiors: walls and windows, shown only when you're inside
   const wallMat = new THREE.MeshStandardMaterial({ color: 0xece4d4, flatShading: true });
@@ -250,6 +296,9 @@ export const buildWorld = (scene: THREE.Scene): World => {
           });
         }
         interiors[i].visible = fade[i] < 0.98;
+        // Inside, the walls are cut down to waist height so the whole room reads from above.
+        interiors[i].scale.y = 0.4 + 0.6 * fade[i];
+        doorFrames[i].visible = fade[i] > 0.5;
       });
       crates.forEach((t, k) => {
         const alive = state.racks[t.ty * SIZE + t.tx] > 0;

@@ -17,6 +17,7 @@ export const PLAYERS = 10;
 //   f fence (blocks you, not bullets)    t tree (blocks both)    k rock (blocks both)
 //   r crate (cover, breaks, may drop loot)    b bush / c crops (you can hide inside)
 //   l loot inside a building    s loot outdoors
+//   u furniture (blocks you, not bullets; placed so every room stays reachable)
 // ---------------------------------------------------------------------------
 
 export interface District {
@@ -126,7 +127,66 @@ const buildMap = () => {
       const q = inside();
       if (get(q.x, q.y) === '.') set(q.x, q.y, 'r');
     }
+    furnish(x0, y0, w, h, barn);
     buildings.push({ x0, y0, w, h, model: ri(0, 20), barn });
+  };
+
+  /**
+   * Furniture ('u') stands against the walls, never in front of a doorway, and a piece is only
+   * kept if every open tile of the building can still be reached from its doors. It has its own
+   * random stream so furnishing doesn't reshuffle the rest of the map.
+   */
+  const fr = rng(5150);
+  const furnish = (x0: number, y0: number, w: number, h: number, barn: boolean) => {
+    const inB = (x: number, y: number) => x > x0 && y > y0 && x < x0 + w - 1 && y < y0 + h - 1;
+    const onRing = (x: number, y: number) => x >= x0 && y >= y0 && x < x0 + w && y < y0 + h && !inB(x, y);
+    const doors: [number, number][] = [];
+    for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) if (onRing(x, y) && get(x, y) === '.') doors.push([x, y]);
+    const walkable = (c: string) => c === '.' || c === 'l';
+    const near = (x: number, y: number, test: (c: string, nx: number, ny: number) => boolean) =>
+      [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => test(get(x + dx, y + dy), x + dx, y + dy));
+    const connected = () => {
+      if (!doors.length) return true;
+      const seen = new Set<string>();
+      const queue = [doors[0]];
+      seen.add(doors[0].join());
+      while (queue.length) {
+        const [x, y] = queue.pop()!;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx;
+          const ny = y + dy;
+          const k = `${nx},${ny}`;
+          if (seen.has(k) || !(inB(nx, ny) || onRing(nx, ny)) || !walkable(get(nx, ny))) continue;
+          seen.add(k);
+          queue.push([nx, ny]);
+        }
+      }
+      for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) if (walkable(get(x, y)) && !seen.has(`${x},${y}`)) return false;
+      return true;
+    };
+    const spots: [number, number][] = [];
+    for (let y = y0 + 1; y < y0 + h - 1; y++) {
+      for (let x = x0 + 1; x < x0 + w - 1; x++) {
+        if (get(x, y) !== '.') continue;
+        const byWall = near(x, y, (c) => c === '#' || c === 'w');
+        const byDoor = near(x, y, (_c, nx, ny) => doors.some(([dx, dy]) => dx === nx && dy === ny));
+        // Not in the inner wall's doorway either: a '.' with walls on two opposite sides.
+        const gap = (get(x - 1, y) === '#' && get(x + 1, y) === '#') || (get(x, y - 1) === '#' && get(x, y + 1) === '#');
+        if (byWall && !byDoor && !gap) spots.push([x, y]);
+      }
+    }
+    for (let i = spots.length - 1; i > 0; i--) {
+      const j = Math.floor(fr() * (i + 1));
+      [spots[i], spots[j]] = [spots[j], spots[i]];
+    }
+    const want = Math.max(1, Math.floor(((w - 2) * (h - 2)) / (barn ? 6 : 3.5)));
+    let placed = 0;
+    for (const [x, y] of spots) {
+      if (placed >= want) break;
+      set(x, y, 'u');
+      if (connected()) placed += 1;
+      else set(x, y, '.');
+    }
   };
 
   const free = (x0: number, y0: number, w: number, h: number) => {
@@ -254,7 +314,7 @@ export const tileHash = (x: number, y: number, k = 0) => {
  * round, and a fence is a thin rail through the middle of its tile. The renderer places the models
  * at the same spots, so what you see is what stops you.
  */
-export const SHAPES = { trunk: 0.45, rock: 0.95, crate: 0.8, fence: 0.16 };
+export const SHAPES = { trunk: 0.45, rock: 0.95, crate: 0.8, fence: 0.16, furniture: 0.22 };
 
 /** Trees stand a little off their tile centre so the forest doesn't look like a grid. */
 export const treeSpot = (tx: number, ty: number) => ({

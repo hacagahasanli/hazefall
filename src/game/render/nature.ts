@@ -90,7 +90,7 @@ export const paintTerrain = () => {
   const road = weightGrid((t) => t === 'a');
   const soil = weightGrid((t) => t === 'c');
   const gravel = weightGrid((t) => t === 'k');
-  const floor = weightGrid((t, tx, ty) => '.lwr#'.includes(t) && insideBuilding(tx, ty));
+  const floor = weightGrid((t, tx, ty) => '.lwr#u'.includes(t) && insideBuilding(tx, ty));
   const GRASS_A = [62, 112, 42];
   const GRASS_B = [98, 146, 58];
   const DRY = [146, 150, 74];

@@ -71,6 +71,11 @@ const tileHit = (state: GameState, tx: number, ty: number, x: number, y: number,
       return boxHit(x, y, r, x0, y0, x0 + TILE, y0 + TILE);
     case 'w':
       return !bullet && boxHit(x, y, r, x0, y0, x0 + TILE, y0 + TILE);
+    case 'u': {
+      // Furniture: a little smaller than its tile, low enough to shoot over.
+      const m = SHAPES.furniture;
+      return !bullet && boxHit(x, y, r, x0 + m, y0 + m, x0 + TILE - m, y0 + TILE - m);
+    }
     case 'f': {
       if (bullet) return false;
       const h = SHAPES.fence;

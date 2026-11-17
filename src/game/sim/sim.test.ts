@@ -78,6 +78,36 @@ describe('the map', () => {
     expect(circleBlocked(s, rx + 1.25, ry + 1.25, PLAYER_RADIUS)).toBe(false);
   });
 
+  it('furniture never cuts off a room: every open tile of a building is reachable from its doors', () => {
+    let pieces = 0;
+    for (const b of BUILDINGS) {
+      const inside = (x: number, y: number) => x >= b.x0 && y >= b.y0 && x < b.x0 + b.w && y < b.y0 + b.h;
+      const open = (x: number, y: number) => '.l'.includes(MAP[y][x]);
+      const ring = (x: number, y: number) => x === b.x0 || y === b.y0 || x === b.x0 + b.w - 1 || y === b.y0 + b.h - 1;
+      const cells: [number, number][] = [];
+      for (let y = b.y0; y < b.y0 + b.h; y++) for (let x = b.x0; x < b.x0 + b.w; x++) {
+        if (open(x, y)) cells.push([x, y]);
+        if (MAP[y][x] === 'u') pieces += 1;
+      }
+      const door = cells.find(([x, y]) => ring(x, y));
+      expect(door).toBeDefined();
+      const seen = new Set([door!.join()]);
+      const queue = [door!];
+      while (queue.length) {
+        const [x, y] = queue.pop()!;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const n: [number, number] = [x + dx, y + dy];
+          if (inside(...n) && open(...n) && !seen.has(n.join())) {
+            seen.add(n.join());
+            queue.push(n);
+          }
+        }
+      }
+      expect(cells.every((c) => seen.has(c.join()))).toBe(true);
+    }
+    expect(pieces).toBeGreaterThan(30);
+  });
+
   it('nobody walks out through the tree line at the edge', () => {
     const s = createGame('hotfix', 1);
     expect(circleBlocked(s, 3, WORLD / 2, PLAYER_RADIUS)).toBe(true);

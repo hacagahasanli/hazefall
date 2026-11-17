@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 import { createSfx } from '../sfx';
 import { createBot } from '../sim/bot';
-import { AUTO_AIM_RANGE, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, MAP, SIZE, SUPERS, TILE, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
+import { AUTO_AIM_RANGE, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, MAP, SIZE, SUPERS, TILE, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
 import { canSee, createGame, inPlant, lineOfSight, lootUnder, step } from '../sim/step';
 import { NO_INPUT } from '../sim/types';
 
@@ -59,8 +59,47 @@ export interface MatchOptions {
 }
 
 const GUN_MODEL: Record<Exclude<WeaponKind, 'fists'>, GunKind> = {
-  pistol: 'pistol', smg: 'smg', shotgun: 'shotgun', rifle: 'smg', sniper: 'railgun', rockets: 'launcher',
+  pistol: 'pistol', smg: 'smg', shotgun: 'shotgun', rifle: 'rifle', sniper: 'sniper', rockets: 'launcher',
 };
+/** Loot rarity colours: common white, uncommon green, rare blue, epic violet. */
+const RARITY: Record<LootKind, number> = {
+  pistol: 0xe8eef7, medkit: 0xe8eef7,
+  smg: 0x3ddc84, shotgun: 0x3ddc84, bomb: 0x3ddc84,
+  rifle: 0x3ec5ff, armor: 0x3ec5ff,
+  sniper: 0xc77dff, rockets: 0xc77dff,
+};
+
+/** A soft round glow, drawn once, shared by every loot spot. */
+const glowTexture = (() => {
+  let tex: THREE.Texture | null = null;
+  return () => {
+    if (tex) return tex;
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d')!;
+    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+    grad.addColorStop(0.35, 'rgba(255,255,255,0.35)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+    tex = new THREE.CanvasTexture(c);
+    return tex;
+  };
+})();
+/** A vertical beam that fades upwards. */
+const beamGeometry = (() => {
+  const g = new THREE.CylinderGeometry(0.22, 0.32, 2.6, 12, 1, true);
+  g.translate(0, 1.3, 0);
+  const pos = g.getAttribute('position');
+  const col = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const k = 1 - pos.getY(i) / 2.6;
+    col.set([k, k, k], i * 3);
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return g;
+})();
 const SOUND: Record<Exclude<WeaponKind, 'fists' | 'rockets'>, 'pistol' | 'smg' | 'shotgun' | 'rifle' | 'sniper'> = {
   pistol: 'pistol', smg: 'smg', shotgun: 'shotgun', rifle: 'rifle', sniper: 'sniper',
 };
@@ -253,26 +292,56 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   // ---------- loot, projectiles, temp walls and fields (pooled / keyed)
   const lootViews = new Map<number, THREE.Object3D>();
   const lootModel = (kind: LootKind): THREE.Object3D => {
+    // Root sits on the ground; `item` floats and turns (see the loot loop), `glow` pulses.
     const g = new THREE.Group();
+    const item = new THREE.Group();
+    item.name = 'item';
+    const color = RARITY[kind];
     if (kind in GUN_MODEL) {
       const gun = buildGun(GUN_MODEL[kind as keyof typeof GUN_MODEL]).root;
-      gun.scale.setScalar(1.6);
-      gun.rotation.y = Math.PI / 2;
-      g.add(gun);
+      gun.scale.setScalar(1.7);
+      // Tilted up so the whole silhouette shows from the high camera.
+      gun.rotation.set(-0.5, Math.PI / 2, 0);
+      item.add(gun);
     } else if (kind === 'armor') {
-      g.add(mesh(new THREE.BoxGeometry(0.8, 0.9, 0.35), mat(PALETTE.blue)));
+      const vest = new THREE.MeshStandardMaterial({ color: 0x4a5a3a, roughness: 0.85 });
+      const strap = new THREE.MeshStandardMaterial({ color: 0x2a2f24, roughness: 0.9 });
+      const body = mesh(new THREE.BoxGeometry(0.75, 0.85, 0.3), vest);
+      const collar = mesh(new THREE.BoxGeometry(0.4, 0.12, 0.32), strap);
+      collar.position.y = 0.45;
+      const plate = mesh(new THREE.BoxGeometry(0.5, 0.45, 0.06), mat(0x3a4a2e));
+      plate.position.set(0, 0.05, 0.17);
+      const pouches = [-0.22, 0, 0.22].map((x) => at(mesh(new THREE.BoxGeometry(0.17, 0.2, 0.08), strap), x, -0.25, 0.18));
+      item.add(body, collar, plate, ...pouches);
+      item.rotation.x = -0.6;
     } else if (kind === 'medkit') {
-      g.add(mesh(new THREE.BoxGeometry(0.7, 0.45, 0.5), mat(PALETTE.paper)));
-      g.add(new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.46, 0.12), new THREE.MeshBasicMaterial({ color: 0xff3d6e })));
-      g.add(new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.46, 0.4), new THREE.MeshBasicMaterial({ color: 0xff3d6e })));
+      const caseM = mesh(new THREE.BoxGeometry(0.7, 0.42, 0.24), mat(0xf1ede4));
+      const handle = mesh(new THREE.BoxGeometry(0.28, 0.06, 0.06), mat(0x2a2f38));
+      handle.position.y = 0.25;
+      const crossA = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.08, 0.02), new THREE.MeshBasicMaterial({ color: 0xd8312a }));
+      const crossB = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.26, 0.02), new THREE.MeshBasicMaterial({ color: 0xd8312a }));
+      crossA.position.z = crossB.position.z = 0.13;
+      item.add(caseM, handle, crossA, crossB);
+      item.rotation.x = -0.6;
     } else {
-      g.add(mesh(new THREE.IcosahedronGeometry(0.35, 1), mat(0x2b3045)));
-      g.add(at(new THREE.Mesh(new THREE.IcosahedronGeometry(0.08, 0), new THREE.MeshBasicMaterial({ color: 0xffb347 })), 0, 0.42, 0));
+      const bomb = buildGun('bomb').root;
+      bomb.scale.setScalar(2.4);
+      item.add(bomb);
     }
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.7, 24), new THREE.MeshBasicMaterial({ color: kind === 'sniper' || kind === 'rockets' ? 0xff3d6e : 0xffd23f, transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = -0.55;
-    g.add(ring);
+    item.position.y = 0.75;
+    g.add(item);
+    const glow = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.4, 2.4),
+      new THREE.MeshBasicMaterial({ map: glowTexture(), color, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }),
+    );
+    glow.name = 'glow';
+    glow.rotation.x = -Math.PI / 2;
+    glow.position.y = 0.04;
+    const beam = new THREE.Mesh(
+      beamGeometry,
+      new THREE.MeshBasicMaterial({ color, vertexColors: true, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+    );
+    g.add(glow, beam);
     return g;
   };
   const tracers = Array.from({ length: 90 }, () => {
@@ -474,7 +543,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       for (let tx = 0; tx < SIZE; tx++) {
         const t = MAP[ty][tx];
         g.fillStyle =
-          t === '#' || t === 'w' ? '#e8dcc4' : t === '.' || t === 'l' ? '#b89a72' : t === 't' ? '#2f6a32' : t === 'b' ? '#4f9a48'
+          t === '#' || t === 'w' ? '#e8dcc4' : t === '.' || t === 'l' || t === 'u' ? '#b89a72' : t === 't' ? '#2f6a32' : t === 'b' ? '#4f9a48'
             : t === 'c' ? '#c9c06a' : t === 'k' ? '#8a8a8a' : t === 'a' ? '#4a4f5e' : t === 'p' ? '#a8865a' : t === 'f' ? '#7a5a3a' : '#5a9a50';
         g.fillRect(tx * 4, ty * 4, 4, 4);
       }
@@ -655,8 +724,12 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         scene.add(v);
         lootViews.set(l.id, v);
       }
-      v.position.set(l.x, 0.6 + Math.sin(time * 3 + l.id) * 0.08, l.y);
-      v.rotation.y = time * 0.8 + l.id;
+      v.position.set(l.x, 0, l.y);
+      const item = v.getObjectByName('item')!;
+      item.position.y = 0.75 + Math.sin(time * 2.6 + l.id) * 0.1;
+      item.rotation.y = time * 0.9 + l.id;
+      const glow = v.getObjectByName('glow') as THREE.Mesh;
+      (glow.material as THREE.MeshBasicMaterial).opacity = 0.6 + Math.sin(time * 3 + l.id) * 0.2;
     }
     for (const [id, v] of lootViews) {
       if (!seen.has(id)) {
@@ -836,7 +909,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     raf = requestAnimationFrame(frame);
   };
   raf = requestAnimationFrame(frame);
-  if (process.env.NODE_ENV !== 'production') (window as unknown as { __lcs?: unknown }).__lcs = { state: () => state };
+  if (process.env.NODE_ENV !== 'production') (window as unknown as { __lcs?: unknown }).__lcs = { state: () => state, buildings: BUILDINGS, map: MAP };
 
   return {
     setPaused: (on: boolean) => {
