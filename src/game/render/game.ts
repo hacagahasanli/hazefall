@@ -10,6 +10,7 @@ import { buildRig, poseRig } from './characters';
 import { buildGun } from './guns';
 import { mat, mesh, PALETTE } from './palette';
 import { createVfx } from './vfx';
+import { buildWorld } from './world';
 
 import type { Rig } from './characters';
 import type { GunKind } from './guns';
@@ -54,8 +55,8 @@ export interface MatchOptions {
 const GUN_MODEL: Record<Exclude<WeaponKind, 'fists'>, GunKind> = {
   pistol: 'pistol', smg: 'smg', shotgun: 'shotgun', rifle: 'smg', sniper: 'railgun', rockets: 'launcher',
 };
-const SOUND: Record<WeaponKind, 'pistol' | 'smg' | 'shotgun' | 'railgun' | 'launcher' | 'uzi'> = {
-  fists: 'uzi', pistol: 'pistol', smg: 'smg', shotgun: 'shotgun', rifle: 'pistol', sniper: 'railgun', rockets: 'launcher',
+const SOUND: Record<Exclude<WeaponKind, 'fists' | 'rockets'>, 'pistol' | 'smg' | 'shotgun' | 'rifle' | 'sniper'> = {
+  pistol: 'pistol', smg: 'smg', shotgun: 'shotgun', rifle: 'rifle', sniper: 'sniper',
 };
 const LOOT_NAME: Record<LootKind, string> = {
   pistol: 'Pistol', smg: 'SMG', shotgun: 'Shotgun', rifle: 'Rifle', sniper: 'Sniper', rockets: 'Rockets',
@@ -82,8 +83,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x10142a);
-  scene.fog = new THREE.Fog(0x10142a, 90, 220);
+  scene.background = new THREE.Color(0x9fd3f5);
+  scene.fog = new THREE.Fog(0x9fd3f5, 120, 300);
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 600);
 
   const state: GameState = createGame(opts.fighter, randomSeed(), opts.name);
@@ -93,111 +94,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const vfx = createVfx(scene);
 
   // ---------- light
-  scene.add(new THREE.HemisphereLight(0xdfe6ff, 0x404660, 1.3));
-  const sun = new THREE.DirectionalLight(0xfff1dc, 1.9);
+  scene.add(new THREE.HemisphereLight(0xcfeaff, 0x55703f, 1.5));
+  const sun = new THREE.DirectionalLight(0xfff0d0, 2.4);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40, near: 1, far: 160 });
   scene.add(sun, sun.target);
 
-  // ---------- the campus floor, painted from the map
-  const floorTex = (() => {
-    const px = 16;
-    const c = document.createElement('canvas');
-    c.width = c.height = SIZE * px;
-    const g = c.getContext('2d')!;
-    for (let ty = 0; ty < SIZE; ty++) {
-      for (let tx = 0; tx < SIZE; tx++) {
-        const t = MAP[ty][tx];
-        g.fillStyle = t === ',' || t === 's' ? '#2d3247' : t === 'b' ? '#2f6b4a' : '#c9cfdb';
-        g.fillRect(tx * px, ty * px, px, px);
-        if (t === '.' || t === 'l' || t === 'r') {
-          g.strokeStyle = 'rgba(0,0,0,0.06)';
-          g.strokeRect(tx * px + 0.5, ty * px + 0.5, px - 1, px - 1);
-        }
-      }
-    }
-    // Street markings between blocks.
-    g.strokeStyle = 'rgba(255,210,63,0.35)';
-    g.setLineDash([6, 8]);
-    g.lineWidth = 2;
-    for (let i = 1; i < 4; i++) {
-      const k = (1 + i * 12) * px + px / 2;
-      g.beginPath();
-      g.moveTo(k, 0);
-      g.lineTo(k, SIZE * px);
-      g.moveTo(0, k);
-      g.lineTo(SIZE * px, k);
-      g.stroke();
-    }
-    const t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
-    t.magFilter = THREE.NearestFilter;
-    return t;
-  })();
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(WORLD, WORLD), new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.95 }));
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.set(WORLD / 2, 0, WORLD / 2);
-  floor.receiveShadow = true;
-  scene.add(floor);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshBasicMaterial({ color: 0x0c1022 }));
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.set(WORLD / 2, -0.05, WORLD / 2);
-  scene.add(ground);
-
-  // ---------- walls, plants and racks as instanced meshes
-  const tiles = (c: string) => {
-    const out: { x: number; y: number }[] = [];
-    MAP.forEach((row, ty) => [...row].forEach((t, tx) => t === c && out.push({ x: tx * TILE + TILE / 2, y: ty * TILE + TILE / 2 })));
-    return out;
-  };
-  const m4 = new THREE.Matrix4();
-  const wallTiles = tiles('#');
-  const walls = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE, 2.6, TILE), mat(PALETTE.lilac), wallTiles.length);
-  wallTiles.forEach((t, i) => walls.setMatrixAt(i, m4.makeTranslation(t.x, 1.3, t.y)));
-  walls.castShadow = walls.receiveShadow = true;
-  scene.add(walls);
-  const wallTops = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE, 0.06, TILE), mat(PALETTE.inkSoft), wallTiles.length);
-  wallTiles.forEach((t, i) => wallTops.setMatrixAt(i, m4.makeTranslation(t.x, 2.63, t.y)));
-  scene.add(wallTops);
-
-  const plantTiles = tiles('b');
-  const plantMat = new THREE.MeshStandardMaterial({ color: PALETTE.green, flatShading: true, roughness: 0.9, transparent: true, opacity: 0.92 });
-  const plants = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1.15, 0), plantMat, plantTiles.length);
-  plantTiles.forEach((t, i) => plants.setMatrixAt(i, new THREE.Matrix4().compose(v3(t.x, t.y, 0.8), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, t.x * 3 + t.y, 0)), new THREE.Vector3(1, 0.75, 1))));
-  plants.castShadow = true;
-  scene.add(plants);
-
-  const rackTiles: { x: number; y: number; i: number }[] = [];
-  MAP.forEach((row, ty) => [...row].forEach((t, tx) => t === 'r' && rackTiles.push({ x: tx * TILE + TILE / 2, y: ty * TILE + TILE / 2, i: ty * SIZE + tx })));
-  const racks = new THREE.InstancedMesh(new THREE.BoxGeometry(1.6, 2, 1.2), mat(PALETTE.ink), rackTiles.length);
-  const rackLights = new THREE.InstancedMesh(new THREE.BoxGeometry(1.62, 0.08, 1.22), new THREE.MeshBasicMaterial({ color: 0x3ddc84 }), rackTiles.length);
-  const setRack = (k: number, alive: boolean) => {
-    const t = rackTiles[k];
-    racks.setMatrixAt(k, alive ? m4.makeTranslation(t.x, 1, t.y) : m4.makeScale(0, 0, 0));
-    rackLights.setMatrixAt(k, alive ? m4.makeTranslation(t.x, 1.5, t.y) : m4.makeScale(0, 0, 0));
-  };
-  rackTiles.forEach((_, k) => setRack(k, true));
-  racks.castShadow = true;
-  scene.add(racks, rackLights);
-  const rackAlive = rackTiles.map(() => true);
-
-  // District names painted on the ground.
-  for (const d of DISTRICTS) {
-    const c = document.createElement('canvas');
-    c.width = 512;
-    c.height = 96;
-    const g = c.getContext('2d')!;
-    g.font = 'bold 54px sans-serif';
-    g.fillStyle = 'rgba(255,255,255,0.18)';
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    g.fillText(d.name.toUpperCase(), 256, 48);
-    const label = new THREE.Mesh(new THREE.PlaneGeometry(10, 1.9), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
-    label.rotation.x = -Math.PI / 2;
-    label.position.set((d.x0 + d.x1) / 2, 0.03, d.y1 + 0.6);
-    scene.add(label);
-  }
+  // ---------- the world: ground, houses, trees, bushes, rocks, fences, crates
+  const world = buildWorld(scene);
 
   // ---------- the Deadline
   const zoneWall = new THREE.Mesh(
@@ -413,7 +318,12 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     switch (e.type) {
       case 'shot': {
         const d = Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y);
-        if (d < 40) sfx.shot(SOUND[e.weapon], e.x - camX());
+        if (d < 60) {
+          // Fists: a short swoosh. Rockets: the synthesised launch. Guns: recorded shots.
+          if (e.weapon === 'fists') sfx.dash(e.x - camX());
+          else if (e.weapon === 'rockets') sfx.shot('launcher', e.x - camX());
+          else sfx.gunshot(SOUND[e.weapon], e.x - camX(), d);
+        }
         if (e.owner === me && (e.weapon === 'shotgun' || e.weapon === 'sniper')) trauma = Math.min(1, trauma + 0.2);
         break;
       }
@@ -476,7 +386,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     for (let ty = 0; ty < SIZE; ty++) {
       for (let tx = 0; tx < SIZE; tx++) {
         const t = MAP[ty][tx];
-        g.fillStyle = t === '#' ? '#8b93ad' : t === 'b' ? '#2f6b4a' : t === ',' || t === 's' ? '#1c2136' : '#3a4060';
+        g.fillStyle =
+          t === '#' || t === 'w' ? '#e8dcc4' : t === '.' || t === 'l' ? '#b89a72' : t === 't' ? '#2f6a32' : t === 'b' ? '#4f9a48'
+            : t === 'c' ? '#c9c06a' : t === 'k' ? '#8a8a8a' : t === 'a' ? '#4a4f5e' : t === 'p' ? '#a8865a' : t === 'f' ? '#7a5a3a' : '#5a9a50';
         g.fillRect(tx * 4, ty * 4, 4, 4);
       }
     }
@@ -628,18 +540,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       bar.armor.position.x = -0.8 * (1 - a);
       bar.armor.visible = p.armor > 0;
     });
-    plantMat.opacity = inPlant(self.x, self.y) && self.stage === 'ground' ? 0.45 : 0.92;
-
-    // Racks broken since last frame.
-    rackTiles.forEach((t, k) => {
-      const alive = state.racks[t.i] > 0;
-      if (alive !== rackAlive[k]) {
-        rackAlive[k] = alive;
-        setRack(k, alive);
-        racks.instanceMatrix.needsUpdate = true;
-        rackLights.instanceMatrix.needsUpdate = true;
-      }
-    });
+    world.update(state, self.x, self.y);
 
     // Loot.
     const seen = new Set<number>();

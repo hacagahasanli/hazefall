@@ -43,14 +43,16 @@ const isWeapon = (k: LootKind): k is Exclude<WeaponKind, 'fists'> => k in WEAPON
 
 // ---------- the map
 
-export const inPlant = (x: number, y: number) => tileAt(toTile(x), toTile(y)) === 'b';
+/** Bushes and crops hide you. */
+export const inPlant = (x: number, y: number) => 'bc'.includes(tileAt(toTile(x), toTile(y)));
 
 /** Walls, standing racks and Deprecated walls block movement and bullets. Plants don't. */
 export const solidAt = (state: GameState, x: number, y: number) => {
   const tx = toTile(x);
   const ty = toTile(y);
   const t = tileAt(tx, ty);
-  if (t === '#') return true;
+  // Bullets stop at walls, trees, rocks and standing crates; windows and fences let them through.
+  if (t === '#' || t === 't' || t === 'k') return true;
   if (t === 'r' && state.racks[tileIndex(tx, ty)] > 0) return true;
   return state.walls.some((w) => Math.abs(x - w.x) <= w.w / 2 && Math.abs(y - w.y) <= w.h / 2);
 };
@@ -59,7 +61,8 @@ export const circleBlocked = (state: GameState, x: number, y: number, r: number)
   for (let ty = toTile(y - r); ty <= toTile(y + r); ty++) {
     for (let tx = toTile(x - r); tx <= toTile(x + r); tx++) {
       const t = tileAt(tx, ty);
-      const solid = t === '#' || (t === 'r' && state.racks[tileIndex(tx, ty)] > 0);
+      // You can't walk through walls, windows, fences, trees, rocks or standing crates.
+      const solid = '#wftk'.includes(t) || (t === 'r' && state.racks[tileIndex(tx, ty)] > 0);
       if (!solid) continue;
       const nx = Math.max(tx * TILE, Math.min(x, tx * TILE + TILE));
       const ny = Math.max(ty * TILE, Math.min(y, ty * TILE + TILE));

@@ -2,19 +2,21 @@ import type { FighterId, WeaponKind } from './types';
 
 export const DT = 1 / 60;
 
-/** Tiles are 2 m; the campus is 48 x 48 tiles = 96 x 96 m. */
+/** Tiles are 2 m; the island is 64 x 64 tiles = 128 x 128 m. */
 export const TILE = 2;
-export const SIZE = 48;
+export const SIZE = 64;
 export const WORLD = TILE * SIZE;
 export const PLAYER_RADIUS = 0.55;
 export const PLAYERS = 10;
 
 // ---------------------------------------------------------------------------
-// The campus: an original office park, built the same way every match.
-//   #  wall          .  floor (inside a building)   ,  street / yard
-//   b  plants (hide inside)
-//   r  server rack (cover; breaks; may drop loot)
-//   l  loot spot      s  street loot spot
+// The map: an original countryside with a dense old town in the middle, farms around it,
+// a forest and a quarry. Built the same way every match from a fixed seed.
+//   g grass      p dirt path    a asphalt road
+//   # wall       w window (blocks you, not bullets)    . floor inside a building
+//   f fence (blocks you, not bullets)    t tree (blocks both)    k rock (blocks both)
+//   r crate (cover, breaks, may drop loot)    b bush / c crops (you can hide inside)
+//   l loot inside a building    s loot outdoors
 // ---------------------------------------------------------------------------
 
 export interface District {
@@ -25,112 +27,221 @@ export interface District {
   y1: number;
 }
 
+export interface Building {
+  /** In tiles. */
+  x0: number;
+  y0: number;
+  w: number;
+  h: number;
+  /** Which exterior model to dress it with, and whether it is a big barn. */
+  model: number;
+  barn: boolean;
+}
+
 const rng = (seed: number) => () => {
   seed = (seed * 16807) % 2147483647;
   return (seed - 1) / 2147483646;
 };
 
 const buildMap = () => {
-  const grid: string[][] = Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => ','));
+  const grid: string[][] = Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => 'g'));
+  const get = (x: number, y: number) => (x >= 0 && y >= 0 && x < SIZE && y < SIZE ? grid[y][x] : '#');
   const set = (x: number, y: number, c: string) => {
     if (x >= 0 && y >= 0 && x < SIZE && y < SIZE) grid[y][x] = c;
   };
-  const r = rng(4242);
+  const r = rng(91827);
+  const ri = (a: number, b: number) => a + Math.floor(r() * (b - a + 1));
+  const buildings: Building[] = [];
   const districts: District[] = [];
-  // 4 x 4 blocks of 11 tiles with 1-tile streets between them; the outer ring is the fence.
-  const names = [
-    'Parking', 'Reception', 'Cafeteria', 'Loading Dock',
-    'HR', 'Open Space', 'Server Farm', 'Meeting Rooms',
-    'Gym', 'QA Lab', 'Floor 42', 'Data Center',
-    'Garden', 'Archive', 'Rooftop Bar', 'Car Park',
-  ];
-  for (let by = 0; by < 4; by++) {
-    for (let bx = 0; bx < 4; bx++) {
-      const x0 = 1 + bx * 12 + 1;
-      const y0 = 1 + by * 12 + 1;
-      const name = names[by * 4 + bx];
-      districts.push({ name, x0: x0 * TILE, y0: y0 * TILE, x1: (x0 + 10) * TILE, y1: (y0 + 10) * TILE });
-      const open = name === 'Parking' || name === 'Garden' || name === 'Car Park';
-      if (open) {
-        // Yards: plant patches and a few racks of crates as cover, loot in the open.
-        for (let i = 0; i < 5; i++) {
-          const px = x0 + 1 + Math.floor(r() * 7);
-          const py = y0 + 1 + Math.floor(r() * 7);
-          for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 3; dx++) set(px + dx, py + dy, 'b');
-        }
-        for (let i = 0; i < 4; i++) set(x0 + 1 + Math.floor(r() * 9), y0 + 1 + Math.floor(r() * 9), 'r');
-        for (let i = 0; i < 3; i++) set(x0 + 1 + Math.floor(r() * 9), y0 + 1 + Math.floor(r() * 9), 's');
-        continue;
+  const district = (name: string, x0: number, y0: number, x1: number, y1: number) =>
+    districts.push({ name, x0: x0 * TILE, y0: y0 * TILE, x1: x1 * TILE, y1: y1 * TILE });
+
+  // Roads and paths first, so buildings sit beside them.
+  for (let x = 0; x < SIZE; x++) {
+    const y = 31 + Math.round(Math.sin(x / 7) * 2);
+    set(x, y, 'a');
+    set(x, y + 1, 'a');
+  }
+  const path = (x0: number, y0: number, x1: number, y1: number) => {
+    const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+    for (let i = 0; i <= n; i++) {
+      const x = Math.round(x0 + ((x1 - x0) * i) / n + Math.sin(i / 3) * 0.8);
+      const y = Math.round(y0 + ((y1 - y0) * i) / n);
+      if (get(x, y) === 'g') set(x, y, 'p');
+      if (get(x + 1, y) === 'g') set(x + 1, y, 'p');
+    }
+  };
+  path(32, 31, 32, 6);
+  path(32, 33, 32, 58);
+  path(30, 14, 12, 12);
+  path(34, 14, 52, 10);
+  path(30, 50, 12, 54);
+
+  const house = (x0: number, y0: number, w: number, h: number, barn: boolean) => {
+    for (let y = y0; y < y0 + h; y++) {
+      for (let x = x0; x < x0 + w; x++) {
+        const edge = x === x0 || y === y0 || x === x0 + w - 1 || y === y0 + h - 1;
+        set(x, y, edge ? '#' : '.');
       }
-      // A building: walls around, floor inside, a door on two sides, an inner wall with a gap.
-      const w = 7 + Math.floor(r() * 3);
-      const h = 7 + Math.floor(r() * 3);
-      const ox = x0 + Math.floor(r() * (11 - w));
-      const oy = y0 + Math.floor(r() * (11 - h));
-      for (let y = oy; y < oy + h; y++) {
-        for (let x = ox; x < ox + w; x++) {
-          const edge = x === ox || y === oy || x === ox + w - 1 || y === oy + h - 1;
-          set(x, y, edge ? '#' : '.');
-        }
+    }
+    // Two doors (two tiles wide) on opposite sides; barns get a third.
+    const doorH = (y: number) => {
+      const x = ri(x0 + 1, x0 + w - 3);
+      set(x, y, '.');
+      set(x + 1, y, '.');
+    };
+    const doorV = (x: number) => {
+      const y = ri(y0 + 1, y0 + h - 3);
+      set(x, y, '.');
+      set(x, y + 1, '.');
+    };
+    if (r() < 0.5) {
+      doorH(y0);
+      doorH(y0 + h - 1);
+      if (barn) doorV(x0);
+    } else {
+      doorV(x0);
+      doorV(x0 + w - 1);
+      if (barn) doorH(y0);
+    }
+    // Windows: wall tiles you can shoot through.
+    for (let i = 0; i < (barn ? 2 : ri(2, 4)); i++) {
+      const side = ri(0, 3);
+      const x = side < 2 ? ri(x0 + 1, x0 + w - 2) : side === 2 ? x0 : x0 + w - 1;
+      const y = side >= 2 ? ri(y0 + 1, y0 + h - 2) : side === 0 ? y0 : y0 + h - 1;
+      if (get(x, y) === '#') set(x, y, 'w');
+    }
+    // Bigger houses get an inner wall with a doorway.
+    if (!barn && w >= 7) {
+      const mx = x0 + Math.floor(w / 2);
+      const gap = ri(y0 + 1, y0 + h - 3);
+      for (let y = y0 + 1; y < y0 + h - 1; y++) if (y !== gap && y !== gap + 1) set(mx, y, '#');
+    }
+    const inside = () => ({ x: ri(x0 + 1, x0 + w - 2), y: ri(y0 + 1, y0 + h - 2) });
+    for (let i = 0; i < (barn ? 5 : ri(2, 3)); i++) {
+      const q = inside();
+      if (get(q.x, q.y) === '.') set(q.x, q.y, 'l');
+    }
+    for (let i = 0; i < (barn ? 3 : ri(0, 1)); i++) {
+      const q = inside();
+      if (get(q.x, q.y) === '.') set(q.x, q.y, 'r');
+    }
+    buildings.push({ x0, y0, w, h, model: ri(0, 20), barn });
+  };
+
+  const free = (x0: number, y0: number, w: number, h: number) => {
+    for (let y = y0 - 1; y <= y0 + h; y++) for (let x = x0 - 1; x <= x0 + w; x++) if (!'gp'.includes(get(x, y))) return false;
+    return x0 > 2 && y0 > 2 && x0 + w < SIZE - 3 && y0 + h < SIZE - 3;
+  };
+
+  // Old Town: a tight grid of houses of every size, with alleys between them.
+  district('Old Town', 16, 14, 50, 50);
+  for (let gy = 0; gy < 4; gy++) {
+    for (let gx = 0; gx < 4; gx++) {
+      // The road crosses the town around row 31 and the main path around column 32: step around them.
+      let w = 0;
+      let h = 0;
+      let x0 = 0;
+      let y0 = 0;
+      let placed = false;
+      for (let attempt = 0; attempt < 8 && !placed; attempt++) {
+        w = ri(4, 7 - Math.floor(attempt / 4));
+        h = ri(4, 6 - Math.floor(attempt / 5));
+        x0 = 16 + gx * 8 + (gx >= 2 ? 3 : 0) + ri(0, 1);
+        y0 = 14 + gy * 8 + (gy >= 2 ? 4 : 0) + ri(0, 1);
+        placed = free(x0, y0, w, h);
       }
-      const doors = [
-        () => set(ox + 1 + Math.floor(r() * (w - 3)), oy, '.'),
-        () => set(ox + 1 + Math.floor(r() * (w - 3)), oy + h - 1, '.'),
-        () => set(ox, oy + 1 + Math.floor(r() * (h - 3)), '.'),
-        () => set(ox + w - 1, oy + 1 + Math.floor(r() * (h - 3)), '.'),
-      ];
-      const first = Math.floor(r() * 4);
-      doors[first]();
-      doors[(first + 2) % 4]();
-      // Wide doors: open the tile next to each door too.
-      for (let y = oy; y < oy + h; y++) {
-        for (let x = ox; x < ox + w; x++) {
-          const edge = x === ox || y === oy || x === ox + w - 1 || y === oy + h - 1;
-          if (edge && grid[y][x] === '.') {
-            if (y === oy || y === oy + h - 1) set(x + 1 < ox + w - 1 ? x + 1 : x - 1, y, '.');
-            else set(x, y + 1 < oy + h - 1 ? y + 1 : y - 1, '.');
-          }
-        }
-      }
-      // Inner wall with a gap, splitting the building into two rooms.
-      const mid = ox + Math.floor(w / 2);
-      const gap = oy + 1 + Math.floor(r() * (h - 3));
-      for (let y = oy + 1; y < oy + h - 1; y++) if (y !== gap && y !== gap + 1) set(mid, y, '#');
-      // Furniture: racks as cover, loot spots on the floor.
-      const inside = () => ({ x: ox + 1 + Math.floor(r() * (w - 2)), y: oy + 1 + Math.floor(r() * (h - 2)) });
-      const racks = name === 'Server Farm' || name === 'Data Center' ? 5 : 2;
-      for (let i = 0; i < racks; i++) {
-        const p = inside();
-        if (grid[p.y][p.x] === '.' && p.x !== mid) set(p.x, p.y, 'r');
-      }
-      const loot = name === 'Floor 42' || name === 'Server Farm' ? 5 : 3;
-      for (let i = 0; i < loot; i++) {
-        const p = inside();
-        if (grid[p.y][p.x] === '.') set(p.x, p.y, 'l');
-      }
-      // A plant or two by the walls outside.
-      set(ox - 1, oy + Math.floor(h / 2), 'b');
-      set(ox + w, oy + Math.floor(h / 2) - 1, 'b');
+      if (!placed) continue;
+      house(x0, y0, w, h, false);
+      // A fenced yard or a garden next to some of them.
+      if (r() < 0.4) for (let i = 0; i < 4; i++) set(x0 + w, y0 + i, get(x0 + w, y0 + i) === 'g' ? 'f' : get(x0 + w, y0 + i));
+      if (r() < 0.5) set(x0 - 1, y0 + h, get(x0 - 1, y0 + h) === 'g' ? 'b' : get(x0 - 1, y0 + h));
     }
   }
-  // The fence.
-  for (let i = 0; i < SIZE; i++) {
-    set(i, 0, '#');
-    set(i, SIZE - 1, '#');
-    set(0, i, '#');
-    set(SIZE - 1, i, '#');
+
+  // A few lone houses out in the fields.
+  for (let i = 0, made = 0; i < 60 && made < 6; i++) {
+    const w = ri(4, 6);
+    const h = ri(4, 5);
+    const x0 = ri(4, SIZE - 10);
+    const y0 = ri(4, SIZE - 10);
+    if (free(x0, y0, w, h)) {
+      house(x0, y0, w, h, false);
+      made += 1;
+    }
   }
-  return { map: grid.map((row) => row.join('')), districts };
+
+  // Farms: a barn, a farmhouse, a fenced field of crops you can hide in.
+  const farm = (name: string, x0: number, y0: number) => {
+    district(name, x0, y0, x0 + 16, y0 + 12);
+    if (free(x0, y0, 10, 7)) house(x0, y0, 10, 7, true);
+    if (free(x0 + 12, y0 + 1, 5, 5)) house(x0 + 12, y0 + 1, 5, 5, false);
+    const fx = x0 + 1;
+    const fy = y0 + 8;
+    for (let y = fy; y < fy + 5; y++) for (let x = fx; x < fx + 12; x++) if (get(x, y) === 'g') set(x, y, 'c');
+    for (let x = fx - 1; x <= fx + 12; x++) {
+      if (get(x, fy - 1) === 'g' && x !== fx + 5) set(x, fy - 1, 'f');
+      if (get(x, fy + 5) === 'g' && x !== fx + 6) set(x, fy + 5, 'f');
+    }
+    for (let i = 0; i < 4; i++) {
+      const x = ri(x0, x0 + 15);
+      const y = ri(y0, y0 + 12);
+      if (get(x, y) === 'g') set(x, y, 'r');
+    }
+    for (let i = 0; i < 3; i++) {
+      const x = ri(x0, x0 + 15);
+      const y = ri(y0, y0 + 12);
+      if (get(x, y) === 'g') set(x, y, 's');
+    }
+  };
+  farm('North Farm', 6, 4);
+  farm('East Farm', 44, 6);
+  farm('South Farm', 5, 46);
+
+  // Forest in the south-east, a quarry of rocks in the east.
+  district('Deadwood', 44, 42, 60, 60);
+  for (let i = 0; i < 140; i++) {
+    const x = ri(44, 60);
+    const y = ri(40, 60);
+    if (get(x, y) === 'g') set(x, y, r() < 0.75 ? 't' : 'b');
+  }
+  district('Quarry', 48, 22, 60, 34);
+  for (let i = 0; i < 26; i++) {
+    const x = ri(48, 60);
+    const y = ri(21, 29);
+    if (get(x, y) === 'g') set(x, y, 'k');
+  }
+  for (let i = 0; i < 4; i++) {
+    const x = ri(49, 59);
+    const y = ri(22, 28);
+    if (get(x, y) === 'g') set(x, y, 's');
+  }
+
+  // Lone trees, bushes and rocks across the fields.
+  for (let i = 0; i < 110; i++) {
+    const x = ri(2, SIZE - 3);
+    const y = ri(2, SIZE - 3);
+    if (get(x, y) !== 'g') continue;
+    const k = r();
+    set(x, y, k < 0.45 ? 't' : k < 0.85 ? 'b' : 'k');
+  }
+
+  // The edge of the world: a tree line you can't pass.
+  for (let i = 0; i < SIZE; i++) {
+    for (const [x, y] of [[i, 0], [i, 1], [i, SIZE - 1], [i, SIZE - 2], [0, i], [1, i], [SIZE - 1, i], [SIZE - 2, i]]) set(x, y, 't');
+  }
+  return { map: grid.map((row) => row.join('')), districts, buildings };
 };
 
 const built = buildMap();
 export const MAP: string[] = built.map;
 export const DISTRICTS: District[] = built.districts;
+export const BUILDINGS: Building[] = built.buildings;
 
 export const tileAt = (tx: number, ty: number) =>
   tx < 0 || ty < 0 || tx >= SIZE || ty >= SIZE ? '#' : MAP[ty][tx];
 
-export const RACK_HP = 1800;
+export const RACK_HP = 900;
 
 // ---------------------------------------------------------------------------
 // Fighters: who you are. Weapons come from the map; the super is yours.
@@ -221,8 +332,8 @@ export const MOVE = { accel: 38, friction: 32, turn: 9 };
 
 /** The Deadline: wait, then shrink, phase after phase, until nothing is left. */
 export const ZONE_PHASES = [
-  { wait: 45, shrink: 30, radius: 34, dps: 20 },
-  { wait: 35, shrink: 25, radius: 20, dps: 40 },
+  { wait: 50, shrink: 35, radius: 44, dps: 20 },
+  { wait: 35, shrink: 25, radius: 24, dps: 40 },
   { wait: 25, shrink: 20, radius: 10, dps: 70 },
   { wait: 20, shrink: 15, radius: 3, dps: 110 },
   { wait: 10, shrink: 15, radius: 0, dps: 200 },

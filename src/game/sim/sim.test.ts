@@ -1,6 +1,6 @@
 import { createBot } from './bot';
-import { DROP, DT, MAP, SIZE, WEAPONS, WORLD, ZONE_PHASES } from './constants';
-import { createGame, lootUnder, solidAt, step } from './step';
+import { BUILDINGS, DROP, DT, MAP, SIZE, TILE, WEAPONS, WORLD, ZONE_PHASES } from './constants';
+import { circleBlocked, createGame, lootUnder, solidAt, step } from './step';
 import { NO_INPUT } from './types';
 
 import type { GameState, Input } from './types';
@@ -22,13 +22,32 @@ const clearAround = (s: GameState) => {
   s.players.slice(1).forEach((p) => Object.assign(p, { x: 6, y: 6 }));
 };
 
-describe('the campus', () => {
-  it('is 48 x 48 tiles, fenced, with buildings, plants, racks and loot spots', () => {
+describe('the map', () => {
+  it('is 64 x 64 tiles, ringed by trees, mostly green, with a town, farms, a forest and a quarry', () => {
     expect(MAP).toHaveLength(SIZE);
     MAP.forEach((row) => expect(row).toHaveLength(SIZE));
-    expect(MAP[0]).toBe('#'.repeat(SIZE));
+    expect(MAP[0]).toBe('t'.repeat(SIZE));
     const all = MAP.join('');
-    for (const c of ['#', '.', 'b', 'r', 'l', ',']) expect(all.includes(c)).toBe(true);
+    for (const c of ['#', 'w', '.', 'f', 't', 'k', 'r', 'b', 'c', 'l', 'p', 'a']) expect(all.includes(c)).toBe(true);
+    const grassy = [...all].filter((c) => 'gpbct'.includes(c)).length / all.length;
+    expect(grassy).toBeGreaterThan(0.6);
+    expect(BUILDINGS.length).toBeGreaterThanOrEqual(15);
+    expect(new Set(BUILDINGS.map((b) => `${b.w}x${b.h}`)).size).toBeGreaterThan(5);
+  });
+
+  it('windows and fences stop you but not bullets', () => {
+    const s = createGame('hotfix', 1);
+    const at = (c: string) => {
+      const ty = MAP.findIndex((row) => row.includes(c));
+      return { x: MAP[ty].indexOf(c) * TILE + TILE / 2, y: ty * TILE + TILE / 2 };
+    };
+    for (const c of ['w', 'f']) {
+      const p = at(c);
+      expect(circleBlocked(s, p.x, p.y, 0.5)).toBe(true);
+      expect(solidAt(s, p.x, p.y)).toBe(false);
+    }
+    const tree = at('t');
+    expect(solidAt(s, tree.x, tree.y)).toBe(true);
   });
 
   it('starts with loot on the ground and the same map every match', () => {
@@ -138,6 +157,6 @@ describe('bots', () => {
     expect(shots).toBeGreaterThan(20);
     expect(s.players.filter((p) => p.placement === 1)).toHaveLength(1);
     expect(s.players.some((p) => p.weapon !== 'fists' || p.kills > 0)).toBe(true);
-    expect(WORLD).toBe(96);
+    expect(WORLD).toBe(128);
   });
 });

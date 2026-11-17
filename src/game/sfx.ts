@@ -36,6 +36,18 @@ export const createSfx = () => {
   let noiseBuf: AudioBuffer | null = null;
   let muted = typeof window !== 'undefined' ? readMuted() : false;
   let shotVoices = 0;
+  /** Recorded sounds (see ASSETS.md), decoded once the audio context exists. */
+  const samples = new Map<string, AudioBuffer>();
+  const SAMPLE_NAMES = ['pistol', 'smg', 'shotgun', 'rifle', 'sniper', 'pump', 'bolt', 'reload'];
+  const loadSamples = (c: AudioContext) => {
+    for (const n of SAMPLE_NAMES) {
+      fetch(`/assets/sounds/${n}.m4a`)
+        .then((r) => r.arrayBuffer())
+        .then((b) => c.decodeAudioData(b))
+        .then((buf) => samples.set(n, buf))
+        .catch(() => undefined);
+    }
+  };
 
   const MASTER = 0.75;
 
@@ -78,6 +90,7 @@ export const createSfx = () => {
       g.connect(comp);
       buses[bus] = g;
     }
+    loadSamples(ctx);
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -167,6 +180,22 @@ export const createSfx = () => {
     g.gain.setTargetAtTime(0.5, t + 0.05, back / 3);
   };
 
+  /** Play a recorded sound with a little pitch and level variation, panned and attenuated. */
+  const sample = (name: string, o: { pan?: number; gain?: number; delay?: number; room?: number } = {}) => {
+    const c = ctx;
+    const buf = samples.get(name);
+    if (!c || !buf || muted) return false;
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = 0.95 + Math.random() * 0.1;
+    const g = c.createGain();
+    g.gain.value = (o.gain ?? 1) * (0.9 + Math.random() * 0.15);
+    src.connect(g);
+    out(g, { pan: o.pan ?? 0, room: o.room ?? 0.15 });
+    src.start(c.currentTime + (o.delay ?? 0));
+    return true;
+  };
+
   const panOf = (x?: number) => (x === undefined ? 0 : x / HALF_VIEW);
 
   const shot = (gun: Gun, x?: number) => {
@@ -219,6 +248,20 @@ export const createSfx = () => {
   };
 
   return {
+    /** A recorded gunshot; falls back to synthesis until the files are loaded. */
+    gunshot: (kind: 'pistol' | 'smg' | 'shotgun' | 'rifle' | 'sniper', x = 0, distance = 0) => {
+      if (shotVoices >= SHOT_BUDGET) return;
+      const gain = Math.max(0.12, 1 - distance / 45);
+      const ok = sample(kind, { pan: panOf(x), gain, room: 0.1 + Math.min(0.5, distance / 60) });
+      if (!ok) shot(kind === 'rifle' ? 'pistol' : kind === 'sniper' ? 'railgun' : kind, x);
+      else {
+        shotVoices += 1;
+        setTimeout(() => (shotVoices = Math.max(0, shotVoices - 1)), 90);
+      }
+      if (kind === 'shotgun') sample('pump', { pan: panOf(x), gain: gain * 0.8, delay: 0.45 });
+      if (kind === 'sniper') sample('bolt', { pan: panOf(x), gain: gain * 0.8, delay: 0.6 });
+    },
+    reloadSample: () => sample('reload', { gain: 0.7 }),
     unlock: () => ensure(),
     get muted() {
       return muted;
