@@ -1,0 +1,17 @@
+# Last Commit Standing lobby server on Fly.io. One small machine that stops when nobody plays.
+app = "lcs-game"
+primary_region = "fra"
+
+[build]
+  dockerfile = "server/Dockerfile"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

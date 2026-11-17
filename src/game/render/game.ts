@@ -3,9 +3,9 @@ import * as THREE from 'three';
 import { createSfx } from '../sfx';
 
 import type { VolumeKind } from '../sfx';
-import { createBot } from '../sim/bot';
 import { ARMOR, ROLL, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, ITEMS, MAP, SIZE, SUPERS, TILE, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
-import { canSee, createGame, inPlant, inWater, lineOfSight, lootUnder, step, throwDistance } from '../sim/step';
+import { canSee, inPlant, inWater, lineOfSight, lootUnder, throwDistance } from '../sim/step';
+import { createOfflineSession } from '../net/session';
 import { NO_INPUT } from '../sim/types';
 
 import { buildRig, poseChute, poseDeath, poseFreefall, poseRig, poseSwim, poseTopDown } from './characters';
@@ -21,6 +21,7 @@ import { buildWorld } from './world';
 
 import type { Rig } from './characters';
 import type { GunKind } from './guns';
+import type { NetStatus, Session } from '../net/session';
 import type { FighterId, GameEvent, GameState, Input, ItemKind, LootKind, Player, WeaponKind } from '../sim/types';
 
 // ---------------------------------------------------------------------------
@@ -69,6 +70,11 @@ export interface HudState {
   muted: boolean;
   aimMode: AimMode;
   paused: boolean;
+  /** Online: how the line is doing (null offline). */
+  net: NetStatus | null;
+  host: boolean;
+  /** How many dropped into this round. */
+  total: number;
 }
 
 export type AimMode = 'auto' | 'mouse';
@@ -81,6 +87,8 @@ export interface MatchOptions {
   aimMode: AimMode;
   minimap: HTMLCanvasElement;
   onHud: (hud: HudState) => void;
+  /** An online round (host or guest). Without one, an offline round with bots. */
+  session?: Session;
 }
 
 const GUN_MODEL: Record<Exclude<WeaponKind, 'fists'>, GunKind> = {
@@ -133,7 +141,6 @@ const LOOT_NAME: Record<LootKind, string> = {
   armor: 'Armor vest', medkit: 'Med kit', bomb: 'Bomb', ammo: 'Ammo box',
 };
 
-const randomSeed = () => (Math.random() * 1e9) | 0;
 /** Map (x, y) is the ground plane (x, z) in Three.js. */
 const v3 = (x: number, y: number, h = 0) => new THREE.Vector3(x, h, y);
 /** Place an object (Three.js `position` is read-only, so it can't be assigned). */
@@ -159,9 +166,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   scene.fog = new THREE.Fog(0x9fd3f5, 120, 300);
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 600);
 
-  const state: GameState = createGame(opts.fighter, randomSeed(), opts.name);
-  const me = 0;
-  const bots = state.players.map((p) => (p.bot ? createBot(p.id, randomSeed()) : null));
+  // Offline the match runs here with bots; online the session is the host's or a guest's.
+  const session: Session = opts.session ?? createOfflineSession(opts.fighter, opts.name);
+  let state: GameState = session.state;
+  const me = session.me;
   const sfx = createSfx();
   const vfx = createVfx(scene);
 
@@ -992,10 +1000,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     });
     world.update(state, self.x, self.y);
     updateThrowPreview(self, selfX, selfY);
-    const tgt = aimMode === 'auto' && self.alive && self.stage !== 'drone' ? aimTarget : null;
+    // By id: online the state object is replaced on every correction from the host.
+    const tgt = aimMode === 'auto' && self.alive && self.stage !== 'drone' && aimTarget ? state.players[aimTarget.id] : null;
     reticle.visible = !!tgt && tgt.alive;
     if (tgt) {
-      const ti = state.players.indexOf(tgt);
+      const ti = tgt.id;
       reticle.position.set(prev[ti].x + (tgt.x - prev[ti].x) * alpha, 0.1, prev[ti].y + (tgt.y - prev[ti].y) * alpha);
       reticle.rotation.y = time * 1.5;
       reticle.scale.setScalar(1 + Math.sin(time * 8) * 0.05);
@@ -1229,6 +1238,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       muted,
       aimMode,
       paused,
+      net: session.net,
+      host: session.host,
+      total: state.players.length,
     });
   };
 
@@ -1244,12 +1256,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     time += dt;
     if (dt > 0) fps += (1 / dt - fps) * 0.05;
     // Paused (offline only): the world freezes, the camera and effects keep drawing.
-    acc = paused ? 0 : acc + dt;
+    acc = paused && !session.online ? 0 : acc + dt;
     while (acc >= DT) {
       state.players.forEach((p, i) => Object.assign(prev[i], { x: p.x, y: p.y, fall: p.fall }));
-      const inputs = state.players.map((p) => (p.id === me ? (p.alive ? readInput() : NO_INPUT) : bots[p.id]!(state)));
-      step(state, inputs);
-      state.events.forEach(handle);
+      const events = session.tick(state.players[me].alive ? readInput() : NO_INPUT);
+      // A guest's state is replaced by the host's on every correction: always read it back.
+      state = session.state;
+      events.forEach(handle);
       acc -= DT;
     }
     renderFrame(dt, acc / DT);

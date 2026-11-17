@@ -297,9 +297,30 @@ const addLoot = (state: GameState, kind: LootKind, x: number, y: number, ammo?: 
   state.loot.push({ id: state.nextId++, kind, x, y, ammo: ammo ?? (isWeapon(kind) ? WEAPONS[kind].ammo : 0), active: true });
 };
 
-export const createGame = (you: FighterId, seed = 1, youName = 'you', others: FighterId[] = []): GameState => {
+/** One place in a match: a person (online or this browser) or a bot. `fighter: null` = pick at random. */
+export interface Seat {
+  name: string;
+  fighter: FighterId | null;
+  bot: boolean;
+}
+
+/** Offline: you and nine bots. */
+export const createGame = (you: FighterId, seed = 1, youName = 'you', others: FighterId[] = []): GameState =>
+  createMatch(
+    Array.from({ length: PLAYERS }, (_, i) => (i === 0 ? { name: youName, fighter: you, bot: false } : { name: BOT_NAMES[i - 1], fighter: others[i - 1] ?? null, bot: true })),
+    seed,
+  );
+
+/** Any match: up to ten seats in the given order (player i is seat i), everyone on one plane. */
+/** Crate health on a fresh map. */
+export const initialRacks = () => {
   const racks = new Array(SIZE * SIZE).fill(0);
   MAP.forEach((row, ty) => [...row].forEach((c, tx) => c === 'r' && (racks[tileIndex(tx, ty)] = RACK_HP)));
+  return racks;
+};
+
+export const createMatch = (seats: Seat[], seed = 1): GameState => {
+  const racks = initialRacks();
   const state: GameState = {
     tick: 0,
     phase: 'drop',
@@ -333,10 +354,10 @@ export const createGame = (you: FighterId, seed = 1, youName = 'you', others: Fi
     t: 0,
   };
 
-  for (let i = 0; i < PLAYERS; i++) {
-    const fighter = i === 0 ? you : others[i - 1] ?? FIGHTER_IDS[Math.floor(nextRandom(state) * FIGHTER_IDS.length)];
-    state.players.push(newPlayer(i, i === 0 ? youName : BOT_NAMES[i - 1], fighter, i !== 0, state.drone.x0, state.drone.y0));
-  }
+  seats.slice(0, PLAYERS).forEach((seat, i) => {
+    const fighter = seat.fighter ?? FIGHTER_IDS[Math.floor(nextRandom(state) * FIGHTER_IDS.length)];
+    state.players.push(newPlayer(i, seat.name, fighter, seat.bot, state.drone.x0, state.drone.y0));
+  });
 
   MAP.forEach((row, ty) =>
     [...row].forEach((c, tx) => {

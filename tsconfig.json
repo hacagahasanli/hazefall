@@ -40,6 +40,7 @@
   "include": [
     "next-env.d.ts",
     "src",
+    "server",
     "next.config.ts",
     "vitest.config.mts",
     ".next/types/**/*.ts",
