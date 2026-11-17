@@ -45,6 +45,8 @@ export interface HudState {
   superName: string;
   fighter: FighterId;
   zone: { label: string; seconds: number; outside: boolean };
+  /** Counts up each time the Deadline takes a bite out of you (drives the red pulse). */
+  zoneHits: number;
   feed: { id: number; text: string }[];
   prompt: string | null;
   dead: boolean;
@@ -543,6 +545,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         vfx.ring(e.x, 0.2, 0xffd23f, { grow: 8, life: 0.4, z: e.y, flat: true });
         sfx.push(e.x - camX());
         break;
+      case 'zoneHurt':
+        if (e.player === me && e.amount > 0) {
+          popDamage(me, e.x, e.y, e.amount, 'zone');
+          zoneHits += 1;
+          sfx.hit(4, 0);
+        }
+        break;
       case 'reload':
         sfx.reloadAt(e.weapon, e.x - camX(), e.player === me ? 0 : Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y));
         break;
@@ -634,8 +643,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
   // ---------- damage numbers: a pool of text sprites that rise and fade; quick hits on the same
   // target add up into one number (an SMG burst reads as -225, not five overlapping numbers)
-  type DamageKind = 'dealt' | 'armor' | 'ko' | 'taken';
+  type DamageKind = 'dealt' | 'armor' | 'ko' | 'taken' | 'zone';
   const DAMAGE_STYLE: Record<DamageKind, { color: string; size: number }> = {
+    zone: { color: '#6fb6ff', size: 1.05 },
     dealt: { color: '#ffd23f', size: 1 },
     armor: { color: '#7fd4ff', size: 1 },
     ko: { color: '#ff3d6e', size: 1.5 },
@@ -1085,6 +1095,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
   // ---------- HUD
   let fps = 60;
+  let zoneHits = 0;
   const emitHud = () => {
     const self = state.players[me];
     const z = state.zone;
@@ -1139,6 +1150,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       damage: Math.round(self.damage),
       won: state.winner === me,
       fps: Math.round(fps),
+      zoneHits,
       muted,
       aimMode,
       paused,

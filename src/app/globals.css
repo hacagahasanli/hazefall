@@ -40,3 +40,13 @@
     linear-gradient(90deg, rgba(62, 197, 255, 0.06) 1px, transparent 1px);
   background-size: 32px 32px;
 }
+
+/* The red flash at the screen's edges when the Deadline takes a bite. */
+@keyframes zonePulse {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.15;
+  }
+}

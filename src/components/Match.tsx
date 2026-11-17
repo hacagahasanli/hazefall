@@ -127,6 +127,20 @@ export const Match = ({ fighter, onExit }: { fighter: FighterId; onExit: () => v
           <p className="text-sm text-cream/60">Boarding the plane with nine others…</p>
         </div>
       )}
+      {/* Outside the Deadline: the screen turns blue, and the edges flash red with every bite. */}
+      {hud?.zone.outside && !hud.dead && hud.phase !== 'over' && (
+        <>
+          <div
+            className="pointer-events-none absolute inset-0 z-20"
+            style={{ background: 'radial-gradient(ellipse at center, rgba(47,140,255,0.12) 35%, rgba(30,90,220,0.42) 100%)' }}
+          />
+          <div
+            key={hud.zoneHits}
+            className="pointer-events-none absolute inset-0 z-20 animate-[zonePulse_0.7s_ease-out_forwards]"
+            style={{ boxShadow: 'inset 0 0 140px 40px rgba(255,40,60,0.75)' }}
+          />
+        </>
+      )}
       <canvas ref={canvasRef} className={`block h-full w-full ${hud?.aimMode === 'mouse' ? 'cursor-crosshair' : ''}`} />
 
       {/* Minimap */}

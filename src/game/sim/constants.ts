@@ -607,15 +607,16 @@ export const MOVE = { accel: 24, friction: 20, turn: 12 };
 
 /** The Deadline: wait, then shrink, phase after phase, until nothing is left. */
 /**
- * About 3 minutes in all (Reis: 2 was too fast, 4 too slow). Outside the Deadline you lose HP
- * every second, more with every phase, like the blue zone in battle royales: 1, 2, 4, 7, 12 HP/s.
+ * About 3 minutes in all. Outside the Deadline you lose this much a second, armor first, then
+ * health (out of up to 200): 12 in the first phase, rising to 45 in the last, so even the first
+ * circle kills a fully armored player in about 17 s.
  */
 export const ZONE_PHASES = [
-  { wait: 34, shrink: 26, radius: 60, dps: 1 },
-  { wait: 24, shrink: 20, radius: 32, dps: 2 },
-  { wait: 18, shrink: 14, radius: 13, dps: 4 },
-  { wait: 13, shrink: 12, radius: 4, dps: 7 },
-  { wait: 8, shrink: 12, radius: 0, dps: 12 },
+  { wait: 34, shrink: 26, radius: 60, dps: 12 },
+  { wait: 24, shrink: 20, radius: 32, dps: 16 },
+  { wait: 18, shrink: 14, radius: 13, dps: 22 },
+  { wait: 13, shrink: 12, radius: 4, dps: 30 },
+  { wait: 8, shrink: 12, radius: 0, dps: 45 },
 ];
 export const ZONE_START_RADIUS = WORLD * 0.72;
 

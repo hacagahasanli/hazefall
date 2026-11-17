@@ -68,6 +68,9 @@ export interface Player {
   pushing: number;
   /** Leaning: -1 (left) .. 1 (right), eased towards the input. */
   lean: number;
+  /** Deadline damage taken in the current second, and how far into that second we are. */
+  zoneSum: number;
+  zoneClock: number;
   /** Holding to throw a rocket or a bomb farther: seconds held, and what is being charged. */
   charge: number;
   charging: 'rockets' | 'bomb' | null;
@@ -157,6 +160,8 @@ export type GameEvent =
   | { type: 'rackBroken'; x: number; y: number }
   | { type: 'super'; owner: number; fighter: FighterId; x: number; y: number; angle: number }
   | { type: 'pickup'; player: number; kind: LootKind }
+  /** Once a second while someone stands outside the Deadline: what it took that second. */
+  | { type: 'zoneHurt'; player: number; x: number; y: number; amount: number }
   | { type: 'reload'; player: number; weapon: WeaponKind; x: number; y: number }
   | { type: 'dryFire'; player: number }
   | { type: 'vault'; player: number; x: number; y: number }

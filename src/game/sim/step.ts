@@ -355,6 +355,8 @@ const newPlayer = (id: number, name: string, fighter: FighterId, bot: boolean, x
   vaultTo: { x, y },
   pushing: 0,
   lean: 0,
+  zoneSum: 0,
+  zoneClock: 0,
   charge: 0,
   charging: null,
   kills: 0,
@@ -457,7 +459,22 @@ const updateZone = (state: GameState) => {
   }
   if (z.dps > 0) {
     for (const p of state.players) {
-      if (p.alive && Math.hypot(p.x - z.cx, p.y - z.cy) > z.r) hurt(state, p, z.dps * DT, null, true, true);
+      if (!p.alive) continue;
+      if (Math.hypot(p.x - z.cx, p.y - z.cy) > z.r) {
+        // Armor first, then health; reported once a second so it can be shown.
+        const before = p.hp + p.armor;
+        hurt(state, p, z.dps * DT, null, true, false);
+        p.zoneSum += before - (p.hp + p.armor);
+        p.zoneClock += DT;
+        if (p.zoneClock >= 1 || !p.alive) {
+          state.events.push({ type: 'zoneHurt', player: p.id, x: p.x, y: p.y, amount: Math.round(p.zoneSum) });
+          p.zoneSum = 0;
+          p.zoneClock = 0;
+        }
+      } else {
+        p.zoneSum = 0;
+        p.zoneClock = 0;
+      }
     }
   }
 };
