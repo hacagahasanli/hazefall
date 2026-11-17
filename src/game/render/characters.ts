@@ -694,7 +694,9 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   const kick = (1 - kickT) * Math.cos(kickT * Math.PI * 1.5) * KICK[p.gun];
   // Running leans the body into it like a soldier on the move; firing straightens it a little.
   let leanX = p.dashing ? 0.45 : 0.26 * fwd * amp + 0.05 - kick * 0.07;
-  let bank = Math.max(-0.18, Math.min(0.18, -p.yawRate * 0.035)) + 0.08 * side * amp - p.lean * 0.38;
+  // The model faces +z, so its own right is -x: a lean to the right (E) moves the body to -x and
+  // tips the top that way (positive z rotation).
+  let bank = Math.max(-0.18, Math.min(0.18, -p.yawRate * 0.035)) + 0.08 * side * amp + p.lean * 0.38;
   if (p.vault !== null) {
     // Swing over sideways with the weight on the planted hand.
     leanX = 0.35 * Math.sin(p.vault * Math.PI);
@@ -704,7 +706,7 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   rig.body.rotation.z = damp(rig.body.rotation.z, bank, 10, dt);
   const breathe = running ? 0 : Math.sin(p.time * 2.1) * 0.012;
   rig.body.position.set(
-    damp(rig.body.position.x, p.lean * 0.22, 10, dt),
+    damp(rig.body.position.x, -p.lean * 0.22, 10, dt),
     (running ? bob * 0.06 * amp : breathe) - legDrop,
     -kick * 0.05,
   );
