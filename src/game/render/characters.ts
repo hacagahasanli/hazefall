@@ -480,65 +480,181 @@ export interface TopDownPose {
   sinceShot: number;
   /** What's in the hands: decides the grip and where each hand goes. */
   gun: WeaponKind;
+  /** 0..1 through a reload, or null. */
+  reload: number | null;
+  /** -1 (left) .. 1 (right). */
+  lean: number;
+  /** 0..1 through a vault over a rail or sill, or null. */
+  vault: number | null;
+  /** 0..1 through the landing roll, or null. */
+  roll: number | null;
 }
 
+/** How hard each gun kicks: the shotgun and the sniper rock the whole body. */
+const KICK: Record<WeaponKind, number> = { fists: 0.3, pistol: 0.6, smg: 0.35, rifle: 0.5, shotgun: 1.3, sniper: 1.6, rockets: 1.4 };
+
 /**
- * Top-down animation: the stride follows the real velocity, so strafing steps sideways and
- * back-pedalling plays the cycle backwards; the body leans into speed and banks into turns;
- * standing still, the fighter breathes and the gun sways a little.
+ * Top-down animation, built to feel physical:
+ * - the stride follows the real velocity (strafing steps sideways, back-pedalling runs the cycle
+ *   backwards), the torso counter-twists, the head and the gun bob with each step;
+ * - each gun kicks by its own weight: muzzle climb, the gun driven back, the shoulders rocked;
+ * - reloading drops the support hand to the magazine and tilts the gun;
+ * - leaning tilts the body out to the side;
+ * - a vault plants a hand on the rail, tucks the legs and swings over;
+ * - the landing after a parachute drop is a forward roll.
  */
 export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   const { dt } = p;
   const speed = Math.hypot(p.vx, p.vy);
   const amp = Math.min(1, speed / 6.5);
-  // Movement relative to the facing: fwd 1 = forward, -1 = backwards; side = strafing.
   const rel = Math.atan2(p.vy, p.vx) - p.yaw;
   const fwd = speed > 0.05 ? Math.cos(rel) : 0;
   const side = speed > 0.05 ? Math.sin(rel) : 0;
-  const running = p.onGround && speed > 0.3;
+  const running = p.onGround && speed > 0.3 && p.vault === null && p.roll === null;
   rig.phase += dt * (running ? 3.2 + speed * 1.2 : 0) * (fwd < -0.35 ? -1 : 1);
   const swing = running ? Math.sin(rig.phase) * amp : 0;
+  const bob = running ? Math.abs(Math.sin(rig.phase)) : 0;
 
-  // Legs swing along the direction of travel, not always forward.
+  // ---- the landing roll: curl up and turn over around the hips, then stand.
+  if (p.roll !== null) {
+    const k = p.roll;
+    const turn = k * Math.PI * 2;
+    const hip = 0.55;
+    // Kept in (-PI, PI] so the body doesn't spin back a whole turn when the roll ends.
+    rig.body.rotation.set(turn > Math.PI ? turn - Math.PI * 2 : turn, 0, 0);
+    rig.body.position.set(0, hip - hip * Math.cos(turn) - 0.35 * Math.sin(k * Math.PI), -hip * Math.sin(turn) * 0.4);
+    const tuck = Math.sin(k * Math.PI);
+    rig.legL.rotation.set(-1.6 * tuck, 0, 0);
+    rig.legR.rotation.set(-1.4 * tuck, 0, 0);
+    rig.armL.quaternion.setFromEuler(tmpE.set(-1.2 * tuck, 0, 0.3));
+    rig.armR.quaternion.setFromEuler(tmpE.set(-1.2 * tuck, 0, -0.3));
+    rig.foreL.quaternion.setFromEuler(tmpE.set(-1.4 * tuck, 0, 0));
+    rig.foreR.quaternion.setFromEuler(tmpE.set(-1.4 * tuck, 0, 0));
+    rig.weapon.visible = false;
+    return;
+  }
+  rig.body.rotation.y = damp(rig.body.rotation.y, running ? -swing * 0.12 * Math.abs(fwd) : 0, 12, dt); // torso twist
+
+  // ---- legs: stride along the direction of travel; tucked during a vault.
   const along = Math.max(Math.abs(fwd), 0.25);
-  rig.legL.rotation.x = damp(rig.legL.rotation.x, swing * 0.85 * along, 16, dt);
-  rig.legR.rotation.x = damp(rig.legR.rotation.x, -swing * 0.85 * along, 16, dt);
-  rig.legL.rotation.z = damp(rig.legL.rotation.z, swing * 0.45 * side, 16, dt);
-  rig.legR.rotation.z = damp(rig.legR.rotation.z, -swing * 0.45 * side, 16, dt);
+  if (p.vault !== null) {
+    const tuck = Math.sin(Math.min(1, p.vault / 0.8) * Math.PI);
+    rig.legL.rotation.x = damp(rig.legL.rotation.x, -1.3 * tuck, 25, dt);
+    rig.legR.rotation.x = damp(rig.legR.rotation.x, -0.9 * tuck, 25, dt);
+    rig.legL.rotation.z = damp(rig.legL.rotation.z, 0.5 * tuck, 25, dt);
+    rig.legR.rotation.z = damp(rig.legR.rotation.z, 0.5 * tuck, 25, dt);
+  } else {
+    rig.legL.rotation.x = damp(rig.legL.rotation.x, swing * 0.9 * along, 16, dt);
+    rig.legR.rotation.x = damp(rig.legR.rotation.x, -swing * 0.9 * along, 16, dt);
+    rig.legL.rotation.z = damp(rig.legL.rotation.z, swing * 0.45 * side, 16, dt);
+    rig.legR.rotation.z = damp(rig.legR.rotation.z, -swing * 0.45 * side, 16, dt);
+  }
 
-  // Lean into the run and bank into turns; a hard forward tilt during a dash.
-  const leanX = p.dashing ? 0.45 : 0.12 * fwd * amp;
-  const bank = Math.max(-0.18, Math.min(0.18, -p.yawRate * 0.035)) + 0.08 * side * amp;
-  rig.body.rotation.x = damp(rig.body.rotation.x, leanX, 10, dt);
-  rig.body.rotation.z = damp(rig.body.rotation.z, bank, 8, dt);
+  // ---- body: lean into the run, bank into turns, lean out (Q/E), the kick of the gun.
+  const sinceShot = p.sinceShot;
+  const kickT = sinceShot < 0.25 ? sinceShot / 0.25 : 1;
+  // A kick that snaps back and settles with a small overshoot.
+  const kick = (1 - kickT) * Math.cos(kickT * Math.PI * 1.5) * KICK[p.gun];
+  let leanX = p.dashing ? 0.45 : 0.14 * fwd * amp - kick * 0.07;
+  let bank = Math.max(-0.18, Math.min(0.18, -p.yawRate * 0.035)) + 0.08 * side * amp - p.lean * 0.38;
+  if (p.vault !== null) {
+    // Swing over sideways with the weight on the planted hand.
+    leanX = 0.35 * Math.sin(p.vault * Math.PI);
+    bank = -0.55 * Math.sin(p.vault * Math.PI);
+  }
+  rig.body.rotation.x = damp(rig.body.rotation.x, leanX, 14, dt);
+  rig.body.rotation.z = damp(rig.body.rotation.z, bank, 10, dt);
   const breathe = running ? 0 : Math.sin(p.time * 2.1) * 0.012;
-  rig.body.position.y = running ? Math.abs(Math.sin(rig.phase)) * 0.055 * amp : breathe;
+  rig.body.position.set(
+    damp(rig.body.position.x, p.lean * 0.22, 10, dt),
+    running ? bob * 0.07 * amp : breathe,
+    -kick * 0.05,
+  );
 
-  // The gun: held at the chest with the stock at the right shoulder (a pistol out in front with
-  // both hands, the launcher on the shoulder). Kicked back by each shot, swaying a little.
+  // ---- the gun: at the chest, stock at the right shoulder; bobs with the steps, kicks by its
+  // weight, tilts and drops a little during a reload.
   const h = HOLD[p.gun];
-  const kick = Math.max(0, 1 - p.sinceShot / 0.12);
-  const sway = running ? Math.sin(rig.phase * 0.5) * 0.03 * amp : Math.sin(p.time * 1.3) * 0.02;
-  rig.weapon.visible = p.gun !== 'fists';
-  rig.weapon.position.set(h.x, rig.chestY + h.y, -kick * 0.07);
-  rig.weapon.rotation.x = damp(rig.weapon.rotation.x, -kick * 0.12 + sway, 28, dt);
-  rig.weapon.rotation.y = damp(rig.weapon.rotation.y, sway * 0.5, 10, dt);
+  const step = running ? Math.sin(rig.phase * 2) * 0.03 * amp : 0;
+  const sway = running ? Math.sin(rig.phase) * 0.05 * amp : Math.sin(p.time * 1.3) * 0.02;
+  const r = p.reload;
+  const reloadTilt = r === null ? 0 : Math.sin(Math.min(1, r * 1.3) * Math.PI) * 0.55;
+  rig.weapon.visible = p.gun !== 'fists' && p.vault === null;
+  rig.weapon.position.set(h.x + sway * 0.4, rig.chestY + h.y + step - reloadTilt * 0.12, -Math.max(0, kick) * 0.12);
+  rig.weapon.rotation.x = damp(rig.weapon.rotation.x, -kick * 0.35 + sway * 0.4 + reloadTilt * 0.5, 30, dt);
+  rig.weapon.rotation.y = damp(rig.weapon.rotation.y, sway * 0.6, 10, dt);
+  rig.weapon.rotation.z = damp(rig.weapon.rotation.z, reloadTilt * 0.6 + p.lean * 0.2, 12, dt);
   rig.hand.position.set(0, 0, h.grip);
 
+  if (p.vault !== null) {
+    // Both hands planted on the rail ahead, sliding back as the body goes over it.
+    const k = p.vault;
+    const z = 0.55 - Math.max(0, k - 0.15) * 1.4;
+    const y = 0.95 - rig.body.position.y;
+    tmpGrip.set(0.22, y, z);
+    tmpSupport.set(-0.22, y, z);
+    if (k < 0.75) {
+      reach(rig.armR, rig.foreR, rig.shoulderR, tmpGrip, rig.armLen, 1);
+      reach(rig.armL, rig.foreL, rig.shoulderL, tmpSupport, rig.armLen, -1);
+    } else {
+      rig.armL.quaternion.setFromEuler(tmpE.set(-0.6, 0, 0.5));
+      rig.armR.quaternion.setFromEuler(tmpE.set(-0.6, 0, -0.5));
+    }
+    return;
+  }
+
   if (p.gun === 'fists') {
-    // Relaxed arms swinging with the stride, elbows a little bent.
+    // Arms pump with the stride, elbows bent; a jab on each punch.
+    const jab = Math.max(0, 1 - sinceShot / 0.2);
     const swingArm = (upper: THREE.Group, fore: THREE.Group, sign: number) => {
-      upper.quaternion.setFromEuler(tmpE.set(p.onGround ? sign * swing * 0.7 * along : -0.4, 0, sign * 0.08));
-      fore.quaternion.setFromEuler(tmpE.set(-0.35 - Math.max(0, sign * swing) * 0.4, 0, 0));
+      const punch = sign > 0 ? jab : 0;
+      upper.quaternion.setFromEuler(tmpE.set(p.onGround ? sign * swing * 0.9 * along - punch * 1.4 : -0.4, 0, sign * 0.1));
+      fore.quaternion.setFromEuler(tmpE.set(-0.6 - Math.max(0, sign * swing) * 0.6 + punch * 0.5, 0, 0));
     };
     swingArm(rig.armL, rig.foreL, -1);
     swingArm(rig.armR, rig.foreR, 1);
     return;
   }
-  // Two-bone IK: right hand on the grip, left hand on the fore-end (or cupping the pistol grip).
+  // Two-bone IK: right hand on the grip, left hand on the fore-end (or cupping the pistol grip);
+  // during a reload the left hand goes down to the magazine well and back.
   rig.weapon.updateMatrix();
   tmpGrip.set(0, -0.02, h.grip).applyMatrix4(rig.weapon.matrix);
-  tmpSupport.set(h.support === 0 ? -0.05 : 0, h.support === 0 ? -0.04 : 0.03, h.grip + h.support).applyMatrix4(rig.weapon.matrix);
+  if (r !== null && r < 0.85) {
+    const drop = Math.sin(Math.min(1, r / 0.85) * Math.PI);
+    tmpSupport.set(-0.05, -0.12 - drop * 0.35, h.grip + 0.1).applyMatrix4(rig.weapon.matrix);
+  } else {
+    tmpSupport.set(h.support === 0 ? -0.05 : 0, h.support === 0 ? -0.04 : 0.03, h.grip + h.support).applyMatrix4(rig.weapon.matrix);
+  }
   reach(rig.armR, rig.foreR, rig.shoulderR, tmpGrip, rig.armLen, 1);
   reach(rig.armL, rig.foreL, rig.shoulderL, tmpSupport, rig.armLen, -1);
+};
+
+/**
+ * Hanging under the parachute: hands up on the risers, legs loose and swinging a little,
+ * the body tilted the way you steer. With the gun out (you fired in the last moments) the right
+ * hand brings the pistol down and forward while the left keeps hold of a riser.
+ */
+export const poseChute = (rig: Rig, p: { dt: number; time: number; seed: number; steerX: number; steerZ: number; shooting: boolean }) => {
+  const { dt, time, seed } = p;
+  rig.body.position.set(0, 0, 0);
+  rig.body.rotation.x = damp(rig.body.rotation.x, p.steerZ * 0.12, 4, dt);
+  rig.body.rotation.z = damp(rig.body.rotation.z, -p.steerX * 0.12, 4, dt);
+  rig.body.rotation.y = 0;
+  const dangle = Math.sin(time * 1.7 + seed) * 0.18;
+  rig.legL.rotation.set(dangle + 0.1, 0, 0.05);
+  rig.legR.rotation.set(-dangle * 0.8 + 0.15, 0, -0.05);
+  rig.armL.quaternion.setFromEuler(tmpE.set(Math.PI - 0.35, 0, -0.35));
+  rig.foreL.quaternion.setFromEuler(tmpE.set(0.25, 0, 0));
+  rig.weapon.visible = p.shooting;
+  if (p.shooting) {
+    const h = HOLD.pistol;
+    rig.weapon.position.set(h.x + 0.1, rig.chestY + h.y, 0);
+    rig.weapon.rotation.set(0, 0, 0);
+    rig.hand.position.set(0, 0, h.grip);
+    rig.weapon.updateMatrix();
+    tmpGrip.set(0, -0.02, h.grip).applyMatrix4(rig.weapon.matrix);
+    reach(rig.armR, rig.foreR, rig.shoulderR, tmpGrip, rig.armLen, 1);
+  } else {
+    rig.armR.quaternion.setFromEuler(tmpE.set(Math.PI - 0.35, 0, 0.35));
+    rig.foreR.quaternion.setFromEuler(tmpE.set(0.25, 0, 0));
+  }
 };

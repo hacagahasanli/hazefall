@@ -57,7 +57,10 @@ export const createSfx = () => {
   let shotVoices = 0;
   /** Recorded sounds (see ASSETS.md), decoded once the audio context exists. */
   const samples = new Map<string, AudioBuffer>();
-  const SAMPLE_NAMES = ['pistol', 'smg', 'shotgun', 'rifle', 'sniper', 'pump', 'bolt', 'reload'];
+  const SAMPLE_NAMES = [
+    'pistol', 'smg', 'shotgun', 'rifle', 'sniper', 'pump', 'bolt', 'reload', 'dryfire',
+    'reload_pistol', 'reload_smg', 'reload_rifle', 'reload_sniper', 'reload_shotgun',
+  ];
   const loadSamples = (c: AudioContext) => {
     for (const n of SAMPLE_NAMES) {
       fetch(`/assets/sounds/${n}.m4a`)
@@ -200,18 +203,34 @@ export const createSfx = () => {
   };
 
   /** Play a recorded sound with a little pitch and level variation, panned and attenuated. */
-  const sample = (name: string, o: { pan?: number; gain?: number; delay?: number; room?: number; bus?: Bus } = {}) => {
+  const sample = (
+    name: string,
+    o: { pan?: number; gain?: number; delay?: number; room?: number; bus?: Bus; lowpass?: number; echo?: number } = {},
+  ) => {
     const c = ctx;
     const buf = samples.get(name);
     if (!c || !buf || muted) return false;
-    const src = c.createBufferSource();
-    src.buffer = buf;
-    src.playbackRate.value = 0.95 + Math.random() * 0.1;
-    const g = c.createGain();
-    g.gain.value = (o.gain ?? 1) * (0.9 + Math.random() * 0.15);
-    src.connect(g);
-    out(g, { pan: o.pan ?? 0, room: o.room ?? 0.15, bus: o.bus });
-    src.start(c.currentTime + (o.delay ?? 0));
+    const rate = 0.95 + Math.random() * 0.1;
+    const play = (gain: number, delay: number, lowpass: number) => {
+      const src = c.createBufferSource();
+      src.buffer = buf;
+      src.playbackRate.value = rate;
+      const g = c.createGain();
+      g.gain.value = gain;
+      if (lowpass < 18000) {
+        // Air eats the highs: far shots are duller.
+        const lp = c.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = lowpass;
+        src.connect(lp).connect(g);
+      } else src.connect(g);
+      out(g, { pan: o.pan ?? 0, room: o.room ?? 0.15, bus: o.bus });
+      src.start(c.currentTime + delay);
+    };
+    const gain = (o.gain ?? 1) * (0.9 + Math.random() * 0.15);
+    play(gain, o.delay ?? 0, o.lowpass ?? 20000);
+    // Outdoors a shot comes back off the houses and the tree line: a dull, late slap.
+    if (o.echo) play(gain * o.echo, (o.delay ?? 0) + 0.22 + Math.random() * 0.12, 1400);
     return true;
   };
 
@@ -280,7 +299,10 @@ export const createSfx = () => {
       if (shotVoices >= SHOT_BUDGET) return;
       // Recorded shots are mastered hot: play them well under the rest of the mix (Reis: "too loud").
       const gain = GUN_LEVEL * Math.max(0.12, 1 - distance / 45);
-      const ok = sample(kind, { pan: panOf(x), gain, room: 0.1 + Math.min(0.5, distance / 60), bus: 'guns' });
+      const ok = sample(kind, {
+        pan: panOf(x), gain, room: 0.1 + Math.min(0.5, distance / 60), bus: 'guns',
+        lowpass: 18000 - Math.min(14500, distance * 260), echo: kind === 'sniper' || kind === 'shotgun' ? 0.3 : 0.2,
+      });
       if (!ok) shot(kind === 'rifle' ? 'pistol' : kind === 'sniper' ? 'railgun' : kind, x);
       else {
         shotVoices += 1;
@@ -289,16 +311,18 @@ export const createSfx = () => {
       if (kind === 'shotgun') sample('pump', { pan: panOf(x), gain: gain * 0.8, delay: 0.45, bus: 'guns' });
       if (kind === 'sniper') sample('bolt', { pan: panOf(x), gain: gain * 0.8, delay: 0.6, bus: 'guns' });
     },
-    /** A magazine change, panned and quieter with distance. */
-    reloadAt: (x = 0, distance = 0) => {
+    /** The reload of that gun (each has its own recording), panned and quieter with distance. */
+    reloadAt: (weapon: string, x = 0, distance = 0) => {
       if (distance > 30) return;
-      if (!sample('reload', { pan: panOf(x), gain: 0.7 * Math.max(0.15, 1 - distance / 30), bus: 'guns' })) {
+      const o = { pan: panOf(x), gain: 0.7 * Math.max(0.15, 1 - distance / 30), bus: 'guns' as Bus };
+      if (!sample(`reload_${weapon}`, o) && !sample('reload', o)) {
         click(0, 3000, 0.25, panOf(x));
         click(0.25, 2200, 0.3, panOf(x));
       }
     },
     /** The trigger on an empty gun. */
     dryFire: () => {
+      if (sample('dryfire', { gain: 0.6 })) return;
       click(0, 4200, 0.18);
       click(0.05, 2400, 0.12);
     },
@@ -306,32 +330,47 @@ export const createSfx = () => {
      * One footstep. Surface decides the colour (grass is a soft brush, asphalt and floors a
      * click and a heel thud, bushes and crops a rustle); far steps are quieter and duller.
      */
-    footstep: (surface: 'grass' | 'hard' | 'wood' | 'dirt' | 'leaves', x = 0, distance = 0, heavy = 1) => {
+    footstep: (surface: 'grass' | 'hard' | 'wood' | 'dirt' | 'leaves', x = 0, distance = 0, heavy = 1, gear = false) => {
       if (!ctx || muted || distance > 28) return;
       const v = volumes.steps * Math.max(0.08, 1 - distance / 28) * heavy;
       const pan = panOf(x);
       const dull = Math.max(0.35, 1 - distance / 30);
+      const o = (delay = 0, room = 0.05) => ({ pan, room, delay });
+      // Every step is a heel strike, then the rest of the foot ~40 ms later.
+      const heel = 0;
+      const toe = 0.035 + Math.random() * 0.015;
       switch (surface) {
         case 'grass':
-          noise('lowpass', 1800 * dull, 500, 0.07, 0.28 * v, 0.7, { pan, room: 0.05 });
+          // Blades crushed: a soft, bright swish over a muffled thud.
+          noise('bandpass', 3800 * dull, 2200, 0.09, 0.18 * v, 0.9, o(heel));
+          noise('bandpass', 2600 * dull, 1500, 0.07, 0.12 * v, 1.2, o(toe));
+          tone('sine', 95, 55, 0.05, 0.12 * v, o(heel, 0));
           break;
         case 'dirt':
-          noise('lowpass', 1200 * dull, 300, 0.06, 0.32 * v, 0.8, { pan, room: 0.05 });
-          tone('sine', 110, 60, 0.05, 0.12 * v, { pan, room: 0 });
+          // Grit: a crunch of tiny grains, then the scuff.
+          for (let i = 0; i < 5; i++) noise('bandpass', (2500 + Math.random() * 2500) * dull, 1800, 0.008, 0.12 * v, 4, o(heel + i * 0.009 + Math.random() * 0.006));
+          noise('lowpass', 1400 * dull, 400, 0.06, 0.16 * v, 0.8, o(toe));
+          tone('sine', 110, 60, 0.05, 0.14 * v, o(heel, 0));
           break;
         case 'hard':
-          noise('bandpass', 3200 * dull, 1800, 0.03, 0.26 * v, 2.5, { pan, room: 0.1 });
-          tone('sine', 130, 70, 0.05, 0.16 * v, { pan, room: 0 });
+          // Asphalt: a sharp heel click with a short scuff.
+          noise('bandpass', 4200 * dull, 3000, 0.018, 0.28 * v, 3, o(heel, 0.12));
+          tone('sine', 160, 80, 0.04, 0.16 * v, o(heel, 0));
+          noise('highpass', 3000 * dull, 2500, 0.05, 0.1 * v, 0.7, o(toe));
           break;
         case 'wood':
-          noise('bandpass', 1500 * dull, 900, 0.05, 0.3 * v, 2, { pan, room: 0.25 });
-          tone('sine', 180, 90, 0.07, 0.2 * v, { pan, room: 0.2 });
+          // Floorboards: a hollow knock with a little ring, then the toe.
+          noise('bandpass', 700 * dull, 500, 0.07, 0.3 * v, 6, o(heel, 0.3));
+          tone('triangle', 240, 170, 0.08, 0.12 * v, o(heel, 0.3));
+          noise('bandpass', 1600 * dull, 1200, 0.03, 0.14 * v, 3, o(toe, 0.2));
           break;
         case 'leaves':
-          noise('highpass', 3500 * dull, 2500, 0.14, 0.26 * v, 0.6, { pan, room: 0.05 });
-          noise('bandpass', 1400, 900, 0.1, 0.14 * v, 1, { pan, room: 0, delay: 0.03 });
+          noise('highpass', 3500 * dull, 2500, 0.16, 0.24 * v, 0.6, o(heel));
+          noise('bandpass', 1400, 900, 0.12, 0.14 * v, 1, o(toe));
           break;
       }
+      // Kit on a running body: a faint rattle of the gun and gear every step.
+      if (gear) noise('bandpass', 5200 * dull, 4200, 0.03, 0.05 * v, 5, o(heel + 0.02, 0));
     },
     /** Climbing over a fence or sill: cloth, a hand slap, the landing. */
     vault: (x = 0, distance = 0) => {

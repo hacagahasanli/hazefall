@@ -8,7 +8,7 @@ import { ARMOR, AUTO_AIM_RANGE, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGH
 import { canSee, createGame, inPlant, lineOfSight, lootUnder, step } from '../sim/step';
 import { NO_INPUT } from '../sim/types';
 
-import { buildRig, poseRig, poseTopDown } from './characters';
+import { buildRig, poseChute, poseRig, poseTopDown } from './characters';
 import { buildGun } from './guns';
 import { mat, mesh, PALETTE } from './palette';
 import { createVfx } from './vfx';
@@ -267,7 +267,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     for (let i = 0; i < 8; i++) {
       const panel = new THREE.Mesh(
         new THREE.SphereGeometry(2.6, 4, 6, (i / 8) * Math.PI * 2, Math.PI / 4, 0, Math.PI / 2.6),
-        new THREE.MeshStandardMaterial({ color: colors[i % 2], flatShading: true, side: THREE.DoubleSide }),
+        new THREE.MeshStandardMaterial({ color: colors[i % 2], flatShading: true, side: THREE.DoubleSide, transparent: true }),
       );
       panel.scale.y = 0.55;
       g.add(panel);
@@ -463,8 +463,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const sp = Math.hypot(p.vx, p.vy);
     if (sp > 0.8) lastMove = { x: p.vx / sp, y: p.vy / sp };
     else if (mx || my) lastMove = { x: mx, y: my };
-    const pointed = aimMode === 'mouse' && p.stage === 'ground' ? mouseAim() : null;
-    const target = p.stage === 'ground' && !pointed ? autoAim(p) : null;
+    // On the ground or under the parachute you aim (and auto-aim) at people.
+    const canAim = p.stage === 'ground' || (p.stage === 'falling' && p.fall <= DROP.chute);
+    const pointed = aimMode === 'mouse' && canAim ? mouseAim() : null;
+    const target = canAim && !pointed ? autoAim(p) : null;
     const aim = pointed ?? (target ? { x: target.x, y: target.y } : { x: p.x + lastMove.x * 6, y: p.y + lastMove.y * 6 });
     return {
       mx, my,
@@ -532,7 +534,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         sfx.push(e.x - camX());
         break;
       case 'reload':
-        sfx.reloadAt(e.x - camX(), e.player === me ? 0 : Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y));
+        sfx.reloadAt(e.weapon, e.x - camX(), e.player === me ? 0 : Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y));
         break;
       case 'dryFire':
         if (e.player === me) sfx.dryFire();
@@ -545,6 +547,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         if (e.player === me) sfx.pickup();
         break;
       case 'land':
+        landAt[e.player] = time;
+        dropChute(e.player, e.x, e.y);
         vfx.burst(e.x, 0.2, 12, 'dust', { z: e.y,  speed: 3, up: 1, gravity: 4, life: 0.4 });
         if (e.player === me) sfx.land();
         break;
@@ -574,6 +578,45 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** Visual yaw per player (angle and angular velocity) and when each last fired. */
   const yaw = state.players.map((p) => ({ a: p.heading, v: 0 }));
   const lastShot: number[] = [];
+  /** When each player touched down (for the landing roll), and the canopies left on the ground. */
+  const landAt: number[] = [];
+  const ROLL_TIME = 0.75;
+  const groundChutes: { g: THREE.Group; t: number; dir: number }[] = [];
+  const dropChute = (i: number, x: number, y: number) => {
+    const p = state.players[i];
+    const g = chutes[i].clone(true);
+    g.traverse((o) => {
+      if (o instanceof THREE.Mesh) o.material = (o.material as THREE.Material).clone();
+      if (o instanceof THREE.Line) o.visible = false;
+    });
+    g.visible = true;
+    g.position.set(x, 5.2, y);
+    g.userData.from = { x, y };
+    scene.add(g);
+    groundChutes.push({ g, t: 0, dir: Math.hypot(p.vx, p.vy) > 0.3 ? Math.atan2(p.vy, p.vx) : p.heading + Math.PI });
+  };
+  /** The canopy settles down behind you, lies there a while, then fades. */
+  const updateGroundChutes = (dt: number) => {
+    for (let k = groundChutes.length - 1; k >= 0; k--) {
+      const c = groundChutes[k];
+      c.t += dt;
+      // It drifts on a few metres with the wind and sinks, flattening out as it lands.
+      const fall = Math.min(1, c.t / 1.4);
+      const e = 1 - (1 - fall) * (1 - fall);
+      const from = c.g.userData.from as { x: number; y: number };
+      c.g.position.set(from.x + Math.cos(c.dir) * 3 * e, 5.2 * (1 - e) + 0.06, from.y + Math.sin(c.dir) * 3 * e);
+      c.g.rotation.set(Math.sin(c.t * 2) * 0.1 * (1 - e), 0, (1 - e) * 0.3);
+      c.g.scale.set(1 + e * 0.1, 1 - e * 0.92, 1 + e * 0.1);
+      const fade = c.t > 8 ? 1 - (c.t - 8) / 2 : 1;
+      c.g.traverse((o) => {
+        if (o instanceof THREE.Mesh) (o.material as THREE.MeshStandardMaterial).opacity = Math.max(0, fade);
+      });
+      if (fade <= 0) {
+        scene.remove(c.g);
+        groundChutes.splice(k, 1);
+      }
+    }
+  };
 
   // ---------- damage numbers: a pool of text sprites that rise and fade; quick hits on the same
   // target add up into one number (an SMG burst reads as -225, not five overlapping numbers)
@@ -759,6 +802,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     drone.rotation.y = -Math.atan2(state.drone.y1 - state.drone.y0, state.drone.x1 - state.drone.x0);
     drone.children.forEach((c) => c.userData.rotor && (c.rotation.x += dt * 40));
 
+    // Your own position as drawn this frame (interpolated): the camera follows exactly this, so
+    // you never see two of yourself from the camera and the body disagreeing.
+    let selfX = self.x;
+    let selfY = self.y;
+    let selfH = 0;
     state.players.forEach((p, i) => {
       const rig = rigs[i];
       const x = prev[i].x + (p.x - prev[i].x) * alpha;
@@ -773,10 +821,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       let h = p.stage === 'falling' ? fallHeight(Math.max(0, fall)) : 0;
       if (p.vault > 0) h = Math.sin((1 - p.vault / VAULT.time) * Math.PI) * 0.7; // the hop over
       rig.root.position.set(x, h, y);
+      if (i === me) {
+        selfX = x;
+        selfY = y;
+        selfH = h;
+      }
       // The body turns on a critically damped spring towards the sim heading: it starts and
       // settles smoothly instead of rotating at a constant rate and stopping dead.
       const yw = yaw[i];
-      if (p.stage !== 'ground') {
+      if (p.stage === 'drone') {
         yw.a = p.heading;
         yw.v = 0;
       } else {
@@ -785,11 +838,23 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         yw.v += (w * w * d - 2 * w * yw.v) * dt;
         yw.a += yw.v * dt;
       }
+      const sinceShot = lastShot[i] === undefined ? 9 : time - lastShot[i];
+      const sinceLand = landAt[i] === undefined ? 9 : time - landAt[i];
       if (p.stage === 'ground') {
         poseTopDown(rig, {
           dt, time, vx: p.vx, vy: p.vy, yaw: yw.a, yawRate: yw.v, onGround: true, dashing: p.dashTime > 0,
-          gun: p.weapon, sinceShot: lastShot[i] === undefined ? 9 : time - lastShot[i],
+          gun: p.weapon, sinceShot,
+          reload: p.reload > 0 ? 1 - p.reload / WEAPONS[p.weapon].reload : null,
+          lean: p.lean,
+          vault: p.vault > 0 ? 1 - p.vault / VAULT.time : null,
+          // The landing roll, unless you hit the ground already running into a fight.
+          roll: sinceLand < ROLL_TIME ? sinceLand / ROLL_TIME : null,
         });
+      } else if (chuteOpen) {
+        // Steering tilts you, in the body's own frame.
+        const c = Math.cos(yw.a);
+        const sn = Math.sin(yw.a);
+        poseChute(rig, { dt, time, seed: i, steerX: -p.vx * sn + p.vy * c, steerZ: p.vx * c + p.vy * sn, shooting: sinceShot < 1.5 });
       } else {
         poseRig(rig, {
           dt, time, vx: 0, vy: 0, onGround: false, facing: 1, aim: 0, sideways: false, wall: 0, dashing: false, stunned: false,
@@ -802,14 +867,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         rig.body.rotation.x = 1.25;
         rig.body.rotation.z = Math.sin(time * 0.8 + i) * 0.04;
       }
-      if (p.vault > 0) rig.body.rotation.x = 0.5 * Math.sin((1 - p.vault / VAULT.time) * Math.PI);
 
       // Footsteps, at each footfall of the stride: yours and everyone near you, panned left or right.
       if (p.stage === 'ground' && p.alive && p.vault <= 0) {
         const foot = Math.floor(rig.phase / Math.PI);
         if (foot !== steps[i] && Math.hypot(p.vx, p.vy) > 1) {
           const d = Math.hypot(p.x - self.x, p.y - self.y);
-          sfx.footstep(surfaceAt(p.x, p.y), p.x - camX(), i === me ? 0 : d, i === me ? 0.8 : 1);
+          sfx.footstep(surfaceAt(p.x, p.y), p.x - camX(), i === me ? 0 : d, i === me ? 0.8 : 1, Math.hypot(p.vx, p.vy) > 4);
         }
         steps[i] = foot;
       }
@@ -821,8 +885,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       setFlash(rig, hitFlash[i] > 0);
       rig.root.updateMatrixWorld(true);
       if (chutes[i].visible) {
+        // The canopy sways and tips the way you steer.
         chutes[i].position.set(x, h + 5.2, y);
-        chutes[i].rotation.z = Math.sin(time * 1.3 + i) * 0.08;
+        chutes[i].rotation.z = Math.sin(time * 1.3 + i) * 0.06 - p.vx * 0.035;
+        chutes[i].rotation.x = p.vy * 0.035;
       }
 
       // Gun in hand.
@@ -838,7 +904,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         rig.hand.getWorldQuaternion(tmpQ);
         gun.position.copy(tmpV);
         gun.quaternion.copy(tmpQ);
-        gun.visible = visible && p.stage === 'ground';
+        gun.visible = visible && (p.stage === 'ground' ? p.vault <= 0 && sinceLand >= ROLL_TIME : chuteOpen && sinceShot < 1.5);
       }
 
       // Health bar over the head, facing the camera.
@@ -934,21 +1000,23 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     let look: THREE.Vector3;
     if (self.stage === 'drone' && state.phase === 'drop') {
       // High above the plane, looking down over most of the map, so you can choose where to jump.
-      const fx = droneX + (WORLD / 2 - droneX) * 0.55;
-      const fy = droneY + (WORLD / 2 - droneY) * 0.55;
-      want = new THREE.Vector3(fx, 150, fy + 60);
-      look = new THREE.Vector3(fx, 0, fy + 4);
+      // Centred mostly on the plane so it's always on screen, leaning towards the map.
+      const fx = droneX + (WORLD / 2 - droneX) * 0.3;
+      const fy = droneY + (WORLD / 2 - droneY) * 0.3;
+      // Looking at the plane's height keeps it near the middle of the screen.
+      want = new THREE.Vector3(fx, 165, fy + 55);
+      look = new THREE.Vector3(fx, DROP.height * 0.55, fy);
     } else if (self.stage === 'falling') {
       // Stay close above and behind the jumper the whole way down, so you see yourself from the
       // first frame, falling through the clouds, then the canopy opening below them.
-      const hh = fallHeight(self.fall);
+      const hh = selfH;
       const chute = self.fall <= DROP.chute;
       // Looking steeply down past the jumper: you see yourself in the middle and the ground below.
-      want = new THREE.Vector3(self.x, hh + (chute ? 17 : 12), self.y + (chute ? 13 : 7));
-      look = new THREE.Vector3(self.x, hh - (chute ? 1 : 4), self.y);
+      want = new THREE.Vector3(selfX, hh + (chute ? 17 : 12), selfY + (chute ? 13 : 7));
+      look = new THREE.Vector3(selfX, hh - (chute ? 1 : 4), selfY);
     } else {
-      want = camNear < 1 ? new THREE.Vector3(self.x + 2, 3.2, self.y + 4) : new THREE.Vector3(self.x, 36, self.y + 22);
-      look = camNear < 1 ? new THREE.Vector3(self.x, 1.1, self.y) : new THREE.Vector3(self.x, 0, self.y + 1);
+      want = camNear < 1 ? new THREE.Vector3(selfX + 2, 3.2, selfY + 4) : new THREE.Vector3(selfX, 36, selfY + 22);
+      look = camNear < 1 ? new THREE.Vector3(selfX, 1.1, selfY) : new THREE.Vector3(selfX, 0, selfY + 1);
     }
     // Falling: blend in from the plane view for a moment, then stay locked to the jumper (no lag,
     // no wobble). Ground: a soft follow.
@@ -964,7 +1032,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       camera.fov = fov;
       camera.updateProjectionMatrix();
     }
-    cloudMat.opacity = THREE.MathUtils.damp(cloudMat.opacity, overview ? 0.22 : 0.92, 3, dt);
+    // Clouds: see-through from the plane, a thin mist while you fall through them (no white-out),
+    // solid again once you're on the ground and they're only sky.
+    cloudMat.opacity = THREE.MathUtils.damp(cloudMat.opacity, overview ? 0.22 : self.stage === 'falling' ? 0.1 : 0.92, 5, dt);
+    cloudMat.depthWrite = cloudMat.opacity > 0.8;
     camera.position.set(camPos.x + n(23, 1) * 0.5 * shake, camPos.y, camPos.z + n(19, 4) * 0.4 * shake);
     camera.lookAt(camLook);
     camFocus.set(camLook.x, 0, camLook.z);
@@ -974,6 +1045,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
     vfx.update(dt);
     updateDamage(dt);
+    updateGroundChutes(dt);
     renderer.render(scene, camera);
   };
 
