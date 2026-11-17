@@ -422,21 +422,47 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
    * plants, no.
    */
   const onScreen = new THREE.Vector3();
+  /** A clear shot at any part of them: the centre or either shoulder (a trunk or a car corner
+   * on the centre line shouldn't hide someone whose body you can see). */
+  const clearShot = (p: Player, o: Player) => {
+    const d = Math.hypot(o.x - p.x, o.y - p.y) || 1;
+    const sx = (-(o.y - p.y) / d) * 0.45;
+    const sy = ((o.x - p.x) / d) * 0.45;
+    return [0, 1, -1].some((k) => lineOfSight(state, p.x, p.y, o.x + sx * k, o.y + sy * k));
+  };
+  let aimTarget: Player | null = null;
   const autoAim = (p: Player) => {
     let best: Player | null = null;
     let bd = Infinity;
     for (const o of state.players) {
       if (o.id === p.id || !canSee(state, p, o)) continue;
+      // Anywhere on your screen, and a little past its edges.
       onScreen.set(o.x, 1, o.y).project(camera);
-      if (Math.abs(onScreen.x) > 0.98 || Math.abs(onScreen.y) > 0.98 || onScreen.z > 1) continue;
+      if (Math.abs(onScreen.x) > 1.25 || Math.abs(onScreen.y) > 1.25 || onScreen.z > 1) continue;
       const d = Math.hypot(o.x - p.x, o.y - p.y);
-      if (d < bd && lineOfSight(state, p.x, p.y, o.x, o.y)) {
+      if (d < bd && clearShot(p, o)) {
         best = o;
         bd = d;
       }
     }
+    aimTarget = best;
     return best;
   };
+  // A red reticle on the ground under whoever auto-aim has picked.
+  const reticle = new THREE.Group();
+  {
+    const red = new THREE.MeshBasicMaterial({ color: 0xff3d3d, transparent: true, opacity: 0.9, depthWrite: false });
+    reticle.add(new THREE.Mesh(new THREE.RingGeometry(0.95, 1.1, 40).rotateX(-Math.PI / 2), red));
+    for (let i = 0; i < 4; i++) {
+      const tick = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.45).rotateX(-Math.PI / 2), red);
+      const a = (i / 4) * Math.PI * 2;
+      tick.position.set(Math.cos(a) * 1.3, 0, Math.sin(a) * 1.3);
+      tick.rotation.y = -a + Math.PI / 2;
+      reticle.add(tick);
+    }
+    reticle.visible = false;
+    scene.add(reticle);
+  }
   let lastMove = { x: 1, y: 0 };
   const readInput = (): Input => {
     const p = state.players[me];
@@ -588,9 +614,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const fall = Math.min(1, c.t / 1.4);
       const e = 1 - (1 - fall) * (1 - fall);
       const from = c.g.userData.from as { x: number; y: number };
-      c.g.position.set(from.x + Math.cos(c.dir) * 3 * e, 1 - e, from.y + Math.sin(c.dir) * 3 * e);
-      c.g.rotation.set(Math.sin(c.t * 2) * 0.1 * (1 - e), 0, (1 - e) * 0.3);
-      c.g.scale.set(1 + e * 0.1, 1 - e * 0.92, 1 + e * 0.1);
+      // It drifts on a couple of metres and folds into a long, narrow strip of fabric lying behind
+      // you (about 3 x 1.3 m, the long side along the way you came), not a big round sheet.
+      c.g.position.set(from.x + Math.cos(c.dir) * 2.2 * e, 1 - e, from.y + Math.sin(c.dir) * 2.2 * e);
+      c.g.rotation.set(0, -c.dir, (1 - e) * 0.3);
+      c.g.scale.set(1 - e * 0.42, 1 - e * 0.95, 1 - e * 0.75);
       const fade = c.t > 8 ? 1 - (c.t - 8) / 2 : 1;
       c.g.traverse((o) => {
         if (o instanceof THREE.Mesh) (o.material as THREE.MeshStandardMaterial).opacity = Math.max(0, fade);
@@ -893,6 +921,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     });
     world.update(state, self.x, self.y);
     updateThrowPreview(self, selfX, selfY);
+    const tgt = aimMode === 'auto' && self.alive && self.stage !== 'drone' ? aimTarget : null;
+    reticle.visible = !!tgt && tgt.alive;
+    if (tgt) {
+      const ti = state.players.indexOf(tgt);
+      reticle.position.set(prev[ti].x + (tgt.x - prev[ti].x) * alpha, 0.1, prev[ti].y + (tgt.y - prev[ti].y) * alpha);
+      reticle.rotation.y = time * 1.5;
+      reticle.scale.setScalar(1 + Math.sin(time * 8) * 0.05);
+    }
     setPeople(state.players.filter((q) => q.alive && q.stage === 'ground').map((q) => ({ x: q.x, y: q.y })));
 
     // Loot.
