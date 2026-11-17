@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 import { createSfx } from '../sfx';
 import { createBot } from '../sim/bot';
-import { AUTO_AIM_RANGE, DISTRICTS, DT, FIGHTERS, MAP, SIZE, SUPERS, TILE, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
+import { AUTO_AIM_RANGE, DISTRICTS, DROP, DT, FIGHTERS, MAP, SIZE, SUPERS, TILE, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
 import { canSee, createGame, inPlant, lineOfSight, lootUnder, step } from '../sim/step';
 import { NO_INPUT } from '../sim/types';
 
@@ -83,8 +83,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x10142a);
-  scene.fog = new THREE.Fog(0x10142a, 60, 140);
-  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 400);
+  scene.fog = new THREE.Fog(0x10142a, 90, 220);
+  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 600);
 
   const state: GameState = createGame(opts.fighter, randomSeed(), opts.name);
   const me = 0;
@@ -97,7 +97,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const sun = new THREE.DirectionalLight(0xfff1dc, 1.9);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30, near: 1, far: 120 });
+  Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40, near: 1, far: 160 });
   scene.add(sun, sun.target);
 
   // ---------- the campus floor, painted from the map
@@ -202,24 +202,66 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   // ---------- the Deadline
   const zoneWall = new THREE.Mesh(
     new THREE.CylinderGeometry(1, 1, 30, 96, 1, true),
-    new THREE.MeshBasicMaterial({ color: 0xff3d6e, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false }),
+    new THREE.MeshBasicMaterial({ color: 0x2f8cff, transparent: true, opacity: 0.24, side: THREE.DoubleSide, depthWrite: false }),
   );
   scene.add(zoneWall);
   const nextRing = new THREE.Mesh(new THREE.RingGeometry(0.985, 1, 128), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, side: THREE.DoubleSide }));
   nextRing.rotation.x = -Math.PI / 2;
   scene.add(nextRing);
 
-  // ---------- the drone
+  // ---------- the plane: a high-wing cargo plane in studio colours, four props
   const drone = new THREE.Group();
-  drone.add(mesh(new THREE.BoxGeometry(3, 0.6, 2), mat(PALETTE.ink)));
-  for (const [x, z] of [[-2, -1.6], [2, -1.6], [-2, 1.6], [2, 1.6]]) {
-    drone.add(at(mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.6, 5), mat(PALETTE.stone)), x, 0.4, z));
-    const rotor = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.04, 16), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.25 }));
-    rotor.position.set(x, 0.72, z);
-    rotor.userData.rotor = true;
-    drone.add(rotor);
+  {
+    const body = mat(PALETTE.paper);
+    const trim = mat(0xff3d6e);
+    const fuselage = mesh(new THREE.CylinderGeometry(1.5, 1.3, 16, 12), body);
+    fuselage.rotation.z = Math.PI / 2;
+    drone.add(fuselage);
+    const nose = mesh(new THREE.SphereGeometry(1.5, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), body);
+    nose.rotation.z = -Math.PI / 2;
+    nose.position.x = 8;
+    drone.add(nose);
+    const cockpit = mesh(new THREE.BoxGeometry(1.6, 0.7, 2.2), new THREE.MeshStandardMaterial({ color: 0x1b2a44, roughness: 0.2, metalness: 0.4 }));
+    cockpit.position.set(7.4, 0.9, 0);
+    drone.add(cockpit);
+    const tail = mesh(new THREE.ConeGeometry(1.3, 5, 12), body);
+    tail.rotation.z = Math.PI / 2;
+    tail.position.set(-10.5, 0.4, 0);
+    drone.add(tail);
+    const stripe = mesh(new THREE.CylinderGeometry(1.52, 1.52, 1.2, 12), trim);
+    stripe.rotation.z = Math.PI / 2;
+    stripe.position.x = 3;
+    drone.add(stripe);
+    const wing = mesh(new THREE.BoxGeometry(3.4, 0.35, 26), body);
+    wing.position.set(1.5, 1.4, 0);
+    drone.add(wing);
+    for (const z of [-12.6, 12.6]) {
+      const tip = mesh(new THREE.BoxGeometry(3.4, 0.38, 0.6), trim);
+      tip.position.set(1.5, 1.4, z);
+      drone.add(tip);
+    }
+    const fin = mesh(new THREE.BoxGeometry(3, 4, 0.3), body);
+    fin.position.set(-11, 2.6, 0);
+    drone.add(fin);
+    const finTip = mesh(new THREE.BoxGeometry(3, 0.9, 0.32), trim);
+    finTip.position.set(-11, 4.2, 0);
+    drone.add(finTip);
+    const stab = mesh(new THREE.BoxGeometry(2.4, 0.25, 9), body);
+    stab.position.set(-11.3, 0.8, 0);
+    drone.add(stab);
+    for (const z of [-8.5, -4.2, 4.2, 8.5]) {
+      const nacelle = mesh(new THREE.CylinderGeometry(0.6, 0.55, 3, 10), mat(PALETTE.inkSoft));
+      nacelle.rotation.z = Math.PI / 2;
+      nacelle.position.set(2.6, 1, z);
+      drone.add(nacelle);
+      const prop = new THREE.Mesh(new THREE.CircleGeometry(1.7, 20), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22, side: THREE.DoubleSide }));
+      prop.rotation.y = Math.PI / 2;
+      prop.position.set(4.15, 1, z);
+      prop.userData.rotor = true;
+      drone.add(prop);
+    }
+    drone.traverse((o) => o instanceof THREE.Mesh && (o.castShadow = true));
   }
-  drone.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.12, 0.3), new THREE.MeshBasicMaterial({ color: 0xff3d6e })), 0, -0.35, 0));
   scene.add(drone);
 
   // ---------- players
@@ -228,11 +270,25 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     scene.add(r.root);
     return r;
   });
-  const chutes = state.players.map(() => {
-    const c = new THREE.Mesh(new THREE.SphereGeometry(1.4, 10, 4, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xffd23f, flatShading: true, side: THREE.DoubleSide }));
-    c.visible = false;
-    scene.add(c);
-    return c;
+  const chutes = state.players.map((p) => {
+    const g = new THREE.Group();
+    const colors = [FIGHTERS[p.fighter].color, '#f4f6fb'];
+    for (let i = 0; i < 8; i++) {
+      const panel = new THREE.Mesh(
+        new THREE.SphereGeometry(2.6, 4, 6, (i / 8) * Math.PI * 2, Math.PI / 4, 0, Math.PI / 2.6),
+        new THREE.MeshStandardMaterial({ color: colors[i % 2], flatShading: true, side: THREE.DoubleSide }),
+      );
+      panel.scale.y = 0.55;
+      g.add(panel);
+    }
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const pts = [new THREE.Vector3(Math.cos(a) * 2.2, 0.3, Math.sin(a) * 2.2), new THREE.Vector3(0, -3.4, 0)];
+      g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x0a0d18 })));
+    }
+    g.visible = false;
+    scene.add(g);
+    return g;
   });
   const guns: (THREE.Group | null)[] = state.players.map(() => null);
   const gunKinds: (WeaponKind | null)[] = state.players.map(() => null);
@@ -430,7 +486,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const s = mm.width / WORLD;
     mmCtx.drawImage(mmBase, 0, 0, mm.width, mm.height);
     const z = state.zone;
-    mmCtx.strokeStyle = 'rgba(255,61,110,0.9)';
+    mmCtx.strokeStyle = 'rgba(47,140,255,0.95)';
     mmCtx.lineWidth = 2;
     mmCtx.beginPath();
     mmCtx.arc(z.cx * s, z.cy * s, z.r * s, 0, Math.PI * 2);
@@ -453,12 +509,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       mmCtx.setLineDash([]);
     }
     const self = state.players[me];
-    for (const o of state.players) {
-      if (o.id === me || !o.alive || !canSee(state, self, o)) continue;
-      if (Math.hypot(o.x - self.x, o.y - self.y) > 26) continue;
-      mmCtx.fillStyle = '#ff3d6e';
-      mmCtx.fillRect(o.x * s - 2, o.y * s - 2, 4, 4);
-    }
+    // Only you on the map: never where the others are.
     mmCtx.save();
     mmCtx.translate(self.x * s, self.y * s);
     mmCtx.rotate(self.heading);
@@ -484,6 +535,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
   const prev = state.players.map((p) => ({ x: p.x, y: p.y }));
   const camFocus = new THREE.Vector3(state.players[me].x, 0, state.players[me].y);
+  const camPos = new THREE.Vector3(state.drone.x0, DROP.height + 20, state.drone.y0 + 30);
+  const camLook = new THREE.Vector3(state.drone.x0, DROP.height, state.drone.y0);
   let time = 0;
   const tmpV = new THREE.Vector3();
   const tmpQ = new THREE.Quaternion();
@@ -506,9 +559,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const droneX = state.drone.x0 + (state.drone.x1 - state.drone.x0) * state.drone.t;
     const droneY = state.drone.y0 + (state.drone.y1 - state.drone.y0) * state.drone.t;
     drone.visible = state.phase === 'drop' && state.drone.t < 1;
-    drone.position.set(droneX, 14, droneY);
+    drone.position.set(droneX, DROP.height, droneY);
     drone.rotation.y = -Math.atan2(state.drone.y1 - state.drone.y0, state.drone.x1 - state.drone.x0);
-    drone.children.forEach((c) => c.userData.rotor && (c.rotation.y += dt * 40));
+    drone.children.forEach((c) => c.userData.rotor && (c.rotation.x += dt * 40));
 
     state.players.forEach((p, i) => {
       const rig = rigs[i];
@@ -516,8 +569,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const y = prev[i].y + (p.y - prev[i].y) * alpha;
       const visible = p.alive && p.stage !== 'drone' && (i === me || p.stage === 'falling' || canSee(state, self, p));
       rig.root.visible = visible;
-      chutes[i].visible = visible && p.stage === 'falling';
-      const h = p.stage === 'falling' ? 1 + 13 * (p.fall / 3) : 0;
+      const chuteOpen = p.stage === 'falling' && p.fall <= DROP.chute;
+      chutes[i].visible = visible && chuteOpen;
+      // Free fall from the plane down to chute height, then drift slowly under the canopy.
+      let h = 0;
+      if (p.stage === 'falling') {
+        h = chuteOpen
+          ? 1 + (DROP.chuteHeight - 1) * (p.fall / DROP.chute)
+          : DROP.chuteHeight + (DROP.height - DROP.chuteHeight) * ((p.fall - DROP.chute) / DROP.freefall);
+      }
       rig.root.position.set(x, h, y);
       const speed = Math.hypot(p.x - prev[i].x, p.y - prev[i].y) / DT;
       poseRig(rig, {
@@ -526,6 +586,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         sinceShot: p.cooldown > 0 ? 0.05 : 1, recoil: 0.5, reloading: false, pushing: 0,
       });
       rig.root.rotation.y = Math.PI / 2 - p.heading;
+      if (p.stage === 'falling' && !chuteOpen) rig.body.rotation.x = 1.2; // spread out, head first
       // Your own fighter turns see-through inside plants, so you know you're hidden.
       rig.root.traverse((o) => {
         if (o instanceof THREE.Mesh && !o.userData.orig) o.visible = true;
@@ -533,7 +594,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       hitFlash[i] = Math.max(0, hitFlash[i] - dt);
       setFlash(rig, hitFlash[i] > 0);
       rig.root.updateMatrixWorld(true);
-      if (chutes[i].visible) chutes[i].position.set(x, h + 2.6, y);
+      if (chutes[i].visible) {
+        chutes[i].position.set(x, h + 5.2, y);
+        chutes[i].rotation.z = Math.sin(time * 1.3 + i) * 0.08;
+      }
 
       // Gun in hand.
       if (gunKinds[i] !== p.weapon) {
@@ -641,19 +705,34 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     nextRing.position.set(z.toX, 0.06, z.toY);
     nextRing.scale.setScalar(Math.max(0.5, z.toR));
 
-    // Camera: follow you (or the drone), higher up while in the air.
-    const fx = self.stage === 'drone' ? droneX : self.x;
-    const fy = self.stage === 'drone' ? droneY : self.y;
-    const kf = 1 - Math.exp(-6 * dt);
-    camFocus.x += (fx - camFocus.x) * kf;
-    camFocus.z += (fy - camFocus.z) * kf;
-    const high = self.stage === 'ground' ? 0 : 1;
+    // Camera: chase the plane from behind, follow the fall from above, and on the ground sit
+    // high and far so the fighters read small and you see what's coming.
     const shake = trauma * trauma;
     const n = (f: number, ph: number) => Math.sin(time * f + ph) * 0.6 + Math.sin(time * f * 2.3 + ph) * 0.4;
-    camera.position.set(camFocus.x + n(23, 1) * 0.5 * shake, 24 + high * 16, camFocus.z + 15 + high * 8 + n(19, 4) * 0.4 * shake);
-    camera.lookAt(camFocus.x, 0, camFocus.z + 1);
+    const kf = 1 - Math.exp(-3 * dt);
+    let want: THREE.Vector3;
+    let look: THREE.Vector3;
+    if (self.stage === 'drone' && state.phase === 'drop') {
+      const dirX = state.drone.x1 - state.drone.x0;
+      const dirY = state.drone.y1 - state.drone.y0;
+      const len = Math.hypot(dirX, dirY) || 1;
+      want = new THREE.Vector3(droneX - (dirX / len) * 34 + (dirY / len) * 10, DROP.height + 14, droneY - (dirY / len) * 34 - (dirX / len) * 10);
+      look = new THREE.Vector3(droneX + (dirX / len) * 10, DROP.height - 8, droneY + (dirY / len) * 10);
+    } else if (self.stage === 'falling') {
+      const hh = self.fall <= DROP.chute ? 1 + (DROP.chuteHeight - 1) * (self.fall / DROP.chute) : DROP.chuteHeight + 10;
+      want = new THREE.Vector3(self.x, hh + 22, self.y + 22);
+      look = new THREE.Vector3(self.x, hh * 0.4, self.y);
+    } else {
+      want = new THREE.Vector3(self.x, 36, self.y + 22);
+      look = new THREE.Vector3(self.x, 0, self.y + 1);
+    }
+    camPos.lerp(want, self.stage === 'ground' ? 1 - Math.exp(-6 * dt) : kf);
+    camLook.lerp(look, self.stage === 'ground' ? 1 - Math.exp(-6 * dt) : kf);
+    camera.position.set(camPos.x + n(23, 1) * 0.5 * shake, camPos.y, camPos.z + n(19, 4) * 0.4 * shake);
+    camera.lookAt(camLook);
+    camFocus.set(camLook.x, 0, camLook.z);
     trauma = Math.max(0, trauma - dt * 1.5);
-    sun.position.set(camFocus.x - 15, 40, camFocus.z + 10);
+    sun.position.set(camFocus.x - 20, 60, camFocus.z + 14);
     sun.target.position.set(camFocus.x, 0, camFocus.z);
 
     vfx.update(dt);
@@ -668,7 +747,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const outside = self.alive && Math.hypot(self.x - z.cx, self.y - z.cy) > z.r;
     const zone =
       state.phase === 'drop'
-        ? { label: 'Jump with Space', seconds: Math.ceil((1 - state.drone.t) * 14), outside: false }
+        ? { label: 'Jump with Space', seconds: Math.ceil((1 - state.drone.t) * DROP.flight), outside: false }
         : z.state === 'wait'
           ? { label: 'Deadline moves in', seconds: Math.ceil(z.timer), outside }
           : z.state === 'shrink'

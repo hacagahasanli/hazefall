@@ -27,11 +27,14 @@ export interface Player {
   name: string;
   fighter: FighterId;
   bot: boolean;
-  /** Where in the drop: still on the drone, gliding down, or on the ground. */
+  /** Where in the drop: on the plane, falling (free fall, then under the parachute), or on the ground. */
   stage: 'drone' | 'falling' | 'ground';
-  fall: number; // seconds of glide left
+  fall: number; // seconds of the descent left; the parachute is open for the last DROP.chute seconds
   x: number;
   y: number;
+  /** Velocity: movement accelerates and slows down instead of snapping. */
+  vx: number;
+  vy: number;
   heading: number;
   hp: number;
   maxHp: number;

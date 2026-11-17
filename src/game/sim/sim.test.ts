@@ -10,7 +10,7 @@ const idle = (): Input[] => Array.from({ length: 10 }, () => ({ ...NO_INPUT }));
 /** Land everyone at once: skip the drop. */
 const landed = (seed = 1): GameState => {
   const s = createGame('hotfix', seed);
-  for (let i = 0; i < 30 * 60 && s.phase === 'drop'; i++) step(s, idle());
+  for (let i = 0; i < 60 * 60 && s.phase === 'drop'; i++) step(s, idle());
   return s;
 };
 

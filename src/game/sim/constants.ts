@@ -213,7 +213,11 @@ export const SUPERS = {
 // The drop: a cargo drone crosses the campus; you jump when you want.
 // ---------------------------------------------------------------------------
 
-export const DROP = { flight: 14, glide: 3, glideSpeed: 10, countdown: 3 };
+/** The plane flies slowly and high; you free-fall, then the parachute opens and you drift down. */
+export const DROP = { flight: 24, freefall: 2.5, chute: 9, freefallSpeed: 14, chuteSpeed: 6, glide: 11.5, height: 60, chuteHeight: 22 };
+
+/** Movement feel: you speed up and slow down over a fraction of a second, and turn smoothly. */
+export const MOVE = { accel: 38, friction: 32, turn: 9 };
 
 /** The Deadline: wait, then shrink, phase after phase, until nothing is left. */
 export const ZONE_PHASES = [

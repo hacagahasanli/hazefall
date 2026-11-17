@@ -3,6 +3,7 @@ import {
   BOT_NAMES,
   DROP,
   DT,
+  MOVE,
   FIGHTERS,
   ITEMS,
   LOOT_TABLE,
@@ -167,6 +168,8 @@ const newPlayer = (id: number, name: string, fighter: FighterId, bot: boolean, x
   stage: 'drone',
   fall: 0,
   x, y,
+  vx: 0,
+  vy: 0,
   heading: 0,
   hp: FIGHTERS[fighter].hp,
   maxHp: FIGHTERS[fighter].hp,
@@ -210,17 +213,19 @@ const updateDrop = (state: GameState, inputs: Input[]) => {
       const jump = input.jump || input.fire;
       if ((jump && overCampus) || d.t >= 0.92) {
         p.stage = 'falling';
-        p.fall = DROP.glide;
+        p.fall = DROP.freefall + DROP.chute;
         p.x = Math.min(WORLD - 4, Math.max(4, p.x));
         p.y = Math.min(WORLD - 4, Math.max(4, p.y));
         state.events.push({ type: 'jump', player: p.id });
       }
     } else if (p.stage === 'falling') {
-      // Steer while gliding down.
+      // Steer on the way down: fast in free fall, gentle under the parachute.
       const len = Math.hypot(input.mx, input.my);
+      const speed = p.fall > DROP.chute ? DROP.freefallSpeed : DROP.chuteSpeed;
       if (len > 0.01) {
-        p.x = Math.min(WORLD - 4, Math.max(4, p.x + (input.mx / Math.max(1, len)) * DROP.glideSpeed * DT));
-        p.y = Math.min(WORLD - 4, Math.max(4, p.y + (input.my / Math.max(1, len)) * DROP.glideSpeed * DT));
+        p.x = Math.min(WORLD - 4, Math.max(4, p.x + (input.mx / Math.max(1, len)) * speed * DT));
+        p.y = Math.min(WORLD - 4, Math.max(4, p.y + (input.my / Math.max(1, len)) * speed * DT));
+        p.heading = Math.atan2(input.my, input.mx);
       }
       p.fall -= DT;
       if (p.fall <= 0) {
@@ -504,7 +509,14 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     p.hp = Math.min(p.maxHp, p.hp + REGEN.perSecond * DT);
   }
 
-  if (Math.hypot(input.aimX - p.x, input.aimY - p.y) > 0.05) p.heading = Math.atan2(input.aimY - p.y, input.aimX - p.x);
+  // Turn towards the aim at a limited rate, never snapping.
+  if (Math.hypot(input.aimX - p.x, input.aimY - p.y) > 0.05) {
+    const want = Math.atan2(input.aimY - p.y, input.aimX - p.x);
+    let d = want - p.heading;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    const maxTurn = MOVE.turn * DT;
+    p.heading += Math.max(-maxTurn, Math.min(maxTurn, d));
+  }
 
   if (p.dashTime > 0) {
     p.dashTime -= DT;
@@ -518,11 +530,26 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
       }
     }
   } else {
+    // Accelerate towards the wanted velocity, ease off when the keys are released.
     const len = Math.hypot(input.mx, input.my);
-    if (len > 0.01) {
-      const speed = FIGHTERS[p.fighter].speed * (p.slowed > 0 ? SUPERS.timebox.slow : 1) * DT;
-      moveBy(state, p, (input.mx / Math.max(1, len)) * speed, (input.my / Math.max(1, len)) * speed);
+    const top = FIGHTERS[p.fighter].speed * (p.slowed > 0 ? SUPERS.timebox.slow : 1);
+    const wantX = len > 0.01 ? (input.mx / Math.max(1, len)) * top : 0;
+    const wantY = len > 0.01 ? (input.my / Math.max(1, len)) * top : 0;
+    const rate = (len > 0.01 ? MOVE.accel : MOVE.friction) * DT;
+    const dvx = wantX - p.vx;
+    const dvy = wantY - p.vy;
+    const dv = Math.hypot(dvx, dvy);
+    if (dv > 0) {
+      const k = Math.min(1, rate / dv);
+      p.vx += dvx * k;
+      p.vy += dvy * k;
     }
+    const bx = p.x;
+    const by = p.y;
+    moveBy(state, p, p.vx * DT, p.vy * DT);
+    // Hitting a wall kills the velocity along it.
+    if (Math.abs(p.x - bx) < Math.abs(p.vx * DT) * 0.5) p.vx = 0;
+    if (Math.abs(p.y - by) < Math.abs(p.vy * DT) * 0.5) p.vy = 0;
   }
 
   if (input.fire && p.cooldown <= 0) shoot(state, p, input);
