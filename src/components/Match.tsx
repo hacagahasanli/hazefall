@@ -1,0 +1,143 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+
+import { startMatch } from '~/game/render/game';
+import { FIGHTERS } from '~/game/sim/constants';
+
+import type { HudState } from '~/game/render/game';
+import type { FighterId } from '~/game/sim/types';
+
+const Bar = ({ value, max, color }: { value: number; max: number; color: string }) => (
+  <div className="panel-cut h-3 w-64 bg-ink-deep/80">
+    <div className="h-full transition-[width] duration-150" style={{ width: `${Math.max(0, Math.min(1, value / max)) * 100}%`, background: color }} />
+  </div>
+);
+
+const Key = ({ k }: { k: string }) => (
+  <kbd className="inline-flex min-w-5 items-center justify-center rounded-sm border border-b-2 border-cream/30 bg-cream/10 px-1 text-[10px] font-bold leading-4 text-cream">
+    {k}
+  </kbd>
+);
+
+export const Match = ({ fighter, onExit }: { fighter: FighterId; onExit: () => void }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const mapRef = useRef<HTMLCanvasElement>(null);
+  const [hud, setHud] = useState<HudState | null>(null);
+
+  useEffect(() => {
+    if (!canvasRef.current || !mapRef.current) return;
+    const m = startMatch(canvasRef.current, { fighter, name: 'you', minimap: mapRef.current, onHud: setHud });
+    return () => m.dispose();
+  }, [fighter]);
+
+  const f = FIGHTERS[fighter];
+  const over = hud && (hud.dead || hud.phase === 'over');
+
+  return (
+    <main className="relative h-screen w-screen select-none overflow-hidden bg-ink-deep">
+      <canvas ref={canvasRef} className="block h-full w-full" />
+
+      {/* Minimap */}
+      <div className="panel-cut absolute bottom-3 right-3 bg-ink-deep/80 p-1.5">
+        <canvas ref={mapRef} width={192} height={192} className="block h-48 w-48" />
+      </div>
+
+      {hud && (
+        <>
+          {/* You */}
+          <div className="pointer-events-none absolute left-4 top-3 flex flex-col gap-1.5">
+            <div className="flex items-baseline gap-2">
+              <span className="font-display text-lg" style={{ color: f.color }}>
+                {f.name}
+              </span>
+              <span className="text-xs text-cream/60">{hud.weapon}{hud.ammo !== Infinity ? ` · ${hud.ammo}` : ''}</span>
+              {hud.item && <span className="rounded bg-cream/10 px-1.5 text-xs">{hud.item === 'bomb' ? 'Bomb' : 'Med kit'}</span>}
+            </div>
+            <Bar value={hud.hp} max={hud.maxHp} color={hud.hp / hud.maxHp > 0.35 ? '#3ddc84' : '#ff3d6e'} />
+            {hud.armor > 0 && <Bar value={hud.armor} max={500} color="#3ec5ff" />}
+            <div className="flex items-center gap-2 text-[11px]">
+              <span className="text-cream/60">Q · {hud.superName}</span>
+              <div className="h-1.5 w-28 overflow-hidden rounded bg-cream/15">
+                <div className="h-full" style={{ width: `${hud.superCharge * 100}%`, background: hud.superCharge >= 1 ? '#ffd23f' : '#8b93ad' }} />
+              </div>
+              {hud.superCharge >= 1 && <span className="font-bold text-gold">ready</span>}
+            </div>
+          </div>
+
+          {/* Deadline and players left */}
+          <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center">
+            <div className="panel-cut flex items-center gap-4 bg-ink-deep/85 px-4 py-1.5">
+              <span className="font-display text-xl text-cream">{hud.alive}</span>
+              <span className="text-[10px] font-semibold tracking-widest text-cream/50">LEFT</span>
+              <span className={`text-sm ${hud.zone.outside ? 'font-bold text-orange' : 'text-cream/80'}`}>
+                {hud.zone.outside ? 'Outside the Deadline!' : hud.zone.label}
+                {hud.zone.seconds > 0 && <span className="ml-2 font-display text-gold">{hud.zone.seconds}s</span>}
+              </span>
+            </div>
+          </div>
+
+          {/* Kill feed */}
+          <div className="pointer-events-none absolute right-4 top-3 flex flex-col items-end gap-1 text-xs">
+            {hud.feed.map((k) => (
+              <span key={k.id} className="rounded bg-ink-deep/80 px-2 py-0.5 text-cream/80">
+                {k.text}
+              </span>
+            ))}
+          </div>
+
+          {/* Prompt */}
+          {hud.prompt && !over && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-24 flex justify-center">
+              <span className="panel-cut bg-ink-deep/85 px-4 py-1.5 text-sm text-cream">{hud.prompt}</span>
+            </div>
+          )}
+
+          {/* Controls */}
+          <div className="pointer-events-none absolute bottom-3 left-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-cream/50">
+            <span className="flex items-center gap-1">
+              <Key k="W" />
+              <Key k="A" />
+              <Key k="S" />
+              <Key k="D" /> move
+            </span>
+            <span className="flex items-center gap-1">
+              <Key k="Space" /> shoot / jump
+            </span>
+            <span className="flex items-center gap-1">
+              <Key k="Q" /> super
+            </span>
+            <span className="flex items-center gap-1">
+              <Key k="E" /> pick up / use
+            </span>
+            <span className="flex items-center gap-1">
+              <Key k="M" /> mute
+            </span>
+            <span>{hud.fps} fps</span>
+          </div>
+
+          {/* Result */}
+          {over && (
+            <div className="absolute inset-0 flex items-center justify-center bg-ink-deep/70">
+              <div className="panel-cut flex w-[26rem] flex-col items-center gap-3 bg-ink p-8 text-center">
+                <div className="text-xs font-bold tracking-[0.3em] text-blue">{hud.won ? 'SHIPPED' : 'ROUND OVER FOR YOU'}</div>
+                <div className="font-display text-4xl text-gold">{hud.won ? 'Last commit standing' : `#${hud.placement} of 10`}</div>
+                <div className="flex gap-6 text-sm text-cream/80">
+                  <span>
+                    <b className="font-display text-xl text-cream">{hud.kills}</b> KOs
+                  </span>
+                  <span>
+                    <b className="font-display text-xl text-cream">{hud.damage}</b> damage
+                  </span>
+                </div>
+                <button type="button" onClick={onExit} className="panel-cut mt-2 w-full bg-gold px-5 py-2 font-bold uppercase tracking-wider text-ink-deep">
+                  Back to lobby
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </main>
+  );
+};

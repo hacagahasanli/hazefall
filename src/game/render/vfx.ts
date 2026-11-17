@@ -68,7 +68,7 @@ export const createVfx = (scene: THREE.Scene) => {
     y: number,
     count: number,
     color: ParticleColor,
-    opts: { speed?: number; up?: number; gravity?: number; life?: number; size?: number; dirX?: number } = {},
+    opts: { speed?: number; up?: number; gravity?: number; life?: number; size?: number; dirX?: number; z?: number } = {},
   ) => {
     const { speed = 6, up = 3, gravity = 18, life = 0.5, size = 1, dirX = 0 } = opts;
     for (let i = 0; i < count; i++) {
@@ -82,19 +82,19 @@ export const createVfx = (scene: THREE.Scene) => {
       p.gravity = gravity;
       p.spin = (Math.random() - 0.5) * 20;
       p.mesh.material = mats[color];
-      p.mesh.position.set(x, y, (Math.random() - 0.5) * 0.4);
+      p.mesh.position.set(x, y, (opts.z ?? 0) + (Math.random() - 0.5) * 0.4);
       p.mesh.scale.setScalar(size * (0.6 + Math.random() * 0.8));
       p.mesh.visible = true;
     }
   };
 
-  const ring = (x: number, y: number, color: number, opts: { grow?: number; life?: number; facing?: number } = {}) => {
+  const ring = (x: number, y: number, color: number, opts: { grow?: number; life?: number; facing?: number; z?: number; flat?: boolean } = {}) => {
     const r = rings[nextRing++ % rings.length];
     r.life = r.max = opts.life ?? 0.35;
     r.grow = opts.grow ?? 8;
-    r.mesh.position.set(x, y, 0.2);
-    // A push ring stands up facing the push direction; others face the camera.
-    r.mesh.rotation.set(0, opts.facing ? Math.PI / 2 : 0, 0);
+    r.mesh.position.set(x, y, opts.z ?? 0.2);
+    // A push ring stands up facing the push direction; flat rings lie on the floor; others face the camera.
+    r.mesh.rotation.set(opts.flat ? -Math.PI / 2 : 0, opts.facing ? Math.PI / 2 : 0, 0);
     (r.mesh.material as THREE.MeshBasicMaterial).color.setHex(color);
     r.mesh.scale.setScalar(0.3);
     r.mesh.visible = true;
