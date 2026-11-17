@@ -13,6 +13,9 @@ import { buildGun } from './guns';
 import { mat, mesh, PALETTE } from './palette';
 import { createVfx } from './vfx';
 import { setPeople } from './nature';
+import { buildChute } from './chute';
+import { paintMapImage } from './mapImage';
+import { buildPlane } from './plane';
 import { buildProps } from './props';
 import { buildWorld } from './world';
 
@@ -170,58 +173,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   scene.add(nextRing);
 
   // ---------- the plane: a high-wing cargo plane in studio colours, four props
-  const drone = new THREE.Group();
-  {
-    const body = mat(PALETTE.paper);
-    const trim = mat(0xff3d6e);
-    const fuselage = mesh(new THREE.CylinderGeometry(1.5, 1.3, 16, 12), body);
-    fuselage.rotation.z = Math.PI / 2;
-    drone.add(fuselage);
-    const nose = mesh(new THREE.SphereGeometry(1.5, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), body);
-    nose.rotation.z = -Math.PI / 2;
-    nose.position.x = 8;
-    drone.add(nose);
-    const cockpit = mesh(new THREE.BoxGeometry(1.6, 0.7, 2.2), new THREE.MeshStandardMaterial({ color: 0x1b2a44, roughness: 0.2, metalness: 0.4 }));
-    cockpit.position.set(7.4, 0.9, 0);
-    drone.add(cockpit);
-    const tail = mesh(new THREE.ConeGeometry(1.3, 5, 12), body);
-    tail.rotation.z = Math.PI / 2;
-    tail.position.set(-10.5, 0.4, 0);
-    drone.add(tail);
-    const stripe = mesh(new THREE.CylinderGeometry(1.52, 1.52, 1.2, 12), trim);
-    stripe.rotation.z = Math.PI / 2;
-    stripe.position.x = 3;
-    drone.add(stripe);
-    const wing = mesh(new THREE.BoxGeometry(3.4, 0.35, 26), body);
-    wing.position.set(1.5, 1.4, 0);
-    drone.add(wing);
-    for (const z of [-12.6, 12.6]) {
-      const tip = mesh(new THREE.BoxGeometry(3.4, 0.38, 0.6), trim);
-      tip.position.set(1.5, 1.4, z);
-      drone.add(tip);
-    }
-    const fin = mesh(new THREE.BoxGeometry(3, 4, 0.3), body);
-    fin.position.set(-11, 2.6, 0);
-    drone.add(fin);
-    const finTip = mesh(new THREE.BoxGeometry(3, 0.9, 0.32), trim);
-    finTip.position.set(-11, 4.2, 0);
-    drone.add(finTip);
-    const stab = mesh(new THREE.BoxGeometry(2.4, 0.25, 9), body);
-    stab.position.set(-11.3, 0.8, 0);
-    drone.add(stab);
-    for (const z of [-8.5, -4.2, 4.2, 8.5]) {
-      const nacelle = mesh(new THREE.CylinderGeometry(0.6, 0.55, 3, 10), mat(PALETTE.inkSoft));
-      nacelle.rotation.z = Math.PI / 2;
-      nacelle.position.set(2.6, 1, z);
-      drone.add(nacelle);
-      const prop = new THREE.Mesh(new THREE.CircleGeometry(1.7, 20), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22, side: THREE.DoubleSide }));
-      prop.rotation.y = Math.PI / 2;
-      prop.position.set(4.15, 1, z);
-      prop.userData.rotor = true;
-      drone.add(prop);
-    }
-    drone.traverse((o) => o instanceof THREE.Mesh && (o.castShadow = true));
-  }
+  const drone = buildPlane();
   scene.add(drone);
 
   // ---------- clouds: a broken layer between the plane and the ground; you fall through it
@@ -264,34 +216,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     scene.add(r.root);
     return r;
   });
-  // Parachutes hang from a point at the jumper's raised hands (the group's origin), so the
-  // canopy and the body always move together; the lines run from the canopy rim to the hands.
-  const CHUTE_UP = 4.2;
-  const lineMat = new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.6 });
+  // Parachutes hang from a point at the jumper's raised hands (see chute.ts).
   const chutes = state.players.map((p) => {
-    const g = new THREE.Group();
-    const colors = [FIGHTERS[p.fighter].color, '#f4f6fb'];
-    for (let i = 0; i < 8; i++) {
-      const panel = new THREE.Mesh(
-        new THREE.SphereGeometry(2.6, 4, 6, (i / 8) * Math.PI * 2, Math.PI / 4, 0, Math.PI / 2.6),
-        new THREE.MeshStandardMaterial({ color: colors[i % 2], flatShading: true, side: THREE.DoubleSide, transparent: true }),
-      );
-      panel.scale.y = 0.55;
-      panel.position.y = CHUTE_UP;
-      panel.castShadow = true;
-      g.add(panel);
-    }
-    const end = new THREE.Vector3(0, 0, 0);
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-      const start = new THREE.Vector3(Math.cos(a) * 2.35, CHUTE_UP + 0.35, Math.sin(a) * 2.35);
-      const len = start.distanceTo(end);
-      const line = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, len, 4), lineMat);
-      line.position.copy(start).add(end).multiplyScalar(0.5);
-      line.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), start.clone().sub(end).normalize());
-      line.userData.line = true;
-      g.add(line);
-    }
+    const g = buildChute(FIGHTERS[p.fighter].color);
     g.visible = false;
     scene.add(g);
     return g;
@@ -760,21 +687,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   // ---------- minimap
   const mm = opts.minimap;
   const mmCtx = mm.getContext('2d')!;
-  const mmBase = (() => {
-    const c = document.createElement('canvas');
-    c.width = c.height = SIZE * 4;
-    const g = c.getContext('2d')!;
-    for (let ty = 0; ty < SIZE; ty++) {
-      for (let tx = 0; tx < SIZE; tx++) {
-        const t = MAP[ty][tx];
-        g.fillStyle =
-          t === '#' || t === 'w' ? '#e8dcc4' : t === 'o' ? '#3f7fb5' : t === 'h' ? '#9aa84a' : t === 'v' ? '#9aa0ab' : t === 'd' ? '#9a7048' : t === '.' || t === 'l' || t === 'u' ? '#b89a72' : t === 't' ? '#2f6a32' : t === 'b' ? '#4f9a48'
-            : t === 'c' ? '#c9c06a' : t === 'k' ? '#8a8a8a' : t === 'a' ? '#4a4f5e' : t === 'p' ? '#a8865a' : t === 'f' ? '#7a5a3a' : '#5a9a50';
-        g.fillRect(tx * 4, ty * 4, 4, 4);
-      }
-    }
-    return c;
-  })();
+  const mmBase = paintMapImage(4);
   const drawMinimap = () => {
     const s = mm.width / WORLD;
     mmCtx.drawImage(mmBase, 0, 0, mm.width, mm.height);
