@@ -68,6 +68,9 @@ export interface Player {
   pushing: number;
   /** Leaning: -1 (left) .. 1 (right), eased towards the input. */
   lean: number;
+  /** Holding to throw a rocket or a bomb farther: seconds held, and what is being charged. */
+  charge: number;
+  charging: 'rockets' | 'bomb' | null;
   kills: number;
   damage: number;
   placement: number; // 0 while alive

@@ -1,6 +1,6 @@
 import { createBot } from './bot';
 import { BUILDINGS, DROP, DT, MAP, PLAYER_RADIUS, SHAPES, SIZE, TILE, treeSpot, WEAPONS, WORLD, ZONE_PHASES } from './constants';
-import { circleBlocked, createGame, falloffDamage, hitPoint, lootUnder, solidAt, step } from './step';
+import { circleBlocked, createGame, falloffDamage, hitPoint, inPlant, lootUnder, solidAt, step } from './step';
 import { NO_INPUT } from './types';
 
 import type { GameState, Input } from './types';
@@ -173,6 +173,30 @@ describe('loot and fighting', () => {
     expect(falloffDamage('pistol', 34, 25)).toBeLessThan(34);
     expect(Math.ceil(100 / WEAPONS.pistol.damage)).toBe(3);
     expect(WEAPONS.rifle.range).toBeGreaterThan(100);
+  });
+
+  it('rockets: a tap throws close, holding Space throws up to the full range', () => {
+    const throwAfter = (ticks: number) => {
+      const s = landed();
+      clearAround(s);
+      const p = s.players[0];
+      Object.assign(p, { weapon: 'rockets', mag: 1, ammo: 0, cooldown: 0, heading: 0 });
+      const hold = idle();
+      hold[0] = { ...NO_INPUT, fire: true, aimX: p.x + 10, aimY: p.y };
+      for (let i = 0; i < ticks; i++) step(s, hold);
+      step(s, idle());
+      const pr = s.projectiles.find((q) => q.kind === 'lob' && q.owner === 0)!;
+      return Math.hypot(pr.tx - pr.sx, pr.ty - pr.sy);
+    };
+    expect(throwAfter(2)).toBeLessThan(5);
+    expect(throwAfter(90)).toBeCloseTo(WEAPONS.rockets.range, 0);
+  });
+
+  it('tall grass hides you like a bush', () => {
+    const ty = MAP.findIndex((row) => row.includes('h'));
+    expect(ty).toBeGreaterThan(0);
+    const tx = MAP[ty].indexOf('h');
+    expect(inPlant(tx * TILE + 1, ty * TILE + 1)).toBe(true);
   });
 
   it('leaning moves the exposed shoulder (and the muzzle) out to the side', () => {

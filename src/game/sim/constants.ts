@@ -21,7 +21,7 @@ export const PLAYERS = 10;
 //   l loot inside a building    s loot outdoors
 //   u furniture (blocks you, not bullets; placed so every room stays reachable)
 //   v vehicle / container / big prop (blocks both: cover)    o water (blocks you, not bullets)
-//   d wooden pier (walkable)
+//   d wooden pier (walkable)    h tall grass (walk through it, it hides you like a bush)
 // ---------------------------------------------------------------------------
 
 export interface District {
@@ -401,6 +401,21 @@ const buildMap = () => {
     set(x, y, k < 0.45 ? 't' : k < 0.85 ? 'b' : 'k');
   }
 
+  // Meadows of tall grass you can crawl through unseen.
+  for (let i = 0, made = 0; i < 80 && made < 14; i++) {
+    const cx = ri(6, SIZE - 7);
+    const cy = ri(6, SIZE - 7);
+    if (get(cx, cy) !== 'g') continue;
+    const rx = 1.5 + r() * 2.5;
+    const ry = 1.5 + r() * 2.5;
+    for (let y = Math.floor(cy - ry); y <= cy + ry; y++) {
+      for (let x = Math.floor(cx - rx); x <= cx + rx; x++) {
+        if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1 + (r() - 0.5) * 0.4 && get(x, y) === 'g') set(x, y, 'h');
+      }
+    }
+    made += 1;
+  }
+
   // Every door opens onto open ground: clear two tiles in front of it of fences, trees, rocks
   // and crates that the yards, farms and lone trees may have put there.
   for (const b of buildings) {
@@ -529,6 +544,9 @@ export const LOOT_TABLE: string[] = [
   'bomb', 'bomb',
   'ammo', 'ammo', 'ammo', 'ammo', 'ammo',
 ];
+
+/** Rockets and bombs: hold to throw farther, from `min` metres up to the weapon's range after `full` seconds. */
+export const THROW = { min: 4, full: 1.2 };
 
 /** An ammo box gives the gun in your hands this many magazines of spare rounds. */
 export const AMMO_BOX_MAGS = 2;

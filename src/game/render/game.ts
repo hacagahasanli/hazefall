@@ -4,11 +4,11 @@ import { createSfx } from '../sfx';
 
 import type { VolumeKind } from '../sfx';
 import { createBot } from '../sim/bot';
-import { ARMOR, AUTO_AIM_RANGE, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, MAP, SIZE, SUPERS, TILE, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
-import { canSee, createGame, inPlant, lineOfSight, lootUnder, step } from '../sim/step';
+import { ARMOR, AUTO_AIM_RANGE, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, ITEMS, MAP, SIZE, SUPERS, TILE, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
+import { canSee, createGame, inPlant, lineOfSight, lootUnder, step, throwDistance } from '../sim/step';
 import { NO_INPUT } from '../sim/types';
 
-import { buildRig, poseChute, poseRig, poseTopDown } from './characters';
+import { buildRig, poseChute, poseFreefall, poseRig, poseTopDown } from './characters';
 import { buildGun } from './guns';
 import { mat, mesh, PALETTE } from './palette';
 import { createVfx } from './vfx';
@@ -264,6 +264,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     scene.add(r.root);
     return r;
   });
+  // Parachutes hang from a point at the jumper's raised hands (the group's origin), so the
+  // canopy and the body always move together; the lines run from the canopy rim to the hands.
+  const CHUTE_UP = 4.2;
+  const lineMat = new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.6 });
   const chutes = state.players.map((p) => {
     const g = new THREE.Group();
     const colors = [FIGHTERS[p.fighter].color, '#f4f6fb'];
@@ -273,12 +277,20 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         new THREE.MeshStandardMaterial({ color: colors[i % 2], flatShading: true, side: THREE.DoubleSide, transparent: true }),
       );
       panel.scale.y = 0.55;
+      panel.position.y = CHUTE_UP;
+      panel.castShadow = true;
       g.add(panel);
     }
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2;
-      const pts = [new THREE.Vector3(Math.cos(a) * 2.2, 0.3, Math.sin(a) * 2.2), new THREE.Vector3(0, -3.4, 0)];
-      g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x0a0d18 })));
+    const end = new THREE.Vector3(0, 0, 0);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+      const start = new THREE.Vector3(Math.cos(a) * 2.35, CHUTE_UP + 0.35, Math.sin(a) * 2.35);
+      const len = start.distanceTo(end);
+      const line = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, len, 4), lineMat);
+      line.position.copy(start).add(end).multiplyScalar(0.5);
+      line.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), start.clone().sub(end).normalize());
+      line.userData.line = true;
+      g.add(line);
     }
     g.visible = false;
     scene.add(g);
@@ -399,6 +411,40 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     scene.add(m);
     return m;
   });
+
+  // ---------- throw preview: while you hold a rocket or a bomb, a dotted arc and a red landing
+  // circle the size of the blast show where it will come down
+  const arcDots = Array.from({ length: 22 }, () => {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff5a3d, transparent: true, opacity: 0.85 }));
+    m.visible = false;
+    scene.add(m);
+    return m;
+  });
+  const landRing = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff3d3d, transparent: true, opacity: 0.9, depthWrite: false }));
+  const landDisc = new THREE.Mesh(new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff3d3d, transparent: true, opacity: 0.2, depthWrite: false }));
+  landRing.visible = landDisc.visible = false;
+  scene.add(landRing, landDisc);
+  const updateThrowPreview = (self: Player, x: number, y: number) => {
+    const on = self.alive && self.stage === 'ground' && self.charging !== null;
+    landRing.visible = landDisc.visible = on;
+    arcDots.forEach((d) => (d.visible = on));
+    if (!on) return;
+    const range = self.charging === 'bomb' ? ITEMS.bomb.range : WEAPONS[self.weapon].range;
+    const radius = self.charging === 'bomb' ? ITEMS.bomb.radius : WEAPONS[self.weapon].lob?.radius ?? 2;
+    const d = throwDistance(self.charge, range);
+    const tx = x + Math.cos(self.heading) * d;
+    const ty = y + Math.sin(self.heading) * d;
+    // The same arc the projectile flies (see the lob drawing below).
+    arcDots.forEach((dot, k) => {
+      const t = (k + 1) / (arcDots.length + 1);
+      dot.position.set(x + (tx - x) * t, 1 + 4 * t * (1 - t) * 5, y + (ty - y) * t);
+    });
+    const pulse = 1 + Math.sin(time * 10) * 0.04;
+    landRing.position.set(tx, 0.08, ty);
+    landDisc.position.set(tx, 0.07, ty);
+    landRing.scale.setScalar(radius * pulse);
+    landDisc.scale.setScalar(radius * pulse);
+  };
 
   // ---------- input: keyboard; aim is automatic unless mouse aim is on
   const keys = new Set<string>();
@@ -576,7 +622,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const steps = state.players.map(() => 0);
   const surfaceAt = (x: number, y: number) => {
     const t = MAP[Math.floor(y / TILE)]?.[Math.floor(x / TILE)] ?? 'g';
-    return t === 'a' ? 'hard' : '.lud'.includes(t) ? 'wood' : t === 'p' ? 'dirt' : 'bc'.includes(t) ? 'leaves' : 'grass';
+    return t === 'a' ? 'hard' : '.lud'.includes(t) ? 'wood' : t === 'p' ? 'dirt' : 'bch'.includes(t) ? 'leaves' : 'grass';
   };
   /** Visual yaw per player (angle and angular velocity) and when each last fired. */
   const yaw = state.players.map((p) => ({ a: p.heading, v: 0 }));
@@ -590,10 +636,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const g = chutes[i].clone(true);
     g.traverse((o) => {
       if (o instanceof THREE.Mesh) o.material = (o.material as THREE.Material).clone();
-      if (o instanceof THREE.Line) o.visible = false;
+      if (o.userData.line) o.visible = false;
     });
     g.visible = true;
-    g.position.set(x, 5.2, y);
+    g.position.set(x, 1, y);
     g.userData.from = { x, y };
     scene.add(g);
     groundChutes.push({ g, t: 0, dir: Math.hypot(p.vx, p.vy) > 0.3 ? Math.atan2(p.vy, p.vx) : p.heading + Math.PI });
@@ -607,7 +653,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const fall = Math.min(1, c.t / 1.4);
       const e = 1 - (1 - fall) * (1 - fall);
       const from = c.g.userData.from as { x: number; y: number };
-      c.g.position.set(from.x + Math.cos(c.dir) * 3 * e, 5.2 * (1 - e) + 0.06, from.y + Math.sin(c.dir) * 3 * e);
+      c.g.position.set(from.x + Math.cos(c.dir) * 3 * e, 1 - e, from.y + Math.sin(c.dir) * 3 * e);
       c.g.rotation.set(Math.sin(c.t * 2) * 0.1 * (1 - e), 0, (1 - e) * 0.3);
       c.g.scale.set(1 + e * 0.1, 1 - e * 0.92, 1 + e * 0.1);
       const fade = c.t > 8 ? 1 - (c.t - 8) / 2 : 1;
@@ -714,7 +760,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       for (let tx = 0; tx < SIZE; tx++) {
         const t = MAP[ty][tx];
         g.fillStyle =
-          t === '#' || t === 'w' ? '#e8dcc4' : t === 'o' ? '#3f7fb5' : t === 'v' ? '#9aa0ab' : t === 'd' ? '#9a7048' : t === '.' || t === 'l' || t === 'u' ? '#b89a72' : t === 't' ? '#2f6a32' : t === 'b' ? '#4f9a48'
+          t === '#' || t === 'w' ? '#e8dcc4' : t === 'o' ? '#3f7fb5' : t === 'h' ? '#9aa84a' : t === 'v' ? '#9aa0ab' : t === 'd' ? '#9a7048' : t === '.' || t === 'l' || t === 'u' ? '#b89a72' : t === 't' ? '#2f6a32' : t === 'b' ? '#4f9a48'
             : t === 'c' ? '#c9c06a' : t === 'k' ? '#8a8a8a' : t === 'a' ? '#4a4f5e' : t === 'p' ? '#a8865a' : t === 'f' ? '#7a5a3a' : '#5a9a50';
         g.fillRect(tx * 4, ty * 4, 4, 4);
       }
@@ -774,6 +820,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
   const prev = state.players.map((p) => ({ x: p.x, y: p.y, fall: p.fall }));
   let fallTime = 0;
+  let shadowWide = false;
   /** Dev only: ?cam=near brings the camera close to check animation. */
   const camNear = process.env.NODE_ENV !== 'production' && new URLSearchParams(window.location.search).get('cam') === 'near' ? 0.12 : 1;
   const camFocus = new THREE.Vector3(state.players[me].x, 0, state.players[me].y);
@@ -858,6 +905,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         const c = Math.cos(yw.a);
         const sn = Math.sin(yw.a);
         poseChute(rig, { dt, time, seed: i, steerX: -p.vx * sn + p.vy * c, steerZ: p.vx * c + p.vy * sn, shooting: sinceShot < 1.5 });
+      } else if (p.stage === 'falling') {
+        poseFreefall(rig, { dt, time, seed: i });
       } else {
         poseRig(rig, {
           dt, time, vx: 0, vy: 0, onGround: false, facing: 1, aim: 0, sideways: false, wall: 0, dashing: false, stunned: false,
@@ -865,11 +914,6 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         });
       }
       rig.root.rotation.y = Math.PI / 2 - yw.a;
-      if (p.stage === 'falling' && !chuteOpen) {
-        // Spread out, head first, steady (a slow gentle drift, no shaking).
-        rig.body.rotation.x = 1.25;
-        rig.body.rotation.z = Math.sin(time * 0.8 + i) * 0.04;
-      }
 
       // Footsteps, at each footfall of the stride: yours and everyone near you, panned left or right.
       if (p.stage === 'ground' && p.alive && p.vault <= 0) {
@@ -888,10 +932,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       setFlash(rig, hitFlash[i] > 0);
       rig.root.updateMatrixWorld(true);
       if (chutes[i].visible) {
-        // The canopy sways and tips the way you steer.
-        chutes[i].position.set(x, h + 5.2, y);
-        chutes[i].rotation.z = Math.sin(time * 1.3 + i) * 0.06 - p.vx * 0.035;
-        chutes[i].rotation.x = p.vy * 0.035;
+        // Hung from the hands: the same point as the body, turned with it, tipped the way you steer.
+        chutes[i].position.set(x, h + rig.chestY + 0.95, y);
+        chutes[i].rotation.set(p.vy * 0.03, Math.PI / 2 - yw.a, Math.sin(time * 1.3 + i) * 0.05 - p.vx * 0.03, 'YXZ');
       }
 
       // Gun in hand.
@@ -924,6 +967,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       bar.armor.visible = p.armor > 0;
     });
     world.update(state, self.x, self.y);
+    updateThrowPreview(self, selfX, selfY);
     setPeople(state.players.filter((q) => q.alive && q.stage === 'ground').map((q) => ({ x: q.x, y: q.y })));
 
     // Loot.
@@ -1031,20 +1075,37 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // Wider lens and see-through clouds while you pick your spot from the plane.
     const overview = self.stage === 'drone' && state.phase === 'drop';
     const fov = THREE.MathUtils.damp(camera.fov, overview ? 52 : 42, 3, dt);
-    if (Math.abs(fov - camera.fov) > 0.01) {
+    // Far away above the map, a nearer near-plane wastes depth precision and the ground and the
+    // roads fight (flicker); push it out while in the overview.
+    const near = overview ? 4 : camNear < 1 ? 0.05 : 0.5;
+    if (Math.abs(fov - camera.fov) > 0.01 || camera.near !== near) {
       camera.fov = fov;
+      camera.near = near;
       camera.updateProjectionMatrix();
     }
     // Clouds: see-through from the plane, a thin mist while you fall through them (no white-out),
     // solid again once you're on the ground and they're only sky.
     cloudMat.opacity = THREE.MathUtils.damp(cloudMat.opacity, overview ? 0.22 : self.stage === 'falling' ? 0.1 : 0.92, 5, dt);
-    cloudMat.depthWrite = cloudMat.opacity > 0.8;
+    cloudMat.depthWrite = false;
     camera.position.set(camPos.x + n(23, 1) * 0.5 * shake, camPos.y, camPos.z + n(19, 4) * 0.4 * shake);
     camera.lookAt(camLook);
     camFocus.set(camLook.x, 0, camLook.z);
     trauma = Math.max(0, trauma - dt * 1.5);
-    sun.position.set(camFocus.x - 20, 60, camFocus.z + 14);
-    sun.target.position.set(camFocus.x, 0, camFocus.z);
+    // Shadows: from the plane one fixed box over the whole map (a box that followed the camera made
+    // shadows pop in and out across the map: the flicker); on the ground a box around you that
+    // moves in steps of one shadow texel, so edges don't shimmer.
+    const wide = overview;
+    if (wide !== shadowWide) {
+      shadowWide = wide;
+      const half = wide ? WORLD * 0.62 : 40;
+      Object.assign(sun.shadow.camera, { left: -half, right: half, top: half, bottom: -half, far: wide ? 400 : 160 });
+      sun.shadow.camera.updateProjectionMatrix();
+    }
+    const texel = (wide ? WORLD * 1.24 : 80) / 2048;
+    const fxs = wide ? WORLD / 2 : Math.round(camFocus.x / texel) * texel;
+    const fzs = wide ? WORLD / 2 : Math.round(camFocus.z / texel) * texel;
+    sun.position.set(fxs - 20, wide ? 160 : 60, fzs + 14);
+    sun.target.position.set(fxs, 0, fzs);
 
     vfx.update(dt);
     updateDamage(dt);
@@ -1076,10 +1137,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         ? 'Space · jump'
         : k
           ? `F · pick up ${LOOT_NAME[k.kind]}`
+          : self.charging
+            ? 'Hold to throw farther · let go to throw'
+            : self.weapon === 'rockets' && self.mag > 0
+              ? 'Hold Space to aim the rocket, let go to fire'
           : self.weapon !== 'fists' && self.mag + self.ammo === 0
             ? 'Out of ammo · find an ammo box or another gun'
             : self.item
-              ? `F · use ${self.item === 'bomb' ? 'bomb' : 'med kit'}`
+              ? self.item === 'bomb' ? 'Hold F to throw the bomb' : 'F · use med kit'
               : null;
     opts.onHud({
       phase: state.phase,

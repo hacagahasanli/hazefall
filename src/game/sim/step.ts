@@ -7,6 +7,7 @@ import {
   fenceVertical,
   LEAN,
   START_WEAPON,
+  THROW,
   MOVE,
   SHAPES,
   treeSpot,
@@ -51,7 +52,10 @@ const isWeapon = (k: LootKind): k is Exclude<WeaponKind, 'fists'> => k in WEAPON
 // ---------- the map
 
 /** Bushes and crops hide you. */
-export const inPlant = (x: number, y: number) => 'bc'.includes(tileAt(toTile(x), toTile(y)));
+export const inPlant = (x: number, y: number) => 'bch'.includes(tileAt(toTile(x), toTile(y)));
+
+/** How far a rocket or bomb held for `charge` seconds will go (metres). */
+export const throwDistance = (charge: number, range: number) => THROW.min + (range - THROW.min) * Math.min(1, charge / THROW.full);
 
 const boxHit = (x: number, y: number, r: number, x0: number, y0: number, x1: number, y1: number) => {
   if (r === 0) return x >= x0 && x <= x1 && y >= y0 && y <= y1;
@@ -351,6 +355,8 @@ const newPlayer = (id: number, name: string, fighter: FighterId, bot: boolean, x
   vaultTo: { x, y },
   pushing: 0,
   lean: 0,
+  charge: 0,
+  charging: null,
   kills: 0,
   damage: 0,
   placement: 0,
@@ -802,13 +808,48 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     if (pushingInto && p.pushing >= VAULT.after) tryVault(state, p, -cx / c, -cy / c);
   }
 
-  if (input.fire && p.cooldown <= 0) shoot(state, p, input);
+  // People charge rockets and bombs: hold to throw farther, let go to throw. Bots throw at once.
+  const rocketReady = WEAPONS[p.weapon].lob && p.mag > 0 && p.reload <= 0;
+  if (!p.bot && rocketReady && (input.fire || p.charging === 'rockets')) {
+    if (input.fire && p.cooldown <= 0) {
+      p.charging = 'rockets';
+      p.charge += DT;
+    } else if (!input.fire && p.charging === 'rockets') {
+      const w = WEAPONS[p.weapon];
+      const d = throwDistance(p.charge, w.range);
+      lob(state, p, p.x + Math.cos(p.heading) * d, p.y + Math.sin(p.heading) * d, w.range, w.damage, w.lob!.radius);
+      p.cooldown = w.rate;
+      p.revealed = 1;
+      p.mag -= 1;
+      state.events.push({ type: 'shot', owner: p.id, x: p.x, y: p.y, angle: p.heading, weapon: p.weapon });
+      if (p.mag <= 0) startReload(state, p);
+      p.charge = 0;
+      p.charging = null;
+    }
+  } else if (input.fire && p.cooldown <= 0) shoot(state, p, input);
   else if (input.fire && p.weapon !== 'fists' && p.mag <= 0 && p.ammo <= 0 && !p.prev.fire) state.events.push({ type: 'dryFire', player: p.id });
+  if (p.charging === 'rockets' && !WEAPONS[p.weapon].lob) {
+    p.charging = null;
+    p.charge = 0;
+  }
   if (pressed('super') && p.superCharge >= 1 && p.dashTime <= 0) useSuper(state, p, input);
 
   const k = lootUnder(state, p);
   if (k && autoTakes(p, k)) takeLoot(state, p, k);
-  else if (pressed('use')) {
+  else if (!p.bot && p.item === 'bomb' && !k && (input.use || p.charging === 'bomb')) {
+    // A bomb: hold F to throw it farther, let go to throw.
+    if (input.use) {
+      p.charging = 'bomb';
+      p.charge += DT;
+    } else {
+      const d = throwDistance(p.charge, ITEMS.bomb.range);
+      lob(state, p, p.x + Math.cos(p.heading) * d, p.y + Math.sin(p.heading) * d, ITEMS.bomb.range, ITEMS.bomb.damage, ITEMS.bomb.radius);
+      p.revealed = 1;
+      p.item = null;
+      p.charge = 0;
+      p.charging = null;
+    }
+  } else if (pressed('use')) {
     if (k) takeLoot(state, p, k);
     else if (p.item) useItem(state, p, input);
   }

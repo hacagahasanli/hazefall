@@ -93,6 +93,7 @@ export const paintTerrain = () => {
   const soil = weightGrid((t) => t === 'c');
   const gravel = weightGrid((t) => t === 'k');
   const pond = weightGrid((t) => t === 'o' || t === 'd');
+  const meadow = weightGrid((t) => t === 'h');
   const floor = weightGrid((t, tx, ty) => '.lwr#u'.includes(t) && insideBuilding(tx, ty));
   const GRASS_A = [62, 112, 42];
   const GRASS_B = [98, 146, 58];
@@ -126,6 +127,8 @@ export const paintTerrain = () => {
       // The pond bed: dark mud under the water surface (props.ts), a muddy bank around it.
       const wPond = sstep(0.2, 0.55, sampleGrid(pond, tx, ty) + e * 0.5);
       if (wPond > 0) col = mix(col, mix([92, 84, 58], [38, 52, 48], sstep(0.5, 0.9, sampleGrid(pond, tx, ty))), wPond);
+      const wTall = sstep(0.35, 0.65, sampleGrid(meadow, tx, ty) + e);
+      if (wTall > 0) col = mix(col, [118, 128, 62], wTall * 0.7);
       const wGravel = sstep(0.3, 0.6, sampleGrid(gravel, tx, ty) + e);
       if (wGravel > 0) col = mix(col, mix(GRAVEL, DIRT, fine * 0.6), wGravel * 0.85);
       const wPath = sstep(0.4, 0.5, sampleGrid(path, tx, ty) + e);
@@ -532,6 +535,33 @@ export const buildGrass = () => {
   }
   const m = windy(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }), 0.25, 0, false, 0.9);
   const im = instanced(tuftGeo(), m, mats, false);
+  colors.forEach((c, i) => im.setColorAt(i, c));
+  return im;
+};
+
+/**
+ * Tall grass on the 'h' meadows: dense tufts 1.1-1.6 m high in straw and green, swaying more
+ * than the lawn and parting round anyone walking through (it hides you like a bush).
+ */
+export const buildTallGrass = () => {
+  const mats: THREE.Matrix4[] = [];
+  const colors: THREE.Color[] = [];
+  const r = rng(4096);
+  for (let ty = 0; ty < SIZE; ty++) {
+    for (let tx = 0; tx < SIZE; tx++) {
+      if (MAP[ty][tx] !== 'h') continue;
+      for (let i = 0; i < 22; i++) {
+        const x = tx * TILE + r() * TILE;
+        const y = ty * TILE + r() * TILE;
+        const s = 1.4 + r() * 0.8;
+        mats.push(placeMatrix(x, y, s, r() * Math.PI * 2, 3.2 + r() * 1.4));
+        const straw = r() < 0.4;
+        colors.push(new THREE.Color().setHSL(straw ? 0.12 + r() * 0.03 : 0.2 + r() * 0.05, straw ? 0.55 : 0.45, 0.85 + r() * 0.3));
+      }
+    }
+  }
+  const m = windy(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }), 0.12, 0, false, 1.1);
+  const im = instanced(tuftGeo(), m, mats, true);
   colors.forEach((c, i) => im.setColorAt(i, c));
   return im;
 };

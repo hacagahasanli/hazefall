@@ -22,8 +22,12 @@ export interface Rig {
   armLen: number;
   shoulderL: THREE.Vector3;
   shoulderR: THREE.Vector3;
+  /** Thighs (pivot at the hip) and shins (pivot at the knee). */
   legL: THREE.Group;
   legR: THREE.Group;
+  shinL: THREE.Group;
+  shinR: THREE.Group;
+  legLen: number;
   weapon: THREE.Group;
   hand: THREE.Object3D;
   chestY: number;
@@ -303,8 +307,31 @@ export const buildRig = (id: CharacterId): Rig => {
   armR.position.set(s.torsoW / 2 + s.armR, shoulderY, 0);
   body.add(armL, armR);
 
-  const legL = makeLimb(s.legLen, s.legR, s.pants, s.shoes, 'shoe');
-  const legR = makeLimb(s.legLen, s.legR, s.pants, s.shoes, 'shoe');
+  // Two-bone legs: a thigh and a shin hinged at the knee, the shoe on the shin.
+  const makeLeg = () => {
+    const half = s.legLen / 2;
+    const thigh = new THREE.Group();
+    const t = mesh(cyl(s.legR * 1.08, half + 0.02), mat(s.pants));
+    t.position.y = -half / 2;
+    thigh.add(t);
+    const knee = mesh(ico(s.legR * 1.05, 0), mat(s.pants));
+    knee.position.y = -half;
+    thigh.add(knee);
+    const shin = new THREE.Group();
+    shin.position.y = -half;
+    const sh = mesh(cyl(s.legR * 0.95, half), mat(s.pants));
+    sh.position.y = -half / 2;
+    shin.add(sh);
+    const shoe = mesh(box(s.legR * 2.2, s.legR * 1.2, s.legR * 3.2), mat(s.shoes));
+    shoe.position.set(0, -half, s.legR * 0.7);
+    shin.add(shoe);
+    thigh.add(shin);
+    return { thigh, shin };
+  };
+  const ll = makeLeg();
+  const lr = makeLeg();
+  const legL = ll.thigh;
+  const legR = lr.thigh;
   legL.position.set(-s.torsoW * 0.24, s.legLen, 0);
   legR.position.set(s.torsoW * 0.24, s.legLen, 0);
   body.add(legL, legR);
@@ -319,6 +346,7 @@ export const buildRig = (id: CharacterId): Rig => {
 
   return {
     root, body, armL, armR, foreL: left.fore, foreR: right.fore, armLen: s.armLen,
+    shinL: ll.shin, shinR: lr.shin, legLen: s.legLen,
     shoulderL: armL.position.clone(), shoulderR: armR.position.clone(),
     legL, legR, weapon, hand, chestY, phase: 0, turn: 0,
   };
@@ -526,6 +554,8 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
     const tuck = Math.sin(k * Math.PI);
     rig.legL.rotation.set(-1.6 * tuck, 0, 0);
     rig.legR.rotation.set(-1.4 * tuck, 0, 0);
+    rig.shinL.rotation.set(2.0 * tuck, 0, 0);
+    rig.shinR.rotation.set(1.8 * tuck, 0, 0);
     rig.armL.quaternion.setFromEuler(tmpE.set(-1.2 * tuck, 0, 0.3));
     rig.armR.quaternion.setFromEuler(tmpE.set(-1.2 * tuck, 0, -0.3));
     rig.foreL.quaternion.setFromEuler(tmpE.set(-1.4 * tuck, 0, 0));
@@ -537,25 +567,41 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
 
   // ---- legs: stride along the direction of travel; tucked during a vault.
   const along = Math.max(Math.abs(fwd), 0.25);
+  let kneeL: number;
+  let kneeR: number;
   if (p.vault !== null) {
     const tuck = Math.sin(Math.min(1, p.vault / 0.8) * Math.PI);
     rig.legL.rotation.x = damp(rig.legL.rotation.x, -1.3 * tuck, 25, dt);
     rig.legR.rotation.x = damp(rig.legR.rotation.x, -0.9 * tuck, 25, dt);
     rig.legL.rotation.z = damp(rig.legL.rotation.z, 0.5 * tuck, 25, dt);
     rig.legR.rotation.z = damp(rig.legR.rotation.z, 0.5 * tuck, 25, dt);
+    kneeL = 1.9 * tuck;
+    kneeR = 1.6 * tuck;
   } else {
-    rig.legL.rotation.x = damp(rig.legL.rotation.x, swing * 0.9 * along, 16, dt);
-    rig.legR.rotation.x = damp(rig.legR.rotation.x, -swing * 0.9 * along, 16, dt);
-    rig.legL.rotation.z = damp(rig.legL.rotation.z, swing * 0.45 * side, 16, dt);
-    rig.legR.rotation.z = damp(rig.legR.rotation.z, -swing * 0.45 * side, 16, dt);
+    // A real run cycle: the leg swinging through bends hard at the knee and lifts the foot; the
+    // standing leg stays nearly straight. Standing still: a ready stance, knees a little bent.
+    const c = running ? Math.cos(rig.phase) : 0;
+    const ready = 0.22;
+    rig.legL.rotation.x = damp(rig.legL.rotation.x, -swing * 1.0 * along - ready * 0.6, 16, dt);
+    rig.legR.rotation.x = damp(rig.legR.rotation.x, swing * 1.0 * along - ready * 0.6, 16, dt);
+    rig.legL.rotation.z = damp(rig.legL.rotation.z, -swing * 0.45 * side - 0.04, 16, dt);
+    rig.legR.rotation.z = damp(rig.legR.rotation.z, swing * 0.45 * side + 0.04, 16, dt);
+    kneeL = ready + (running ? Math.max(0, c) * 1.5 * amp + 0.15 * amp : 0);
+    kneeR = ready + (running ? Math.max(0, -c) * 1.5 * amp + 0.15 * amp : 0);
   }
+  rig.shinL.rotation.x = damp(rig.shinL.rotation.x, kneeL, 18, dt);
+  rig.shinR.rotation.x = damp(rig.shinR.rotation.x, kneeR, 18, dt);
+  // Keep the lower foot on the ground: the body drops as far as the bent legs shorten it.
+  const reachOf = (thigh: number, knee: number) => (Math.cos(thigh) + Math.cos(thigh + knee)) / 2;
+  const legDrop = rig.legLen * (1 - Math.max(reachOf(rig.legL.rotation.x, rig.shinL.rotation.x), reachOf(rig.legR.rotation.x, rig.shinR.rotation.x)));
 
   // ---- body: lean into the run, bank into turns, lean out (Q/E), the kick of the gun.
   const sinceShot = p.sinceShot;
   const kickT = sinceShot < 0.25 ? sinceShot / 0.25 : 1;
   // A kick that snaps back and settles with a small overshoot.
   const kick = (1 - kickT) * Math.cos(kickT * Math.PI * 1.5) * KICK[p.gun];
-  let leanX = p.dashing ? 0.45 : 0.14 * fwd * amp - kick * 0.07;
+  // Running leans the body into it like a soldier on the move; firing straightens it a little.
+  let leanX = p.dashing ? 0.45 : 0.26 * fwd * amp + 0.05 - kick * 0.07;
   let bank = Math.max(-0.18, Math.min(0.18, -p.yawRate * 0.035)) + 0.08 * side * amp - p.lean * 0.38;
   if (p.vault !== null) {
     // Swing over sideways with the weight on the planted hand.
@@ -567,7 +613,7 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   const breathe = running ? 0 : Math.sin(p.time * 2.1) * 0.012;
   rig.body.position.set(
     damp(rig.body.position.x, p.lean * 0.22, 10, dt),
-    running ? bob * 0.07 * amp : breathe,
+    (running ? bob * 0.06 * amp : breathe) - legDrop,
     -kick * 0.05,
   );
 
@@ -580,7 +626,10 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   const reloadTilt = r === null ? 0 : Math.sin(Math.min(1, r * 1.3) * Math.PI) * 0.55;
   rig.weapon.visible = p.gun !== 'fists' && p.vault === null;
   rig.weapon.position.set(h.x + sway * 0.4, rig.chestY + h.y + step - reloadTilt * 0.12, -Math.max(0, kick) * 0.12);
-  rig.weapon.rotation.x = damp(rig.weapon.rotation.x, -kick * 0.35 + sway * 0.4 + reloadTilt * 0.5, 30, dt);
+  // Running without firing for a moment: the gun drops to low ready, muzzle down; it comes up
+  // the moment you shoot.
+  const lowReady = running && sinceShot > 0.8 && p.gun !== 'pistol' ? 0.35 * amp : 0;
+  rig.weapon.rotation.x = damp(rig.weapon.rotation.x, -kick * 0.35 + sway * 0.4 + reloadTilt * 0.5 + lowReady, 30 - lowReady * 40, dt);
   rig.weapon.rotation.y = damp(rig.weapon.rotation.y, sway * 0.6, 10, dt);
   rig.weapon.rotation.z = damp(rig.weapon.rotation.z, reloadTilt * 0.6 + p.lean * 0.2, 12, dt);
   rig.hand.position.set(0, 0, h.grip);
@@ -640,8 +689,10 @@ export const poseChute = (rig: Rig, p: { dt: number; time: number; seed: number;
   rig.body.rotation.z = damp(rig.body.rotation.z, -p.steerX * 0.12, 4, dt);
   rig.body.rotation.y = 0;
   const dangle = Math.sin(time * 1.7 + seed) * 0.18;
-  rig.legL.rotation.set(dangle + 0.1, 0, 0.05);
-  rig.legR.rotation.set(-dangle * 0.8 + 0.15, 0, -0.05);
+  rig.legL.rotation.set(dangle - 0.1, 0, -0.05);
+  rig.legR.rotation.set(-dangle * 0.8 - 0.05, 0, 0.05);
+  rig.shinL.rotation.set(0.35 + dangle * 0.5, 0, 0);
+  rig.shinR.rotation.set(0.25 - dangle * 0.4, 0, 0);
   rig.armL.quaternion.setFromEuler(tmpE.set(Math.PI - 0.35, 0, -0.35));
   rig.foreL.quaternion.setFromEuler(tmpE.set(0.25, 0, 0));
   rig.weapon.visible = p.shooting;
@@ -657,4 +708,24 @@ export const poseChute = (rig: Rig, p: { dt: number; time: number; seed: number;
     rig.armR.quaternion.setFromEuler(tmpE.set(Math.PI - 0.35, 0, 0.35));
     rig.foreR.quaternion.setFromEuler(tmpE.set(0.25, 0, 0));
   }
+};
+
+/**
+ * Free fall, face down: arms out and bent up towards the sky, knees bent with the feet up behind,
+ * the limbs fluttering in the wind. The caller tips the root so the body lies flat.
+ */
+export const poseFreefall = (rig: Rig, p: { dt: number; time: number; seed: number }) => {
+  const f = Math.sin(p.time * 7 + p.seed) * 0.06;
+  rig.body.position.set(0, 0, 0);
+  rig.body.rotation.set(1.3, 0, Math.sin(p.time * 0.8 + p.seed) * 0.04);
+  rig.weapon.visible = false;
+  // Limbs in the body's frame: -z is the back, which faces the sky.
+  rig.armL.quaternion.setFromEuler(tmpE.set(0.55 + f, 0, -1.25));
+  rig.armR.quaternion.setFromEuler(tmpE.set(0.55 - f, 0, 1.25));
+  rig.foreL.quaternion.setFromEuler(tmpE.set(1.1, 0, 0));
+  rig.foreR.quaternion.setFromEuler(tmpE.set(1.1, 0, 0));
+  rig.legL.rotation.set(0.35 - f, 0, -0.25);
+  rig.legR.rotation.set(0.35 + f, 0, 0.25);
+  rig.shinL.rotation.set(1.25, 0, 0);
+  rig.shinR.rotation.set(1.25, 0, 0);
 };
