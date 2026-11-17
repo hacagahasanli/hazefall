@@ -237,7 +237,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     return g;
   };
   const tracers = Array.from({ length: 90 }, () => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.08, 0.08), new THREE.MeshBasicMaterial({ color: 0xffe9a0 }));
+    // A bright streak with a glowing core: reads as a bullet even from far away.
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(1.6, 0.07, 0.07),
+      new THREE.MeshBasicMaterial({ color: 0xfff2a0, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }),
+    );
     m.visible = false;
     scene.add(m);
     return m;
@@ -318,6 +322,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     switch (e.type) {
       case 'shot': {
         const d = Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y);
+        if (e.weapon !== 'fists') {
+          // Muzzle flash at the barrel, a brass casing kicked out to the side.
+          const mx = e.x + Math.cos(e.angle) * 0.9;
+          const my = e.y + Math.sin(e.angle) * 0.9;
+          vfx.burst(mx, 1.15, 5, 'spark', { z: my, speed: 3, up: 0.5, gravity: 0, life: 0.07, size: 1.6 });
+          vfx.burst(e.x - Math.sin(e.angle) * 0.4, 1.1, 1, 'ko', { z: e.y + Math.cos(e.angle) * 0.4, speed: 2.5, up: 3, gravity: 18, life: 0.6, size: 0.45 });
+        }
         if (d < 60) {
           // Fists: a short swoosh. Rockets: the synthesised launch. Guns: recorded shots.
           if (e.weapon === 'fists') sfx.dash(e.x - camX());
