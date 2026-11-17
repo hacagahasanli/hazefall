@@ -188,6 +188,12 @@ export const Match = ({ fighter, onExit }: { fighter: FighterId; onExit: () => v
               </div>
               {hud.superCharge >= 1 && <span className="font-bold text-gold">ready</span>}
             </div>
+            <div className="flex items-center gap-2 text-[11px]">
+              <span className="text-cream/60">Shift · Roll</span>
+              <div className="h-1.5 w-28 overflow-hidden rounded bg-cream/15">
+                <div className="h-full" style={{ width: `${Math.min(1, hud.roll) * 100}%`, background: hud.roll >= 1 ? '#3ec5ff' : '#8b93ad' }} />
+              </div>
+            </div>
           </div>
 
           {/* Deadline and players left */}
@@ -241,6 +247,9 @@ export const Match = ({ fighter, onExit }: { fighter: FighterId; onExit: () => v
             </span>
             <span className="flex items-center gap-1">
               <Key k="R" /> reload
+            </span>
+            <span className="flex items-center gap-1">
+              <Key k="Shift" /> roll
             </span>
             <span className="flex items-center gap-1">
               <Key k="T" /> {hud.aimMode === 'mouse' ? 'mouse aim' : 'auto-aim'}

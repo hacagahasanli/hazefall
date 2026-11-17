@@ -300,6 +300,29 @@ describe('moving among things', () => {
     expect(p.x - x0).toBeGreaterThan(1);
   });
 
+  it('Shift rolls about 4 m the way you move, recharges for 3 s, and dodges bullets early on', () => {
+    const s = landed();
+    clearAround(s);
+    const w = findTile('g', (tx, ty) => [0, 1, 2, 3, 4].every((i) => open(tx + i, ty) && open(tx + i, ty - 1) && open(tx + i, ty + 1)));
+    const p = s.players[0];
+    Object.assign(p, { x: w.tx * TILE + 1, y: w.ty * TILE + 1, vx: 0, vy: 0 });
+    const x0 = p.x;
+    const roll = idle();
+    roll[0] = { ...NO_INPUT, mx: 1, roll: true };
+    step(s, roll);
+    expect(p.rolling).toBeGreaterThan(0);
+    // A bullet straight at you in the first moments of the roll does nothing.
+    const hp = p.hp;
+    s.projectiles.push({ id: 900, owner: 1, kind: 'bullet', weapon: 'pistol', x: p.x + 1, y: p.y, vx: -30, vy: 0, damage: 34, life: 1, sx: p.x + 1, sy: p.y, tx: 0, ty: 0, t: 0, duration: 0, radius: 0 });
+    for (let i = 0; i < 5; i++) step(s, roll);
+    expect(p.hp).toBe(hp);
+    for (let i = 0; i < 40; i++) step(s, idle());
+    expect(p.x - x0).toBeGreaterThan(3.3);
+    // Recharging: pressing again does nothing.
+    step(s, roll);
+    expect(p.rolling).toBe(0);
+  });
+
   it('pushing into a fence climbs over it', () => {
     const s = landed();
     clearAround(s);

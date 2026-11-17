@@ -18,13 +18,15 @@ export interface Input {
   reload: boolean;
   /** Lean round a corner: -1 left (Q), 1 right (E), 0 upright. */
   lean: number;
+  /** Dodge roll (Shift). */
+  roll: boolean;
   jump: boolean;
   /** Aim point on the map. */
   aimX: number;
   aimY: number;
 }
 
-export const NO_INPUT: Input = { mx: 0, my: 0, fire: false, super: false, use: false, reload: false, lean: 0, jump: false, aimX: 0, aimY: 0 };
+export const NO_INPUT: Input = { mx: 0, my: 0, fire: false, super: false, use: false, reload: false, lean: 0, roll: false, jump: false, aimX: 0, aimY: 0 };
 
 export interface Player {
   id: number;
@@ -68,6 +70,10 @@ export interface Player {
   pushing: number;
   /** Leaning: -1 (left) .. 1 (right), eased towards the input. */
   lean: number;
+  /** Dodge roll: seconds left, its direction, and the recharge. */
+  rolling: number;
+  rollDir: number;
+  rollCooldown: number;
   /** Deadline damage taken in the current second, and how far into that second we are. */
   zoneSum: number;
   zoneClock: number;
@@ -165,6 +171,7 @@ export type GameEvent =
   | { type: 'reload'; player: number; weapon: WeaponKind; x: number; y: number }
   | { type: 'dryFire'; player: number }
   | { type: 'vault'; player: number; x: number; y: number }
+  | { type: 'roll'; player: number; x: number; y: number }
   | { type: 'jump'; player: number }
   | { type: 'land'; player: number; x: number; y: number }
   | { type: 'ko'; victim: number; by: number | null; x: number; y: number }

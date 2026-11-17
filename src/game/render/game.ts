@@ -4,7 +4,7 @@ import { createSfx } from '../sfx';
 
 import type { VolumeKind } from '../sfx';
 import { createBot } from '../sim/bot';
-import { ARMOR, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, ITEMS, MAP, SIZE, SUPERS, TILE, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
+import { ARMOR, ROLL, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, ITEMS, MAP, SIZE, SUPERS, TILE, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
 import { canSee, createGame, inPlant, lineOfSight, lootUnder, step, throwDistance } from '../sim/step';
 import { NO_INPUT } from '../sim/types';
 
@@ -43,6 +43,8 @@ export interface HudState {
   item: ItemKind | null;
   superCharge: number;
   superName: string;
+  /** 0..1 how recharged the dodge roll is. */
+  roll: number;
   fighter: FighterId;
   zone: { label: string; seconds: number; outside: boolean };
   /** Counts up each time the Deadline takes a bite out of you (drives the red pulse). */
@@ -407,7 +409,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   let muted = sfx.muted;
   const onDown = (e: KeyboardEvent) => {
     sfx.unlock();
-    if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyQ', 'KeyE', 'KeyF', 'KeyG', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+    if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyQ', 'KeyE', 'KeyF', 'KeyG', 'ShiftLeft', 'ShiftRight', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     if (e.code === 'KeyM') muted = sfx.toggleMute();
     if (e.code === 'KeyT' && !e.repeat) aimMode = aimMode === 'auto' ? 'mouse' : 'auto';
     keys.add(e.code);
@@ -488,6 +490,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       super: keys.has('KeyG'),
       use: keys.has('KeyF'),
       lean: (keys.has('KeyE') ? 1 : 0) - (keys.has('KeyQ') ? 1 : 0),
+      roll: keys.has('ShiftLeft') || keys.has('ShiftRight'),
       reload: keys.has('KeyR'),
       aimX: aim.x,
       aimY: aim.y,
@@ -557,6 +560,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         break;
       case 'dryFire':
         if (e.player === me) sfx.dryFire();
+        break;
+      case 'roll':
+        sfx.vault(e.x - camX(), e.player === me ? 0 : Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y));
+        vfx.burst(e.x, 0.2, 8, 'dust', { z: e.y, speed: 2.5, up: 0.8, gravity: 5, life: 0.4, size: 0.7 });
         break;
       case 'vault':
         sfx.vault(e.x - camX(), e.player === me ? 0 : Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y));
@@ -861,8 +868,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           reload: p.reload > 0 ? 1 - p.reload / WEAPONS[p.weapon].reload : null,
           lean: p.lean,
           vault: p.vault > 0 ? 1 - p.vault / VAULT.time : null,
-          // The landing roll, unless you hit the ground already running into a fight.
-          roll: sinceLand < ROLL_TIME ? sinceLand / ROLL_TIME : null,
+          // The landing roll, or a dodge roll (Shift).
+          roll: p.rolling > 0 ? 1 - p.rolling / ROLL.time : sinceLand < ROLL_TIME ? sinceLand / ROLL_TIME : null,
         });
       } else if (chuteOpen) {
         // Steering tilts you, in the body's own frame.
@@ -1139,6 +1146,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       reloading: self.reload > 0 ? 1 - self.reload / WEAPONS[self.weapon].reload : null,
       item: self.item,
       superCharge: self.superCharge,
+      roll: 1 - self.rollCooldown / ROLL.cooldown,
       superName: FIGHTERS[self.fighter].superName,
       fighter: self.fighter,
       zone,

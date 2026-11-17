@@ -6,6 +6,7 @@ import {
   DT,
   fenceVertical,
   LEAN,
+  ROLL,
   START_WEAPON,
   THROW,
   MOVE,
@@ -355,6 +356,9 @@ const newPlayer = (id: number, name: string, fighter: FighterId, bot: boolean, x
   vaultTo: { x, y },
   pushing: 0,
   lean: 0,
+  rolling: 0,
+  rollDir: 0,
+  rollCooldown: 0,
   zoneSum: 0,
   zoneClock: 0,
   charge: 0,
@@ -486,6 +490,8 @@ const alivePlayers = (state: GameState) => state.players.filter((p) => p.alive);
 const hurt = (state: GameState, target: Player, amount: number, by: number | null, quiet = false, ignoreArmor = false) => {
   if (state.phase === 'over' || !targetable(target)) return;
   if (target.dashTime > 0 && by !== null) return;
+  // Early in a dodge roll, bullets and blasts from players miss.
+  if (target.rolling > ROLL.time - ROLL.iframes && by !== null) return;
   // Armor soaks part of every hit until it's gone. The Deadline ignores it.
   const soaked = ignoreArmor ? 0 : Math.min(target.armor, amount * ARMOR.absorb);
   target.armor -= soaked;
@@ -740,7 +746,7 @@ const useItem = (state: GameState, p: Player, input: Input) => {
 // ---------- per tick
 
 const updatePlayer = (state: GameState, p: Player, input: Input) => {
-  const pressed = (k: 'super' | 'use' | 'reload') => input[k] && !p.prev[k];
+  const pressed = (k: 'super' | 'use' | 'reload' | 'roll') => input[k] && !p.prev[k];
   p.cooldown = Math.max(0, p.cooldown - DT);
   p.revealed = Math.max(0, p.revealed - DT);
   p.slowed = Math.max(0, p.slowed - DT);
@@ -765,6 +771,26 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
 
   updateReload(p);
   if (pressed('reload')) startReload(state, p);
+  p.rollCooldown = Math.max(0, p.rollCooldown - DT);
+
+  // The dodge roll: the way you're moving (or facing), sliding along whatever it meets.
+  if (pressed('roll') && p.rollCooldown <= 0 && p.rolling <= 0 && p.vault <= 0 && p.dashTime <= 0 && !p.charging) {
+    const len = Math.hypot(input.mx, input.my);
+    p.rollDir = len > 0.01 ? Math.atan2(input.my, input.mx) : p.heading;
+    p.rolling = ROLL.time;
+    p.rollCooldown = ROLL.cooldown;
+    state.events.push({ type: 'roll', player: p.id, x: p.x, y: p.y });
+  }
+  if (p.rolling > 0) {
+    p.rolling = Math.max(0, p.rolling - DT);
+    const v = ROLL.distance / ROLL.time;
+    p.vx = Math.cos(p.rollDir) * v;
+    p.vy = Math.sin(p.rollDir) * v;
+    moveBy(state, p, p.vx * DT, p.vy * DT);
+    p.heading = p.rollDir;
+    p.prev = { ...input };
+    return;
+  }
 
   if (p.vault > 0) {
     // Climbing over: a short arc from one side to the other, no shooting meanwhile.
