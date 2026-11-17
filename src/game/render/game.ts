@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 import { createSfx } from '../sfx';
 import { createBot } from '../sim/bot';
-import { AUTO_AIM_RANGE, DISTRICTS, DROP, DT, FIGHTERS, MAP, SIZE, SUPERS, TILE, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
+import { AUTO_AIM_RANGE, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, MAP, SIZE, SUPERS, TILE, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
 import { canSee, createGame, inPlant, lineOfSight, lootUnder, step } from '../sim/step';
 import { NO_INPUT } from '../sim/types';
 
@@ -174,6 +174,39 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     drone.traverse((o) => o instanceof THREE.Mesh && (o.castShadow = true));
   }
   scene.add(drone);
+
+  // ---------- clouds: a broken layer between the plane and the ground; you fall through it
+  const clouds = new THREE.Group();
+  {
+    const puff = new THREE.IcosahedronGeometry(1, 1);
+    const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true, transparent: true, opacity: 0.92, depthWrite: true });
+    const rnd = (() => {
+      let k = 4242;
+      return () => ((k = (k * 16807) % 2147483647) - 1) / 2147483646;
+    })();
+    const parts: THREE.Matrix4[] = [];
+    for (let c = 0; c < 70; c++) {
+      // Spread wider than the map so the edges don't show from the plane.
+      const cx = -60 + rnd() * (WORLD + 120);
+      const cz = -60 + rnd() * (WORLD + 120);
+      const cy = DROP.cloudLow + 3 + rnd() * (DROP.cloudHigh - DROP.cloudLow - 6);
+      const size = 5 + rnd() * 7;
+      for (let i = 0; i < 7; i++) {
+        const s = size * (0.45 + rnd() * 0.55);
+        parts.push(
+          new THREE.Matrix4().compose(
+            new THREE.Vector3(cx + (rnd() - 0.5) * size * 2.4, cy + (rnd() - 0.3) * size * 0.4, cz + (rnd() - 0.5) * size * 1.6),
+            new THREE.Quaternion(),
+            new THREE.Vector3(s, s * 0.55, s),
+          ),
+        );
+      }
+    }
+    const im = new THREE.InstancedMesh(puff, cloudMat, parts.length);
+    parts.forEach((m, i) => im.setMatrixAt(i, m));
+    clouds.add(im);
+  }
+  scene.add(clouds);
 
   // ---------- players
   const rigs: Rig[] = state.players.map((p) => {
@@ -530,12 +563,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const chuteOpen = p.stage === 'falling' && p.fall <= DROP.chute;
       chutes[i].visible = visible && chuteOpen;
       // Free fall from the plane down to chute height, then drift slowly under the canopy.
-      let h = 0;
-      if (p.stage === 'falling') {
-        h = chuteOpen
-          ? 1 + (DROP.chuteHeight - 1) * (p.fall / DROP.chute)
-          : DROP.chuteHeight + (DROP.height - DROP.chuteHeight) * ((p.fall - DROP.chute) / DROP.freefall);
-      }
+      const h = p.stage === 'falling' ? fallHeight(p.fall) : 0;
       rig.root.position.set(x, h, y);
       const speed = Math.hypot(p.x - prev[i].x, p.y - prev[i].y) / DT;
       poseRig(rig, {
@@ -544,7 +572,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         sinceShot: p.cooldown > 0 ? 0.05 : 1, recoil: 0.5, reloading: false, pushing: 0,
       });
       rig.root.rotation.y = Math.PI / 2 - p.heading;
-      if (p.stage === 'falling' && !chuteOpen) rig.body.rotation.x = 1.2; // spread out, head first
+      if (p.stage === 'falling' && !chuteOpen) {
+        // Spread out, head first, with a little wobble from the wind.
+        rig.body.rotation.x = 1.25 + Math.sin(time * 9 + i) * 0.06;
+        rig.body.rotation.z = Math.sin(time * 5.3 + i) * 0.12;
+      }
       // Your own fighter turns see-through inside plants, so you know you're hidden.
       rig.root.traverse((o) => {
         if (o instanceof THREE.Mesh && !o.userData.orig) o.visible = true;
@@ -666,15 +698,20 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       want = new THREE.Vector3(droneX - (dirX / len) * 34 + (dirY / len) * 10, DROP.height + 14, droneY - (dirY / len) * 34 - (dirX / len) * 10);
       look = new THREE.Vector3(droneX + (dirX / len) * 10, DROP.height - 8, droneY + (dirY / len) * 10);
     } else if (self.stage === 'falling') {
-      const hh = self.fall <= DROP.chute ? 1 + (DROP.chuteHeight - 1) * (self.fall / DROP.chute) : DROP.chuteHeight + 10;
-      want = new THREE.Vector3(self.x, hh + 22, self.y + 22);
-      look = new THREE.Vector3(self.x, hh * 0.4, self.y);
+      // Stay close above and behind the jumper the whole way down, so you see yourself from the
+      // first frame, falling through the clouds, then the canopy opening below them.
+      const hh = fallHeight(self.fall);
+      const chute = self.fall <= DROP.chute;
+      // Looking steeply down past the jumper: you see yourself in the middle and the ground below.
+      want = new THREE.Vector3(self.x, hh + (chute ? 17 : 12), self.y + (chute ? 13 : 7));
+      look = new THREE.Vector3(self.x, hh - (chute ? 1 : 4), self.y);
     } else {
       want = new THREE.Vector3(self.x, 36, self.y + 22);
       look = new THREE.Vector3(self.x, 0, self.y + 1);
     }
-    camPos.lerp(want, self.stage === 'ground' ? 1 - Math.exp(-6 * dt) : kf);
-    camLook.lerp(look, self.stage === 'ground' ? 1 - Math.exp(-6 * dt) : kf);
+    const follow = self.stage === 'ground' ? 1 - Math.exp(-6 * dt) : self.stage === 'falling' ? 1 - Math.exp(-8 * dt) : kf;
+    camPos.lerp(want, follow);
+    camLook.lerp(look, self.stage === 'falling' ? 1 - Math.exp(-14 * dt) : follow);
     camera.position.set(camPos.x + n(23, 1) * 0.5 * shake, camPos.y, camPos.z + n(19, 4) * 0.4 * shake);
     camera.lookAt(camLook);
     camFocus.set(camLook.x, 0, camLook.z);

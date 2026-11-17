@@ -348,8 +348,28 @@ export const SUPERS = {
 // The drop: a cargo drone crosses the campus; you jump when you want.
 // ---------------------------------------------------------------------------
 
-/** The plane flies slowly and high; you free-fall, then the parachute opens and you drift down. */
-export const DROP = { flight: 24, freefall: 2.5, chute: 9, freefallSpeed: 14, chuteSpeed: 6, glide: 11.5, height: 60, chuteHeight: 22 };
+/**
+ * The plane flies slowly, above the clouds. You free-fall through the cloud layer, the parachute
+ * opens once you're below it, and you drift down. Heights are in metres, times in seconds.
+ */
+export const DROP = {
+  flight: 24,
+  freefall: 3.2,
+  chute: 9,
+  freefallSpeed: 14,
+  chuteSpeed: 6,
+  glide: 12.2,
+  height: 75,
+  chuteHeight: 30,
+  cloudLow: 44,
+  cloudHigh: 58,
+};
+
+/** How high a falling player is, from the seconds of descent they have left. */
+export const fallHeight = (fall: number) =>
+  fall <= DROP.chute
+    ? 1 + (DROP.chuteHeight - 1) * (fall / DROP.chute)
+    : DROP.chuteHeight + (DROP.height - DROP.chuteHeight) * Math.min(1, (fall - DROP.chute) / DROP.freefall);
 
 /** Movement feel: you speed up and slow down over a fraction of a second, and turn smoothly. */
 export const MOVE = { accel: 38, friction: 32, turn: 9 };
