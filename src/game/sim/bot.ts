@@ -75,7 +75,7 @@ export const createBot = (id: number, seed: number) => {
         const useful =
           ((me.weapon === 'fists' || me.mag + me.ammo === 0) && k.kind in WEAPONS) ||
           (k.kind === 'ammo' && me.weapon !== 'fists' && me.ammo < WEAPONS[me.weapon].mag) ||
-          (k.kind === 'armor' && me.armor < 250) ||
+          (k.kind === 'armor' && me.armor < 50) ||
           ((k.kind === 'medkit' || k.kind === 'bomb') && me.item === null) ||
           (k.kind === 'sniper' || k.kind === 'rockets' || k.kind === 'rifle');
         if (!useful) continue;

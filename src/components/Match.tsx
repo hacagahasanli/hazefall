@@ -146,9 +146,9 @@ export const Match = ({ fighter, onExit }: { fighter: FighterId; onExit: () => v
               {hud.item && <span className="rounded bg-cream/10 px-1.5 text-xs">{hud.item === 'bomb' ? 'Bomb' : 'Med kit'}</span>}
             </div>
             <Bar value={hud.hp} max={hud.maxHp} color={hud.hp / hud.maxHp > 0.35 ? '#3ddc84' : '#ff3d6e'} />
-            {hud.armor > 0 && <Bar value={hud.armor} max={500} color="#3ec5ff" />}
+            {hud.armor > 0 && <Bar value={hud.armor} max={100} color="#3ec5ff" />}
             <div className="flex items-center gap-2 text-[11px]">
-              <span className="text-cream/60">Q · {hud.superName}</span>
+              <span className="text-cream/60">G · {hud.superName}</span>
               <div className="h-1.5 w-28 overflow-hidden rounded bg-cream/15">
                 <div className="h-full" style={{ width: `${hud.superCharge * 100}%`, background: hud.superCharge >= 1 ? '#ffd23f' : '#8b93ad' }} />
               </div>
@@ -196,10 +196,14 @@ export const Match = ({ fighter, onExit }: { fighter: FighterId; onExit: () => v
               <Key k="Space" /> shoot / jump
             </span>
             <span className="flex items-center gap-1">
-              <Key k="Q" /> super
+              <Key k="Q" />
+              <Key k="E" /> lean
             </span>
             <span className="flex items-center gap-1">
-              <Key k="E" /> pick up / use
+              <Key k="G" /> super
+            </span>
+            <span className="flex items-center gap-1">
+              <Key k="F" /> pick up / use
             </span>
             <span className="flex items-center gap-1">
               <Key k="R" /> reload

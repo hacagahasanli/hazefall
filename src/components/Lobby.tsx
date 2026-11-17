@@ -91,7 +91,7 @@ export const Lobby = () => {
                 {f.hp} HP · speed {f.speed}
               </div>
               <div className="text-sm text-cream/80">
-                <span className="font-bold text-cream">Q · {f.superName}:</span> {f.superText}
+                <span className="font-bold text-cream">G · {f.superName}:</span> {f.superText}
               </div>
             </button>
           );
@@ -140,7 +140,7 @@ export const Lobby = () => {
         </div>
         <div className="panel-cut bg-ink/60 p-3">
           <b className="text-cream">Survive.</b> The Deadline closes in until nothing is left. Space shoots at the nearest enemy
-          you can see (or aim with the mouse), Q is your super. Hide in plants. Esc Esc pauses.
+          you can see (or aim with the mouse), Q and E lean round corners, F picks up, G is your super. Hide in plants. Esc Esc pauses.
         </div>
       </section>
     </main>

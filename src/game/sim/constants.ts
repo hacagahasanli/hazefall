@@ -368,7 +368,7 @@ export const treeSpot = (tx: number, ty: number) => ({
 /** A fence runs up-down when it has a fence above or below it, otherwise left-right. */
 export const fenceVertical = (tx: number, ty: number) => tileAt(tx, ty - 1) === 'f' || tileAt(tx, ty + 1) === 'f';
 
-export const RACK_HP = 900;
+export const RACK_HP = 90;
 
 // ---------------------------------------------------------------------------
 // Fighters: who you are. Weapons come from the map; the super is yours.
@@ -386,10 +386,10 @@ export interface FighterStats {
 }
 
 export const FIGHTERS: Record<FighterId, FighterStats> = {
-  hotfix: { name: 'Hotfix', role: 'On-call engineer', hp: 1000, speed: 6.6, superCost: 1600, superName: 'Deploy', superText: 'a fast dash that hits everyone in its path', color: '#ff6a3d' },
-  legacy: { name: 'Legacy', role: 'Senior maintainer', hp: 1300, speed: 5.6, superCost: 1400, superName: 'Deprecated', superText: 'drops a wall that blocks bullets', color: '#3ddc84' },
-  standup: { name: 'Standup', role: 'Scrum lead', hp: 900, speed: 6.9, superCost: 1300, superName: 'Timebox', superText: 'a field that slows enemies', color: '#3ec5ff' },
-  intern: { name: 'Intern', role: 'First week', hp: 1000, speed: 6.3, superCost: 1500, superName: 'Force push to main', superText: 'a blast that throws everyone back', color: '#ffd23f' },
+  hotfix: { name: 'Hotfix', role: 'On-call engineer', hp: 100, speed: 6.6, superCost: 160, superName: 'Deploy', superText: 'a fast dash that hits everyone in its path', color: '#ff6a3d' },
+  legacy: { name: 'Legacy', role: 'Senior maintainer', hp: 100, speed: 5.9, superCost: 140, superName: 'Deprecated', superText: 'drops a wall that blocks bullets', color: '#3ddc84' },
+  standup: { name: 'Standup', role: 'Scrum lead', hp: 100, speed: 6.9, superCost: 130, superName: 'Timebox', superText: 'a field that slows enemies', color: '#3ec5ff' },
+  intern: { name: 'Intern', role: 'First week', hp: 100, speed: 6.3, superCost: 150, superName: 'Force push to main', superText: 'a blast that throws everyone back', color: '#ffd23f' },
 };
 
 // ---------------------------------------------------------------------------
@@ -405,6 +405,12 @@ export interface WeaponStats {
   range: number;
   rate: number; // seconds between shots
   ammo: number; // rounds in the gun when found (magazine + spare)
+  /**
+   * No range limit: a bullet flies until it hits something (`range` is only how far it can
+   * physically carry). Damage is full up to `falloff.start` metres and drops to `falloff.min`
+   * of it at `falloff.end`.
+   */
+  falloff: { start: number; end: number; min: number };
   /** Magazine size and seconds to reload it. */
   mag: number;
   reload: number;
@@ -412,13 +418,14 @@ export interface WeaponStats {
 }
 
 export const WEAPONS: Record<WeaponKind, WeaponStats> = {
-  fists: { name: 'Fists', damage: 110, bullets: 1, spread: 0, speed: 30, range: 1.6, rate: 0.45, ammo: Infinity, mag: Infinity, reload: 0 },
-  pistol: { name: 'Pistol', damage: 140, bullets: 1, spread: 0.03, speed: 30, range: 13, rate: 0.35, ammo: 36, mag: 12, reload: 1.1 },
-  smg: { name: 'SMG', damage: 75, bullets: 1, spread: 0.1, speed: 32, range: 12, rate: 0.09, ammo: 90, mag: 30, reload: 1.7 },
-  shotgun: { name: 'Shotgun', damage: 70, bullets: 7, spread: 0.5, speed: 24, range: 7, rate: 0.85, ammo: 18, mag: 6, reload: 2.2 },
-  rifle: { name: 'Rifle', damage: 120, bullets: 1, spread: 0.04, speed: 40, range: 20, rate: 0.16, ammo: 75, mag: 25, reload: 1.9 },
-  sniper: { name: 'Sniper', damage: 700, bullets: 1, spread: 0, speed: 70, range: 34, rate: 1.4, ammo: 10, mag: 5, reload: 2.6 },
-  rockets: { name: 'Rockets', damage: 900, bullets: 1, spread: 0, speed: 0, range: 16, rate: 1.2, ammo: 4, mag: 1, reload: 2.4, lob: { radius: 3 } },
+  // Damage is out of 100 HP (+ up to 100 armor): about three hits kill.
+  fists: { name: 'Fists', damage: 15, bullets: 1, spread: 0, speed: 30, range: 1.6, rate: 0.45, ammo: Infinity, mag: Infinity, reload: 0, falloff: { start: 9, end: 9, min: 1 } },
+  pistol: { name: 'Pistol', damage: 34, bullets: 1, spread: 0.03, speed: 34, range: 90, rate: 0.35, ammo: 36, mag: 12, reload: 1.1, falloff: { start: 12, end: 40, min: 0.4 } },
+  smg: { name: 'SMG', damage: 22, bullets: 1, spread: 0.1, speed: 36, range: 90, rate: 0.09, ammo: 90, mag: 30, reload: 1.7, falloff: { start: 10, end: 35, min: 0.35 } },
+  shotgun: { name: 'Shotgun', damage: 14, bullets: 7, spread: 0.5, speed: 28, range: 45, rate: 0.85, ammo: 18, mag: 6, reload: 2.2, falloff: { start: 5, end: 18, min: 0.15 } },
+  rifle: { name: 'Rifle', damage: 30, bullets: 1, spread: 0.04, speed: 48, range: 120, rate: 0.16, ammo: 75, mag: 25, reload: 1.9, falloff: { start: 20, end: 60, min: 0.5 } },
+  sniper: { name: 'Sniper', damage: 80, bullets: 1, spread: 0, speed: 80, range: 160, rate: 1.4, ammo: 10, mag: 5, reload: 2.6, falloff: { start: 40, end: 100, min: 0.7 } },
+  rockets: { name: 'Rockets', damage: 110, bullets: 1, spread: 0, speed: 0, range: 16, rate: 1.2, ammo: 4, mag: 1, reload: 2.4, lob: { radius: 3 }, falloff: { start: 99, end: 99, min: 1 } },
 };
 
 /** Loot weights inside buildings (one entry = one ticket). Rockets and snipers are rare. */
@@ -439,22 +446,27 @@ export const LOOT_TABLE: string[] = [
 export const AMMO_BOX_MAGS = 2;
 
 /** Vaulting: how long you push into a fence or sill before you climb over, and how long the climb takes. */
-export const VAULT = { after: 0.15, time: 0.42, reach: 3.2 };
+export const VAULT = { after: 0.15, time: 0.55, reach: 3.2 };
 
-export const ARMOR = { points: 500, absorb: 0.6 };
+/** Armor is a second health bar of up to 100 that takes hits first (the Deadline ignores it). */
+export const ARMOR = { points: 100, absorb: 1 };
 export const ITEMS = {
-  bomb: { damage: 800, radius: 2.6, range: 12 },
-  medkit: { heal: 500, over: 3 },
+  bomb: { damage: 80, radius: 2.6, range: 12 },
+  medkit: { heal: 50, over: 3 },
 };
+/** Everyone jumps with a pistol and one magazine, so you can fight under the parachute. */
+export const START_WEAPON = { kind: 'pistol' as const, mag: 12, spare: 0 };
 export const PLANT_REVEAL = 2.4;
-export const AUTO_AIM_RANGE = 22;
-export const REGEN = { after: 6, perSecond: 25 };
+export const AUTO_AIM_RANGE = 28;
+export const REGEN = { after: 6, perSecond: 2.5 };
+/** Leaning out round a corner (Q / E): how far the shoulder and the muzzle move out, and the speed while leaning. */
+export const LEAN = { offset: 0.7, speed: 0.6, rate: 6 };
 
 export const SUPERS = {
-  deploy: { distance: 8, time: 0.28, damage: 350 },
+  deploy: { distance: 8, time: 0.28, damage: 35 },
   deprecated: { length: 6, thickness: 1, ahead: 2.5, life: 7 },
   timebox: { radius: 4, life: 4, reach: 12, slow: 0.45 },
-  push: { radius: 4.5, damage: 300, knockback: 4 },
+  push: { radius: 4.5, damage: 30, knockback: 4 },
 };
 
 // ---------------------------------------------------------------------------
@@ -488,13 +500,16 @@ export const fallHeight = (fall: number) =>
 export const MOVE = { accel: 24, friction: 20, turn: 8 };
 
 /** The Deadline: wait, then shrink, phase after phase, until nothing is left. */
-/** About 2.1x faster than the first version (Reis: the map is big, the Deadline dragged): ~2 minutes in all. */
+/**
+ * About 3 minutes in all (Reis: 2 was too fast, 4 too slow). Outside the Deadline you lose HP
+ * every second, more with every phase, like the blue zone in battle royales: 1, 2, 4, 7, 12 HP/s.
+ */
 export const ZONE_PHASES = [
-  { wait: 22, shrink: 16, radius: 44, dps: 20 },
-  { wait: 16, shrink: 12, radius: 24, dps: 40 },
-  { wait: 12, shrink: 10, radius: 10, dps: 70 },
-  { wait: 9, shrink: 8, radius: 3, dps: 110 },
-  { wait: 5, shrink: 8, radius: 0, dps: 200 },
+  { wait: 34, shrink: 24, radius: 44, dps: 1 },
+  { wait: 24, shrink: 18, radius: 24, dps: 2 },
+  { wait: 18, shrink: 14, radius: 10, dps: 4 },
+  { wait: 13, shrink: 12, radius: 3, dps: 7 },
+  { wait: 8, shrink: 12, radius: 0, dps: 12 },
 ];
 export const ZONE_START_RADIUS = WORLD * 0.72;
 

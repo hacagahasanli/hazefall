@@ -1,6 +1,6 @@
 import { createBot } from './bot';
 import { BUILDINGS, DROP, DT, MAP, PLAYER_RADIUS, SHAPES, SIZE, TILE, treeSpot, WEAPONS, WORLD, ZONE_PHASES } from './constants';
-import { circleBlocked, createGame, lootUnder, solidAt, step } from './step';
+import { circleBlocked, createGame, falloffDamage, hitPoint, lootUnder, solidAt, step } from './step';
 import { NO_INPUT } from './types';
 
 import type { GameState, Input } from './types';
@@ -155,14 +155,34 @@ describe('the drop', () => {
 });
 
 describe('loot and fighting', () => {
-  it('fists until you find a gun; walking over one picks it up', () => {
+  it('you jump with a pistol and one magazine; with it empty, walking over a gun picks it up', () => {
     const s = landed();
     clearAround(s);
     const p = s.players[0];
-    expect(p.weapon).toBe('fists');
+    expect(p.weapon).toBe('pistol');
+    expect(p.mag + p.ammo).toBe(12);
+    Object.assign(p, { mag: 0, ammo: 0 });
     s.loot.push({ id: 999, kind: 'rifle', x: p.x + 0.3, y: p.y, ammo: WEAPONS.rifle.ammo, active: true });
     step(s, idle());
     expect(p.weapon).toBe('rifle');
+  });
+
+  it('bullets have no range limit, they just hit softer far away; about three hits kill', () => {
+    expect(falloffDamage('rifle', 30, 5)).toBe(30);
+    expect(falloffDamage('rifle', 30, 80)).toBeCloseTo(15);
+    expect(falloffDamage('pistol', 34, 25)).toBeLessThan(34);
+    expect(Math.ceil(100 / WEAPONS.pistol.damage)).toBe(3);
+    expect(WEAPONS.rifle.range).toBeGreaterThan(100);
+  });
+
+  it('leaning moves the exposed shoulder (and the muzzle) out to the side', () => {
+    const s = landed();
+    const p = s.players[0];
+    p.heading = 0;
+    p.lean = 1;
+    const h = hitPoint(p);
+    expect(h.y - p.y).toBeGreaterThan(0.3);
+    expect(Math.abs(h.x - p.x)).toBeLessThan(0.01);
   });
 
   it('E swaps your gun for the one on the floor and drops yours', () => {
@@ -271,6 +291,23 @@ describe('moving among things', () => {
     }
     expect(vaulted).toBe(true);
     expect(p.y).toBeGreaterThan(f.ty * TILE + TILE);
+  });
+});
+
+describe('the drop', () => {
+  it('under the parachute you can shoot and be shot', () => {
+    const s = createGame('hotfix', 1);
+    const [a, b] = s.players;
+    for (const p of [a, b]) Object.assign(p, { stage: 'falling', fall: DROP.chute - 1 });
+    Object.assign(a, { x: 60, y: 60, cooldown: 0 });
+    Object.assign(b, { x: 66, y: 60 });
+    s.players.slice(2).forEach((p) => Object.assign(p, { stage: 'falling', fall: DROP.chute + 2, x: 10, y: 10 }));
+    s.drone.t = 1;
+    const inputs = idle();
+    inputs[0] = { ...NO_INPUT, fire: true, aimX: b.x, aimY: b.y };
+    const hp = b.hp;
+    for (let i = 0; i < 30; i++) step(s, inputs);
+    expect(b.hp).toBeLessThan(hp);
   });
 });
 

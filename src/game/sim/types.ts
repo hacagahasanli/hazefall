@@ -16,13 +16,15 @@ export interface Input {
   use: boolean;
   /** Reload the gun (R). */
   reload: boolean;
+  /** Lean round a corner: -1 left (Q), 1 right (E), 0 upright. */
+  lean: number;
   jump: boolean;
   /** Aim point on the map. */
   aimX: number;
   aimY: number;
 }
 
-export const NO_INPUT: Input = { mx: 0, my: 0, fire: false, super: false, use: false, reload: false, jump: false, aimX: 0, aimY: 0 };
+export const NO_INPUT: Input = { mx: 0, my: 0, fire: false, super: false, use: false, reload: false, lean: 0, jump: false, aimX: 0, aimY: 0 };
 
 export interface Player {
   id: number;
@@ -64,6 +66,8 @@ export interface Player {
   vaultTo: { x: number; y: number };
   /** How long you've been pushing into something you could vault. */
   pushing: number;
+  /** Leaning: -1 (left) .. 1 (right), eased towards the input. */
+  lean: number;
   kills: number;
   damage: number;
   placement: number; // 0 while alive
@@ -75,6 +79,8 @@ export interface Projectile {
   id: number;
   owner: number;
   kind: 'bullet' | 'lob';
+  /** The gun that fired it: sets how damage falls off with distance. */
+  weapon: WeaponKind;
   x: number;
   y: number;
   vx: number;

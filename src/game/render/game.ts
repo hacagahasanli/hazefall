@@ -4,7 +4,7 @@ import { createSfx } from '../sfx';
 
 import type { VolumeKind } from '../sfx';
 import { createBot } from '../sim/bot';
-import { AUTO_AIM_RANGE, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, MAP, SIZE, SUPERS, TILE, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
+import { ARMOR, AUTO_AIM_RANGE, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, MAP, SIZE, SUPERS, TILE, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
 import { canSee, createGame, inPlant, lineOfSight, lootUnder, step } from '../sim/step';
 import { NO_INPUT } from '../sim/types';
 
@@ -429,7 +429,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   let muted = sfx.muted;
   const onDown = (e: KeyboardEvent) => {
     sfx.unlock();
-    if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyQ', 'KeyE', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+    if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyQ', 'KeyE', 'KeyF', 'KeyG', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     if (e.code === 'KeyM') muted = sfx.toggleMute();
     if (e.code === 'KeyT' && !e.repeat) aimMode = aimMode === 'auto' ? 'mouse' : 'auto';
     keys.add(e.code);
@@ -470,8 +470,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       mx, my,
       fire: keys.has('Space') || (aimMode === 'mouse' && mouseDown),
       jump: keys.has('Space'),
-      super: keys.has('KeyQ'),
-      use: keys.has('KeyE'),
+      // Battle-royale keys: Q / E lean, F picks up or uses, G is the super.
+      super: keys.has('KeyG'),
+      use: keys.has('KeyF'),
+      lean: (keys.has('KeyE') ? 1 : 0) - (keys.has('KeyQ') ? 1 : 0),
       reload: keys.has('KeyR'),
       aimX: aim.x,
       aimY: aim.y,
@@ -634,7 +636,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     m.map = t.tex;
     m.needsUpdate = true;
     // About 1.3 m tall at the normal camera distance (~33 px), bigger for bigger hits.
-    const hgt = 1.3 * style.size * (1 + Math.min(0.5, n.total / 800));
+    const hgt = 1.3 * style.size * (1 + Math.min(0.5, n.total / 80));
     n.sprite.userData.base = hgt;
     n.sprite.userData.aspect = t.aspect;
     n.sprite.visible = true;
@@ -847,7 +849,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const k = Math.max(0.001, p.hp / p.maxHp);
       bar.fill.scale.x = k;
       bar.fill.position.x = -0.8 * (1 - k);
-      const a = Math.max(0.001, p.armor / 500);
+      const a = Math.max(0.001, p.armor / ARMOR.points);
       bar.armor.scale.x = a;
       bar.armor.position.x = -0.8 * (1 - a);
       bar.armor.visible = p.armor > 0;
@@ -997,11 +999,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       : self.stage === 'drone'
         ? 'Space · jump'
         : k
-          ? `E · pick up ${LOOT_NAME[k.kind]}`
+          ? `F · pick up ${LOOT_NAME[k.kind]}`
           : self.weapon !== 'fists' && self.mag + self.ammo === 0
             ? 'Out of ammo · find an ammo box or another gun'
             : self.item
-              ? `E · use ${self.item === 'bomb' ? 'bomb' : 'med kit'}`
+              ? `F · use ${self.item === 'bomb' ? 'bomb' : 'med kit'}`
               : null;
     opts.onHud({
       phase: state.phase,

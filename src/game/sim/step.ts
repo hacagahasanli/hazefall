@@ -5,6 +5,8 @@ import {
   AMMO_BOX_MAGS,
   DT,
   fenceVertical,
+  LEAN,
+  START_WEAPON,
   MOVE,
   SHAPES,
   treeSpot,
@@ -228,8 +230,17 @@ export const lineOfSight = (state: GameState, x0: number, y0: number, x1: number
 };
 
 /** Can `viewer` see `target`? Plants hide you unless someone is very close or you just fired. */
+/** On the ground, or hanging under an open parachute: you can be seen, aimed at and hit. */
+export const targetable = (p: Player) => p.alive && (p.stage === 'ground' || (p.stage === 'falling' && p.fall <= DROP.chute));
+
+/** Where a player's body is for bullets: leaning out moves the exposed shoulder sideways. */
+export const hitPoint = (p: Player) => ({
+  x: p.x - Math.sin(p.heading) * p.lean * LEAN.offset * 0.7,
+  y: p.y + Math.cos(p.heading) * p.lean * LEAN.offset * 0.7,
+});
+
 export const canSee = (state: GameState, viewer: Player, target: Player) => {
-  if (!target.alive || target.stage !== 'ground') return false;
+  if (!targetable(target)) return false;
   if (viewer.id === target.id) return true;
   const d = Math.hypot(target.x - viewer.x, target.y - viewer.y);
   if (inPlant(target.x, target.y) && target.revealed <= 0 && d > PLANT_REVEAL) return false;
@@ -318,9 +329,9 @@ const newPlayer = (id: number, name: string, fighter: FighterId, bot: boolean, x
   maxHp: FIGHTERS[fighter].hp,
   armor: 0,
   alive: true,
-  weapon: 'fists',
-  mag: Infinity,
-  ammo: 0,
+  weapon: START_WEAPON.kind,
+  mag: START_WEAPON.mag,
+  ammo: START_WEAPON.spare,
   reload: 0,
   cooldown: 0,
   item: null,
@@ -336,6 +347,7 @@ const newPlayer = (id: number, name: string, fighter: FighterId, bot: boolean, x
   vaultFrom: { x, y },
   vaultTo: { x, y },
   pushing: 0,
+  lean: 0,
   kills: 0,
   damage: 0,
   placement: 0,
@@ -370,12 +382,19 @@ const updateDrop = (state: GameState, inputs: Input[]) => {
     } else if (p.stage === 'falling') {
       // Steer on the way down: fast in free fall, gentle under the parachute.
       const len = Math.hypot(input.mx, input.my);
-      const speed = p.fall > DROP.chute ? DROP.freefallSpeed : DROP.chuteSpeed;
-      if (len > 0.01) {
-        p.x = Math.min(WORLD - 4, Math.max(4, p.x + (input.mx / Math.max(1, len)) * speed * DT));
-        p.y = Math.min(WORLD - 4, Math.max(4, p.y + (input.my / Math.max(1, len)) * speed * DT));
-        p.heading = Math.atan2(input.my, input.mx);
-      }
+      const chute = p.fall <= DROP.chute;
+      const speed = chute ? DROP.chuteSpeed : DROP.freefallSpeed;
+      p.vx = len > 0.01 ? (input.mx / Math.max(1, len)) * speed : 0;
+      p.vy = len > 0.01 ? (input.my / Math.max(1, len)) * speed : 0;
+      p.x = Math.min(WORLD - 4, Math.max(4, p.x + p.vx * DT));
+      p.y = Math.min(WORLD - 4, Math.max(4, p.y + p.vy * DT));
+      if (chute) {
+        // Under the canopy you can aim and shoot at whoever is in the air or below.
+        p.cooldown = Math.max(0, p.cooldown - DT);
+        updateReload(p);
+        if (Math.hypot(input.aimX - p.x, input.aimY - p.y) > 0.05) p.heading = Math.atan2(input.aimY - p.y, input.aimX - p.x);
+        if (input.fire && p.cooldown <= 0) shoot(state, p, input);
+      } else if (len > 0.01) p.heading = Math.atan2(input.my, input.mx);
       p.fall -= DT;
       if (p.fall <= 0) {
         const spot = freeSpot(state, p.x, p.y);
@@ -439,7 +458,7 @@ const updateZone = (state: GameState) => {
 const alivePlayers = (state: GameState) => state.players.filter((p) => p.alive);
 
 const hurt = (state: GameState, target: Player, amount: number, by: number | null, quiet = false, ignoreArmor = false) => {
-  if (!target.alive || state.phase === 'over' || target.stage !== 'ground') return;
+  if (state.phase === 'over' || !targetable(target)) return;
   if (target.dashTime > 0 && by !== null) return;
   // Armor soaks part of every hit until it's gone. The Deadline ignores it.
   const soaked = ignoreArmor ? 0 : Math.min(target.armor, amount * ARMOR.absorb);
@@ -514,20 +533,32 @@ const explode = (state: GameState, owner: number, x: number, y: number, radius: 
 
 const fireBullet = (state: GameState, p: Player, angle: number) => {
   const w = WEAPONS[p.weapon];
+  // Leaning out, the muzzle is out past the corner too.
+  const o = hitPoint(p);
+  const x = o.x + Math.cos(angle) * 0.6;
+  const y = o.y + Math.sin(angle) * 0.6;
   state.projectiles.push({
-    id: state.nextId++, owner: p.id, kind: 'bullet',
-    x: p.x + Math.cos(angle) * 0.6, y: p.y + Math.sin(angle) * 0.6,
+    id: state.nextId++, owner: p.id, kind: 'bullet', weapon: p.weapon,
+    x, y,
     vx: Math.cos(angle) * w.speed, vy: Math.sin(angle) * w.speed,
     damage: w.damage, life: w.range / w.speed,
-    sx: 0, sy: 0, tx: 0, ty: 0, t: 0, duration: 0, radius: 0,
+    sx: x, sy: y, tx: 0, ty: 0, t: 0, duration: 0, radius: 0,
   });
+};
+
+/** Damage after the distance the bullet flew: full up close, down to `min` of it far away. */
+export const falloffDamage = (weapon: WeaponKind, damage: number, distance: number) => {
+  const f = WEAPONS[weapon].falloff;
+  if (distance <= f.start) return damage;
+  const k = Math.min(1, (distance - f.start) / Math.max(0.01, f.end - f.start));
+  return damage * (1 - (1 - f.min) * k);
 };
 
 const lob = (state: GameState, p: Player, aimX: number, aimY: number, range: number, damage: number, radius: number) => {
   const a = Math.atan2(aimY - p.y, aimX - p.x);
   const d = Math.min(range, Math.hypot(aimX - p.x, aimY - p.y));
   state.projectiles.push({
-    id: state.nextId++, owner: p.id, kind: 'lob',
+    id: state.nextId++, owner: p.id, kind: 'lob', weapon: 'rockets',
     x: p.x, y: p.y, vx: 0, vy: 0, damage, life: 99,
     sx: p.x, sy: p.y, tx: p.x + Math.cos(a) * d, ty: p.y + Math.sin(a) * d,
     t: 0, duration: 0.35 + d / 22, radius,
@@ -732,7 +763,8 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
   } else {
     // Accelerate towards the wanted velocity, ease off when the keys are released.
     const len = Math.hypot(input.mx, input.my);
-    const top = FIGHTERS[p.fighter].speed * (p.slowed > 0 ? SUPERS.timebox.slow : 1);
+    p.lean += (Math.max(-1, Math.min(1, input.lean)) - p.lean) * Math.min(1, LEAN.rate * DT);
+    const top = FIGHTERS[p.fighter].speed * (p.slowed > 0 ? SUPERS.timebox.slow : 1) * (Math.abs(p.lean) > 0.3 ? LEAN.speed : 1);
     const wantX = len > 0.01 ? (input.mx / Math.max(1, len)) * top : 0;
     const wantY = len > 0.01 ? (input.my / Math.max(1, len)) * top : 0;
     const rate = (len > 0.01 ? MOVE.accel : MOVE.friction) * DT;
@@ -824,9 +856,10 @@ const updateProjectile = (state: GameState, pr: Projectile) => {
       return false;
     }
     for (const o of state.players) {
-      if (!o.alive || o.id === pr.owner || o.stage !== 'ground') continue;
-      if (Math.hypot(o.x - pr.x, o.y - pr.y) < PLAYER_RADIUS + 0.15) {
-        hurt(state, o, pr.damage, pr.owner);
+      if (o.id === pr.owner || !targetable(o)) continue;
+      const h = hitPoint(o);
+      if (Math.hypot(h.x - pr.x, h.y - pr.y) < PLAYER_RADIUS + 0.15) {
+        hurt(state, o, falloffDamage(pr.weapon, pr.damage, Math.hypot(pr.x - pr.sx, pr.y - pr.sy)), pr.owner);
         return false;
       }
     }
