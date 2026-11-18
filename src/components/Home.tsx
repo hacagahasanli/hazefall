@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { DISTRICTS, FIGHTERS, WORLD } from '~/game/sim/constants';
 
-import { SupportLink } from '~/components/SupportLink';
+import { SupportCard } from '~/components/SupportLink';
 
 import type { FighterId } from '~/game/sim/types';
 
@@ -217,6 +217,7 @@ export const Home = () => {
                 How to play
               </a>
             </div>
+            <SupportCard />
           </div>
 
           <aside className="panel-cut hidden w-[320px] flex-col gap-2 bg-ink-deep/80 p-3 backdrop-blur lg:flex">
@@ -284,10 +285,6 @@ export const Home = () => {
             </div>
           ))}
         </section>
-
-        <footer className="flex items-center justify-center pt-2">
-          <SupportLink />
-        </footer>
       </div>
     </main>
   );
