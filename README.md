@@ -1,39 +1,56 @@
+<div align="center">
+
 # Last Commit Standing
 
-### Ten developers drop onto the campus. The Deadline closes in. The last commit standing ships.
+### Ten developers. One merge.
 
-A Merge Conflict game: a top-down battle royale in the browser, in short rounds.
+A game by **[Merge Conflict](https://merge-conflict-drab.vercel.app)**, the studio where coworkers settle their conflicts.
 
-> Status: playable prototype, offline against 9 bots. Online lobbies with invite links come next.
+### [▶ Play with friends](https://last-commit-standing.vercel.app/play) · [Studio](https://merge-conflict-drab.vercel.app) · [Floor 42](https://floor-42.vercel.app)
+
+</div>
+
+A battle royale in the browser for developers who never agree: up to ten of you parachute into the
+same countryside with a pistol each, the Deadline closes in, and only the last one standing gets
+to merge. Play with friends by link (bots fill the empty places, or switch them off), or solo
+against nine bots. Works on phones.
 
 ## How a round goes
 
-1. **Lobby**: pick your fighter, press Ready.
-2. **Drop**: a cargo drone crosses the campus. Hold Space to jump, steer with WASD while you glide.
-3. **Loot**: everyone lands with fists. Guns, armor, med kits and bombs lie in the buildings; server racks break and sometimes drop loot.
-4. **Fight**: Space shoots at the nearest enemy you can see; Q fires your fighter's super. Hide in plants.
-5. **The Deadline** shrinks in five phases until nothing is left; outside it you lose health every second.
-6. Last one standing wins; everyone goes back to the lobby.
+1. **Room**: pick your fighter, press *Play with friends* and send the link (or play solo with bots).
+   Everyone says ready, the host starts.
+2. **Drop**: a cargo plane crosses the map. Jump with Space, free-fall, steer the parachute down.
+3. **Loot**: you land with a pistol and one magazine. Guns, armor, ammo, med kits and bombs lie in
+   houses, barns and the container port; walk over them or press F.
+4. **Fight**: Space shoots (auto-aim on whoever you can see, or mouse aim), Q / E lean, Shift rolls,
+   G is your fighter's super, R reloads. Hide in tall grass, swim the river, take a bridge.
+5. **The Deadline** closes in, phase by phase; outside it you lose health every second.
+6. Last one standing wins: **MERGED TO MAIN**. Everyone else gets their round report.
 
 ## Fighters
 
-| Fighter | HP | Super (Q) |
+Everyone has 100 health and up to 100 armor; about three hits take you down. What differs is speed
+and the super (G):
+
+| Fighter | Speed | Super (G) |
 | --- | --- | --- |
-| Hotfix | 1000 | Deploy: a fast dash that hits everyone in its path |
-| Legacy | 1300 | Deprecated: drops a wall that blocks bullets |
-| Standup | 900 | Timebox: a field that slows enemies |
-| Intern | 1000 | Force push to main: a blast that throws everyone back |
+| Hotfix | 6.6 m/s | Deploy: a fast dash that hits everyone in its path |
+| Legacy | 5.9 m/s | Deprecated: drops a wall that blocks bullets |
+| Standup | 6.9 m/s | Timebox: a field that slows enemies |
+| Intern | 6.3 m/s | Force push to main: a blast that throws everyone back |
 
 ## Weapons
 
-Pistol, SMG, shotgun, rifle (common to uncommon), sniper and rockets (rare), plus bombs, armor vests and med kits.
+Pistol, SMG, shotgun, rifle, sniper and rockets, with magazines and spare rounds, plus bombs, armor
+vests, ammo boxes and med kits. Loot glows by rarity.
 
 ## Run it
 
 ```bash
 npm install
 npm run dev        # http://localhost:3100
-npm run test:run   # simulation tests: map, drop, loot, armor, Deadline, a full 10-bot round
+npm run server     # the lobby server for online rooms (ws://localhost:2568); open /play?server=ws://localhost:2568
+npm run test:run   # simulation and netcode tests: map, river, drop, loot, armor, Deadline, online sync
 ```
 
 Design: [docs/DESIGN.md](docs/DESIGN.md).
