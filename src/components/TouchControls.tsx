@@ -198,6 +198,7 @@ export const TouchControls = ({
   onPlane,
   superReady,
   rollReady,
+  sniper = false,
 }: {
   press: Press;
   onMove: (x: number, y: number) => void;
@@ -205,6 +206,8 @@ export const TouchControls = ({
   onPlane: boolean;
   superReady: number;
   rollReady: number;
+  /** A sniper in hand: a SCOPE button to hold. */
+  sniper?: boolean;
 }) => (
   <div
     className="absolute inset-0 z-[5] select-none"
@@ -233,6 +236,7 @@ export const TouchControls = ({
             style={{ right: 136, bottom: 14 }}
           />
           <Pad b="use" label="Use" press={press} style={{ right: 36, bottom: 138 }} />
+          {sniper && <Pad b="scope" label="Scope" press={press} size={64} accent style={{ right: 30, bottom: 218 }} />}
           <Pad
             b="reload"
             label="Reload"

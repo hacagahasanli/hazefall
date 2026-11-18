@@ -4,7 +4,7 @@ import { createSfx } from '../sfx';
 
 import type { VolumeKind } from '../sfx';
 import { ARMOR, ROLL, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, ITEMS, MAP, SIZE, SUPERS, TILE, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
-import { canSee, inPlant, inWater, lineOfSight, lootUnder, throwDistance } from '../sim/step';
+import { canSee, inPlant, inWater, lineOfSight, lootUnder, solidAt, throwDistance } from '../sim/step';
 import { createOfflineSession } from '../net/session';
 import { NO_INPUT } from '../sim/types';
 
@@ -77,13 +77,17 @@ export interface HudState {
   total: number;
   /** Seconds since the round started (the title card shows for the first few). */
   planeTime: number;
+  /** Looking through the sniper's scope. */
+  scoped: boolean;
+  /** Holding a sniper (the touch SCOPE button shows). */
+  sniper: boolean;
   /** First person on the ground (the crosshair shows), and whether the mouse is captured. */
   firstPerson: boolean;
   mouseLocked: boolean;
 }
 
 export type AimMode = 'auto' | 'mouse';
-export type TouchButton = 'fire' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR';
+export type TouchButton = 'fire' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR' | 'scope';
 
 export interface MatchOptions {
   fighter: FighterId;
@@ -348,6 +352,36 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     scene.add(m);
     return m;
   });
+  /**
+   * A sniper round is too fast to see in flight, so every shot leaves a contrail: a thin bright
+   * streak from the muzzle to wherever the round stops (the first wall, tree or person), fading
+   * out over half a second. Scoped or not, you always see where it went.
+   */
+  const contrailMat = new THREE.MeshBasicMaterial({ color: 0xe8f4ff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+  const contrails = Array.from({ length: 6 }, () => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(1, 0.05, 0.05).translate(0.5, 0, 0), contrailMat.clone());
+    m.visible = false;
+    m.userData.life = 0;
+    scene.add(m);
+    return m;
+  });
+  let nextContrail = 0;
+  const contrail = (x: number, y: number, angle: number, h: number) => {
+    // March along the line until something solid or someone stops the round.
+    let d = 0.8;
+    for (; d < 160; d += 0.5) {
+      const px = x + Math.cos(angle) * d;
+      const py = y + Math.sin(angle) * d;
+      if (h < 3 && solidAt(state, px, py)) break;
+      if (state.players.some((o) => o.alive && o.stage !== 'drone' && Math.hypot(o.x - px, o.y - py) < 0.6 && Math.hypot(o.x - x, o.y - y) > 1)) break;
+    }
+    const m = contrails[nextContrail++ % contrails.length];
+    m.position.set(x + Math.cos(angle) * 0.8, h, y + Math.sin(angle) * 0.8);
+    m.rotation.set(0, -angle, 0);
+    m.scale.set(d - 0.8, 1, 1);
+    m.visible = true;
+    m.userData.life = 0.5;
+  };
   const lobs = Array.from({ length: 12 }, () => {
     const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.28, 1), mat(0x2b3045));
     m.visible = false;
@@ -413,17 +447,26 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const landRing = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff3d3d, transparent: true, opacity: 0.9, depthWrite: false }));
   const landDisc = new THREE.Mesh(new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff3d3d, transparent: true, opacity: 0.2, depthWrite: false }));
   landRing.visible = landDisc.visible = false;
+  // Drawn over everything (grass, plants, rugs), so the landing spot is never hidden.
+  for (const m of [landRing, landDisc, ...arcDots]) {
+    (m.material as THREE.Material).depthTest = false;
+    m.renderOrder = 10;
+  }
   scene.add(landRing, landDisc);
   const updateThrowPreview = (self: Player, x: number, y: number) => {
-    const on = self.alive && self.stage === 'ground' && self.charging !== null;
+    // Only a bomb gets the landing circle: rockets fly straight where you aim, like a gun.
+    const on = self.alive && self.stage === 'ground' && self.charging === 'bomb';
     landRing.visible = landDisc.visible = on;
     arcDots.forEach((d) => (d.visible = on));
     if (!on) return;
-    const range = self.charging === 'bomb' ? ITEMS.bomb.range : WEAPONS[self.weapon].range;
-    const radius = self.charging === 'bomb' ? ITEMS.bomb.radius : WEAPONS[self.weapon].lob?.radius ?? 2;
-    const d = throwDistance(self.charge, range);
-    const tx = x + Math.cos(self.heading) * d;
-    const ty = y + Math.sin(self.heading) * d;
+    const range = ITEMS.bomb.range;
+    const radius = ITEMS.bomb.radius;
+    // With the mouse the bomb lands under the cursor (up to its range); otherwise hold to throw farther.
+    const toCursor = lastThrowAim ? Math.hypot(lastThrowAim.x - self.x, lastThrowAim.y - self.y) : 0;
+    const d = lastThrowAim ? Math.min(range, toCursor) : throwDistance(self.charge, range);
+    const a = lastThrowAim && toCursor > 0.3 ? Math.atan2(lastThrowAim.y - self.y, lastThrowAim.x - self.x) : self.heading;
+    const tx = x + Math.cos(a) * d;
+    const ty = y + Math.sin(a) * d;
     // The same arc the projectile flies (see the lob drawing below).
     arcDots.forEach((dot, k) => {
       const t = (k + 1) / (arcDots.length + 1);
@@ -443,6 +486,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** The mouse on the canvas in normalised device coordinates, and the left button. */
   const mouse = new THREE.Vector2(0, 0);
   let mouseDown = false;
+  /** Right mouse button held: look through the sniper's scope (Z does the same). */
+  let rightDown = false;
+  /** Mouse aim with a bomb: where it will land (null when throwing by holding). */
+  let lastThrowAim: { x: number; y: number } | null = null;
   const onMouseMove = (e: MouseEvent) => {
     const r = canvas.getBoundingClientRect();
     mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
@@ -450,10 +497,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const onMouseDown = (e: MouseEvent) => {
     sfx.unlock();
     if (e.button === 0) mouseDown = true;
+    if (e.button === 2) rightDown = true;
   };
   const onMouseUp = (e: MouseEvent) => {
     if (e.button === 0) mouseDown = false;
+    if (e.button === 2) rightDown = false;
   };
+  const onContext = (e: Event) => e.preventDefault();
+  canvas.addEventListener('contextmenu', onContext);
   canvas.addEventListener('mousemove', onMouseMove);
   canvas.addEventListener('mousedown', onMouseDown);
   window.addEventListener('mouseup', onMouseUp);
@@ -468,7 +519,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   let muted = sfx.muted;
   const onDown = (e: KeyboardEvent) => {
     sfx.unlock();
-    if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyQ', 'KeyE', 'KeyF', 'KeyG', 'ShiftLeft', 'ShiftRight', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+    if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyZ', 'Space', 'KeyQ', 'KeyE', 'KeyF', 'KeyG', 'ShiftLeft', 'ShiftRight', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     if (e.code === 'KeyM') muted = sfx.toggleMute();
     if (e.code === 'KeyT' && !e.repeat) aimMode = aimMode === 'auto' ? 'mouse' : 'auto';
     keys.add(e.code);
@@ -488,14 +539,18 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   let viewInit = false;
   let locked = false;
   /** First person once you're out of the plane: falling, under the canopy and on the ground. */
+  /** Looking through the sniper's scope this frame (set every frame from the input). */
+  let scoped = false;
   const firstPerson = () => fpp && state.players[me].stage !== 'drone' && state.players[me].alive;
   const onLockChange = () => {
     locked = document.pointerLockElement === canvas;
   };
   const onLook = (e: MouseEvent) => {
     if (!locked) return;
-    viewYaw += e.movementX * 0.0022;
-    viewPitch = Math.max(-1.1, Math.min(1.1, viewPitch - e.movementY * 0.0022));
+    // Through the scope the view moves as much less as it is zoomed, so aiming stays steady.
+    const sens = 0.0022 * (scoped ? 0.25 : 1);
+    viewYaw += e.movementX * sens;
+    viewPitch = Math.max(-1.1, Math.min(1.1, viewPitch - e.movementY * sens));
   };
   const onLockClick = () => {
     if (fpp && !locked && firstPerson()) void canvas.requestPointerLock();
@@ -699,9 +754,12 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         roll: keys.has('ShiftLeft') || keys.has('ShiftRight') || btn('roll'),
         reload: keys.has('KeyR') || btn('reload'),
         snap: true,
+        scope: scopeHeld(p),
+        pitch: viewPitch,
         aimX: p.x + c * 30,
         aimY: p.y + sn * 30,
       };
+      lastThrowAim = null;
       touchLatched.clear();
       return input;
     }
@@ -729,12 +787,19 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       lean: clamp((keys.has('KeyE') || btn('leanR') ? 1 : 0) - (keys.has('KeyQ') || btn('leanL') ? 1 : 0)),
       roll: keys.has('ShiftLeft') || keys.has('ShiftRight') || btn('roll'),
       reload: keys.has('KeyR') || btn('reload'),
+      scope: scopeHeld(p),
+      // Mouse aim: a bomb lands under the cursor.
+      throwAt: !!pointed,
       aimX: aim.x,
       aimY: aim.y,
     };
+    lastThrowAim = pointed ? { x: pointed.x, y: pointed.y } : null;
     touchLatched.clear();
     return input;
   };
+  /** Looking through the scope: a sniper in hand, on your feet, right mouse / Z / the touch button held. */
+  const scopeHeld = (p: Player) =>
+    p.weapon === 'sniper' && p.alive && p.stage === 'ground' && !inWater(p.x, p.y) && (rightDown || keys.has('KeyZ') || btn('scope'));
 
   // ---------- events -> effects and sound
   const feed: { id: number; text: string; at: number }[] = [];
@@ -763,6 +828,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           else sfx.gunshot(SOUND[e.weapon], e.x - camX(), d);
         }
         if (e.owner === me && (e.weapon === 'shotgun' || e.weapon === 'sniper')) trauma = Math.min(1, trauma + 0.2);
+        if (e.weapon === 'sniper') contrail(e.x, e.y, e.angle, 1.15);
         break;
       }
       case 'hit':
@@ -1068,6 +1134,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const renderFrame = (dt: number, alpha: number) => {
     resize();
     const self = state.players[me];
+    scoped = !paused && scopeHeld(self);
     const droneX = state.drone.x0 + (state.drone.x1 - state.drone.x0) * state.drone.t;
     const droneY = state.drone.y0 + (state.drone.y1 - state.drone.y0) * state.drone.t;
     drone.visible = state.phase === 'drop' && state.drone.t < 1;
@@ -1282,8 +1349,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         const m = tracers[t++];
         if (!m) continue;
         m.visible = true;
-        m.position.set(pr.x, 1.1, pr.y);
-        m.rotation.set(0, -Math.atan2(pr.vy, pr.vx), 0);
+        m.position.set(pr.x, pr.h ?? 1.1, pr.y);
+        // Fired up at a parachute (or down from one), the round climbs or dips along its line.
+        const climb = pr.h0 !== undefined && pr.h1 !== undefined ? Math.atan2(pr.h1 - pr.h0, pr.hd ?? 1) : 0;
+        m.rotation.set(0, -Math.atan2(pr.vy, pr.vx), climb, 'YZX');
         if (pr.owner === me && firstPerson() && vmGun) {
           // First person: the round leaves your own barrel and merges into its true line
           // (chest height, where the game counts hits) over the first 10 m.
@@ -1293,18 +1362,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           m.position.y += (muzzleAt.y - 1.1) * k;
           m.position.z += (muzzleAt.z - pr.sy) * k;
         }
-      } else if (pr.rocket) {
-        // A low arc (peaks ~1.4 m above the launcher), nose along the flight.
+      } else if (pr.kind === 'rocket') {
+        // Straight where it was aimed, nose along the flight, sinking a little when it goes far.
         const m = rocketMeshes[rk++];
         if (!m) continue;
         m.visible = true;
-        const hAt = (t: number) => 1.3 + 4 * t * (1 - t) * 1.4 - t * 0.9;
-        m.position.set(pr.x, hAt(pr.t), pr.y);
-        const dir = tmpV.set(pr.tx - pr.sx, 0, pr.ty - pr.sy);
-        const flat = dir.length() || 1;
-        dir.multiplyScalar(1 / flat);
-        dir.y = ((hAt(Math.min(1, pr.t + 0.02)) - hAt(pr.t)) / 0.02) * (pr.duration / flat);
-        m.lookAt(m.position.x + dir.x, m.position.y + dir.y, m.position.z + dir.z);
+        m.position.set(pr.x, pr.h ?? 1.3, pr.y);
+        m.lookAt(pr.x + pr.vx, (pr.h ?? 1.3) + (pr.vh ?? 0), pr.y + pr.vy);
         const f = m.userData.flame as THREE.Mesh;
         f.scale.set(1, 1, 0.8 + Math.random() * 0.5);
         if (smokeTick) {
@@ -1320,6 +1384,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     }
     for (; rk < rocketMeshes.length; rk++) rocketMeshes[rk].visible = false;
     for (; t < tracers.length; t++) tracers[t].visible = false;
+    for (const c of contrails) {
+      if (!c.visible) continue;
+      c.userData.life -= dt;
+      c.visible = c.userData.life > 0;
+      (c.material as THREE.MeshBasicMaterial).opacity = Math.max(0, c.userData.life / 0.5) * 0.9;
+      c.scale.y = c.scale.z = 1 + (0.5 - c.userData.life) * 3;
+    }
     for (; lb < lobs.length; lb++) lobs[lb].visible = false;
     tempWalls.forEach((m, i) => {
       const w = state.walls[i];
@@ -1379,6 +1450,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const k = (camera.aspect < 1.3 ? Math.min(1.75, 1.3 / camera.aspect) : 1) * camZoom;
       want = camNear < 1 ? new THREE.Vector3(selfX + 2, 3.2, selfY + 4) : new THREE.Vector3(selfX, 36 * k, selfY + 22 * k);
       look = camNear < 1 ? new THREE.Vector3(selfX, 1.1, selfY) : new THREE.Vector3(selfX, 0, selfY + 1);
+      if (scoped && camNear >= 1) {
+        // Through the scope from above: the view slides far out the way you aim and pulls up,
+        // so you see (and auto-aim reaches) people well past the normal screen.
+        const ax = Math.cos(self.heading) * 30;
+        const ay = Math.sin(self.heading) * 30;
+        want.set(selfX + ax, 54 * k, selfY + ay + 33 * k);
+        look.set(selfX + ax, 0, selfY + ay + 1);
+      }
     }
     // Falling: blend in from the plane view for a moment, then stay locked to the jumper (no lag,
     // no wobble). Ground: a soft follow.
@@ -1390,11 +1469,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // Wider lens and see-through clouds while you pick your spot from the plane.
     const overview = self.stage === 'drone' && state.phase === 'drop';
     const fp = firstPerson();
-    const fov = fp ? 74 : THREE.MathUtils.damp(camera.fov, overview ? 52 : 42, 3, dt);
+    const fov = fp ? THREE.MathUtils.damp(camera.fov, scoped ? 16 : 74, 18, dt) : THREE.MathUtils.damp(camera.fov, overview ? 52 : 42, 3, dt);
     // Far away above the map, a nearer near-plane wastes depth precision and the ground and the
     // roads fight (flicker); push it out while in the overview.
     const near = overview ? 4 : camNear < 1 || fp ? 0.05 : 0.5;
-    if (Math.abs(fov - camera.fov) > 0.01 || camera.near !== near) {
+    if (Math.abs(fov - camera.fov) > 0.001 || camera.near !== near) {
       camera.fov = fov;
       camera.near = near;
       camera.updateProjectionMatrix();
@@ -1452,7 +1531,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const since = lastShot[me] === undefined ? 9 : time - lastShot[me];
       const kick = Math.max(0, 1 - since / 0.14);
       const reload = self.reload > 0 ? Math.sin((1 - self.reload / WEAPONS[self.weapon].reload) * Math.PI) : 0;
-      viewmodel.visible = !swim && !air;
+      viewmodel.visible = !swim && !air && !scoped;
       swimArms.visible = swim && !air;
       if (swim) poseSwimArms(rig.phase, Math.min(1, speed / 1.6));
       viewmodel.position.set(Math.sin(rig.phase) * 0.012 * Math.min(1, speed / 5), bob * 0.5 - reload * 0.12, kick * 0.07);
@@ -1526,9 +1605,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         : k
           ? `${touch ? 'USE' : 'F'} · pick up ${LOOT_NAME[k.kind]}`
           : self.charging
-            ? 'Hold to throw farther · let go to throw'
-            : self.weapon === 'rockets' && self.mag > 0
-              ? `Hold ${touch ? 'FIRE' : 'Space'} to aim the rocket, let go to fire`
+            ? lastThrowAim ? 'Point where it lands · let go of F to throw' : 'Hold to throw farther · let go to throw'
+            : self.weapon === 'sniper' && self.mag + self.ammo > 0 && !scoped && !touch
+              ? `${aimMode === 'mouse' || fpp ? 'Right click' : 'Z'} · scope`
           : self.weapon !== 'fists' && self.mag + self.ammo === 0
             ? 'Out of ammo · find an ammo box or another gun'
             : self.item
@@ -1575,6 +1654,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       total: state.players.length,
       planeTime: state.tick * DT,
       firstPerson: firstPerson(),
+      scoped,
+      sniper: self.weapon === 'sniper' && self.alive,
       mouseLocked: locked,
     });
   };
@@ -1614,7 +1695,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     raf = requestAnimationFrame(frame);
   };
   raf = requestAnimationFrame(frame);
-  if (process.env.NODE_ENV !== 'production') (window as unknown as { __lcs?: unknown }).__lcs = { state: () => state, buildings: BUILDINGS, map: MAP, animals: props.animals };
+  if (process.env.NODE_ENV !== 'production') (window as unknown as { __lcs?: unknown }).__lcs = { state: () => state, buildings: BUILDINGS, map: MAP, animals: props.animals, preview: () => ({ ring: landRing.visible, x: landRing.position.x, y: landRing.position.y, z: landRing.position.z, s: landRing.scale.x, parent: !!landRing.parent, op: (landRing.material as THREE.MeshBasicMaterial).opacity, dots: arcDots.filter((d) => d.visible).length, aim: lastThrowAim }) };
 
   return {
     touch,
@@ -1654,6 +1735,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       if (document.pointerLockElement === canvas) document.exitPointerLock();
       canvas.removeEventListener('mousemove', onMouseMove);
       canvas.removeEventListener('mousedown', onMouseDown);
+      canvas.removeEventListener('contextmenu', onContext);
       window.removeEventListener('mouseup', onMouseUp);
       window.removeEventListener('keydown', onDown);
       window.removeEventListener('keyup', onUp);

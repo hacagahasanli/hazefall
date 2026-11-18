@@ -6,6 +6,8 @@ import {
   DT,
   fenceVertical,
   LEAN,
+  fallHeight,
+  ROCKET,
   ROLL,
   railSides,
   SWIM,
@@ -260,7 +262,9 @@ export const lineOfSight = (state: GameState, x0: number, y0: number, x1: number
 
 /** Can `viewer` see `target`? Plants hide you unless someone is very close or you just fired. */
 /** On the ground, or hanging under an open parachute: you can be seen, aimed at and hit. */
-export const targetable = (p: Player) => p.alive && (p.stage === 'ground' || (p.stage === 'falling' && p.fall <= DROP.chute));
+export const targetable = (p: Player) => p.alive && (p.stage === 'ground' || p.stage === 'falling');
+/** How high a player's chest is above the ground (in the air: on the way down). */
+export const chestHeight = (p: Player) => (p.stage === 'falling' ? fallHeight(Math.max(0, p.fall)) + 1.1 : 1.1);
 
 /** Where a player's body is for bullets: leaning out moves the exposed shoulder sideways. */
 export const hitPoint = (p: Player) => ({
@@ -272,7 +276,8 @@ export const canSee = (state: GameState, viewer: Player, target: Player) => {
   if (!targetable(target)) return false;
   if (viewer.id === target.id) return true;
   const d = Math.hypot(target.x - viewer.x, target.y - viewer.y);
-  if (inPlant(target.x, target.y) && target.revealed <= 0 && d > PLANT_REVEAL) return false;
+  // Plants hide people standing in them, not the ones floating down over them.
+  if (target.stage === 'ground' && inPlant(target.x, target.y) && target.revealed <= 0 && d > PLANT_REVEAL) return false;
   return true;
 };
 
@@ -618,18 +623,36 @@ const explode = (state: GameState, owner: number, x: number, y: number, radius: 
 
 // ---------- weapons, supers and items
 
-const fireBullet = (state: GameState, p: Player, angle: number) => {
+/** Who the aim point is on, if anyone (within 2.5 m of it): rounds climb or dip to their height. */
+const aimedAt = (state: GameState, p: Player, aimX: number, aimY: number) => {
+  let best: Player | null = null;
+  let bd = 2.5;
+  for (const o of state.players) {
+    if (o.id === p.id || !targetable(o)) continue;
+    const d = Math.hypot(o.x - aimX, o.y - aimY);
+    if (d < bd) {
+      best = o;
+      bd = d;
+    }
+  }
+  return best;
+};
+
+const fireBullet = (state: GameState, p: Player, angle: number, aim?: { x: number; y: number }) => {
   const w = WEAPONS[p.weapon];
   // Leaning out, the muzzle is out past the corner too.
   const o = hitPoint(p);
   const x = o.x + Math.cos(angle) * 0.6;
   const y = o.y + Math.sin(angle) * 0.6;
+  const target = aim ? aimedAt(state, p, aim.x, aim.y) : null;
+  const h0 = chestHeight(p);
   state.projectiles.push({
     id: state.nextId++, owner: p.id, kind: 'bullet', weapon: p.weapon,
     x, y,
     vx: Math.cos(angle) * w.speed, vy: Math.sin(angle) * w.speed,
     damage: w.damage, life: w.range / w.speed,
     sx: x, sy: y, tx: 0, ty: 0, t: 0, duration: 0, radius: 0,
+    h: h0, h0, h1: target ? chestHeight(target) : h0, hd: target ? Math.max(1, Math.hypot(target.x - x, target.y - y)) : 1,
   });
 };
 
@@ -641,8 +664,26 @@ export const falloffDamage = (weapon: WeaponKind, damage: number, distance: numb
   return damage * (1 - (1 - f.min) * k);
 };
 
-/** How fast a rocket flies (m/s). */
-const ROCKET_SPEED = 13;
+/**
+ * A rocket leaves the launcher on your shoulder and flies straight where you aim, like any gun:
+ * level from the top-down view (sinking slowly over long distances), up or down with your view
+ * in first person. It explodes on the first wall, tree or person it meets, or the ground.
+ */
+const fireRocket = (state: GameState, p: Player, angle: number, pitch: number) => {
+  const w = WEAPONS.rockets;
+  const o = hitPoint(p);
+  const x = o.x + Math.cos(angle) * 0.8;
+  const y = o.y + Math.sin(angle) * 0.8;
+  const pt = Math.max(-0.6, Math.min(0.9, pitch));
+  const flat = Math.cos(pt) * w.speed;
+  state.projectiles.push({
+    id: state.nextId++, owner: p.id, kind: 'rocket', weapon: 'rockets',
+    x, y, vx: Math.cos(angle) * flat, vy: Math.sin(angle) * flat,
+    damage: w.damage, life: w.range / w.speed,
+    sx: x, sy: y, tx: 0, ty: 0, t: 0, duration: 0, radius: w.lob!.radius, rocket: true,
+    h: chestHeight(p) + (ROCKET.launchHeight - 1.1), vh: Math.sin(pt) * w.speed,
+  });
+};
 
 const lob = (state: GameState, p: Player, aimX: number, aimY: number, range: number, damage: number, radius: number, rocket = false) => {
   const a = Math.atan2(aimY - p.y, aimX - p.x);
@@ -651,8 +692,7 @@ const lob = (state: GameState, p: Player, aimX: number, aimY: number, range: num
     id: state.nextId++, owner: p.id, kind: 'lob', weapon: 'rockets',
     x: p.x, y: p.y, vx: 0, vy: 0, damage, life: 99,
     sx: p.x, sy: p.y, tx: p.x + Math.cos(a) * d, ty: p.y + Math.sin(a) * d,
-    // A rocket flies at ~13 m/s, far slower than a bullet: you see it coming. A bomb is thrown.
-    t: 0, duration: rocket ? 0.25 + d / ROCKET_SPEED : 0.35 + d / 22, radius, rocket,
+    t: 0, duration: 0.35 + d / 22, radius, rocket,
   });
 };
 
@@ -683,10 +723,11 @@ const shoot = (state: GameState, p: Player, input: Input) => {
   const aim = Math.hypot(input.aimX - p.x, input.aimY - p.y) > 0.3 ? Math.atan2(input.aimY - p.y, input.aimX - p.x) : p.heading;
   const keep = p.weapon;
   p.weapon = kind; // fireBullet reads the weapon
-  if (w.lob) lob(state, p, input.aimX, input.aimY, w.range, w.damage, w.lob.radius, true);
+  const at = { x: input.aimX, y: input.aimY };
+  if (kind === 'rockets') fireRocket(state, p, aim, input.pitch ?? 0);
   else if (w.bullets > 1) {
-    for (let i = 0; i < w.bullets; i++) fireBullet(state, p, aim - w.spread / 2 + (w.spread * i) / (w.bullets - 1));
-  } else fireBullet(state, p, aim + (nextRandom(state) - 0.5) * w.spread);
+    for (let i = 0; i < w.bullets; i++) fireBullet(state, p, aim - w.spread / 2 + (w.spread * i) / (w.bullets - 1), at);
+  } else fireBullet(state, p, aim + (nextRandom(state) - 0.5) * w.spread, at);
   p.weapon = keep;
   state.events.push({ type: 'shot', owner: p.id, x: p.x, y: p.y, angle: aim, weapon: kind });
   if (kind !== 'fists') p.shots += w.bullets;
@@ -919,30 +960,13 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
   }
 
   // People charge rockets and bombs: hold to throw farther, let go to throw. Bots throw at once.
-  const rocketReady = WEAPONS[p.weapon].lob && p.mag > 0 && p.reload <= 0;
   if (swimming) {
     // Both hands are swimming: no shooting, no throwing.
     p.charging = null;
     p.charge = 0;
-  } else if (!p.bot && rocketReady && (input.fire || p.charging === 'rockets')) {
-    if (input.fire && p.cooldown <= 0) {
-      p.charging = 'rockets';
-      p.charge += DT;
-    } else if (!input.fire && p.charging === 'rockets') {
-      const w = WEAPONS[p.weapon];
-      const d = throwDistance(p.charge, w.range);
-      lob(state, p, p.x + Math.cos(p.heading) * d, p.y + Math.sin(p.heading) * d, w.range, w.damage, w.lob!.radius, true);
-      p.cooldown = w.rate;
-      p.revealed = 1;
-      p.mag -= 1;
-      state.events.push({ type: 'shot', owner: p.id, x: p.x, y: p.y, angle: p.heading, weapon: p.weapon });
-      if (p.mag <= 0) startReload(state, p);
-      p.charge = 0;
-      p.charging = null;
-    }
   } else if (input.fire && p.cooldown <= 0) shoot(state, p, input);
   else if (input.fire && p.weapon !== 'fists' && p.mag <= 0 && p.ammo <= 0 && !p.prev.fire) state.events.push({ type: 'dryFire', player: p.id });
-  if (p.charging === 'rockets' && !WEAPONS[p.weapon].lob) {
+  if (p.charging === 'rockets') {
     p.charging = null;
     p.charge = 0;
   }
@@ -956,8 +980,11 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
       p.charging = 'bomb';
       p.charge += DT;
     } else {
-      const d = throwDistance(p.charge, ITEMS.bomb.range);
-      lob(state, p, p.x + Math.cos(p.heading) * d, p.y + Math.sin(p.heading) * d, ITEMS.bomb.range, ITEMS.bomb.damage, ITEMS.bomb.radius);
+      // With the mouse it lands under the cursor (up to its range); otherwise hold to throw farther.
+      const toAim = Math.hypot(input.aimX - p.x, input.aimY - p.y);
+      const d = input.throwAt ? Math.min(ITEMS.bomb.range, toAim) : throwDistance(p.charge, ITEMS.bomb.range);
+      const a = input.throwAt && toAim > 0.3 ? Math.atan2(input.aimY - p.y, input.aimX - p.x) : p.heading;
+      lob(state, p, p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, ITEMS.bomb.range, ITEMS.bomb.damage, ITEMS.bomb.radius);
       p.revealed = 1;
       p.item = null;
       p.charge = 0;
@@ -1002,13 +1029,16 @@ const updateProjectile = (state: GameState, pr: Projectile) => {
     }
     return true;
   }
+  if (pr.kind === 'rocket') return updateRocket(state, pr);
   pr.life -= DT;
   if (pr.life <= 0) return false;
   const steps = Math.max(1, Math.ceil((Math.hypot(pr.vx, pr.vy) * DT) / 0.4));
   for (let s = 0; s < steps; s++) {
     pr.x += (pr.vx * DT) / steps;
     pr.y += (pr.vy * DT) / steps;
-    if (solidAt(state, pr.x, pr.y)) {
+    // A round fired up at someone in the air climbs over the roofs and trees in between.
+    if (pr.h0 !== undefined) pr.h = pr.h0 + ((pr.h1 ?? pr.h0) - pr.h0) * Math.min(1, Math.hypot(pr.x - pr.sx, pr.y - pr.sy) / (pr.hd ?? 1));
+    if ((pr.h ?? 1.1) < 3 && solidAt(state, pr.x, pr.y)) {
       hitRack(state, toTile(pr.x), toTile(pr.y), pr.damage);
       state.events.push({ type: 'impact', x: pr.x, y: pr.y });
       return false;
@@ -1021,6 +1051,38 @@ const updateProjectile = (state: GameState, pr: Projectile) => {
         state.players[pr.owner].hits += 1;
         hurt(state, o, falloffDamage(pr.weapon, pr.damage, Math.hypot(pr.x - pr.sx, pr.y - pr.sy)), pr.owner);
         return false;
+      }
+    }
+  }
+  return true;
+};
+
+const updateRocket = (state: GameState, pr: Projectile) => {
+  pr.life -= DT;
+  const boom = () => {
+    explode(state, pr.owner, pr.x, pr.y, pr.radius, pr.damage);
+    return false;
+  };
+  if (pr.life <= 0) return boom();
+  const steps = Math.max(1, Math.ceil((Math.hypot(pr.vx, pr.vy) * DT) / 0.3));
+  for (let s = 0; s < steps; s++) {
+    pr.x += (pr.vx * DT) / steps;
+    pr.y += (pr.vy * DT) / steps;
+    pr.vh = (pr.vh ?? 0) - (ROCKET.gravity * DT) / steps;
+    pr.h = (pr.h ?? ROCKET.launchHeight) + (pr.vh * DT) / steps;
+    if (pr.h <= 0.05) return boom();
+    if (pr.h < ROCKET.wallHeight && solidAt(state, pr.x, pr.y)) {
+      hitRack(state, toTile(pr.x), toTile(pr.y), pr.damage);
+      return boom();
+    }
+    for (const o of state.players) {
+      if (o.id === pr.owner || !targetable(o)) continue;
+      if (Math.abs(chestHeight(o) - pr.h) > 1.6) continue;
+      const h = hitPoint(o);
+      if (Math.hypot(h.x - pr.x, h.y - pr.y) < PLAYER_RADIUS + 0.25) {
+        o.lastHitWith = 'rockets';
+        state.players[pr.owner].hits += 1;
+        return boom();
       }
     }
   }

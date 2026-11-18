@@ -12,12 +12,14 @@ const BUTTONS = ['fire', 'super', 'use', 'reload', 'roll', 'jump'] as const;
 const LEAN_L = 1 << 6;
 const LEAN_R = 1 << 7;
 const SNAP = 1 << 8;
+const SCOPE = 1 << 9;
+const THROW_AT = 1 << 10;
 /** Presses that must survive when inputs are folded together (everything but leaning). */
 export const PRESS_BITS = 0b111111;
 
-/** One tick of input: [clientTick, buttons, mx * 100, my * 100, aimX, aimY]. */
-export type WireInput = [number, number, number, number, number, number];
-export const NO_WIRE: WireInput = [0, 0, 0, 0, 0, 0];
+/** One tick of input: [clientTick, buttons, mx * 100, my * 100, aimX, aimY, pitch * 100]. */
+export type WireInput = [number, number, number, number, number, number, number];
+export const NO_WIRE: WireInput = [0, 0, 0, 0, 0, 0, 0];
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
@@ -29,7 +31,9 @@ export const encodeInput = (tick: number, i: Input): WireInput => {
   if (i.lean < -0.5) bits |= LEAN_L;
   if (i.lean > 0.5) bits |= LEAN_R;
   if (i.snap) bits |= SNAP;
-  return [tick, bits, Math.round(i.mx * 100), Math.round(i.my * 100), r2(i.aimX), r2(i.aimY)];
+  if (i.scope) bits |= SCOPE;
+  if (i.throwAt) bits |= THROW_AT;
+  return [tick, bits, Math.round(i.mx * 100), Math.round(i.my * 100), r2(i.aimX), r2(i.aimY), Math.round((i.pitch ?? 0) * 100)];
 };
 
 export const decodeInput = (w: WireInput): Input => {
@@ -39,12 +43,15 @@ export const decodeInput = (w: WireInput): Input => {
   });
   s.lean = w[1] & LEAN_L ? -1 : w[1] & LEAN_R ? 1 : 0;
   s.snap = (w[1] & SNAP) !== 0;
+  s.scope = (w[1] & SCOPE) !== 0;
+  s.throwAt = (w[1] & THROW_AT) !== 0;
+  s.pitch = (w[6] ?? 0) / 100;
   return s;
 };
 
 export const isWireInput = (w: unknown): w is WireInput =>
   Array.isArray(w) &&
-  w.length === 6 &&
+  w.length === 7 &&
   w.every((n) => typeof n === 'number' && Number.isFinite(n)) &&
   Math.abs(w[2]) <= 100 &&
   Math.abs(w[3]) <= 100;
@@ -75,6 +82,7 @@ export const createInputQueue = () => {
           queue[0][3],
           queue[0][4],
           queue[0][5],
+          queue[0][6],
         ];
       }
       const n = queue.shift();

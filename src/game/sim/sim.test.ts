@@ -1,6 +1,6 @@
 import { createBot } from './bot';
-import { BUILDINGS, DROP, DT, FIGHTERS, MAP, PLAYER_RADIUS, RIVER, riverCentre, SHAPES, SIZE, TILE, treeSpot, WEAPONS, WORLD, ZONE_PHASES } from './constants';
-import { circleBlocked, createGame, falloffDamage, hitPoint, inPlant, inWater, lootUnder, solidAt, step } from './step';
+import { BUILDINGS, DROP, DT, FIGHTERS, ITEMS, MAP, PLAYER_RADIUS, RIVER, riverCentre, SHAPES, SIZE, TILE, treeSpot, WEAPONS, WORLD, ZONE_PHASES } from './constants';
+import { canSee, circleBlocked, createGame, falloffDamage, hitPoint, inPlant, inWater, lootUnder, solidAt, step } from './step';
 import { NO_INPUT } from './types';
 
 import type { GameState, Input } from './types';
@@ -13,6 +13,15 @@ const landed = (seed = 1): GameState => {
   for (let i = 0; i < 60 * 60 && s.phase === 'drop'; i++) step(s, idle());
   return s;
 };
+
+/** The middle of a stretch of open meadow 30 tiles long: nothing to hit for a while. */
+const OPEN = (() => {
+  for (let y = 6; y < MAP.length - 6; y++) {
+    const x = MAP[y].indexOf('g'.repeat(30));
+    if (x >= 0) return { x: x * TILE + 4, y: y * TILE + TILE / 2 };
+  }
+  throw new Error('no meadow');
+})();
 
 const place = (s: GameState, id: number, x: number, y: number) => Object.assign(s.players[id], { x, y });
 /** Empty the floor and send everyone else away, so only player 0 is near the test loot. */
@@ -175,21 +184,56 @@ describe('loot and fighting', () => {
     expect(WEAPONS.rifle.range).toBeGreaterThan(100);
   });
 
-  it('rockets: a tap throws close, holding Space throws up to the full range', () => {
-    const throwAfter = (ticks: number) => {
+  it('a rocket flies straight where you aim, slower than any bullet, and sinks slowly when it goes far', () => {
+    const s = landed();
+    clearAround(s);
+    const p = s.players[0];
+    s.players.slice(1).forEach((o) => Object.assign(o, { x: 5, y: 5 }));
+    Object.assign(p, { weapon: 'rockets', mag: 1, ammo: 0, cooldown: 0, heading: 0, x: OPEN.x, y: OPEN.y });
+    const fire = idle();
+    fire[0] = { ...NO_INPUT, fire: true, aimX: p.x + 10, aimY: p.y + 0.3 };
+    step(s, fire);
+    const pr = s.projectiles.find((q) => q.kind === 'rocket' && q.owner === 0)!;
+    expect(pr).toBeTruthy();
+    expect(Math.atan2(pr.vy, pr.vx)).toBeCloseTo(Math.atan2(0.3, 10), 1); // where you aimed, no throw arc
+    expect(Math.hypot(pr.vx, pr.vy)).toBeLessThan(WEAPONS.pistol.speed / 2);
+    const h0 = pr.h!;
+    for (let i = 0; i < 60; i++) step(s, idle());
+    expect(Math.abs(pr.h! - h0)).toBeLessThan(0.3); // level at first
+    expect(WEAPONS.rockets.lob).toBeTruthy();
+  });
+
+  it('in first person a rocket goes up when you look up, so it lands farther', () => {
+    const fly = (pitch: number) => {
       const s = landed();
       clearAround(s);
+      s.players.slice(1).forEach((o) => Object.assign(o, { x: 5, y: 5 }));
       const p = s.players[0];
-      Object.assign(p, { weapon: 'rockets', mag: 1, ammo: 0, cooldown: 0, heading: 0 });
-      const hold = idle();
-      hold[0] = { ...NO_INPUT, fire: true, aimX: p.x + 10, aimY: p.y };
-      for (let i = 0; i < ticks; i++) step(s, hold);
-      step(s, idle());
-      const pr = s.projectiles.find((q) => q.kind === 'lob' && q.owner === 0)!;
-      return Math.hypot(pr.tx - pr.sx, pr.ty - pr.sy);
+      Object.assign(p, { weapon: 'rockets', mag: 1, ammo: 0, cooldown: 0, heading: 0, x: OPEN.x, y: OPEN.y });
+      const fire = idle();
+      fire[0] = { ...NO_INPUT, fire: true, pitch, aimX: p.x + 10, aimY: p.y };
+      step(s, fire);
+      const pr = s.projectiles.find((q) => q.kind === 'rocket')!;
+      return pr.vh!;
     };
-    expect(throwAfter(2)).toBeLessThan(5);
-    expect(throwAfter(90)).toBeCloseTo(WEAPONS.rockets.range, 0);
+    expect(fly(0.4)).toBeGreaterThan(5);
+    expect(fly(-0.3)).toBeLessThan(0);
+  });
+
+  it('with the mouse a bomb lands under the cursor, as far as 30 m', () => {
+    const s = landed();
+    clearAround(s);
+    const p = s.players[0];
+    Object.assign(p, { item: 'bomb', heading: 0, x: OPEN.x, y: OPEN.y });
+    const hold = idle();
+    hold[0] = { ...NO_INPUT, use: true, throwAt: true, aimX: p.x + 25, aimY: p.y };
+    for (let i = 0; i < 3; i++) step(s, hold);
+    const letGo = idle();
+    letGo[0] = { ...NO_INPUT, throwAt: true, aimX: p.x + 25, aimY: p.y };
+    step(s, letGo);
+    const pr = s.projectiles.find((q) => q.kind === 'lob')!;
+    expect(Math.hypot(pr.tx - pr.sx, pr.ty - pr.sy)).toBeCloseTo(25, 0);
+    expect(ITEMS.bomb.range).toBeGreaterThanOrEqual(30);
   });
 
   it('tall grass hides you like a bush', () => {
@@ -385,6 +429,16 @@ describe('the river', () => {
 });
 
 describe('the drop', () => {
+  it('someone floating down over a bush is not hidden by it', () => {
+    const s = createGame('hotfix', 1);
+    const [a, b] = s.players;
+    const ty = MAP.findIndex((row) => row.includes('b'));
+    const tx = MAP[ty].indexOf('b');
+    Object.assign(a, { stage: 'ground', x: tx * TILE + 12, y: ty * TILE + 1 });
+    Object.assign(b, { stage: 'falling', fall: DROP.chute - 1, x: tx * TILE + 1, y: ty * TILE + 1 });
+    expect(canSee(s, a, b)).toBe(true);
+  });
+
   it('under the parachute you can shoot and be shot', () => {
     const s = createGame('hotfix', 1);
     const [a, b] = s.players;

@@ -425,8 +425,27 @@ export const Match = ({
             </div>
           </div>
 
+          {/* The sniper's scope: in first person a round lens with a reticle and black all round;
+              from above a lighter ring round the far spot you are looking at. */}
+          {hud.scoped && (
+            <div className="pointer-events-none absolute inset-0 z-[3]" aria-hidden>
+              <div
+                className="absolute inset-0"
+                style={{
+                  background: hud.firstPerson
+                    ? 'radial-gradient(circle at 50% 50%, transparent 0, transparent min(38vh, 38vw), rgba(0,0,0,0.92) calc(min(38vh, 38vw) + 3px), #000 calc(min(38vh, 38vw) + 40px))'
+                    : 'radial-gradient(circle at 50% 50%, transparent 0, transparent 30%, rgba(5,8,16,0.55) 62%)',
+                }}
+              />
+              <div className="absolute left-1/2 top-1/2 h-px w-[min(76vh,76vw)] -translate-x-1/2 bg-black/80" />
+              <div className="absolute left-1/2 top-1/2 h-[min(76vh,76vw)] w-px -translate-y-1/2 bg-black/80" />
+              <div className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#ff3d3d]" />
+              <div className="absolute left-1/2 top-1/2 h-[min(76vh,76vw)] w-[min(76vh,76vw)] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-black/70" />
+            </div>
+          )}
+
           {/* First person: a crosshair, and how to take the mouse. */}
-          {hud.firstPerson && !over && (
+          {hud.firstPerson && !over && !hud.scoped && (
             <>
               <div className="pointer-events-none absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2" aria-hidden>
                 <span className="absolute left-1/2 top-0 h-2 w-0.5 -translate-x-1/2 bg-cream/90 shadow" />
@@ -486,6 +505,7 @@ export const Match = ({
               onPlane={hud.stage === 'drone'}
               superReady={hud.superCharge}
               rollReady={Math.min(1, hud.roll)}
+              sniper={hud.sniper}
             />
           )}
 
@@ -516,6 +536,9 @@ export const Match = ({
               </span>
               <span className="flex items-center gap-1">
                 <Key k="Shift" /> roll
+              </span>
+              <span className="flex items-center gap-1">
+                <Key k="Z" /> / right click · scope
               </span>
               <span className="flex items-center gap-1">
                 <Key k="T" /> {hud.aimMode === 'mouse' ? 'mouse aim' : 'auto-aim'}

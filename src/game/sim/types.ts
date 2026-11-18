@@ -23,6 +23,12 @@ export interface Input {
   jump: boolean;
   /** First-person view: the body turns to the aim at once (the mouse is the neck), no turn rate. */
   snap?: boolean;
+  /** First person: how far up (+) or down (-) you look, radians. A rocket flies that way. */
+  pitch?: number;
+  /** Looking through the sniper's scope (right mouse button, Z, or the touch button). */
+  scope?: boolean;
+  /** Mouse aim: the aim point is where to throw (a bomb lands under the cursor). */
+  throwAt?: boolean;
   /** Aim point on the map. */
   aimX: number;
   aimY: number;
@@ -102,7 +108,7 @@ export interface Player {
 export interface Projectile {
   id: number;
   owner: number;
-  kind: 'bullet' | 'lob';
+  kind: 'bullet' | 'lob' | 'rocket';
   /** The gun that fired it: sets how damage falls off with distance. */
   weapon: WeaponKind;
   x: number;
@@ -118,8 +124,18 @@ export interface Projectile {
   t: number; // 0..1 along the arc
   duration: number;
   radius: number;
-  /** A rocket (flies low and slow, under its own power) rather than a thrown bomb. */
+  /** A rocket flies under its own power; kept for old snapshots. */
   rocket?: boolean;
+  /**
+   * Height above the ground (m). Bullets: from the shooter's height to the target's over `hd`
+   * metres (so a round fired up at a parachute climbs to it). Rockets: their own height, with
+   * vertical speed `vh` and a gentle drop.
+   */
+  h?: number;
+  h0?: number;
+  h1?: number;
+  hd?: number;
+  vh?: number;
 }
 
 export interface Loot {

@@ -575,7 +575,9 @@ export const WEAPONS: Record<WeaponKind, WeaponStats> = {
   shotgun: { name: 'Shotgun', damage: 14, bullets: 7, spread: 0.5, speed: 28, range: 45, rate: 0.85, ammo: 18, mag: 6, reload: 2.2, falloff: { start: 5, end: 18, min: 0.15 } },
   rifle: { name: 'Rifle', damage: 30, bullets: 1, spread: 0.04, speed: 48, range: 120, rate: 0.16, ammo: 75, mag: 25, reload: 1.9, falloff: { start: 20, end: 60, min: 0.5 } },
   sniper: { name: 'Sniper', damage: 80, bullets: 1, spread: 0, speed: 80, range: 160, rate: 1.4, ammo: 10, mag: 5, reload: 2.6, falloff: { start: 40, end: 100, min: 0.7 } },
-  rockets: { name: 'Rockets', damage: 110, bullets: 1, spread: 0, speed: 0, range: 16, rate: 1.2, ammo: 4, mag: 1, reload: 2.4, lob: { radius: 3 }, falloff: { start: 99, end: 99, min: 1 } },
+  // A rocket flies straight where you aim at 16 m/s (you see it coming), drops a little over long
+  // distances, and explodes on whatever it meets.
+  rockets: { name: 'Rockets', damage: 110, bullets: 1, spread: 0, speed: 16, range: 70, rate: 1.2, ammo: 4, mag: 1, reload: 2.4, lob: { radius: 3 }, falloff: { start: 999, end: 999, min: 1 } },
 };
 
 /** Loot weights inside buildings (one entry = one ticket). Rockets and snipers are rare. */
@@ -594,6 +596,8 @@ export const LOOT_TABLE: string[] = [
 
 /** Rockets and bombs: hold to throw farther, from `min` metres up to the weapon's range after `full` seconds. */
 export const THROW = { min: 4, full: 1.2 };
+/** Rockets: how fast they sink (m/s^2), the height they leave at, and when they explode on walls. */
+export const ROCKET = { gravity: 0.32, launchHeight: 1.35, wallHeight: 3.2 };
 
 /** An ammo box gives the gun in your hands this many magazines of spare rounds. */
 export const AMMO_BOX_MAGS = 2;
@@ -607,7 +611,7 @@ export const VAULT = { after: 0.15, time: 0.55, reach: 3.2 };
 /** Armor is a second health bar of up to 100 that takes hits first (the Deadline ignores it). */
 export const ARMOR = { points: 100, absorb: 1 };
 export const ITEMS = {
-  bomb: { damage: 80, radius: 2.6, range: 12 },
+  bomb: { damage: 80, radius: 2.6, range: 30 },
   medkit: { heal: 50, over: 3 },
 };
 /** Everyone jumps with a pistol and one magazine, so you can fight under the parachute. */
