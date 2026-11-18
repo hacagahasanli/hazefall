@@ -354,6 +354,40 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     scene.add(m);
     return m;
   });
+  /**
+   * A rocket you can see coming: an olive body with a red nose and four fins, a flickering
+   * flame out of the back, and a trail of smoke behind it. Built along +z.
+   */
+  const rocketMeshes = Array.from({ length: 8 }, () => {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.85, 12).rotateX(Math.PI / 2), mat(0x5a6a3a));
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.135, 0.135, 0.08, 12).rotateX(Math.PI / 2), mat(0xe9c46a));
+    band.position.z = 0.22;
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.32, 12).rotateX(Math.PI / 2), mat(0xc0392b));
+    nose.position.z = 0.58;
+    g.add(body, band, nose);
+    for (let k = 0; k < 4; k++) {
+      const fin = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.2, 0.22), mat(0x3a4428));
+      fin.position.set(Math.cos((k * Math.PI) / 2) * 0.16, Math.sin((k * Math.PI) / 2) * 0.16, -0.36);
+      fin.rotation.z = (k * Math.PI) / 2;
+      g.add(fin);
+    }
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.55, 10).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true, opacity: 0.9 }));
+    flame.position.z = -0.7;
+    const core = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.3, 8).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xfff3c4 }));
+    core.position.z = -0.58;
+    g.add(flame, core);
+    const light = new THREE.PointLight(0xff9a3c, 3, 6);
+    light.position.z = -0.7;
+    g.add(light);
+    g.userData.flame = flame;
+    g.scale.setScalar(1.3); // readable from the top-down camera
+    g.traverse((o) => (o.castShadow = o instanceof THREE.Mesh && o !== flame && o !== core));
+    g.visible = false;
+    scene.add(g);
+    return g;
+  });
+  let smokeClock = 0;
   const tempWalls = Array.from({ length: 10 }, () => {
     const m = mesh(new THREE.BoxGeometry(1, 2.2, 1), mat(PALETTE.green));
     m.visible = false;
@@ -1237,6 +1271,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // Projectiles.
     let t = 0;
     let lb = 0;
+    let rk = 0;
+    smokeClock += dt;
+    const smokeTick = smokeClock > 0.035;
+    if (smokeTick) smokeClock = 0;
     for (const pr of state.projectiles) {
       if (pr.kind === 'bullet') {
         const m = tracers[t++];
@@ -1253,6 +1291,24 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           m.position.y += (muzzleAt.y - 1.1) * k;
           m.position.z += (muzzleAt.z - pr.sy) * k;
         }
+      } else if (pr.rocket) {
+        // A low arc (peaks ~1.4 m above the launcher), nose along the flight.
+        const m = rocketMeshes[rk++];
+        if (!m) continue;
+        m.visible = true;
+        const hAt = (t: number) => 1.3 + 4 * t * (1 - t) * 1.4 - t * 0.9;
+        m.position.set(pr.x, hAt(pr.t), pr.y);
+        const dir = tmpV.set(pr.tx - pr.sx, 0, pr.ty - pr.sy);
+        const flat = dir.length() || 1;
+        dir.multiplyScalar(1 / flat);
+        dir.y = ((hAt(Math.min(1, pr.t + 0.02)) - hAt(pr.t)) / 0.02) * (pr.duration / flat);
+        m.lookAt(m.position.x + dir.x, m.position.y + dir.y, m.position.z + dir.z);
+        const f = m.userData.flame as THREE.Mesh;
+        f.scale.set(1, 1, 0.8 + Math.random() * 0.5);
+        if (smokeTick) {
+          tmpV.set(0, 0, -0.75).applyQuaternion(m.quaternion).add(m.position);
+          vfx.burst(tmpV.x, tmpV.y, 2, 'dust', { z: tmpV.z, speed: 0.4, up: 0.6, gravity: -0.5, life: 0.9, size: 1.1 });
+        }
       } else {
         const m = lobs[lb++];
         if (!m) continue;
@@ -1260,6 +1316,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         m.position.set(pr.x, 1 + 4 * pr.t * (1 - pr.t) * 5, pr.y);
       }
     }
+    for (; rk < rocketMeshes.length; rk++) rocketMeshes[rk].visible = false;
     for (; t < tracers.length; t++) tracers[t].visible = false;
     for (; lb < lobs.length; lb++) lobs[lb].visible = false;
     tempWalls.forEach((m, i) => {

@@ -641,14 +641,18 @@ export const falloffDamage = (weapon: WeaponKind, damage: number, distance: numb
   return damage * (1 - (1 - f.min) * k);
 };
 
-const lob = (state: GameState, p: Player, aimX: number, aimY: number, range: number, damage: number, radius: number) => {
+/** How fast a rocket flies (m/s). */
+const ROCKET_SPEED = 13;
+
+const lob = (state: GameState, p: Player, aimX: number, aimY: number, range: number, damage: number, radius: number, rocket = false) => {
   const a = Math.atan2(aimY - p.y, aimX - p.x);
   const d = Math.min(range, Math.hypot(aimX - p.x, aimY - p.y));
   state.projectiles.push({
     id: state.nextId++, owner: p.id, kind: 'lob', weapon: 'rockets',
     x: p.x, y: p.y, vx: 0, vy: 0, damage, life: 99,
     sx: p.x, sy: p.y, tx: p.x + Math.cos(a) * d, ty: p.y + Math.sin(a) * d,
-    t: 0, duration: 0.35 + d / 22, radius,
+    // A rocket flies at ~13 m/s, far slower than a bullet: you see it coming. A bomb is thrown.
+    t: 0, duration: rocket ? 0.25 + d / ROCKET_SPEED : 0.35 + d / 22, radius, rocket,
   });
 };
 
@@ -679,7 +683,7 @@ const shoot = (state: GameState, p: Player, input: Input) => {
   const aim = Math.hypot(input.aimX - p.x, input.aimY - p.y) > 0.3 ? Math.atan2(input.aimY - p.y, input.aimX - p.x) : p.heading;
   const keep = p.weapon;
   p.weapon = kind; // fireBullet reads the weapon
-  if (w.lob) lob(state, p, input.aimX, input.aimY, w.range, w.damage, w.lob.radius);
+  if (w.lob) lob(state, p, input.aimX, input.aimY, w.range, w.damage, w.lob.radius, true);
   else if (w.bullets > 1) {
     for (let i = 0; i < w.bullets; i++) fireBullet(state, p, aim - w.spread / 2 + (w.spread * i) / (w.bullets - 1));
   } else fireBullet(state, p, aim + (nextRandom(state) - 0.5) * w.spread);
@@ -927,7 +931,7 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     } else if (!input.fire && p.charging === 'rockets') {
       const w = WEAPONS[p.weapon];
       const d = throwDistance(p.charge, w.range);
-      lob(state, p, p.x + Math.cos(p.heading) * d, p.y + Math.sin(p.heading) * d, w.range, w.damage, w.lob!.radius);
+      lob(state, p, p.x + Math.cos(p.heading) * d, p.y + Math.sin(p.heading) * d, w.range, w.damage, w.lob!.radius, true);
       p.cooldown = w.rate;
       p.revealed = 1;
       p.mag -= 1;

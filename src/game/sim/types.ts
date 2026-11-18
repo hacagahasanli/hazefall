@@ -118,6 +118,8 @@ export interface Projectile {
   t: number; // 0..1 along the arc
   duration: number;
   radius: number;
+  /** A rocket (flies low and slow, under its own power) rather than a thrown bomb. */
+  rocket?: boolean;
 }
 
 export interface Loot {
