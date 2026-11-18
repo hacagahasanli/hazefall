@@ -451,7 +451,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   let viewPitch = -0.04;
   let viewInit = false;
   let locked = false;
-  const firstPerson = () => fpp && state.players[me].stage === 'ground' && state.players[me].alive;
+  /** First person once you're out of the plane: falling, under the canopy and on the ground. */
+  const firstPerson = () => fpp && state.players[me].stage !== 'drone' && state.players[me].alive;
   const onLockChange = () => {
     locked = document.pointerLockElement === canvas;
   };
@@ -505,9 +506,71 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       vmArms.add(h);
     }
   };
+  /**
+   * Swimming in first person: your own arms doing breaststroke in front of you (reach forward
+   * together, sweep out to the sides, pull back to the chest); treading water, small sculling
+   * circles at the sides.
+   */
+  const swimArms = new THREE.Group();
+  swimArms.visible = false;
+  camera.add(swimArms);
+  const unitLimb = (r: number, c: number) => {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.1, 1, 8), vmMat(c));
+    swimArms.add(m);
+    return m;
+  };
+  const swimParts = [-1, 1].map(() => {
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.03, 0.1), vmMat(look.skin));
+    swimArms.add(hand);
+    return { fore: unitLimb(0.034, look.top), upper: unitLimb(0.045, look.top), hand };
+  });
+  const UP = new THREE.Vector3(0, 1, 0);
+  const limbDir = new THREE.Vector3();
+  const placeLimb = (m: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3) => {
+    m.position.copy(a).add(b).multiplyScalar(0.5);
+    m.scale.set(1, a.distanceTo(b), 1);
+    m.quaternion.setFromUnitVectors(UP, limbDir.copy(b).sub(a).normalize());
+  };
+  const poseSwimArms = (phase: number, moving: number) => {
+    const c = (((phase / (Math.PI * 2)) % 1) + 1) % 1;
+    swimParts.forEach((part, k) => {
+      const side = k === 0 ? -1 : 1;
+      // Breaststroke path in camera space: chest -> forward -> out -> back to the chest.
+      let x: number;
+      let y: number;
+      let z: number;
+      if (c < 0.35) {
+        const t = c / 0.35;
+        x = side * (0.06 + 0.02 * t);
+        y = -0.31 + 0.1 * t;
+        z = -0.3 - 0.42 * t;
+      } else if (c < 0.7) {
+        const t = (c - 0.35) / 0.35;
+        x = side * (0.08 + 0.4 * Math.sin(t * Math.PI * 0.5));
+        y = -0.21 - 0.06 * t;
+        z = -0.72 + 0.2 * t;
+      } else {
+        const t = (c - 0.7) / 0.3;
+        x = side * (0.48 - 0.42 * t);
+        y = -0.27 - 0.04 * t;
+        z = -0.52 + 0.22 * t;
+      }
+      // Treading water: small circles out at the sides instead.
+      const tx = side * 0.36 + Math.cos(phase * 1.5 + k) * 0.06;
+      const tz = -0.42 + Math.sin(phase * 1.5 + k) * 0.06;
+      const hand = new THREE.Vector3(x * moving + tx * (1 - moving), y * moving - 0.31 * (1 - moving), z * moving + tz * (1 - moving));
+      const elbow = hand.clone().add(new THREE.Vector3(side * 0.16, -0.18, 0.26));
+      const shoulder = new THREE.Vector3(side * 0.22, -0.42, 0.25);
+      placeLimb(part.fore, elbow, hand);
+      placeLimb(part.upper, shoulder, elbow);
+      part.hand.position.copy(hand);
+      part.hand.rotation.y = side * 0.4 * (1 - c);
+    });
+  };
   /** How far along the gun the left hand holds it (m from the grip), by gun. */
   const HOLD_SUPPORT: Partial<Record<WeaponKind, number>> = { smg: 0.24, shotgun: 0.3, rifle: 0.28, sniper: 0.32, rockets: 0.22 };
   buildArms(0);
+  let lastStageAir = false;
   let vmGun: THREE.Object3D | null = null;
   /** The tip of the barrel in first person: your shots leave from here. */
   const vmMuzzle = new THREE.Object3D();
@@ -574,7 +637,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const p = state.players[me];
     if (firstPerson()) {
       if (!viewInit) {
-        viewYaw = p.heading;
+        viewYaw = p.stage === 'falling' ? Math.atan2(state.drone.y1 - state.drone.y0, state.drone.x1 - state.drone.x0) : p.heading;
+        // Out of the plane you look down at the ground you're falling towards.
+        viewPitch = p.stage === 'falling' ? -0.75 : -0.04;
         viewInit = true;
       }
       const fwd = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - stick.y;
@@ -1284,13 +1349,24 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const speed = Math.hypot(self.vx, self.vy);
       const swim = inWater(self.x, self.y);
       const bob = swim ? Math.sin(time * 2) * 0.05 : Math.sin(rig.phase * 2) * 0.035 * Math.min(1, speed / 5);
-      const eyeY = selfH + (swim ? 0.25 : rig.chestY + 0.42) + bob;
+      const air = self.stage === 'falling';
+      // Swimming, the eyes are just above the surface, the hands working at the waterline.
+      const eyeY = selfH + (swim ? 0.45 : rig.chestY + 0.42) + bob;
+      // Touching down from the sky, the view comes back up to the horizon.
+      if (!air && lastStageAir) viewPitch = Math.max(viewPitch, -0.08);
+      lastStageAir = air;
       const c = Math.cos(viewYaw);
       const sn = Math.sin(viewYaw);
       // Leaning (Q/E) puts your head out past the corner and tilts the world, like a real lean.
       const lean = self.lean * 0.72;
       camera.position.set(selfX - sn * lean + n(23, 1) * 0.08 * shake, eyeY, selfY + c * lean + n(19, 4) * 0.08 * shake);
-      tmpV.set(camera.position.x + c * Math.cos(viewPitch), eyeY + Math.sin(viewPitch), camera.position.z + sn * Math.cos(viewPitch));
+      if (air) {
+        // Falling or under the canopy: your eyes are wherever your head is (lying flat in free
+        // fall, hanging from the harness under the canopy), with the wind's flutter.
+        rig.head.getWorldPosition(camera.position);
+        camera.position.y += 0.05 + (self.fall > DROP.chute ? Math.sin(time * 31) * 0.01 : 0);
+      }
+      tmpV.set(camera.position.x + c * Math.cos(viewPitch), camera.position.y + Math.sin(viewPitch), camera.position.z + sn * Math.cos(viewPitch));
       camera.lookAt(tmpV);
       camera.rotateZ(-self.lean * 0.3);
       camPos.copy(camera.position);
@@ -1315,11 +1391,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const since = lastShot[me] === undefined ? 9 : time - lastShot[me];
       const kick = Math.max(0, 1 - since / 0.14);
       const reload = self.reload > 0 ? Math.sin((1 - self.reload / WEAPONS[self.weapon].reload) * Math.PI) : 0;
-      viewmodel.visible = !swim;
+      viewmodel.visible = !swim && !air;
+      swimArms.visible = swim && !air;
+      if (swim) poseSwimArms(rig.phase, Math.min(1, speed / 1.6));
       viewmodel.position.set(Math.sin(rig.phase) * 0.012 * Math.min(1, speed / 5), bob * 0.5 - reload * 0.12, kick * 0.07);
       viewmodel.rotation.set(kick * 0.12 - reload * 0.5, 0, reload * 0.3);
     } else {
       viewmodel.visible = false;
+      swimArms.visible = false;
       camera.position.set(camPos.x + n(23, 1) * 0.5 * shake, camPos.y, camPos.z + n(19, 4) * 0.4 * shake);
       camera.lookAt(camLook);
       camFocus.set(camLook.x, 0, camLook.z);

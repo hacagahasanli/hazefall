@@ -19,6 +19,56 @@ const loader = new GLTFLoader();
 const load = (name: string) => loader.loadAsync(`/assets/models/${name}.glb`).then((g) => g.scene);
 
 const TINTS = [0xffffff, 0xffc9b0, 0xc8dcff, 0xfff0b8, 0xe0ffd0, 0xffd6e8, 0xd8d0ff];
+/** Siding colours for the houses in first person, and their roofs. */
+const FACADES = [0xd9c8a8, 0xb9c8d6, 0xe4d7c1, 0xc9a98a, 0xa9b996, 0xd8b8a4, 0xc4c0b6];
+const ROOFS = [0x7a3a2e, 0x4a5560, 0x5a6b45, 0x6b4a32, 0x3f4650];
+
+/**
+ * A gabled roof over a building's footprint (x0, z0, w, d in metres): the ridge along the long
+ * side, eaves at the wall tops with a little overhang, gable ends in the wall colour, and a flat
+ * ceiling under it so a room reads as a room from inside.
+ */
+const buildRoof = (x0: number, z0: number, w: number, d: number, barn: boolean, i: number) => {
+  const g = new THREE.Group();
+  const H = 2.6;
+  const o = 0.4;
+  const alongX = w >= d;
+  const L = (alongX ? w : d) + o * 2;
+  const S = (alongX ? d : w) + o * 2;
+  const rise = Math.min(barn ? 3.2 : 2.2, S * (barn ? 0.42 : 0.32));
+  const pos = (u: number, v: number, y: number) => (alongX ? [x0 - o + u, y, z0 - o + v] : [x0 - o + v, y, z0 - o + u]);
+  const quad = (a: number[], b: number[], c: number[], e: number[]) => [...a, ...b, ...c, ...a, ...c, ...e];
+  const slopes = new THREE.BufferGeometry();
+  slopes.setAttribute(
+    'position',
+    new THREE.Float32BufferAttribute(
+      [
+        ...quad(pos(0, 0, H - 0.05), pos(L, 0, H - 0.05), pos(L, S / 2, H + rise), pos(0, S / 2, H + rise)),
+        ...quad(pos(0, S, H - 0.05), pos(0, S / 2, H + rise), pos(L, S / 2, H + rise), pos(L, S, H - 0.05)),
+      ],
+      3,
+    ),
+  );
+  slopes.computeVertexNormals();
+  const roofMat = new THREE.MeshStandardMaterial({ color: barn ? 0x5b2a24 : ROOFS[i % ROOFS.length], roughness: 0.9, side: THREE.DoubleSide, flatShading: true });
+  const roof = new THREE.Mesh(slopes, roofMat);
+  roof.castShadow = true;
+  roof.receiveShadow = true;
+  // The gables: triangles closing the ends between the wall tops and the ridge.
+  const gables = new THREE.BufferGeometry();
+  gables.setAttribute(
+    'position',
+    new THREE.Float32BufferAttribute([...pos(o, o, H), ...pos(o, S - o, H), ...pos(o, S / 2, H + rise - 0.1), ...pos(L - o, o, H), ...pos(L - o, S / 2, H + rise - 0.1), ...pos(L - o, S - o, H)], 3),
+  );
+  gables.computeVertexNormals();
+  const gable = new THREE.Mesh(gables, new THREE.MeshStandardMaterial({ color: barn ? 0x9b3b30 : FACADES[i % FACADES.length], side: THREE.DoubleSide, flatShading: true }));
+  gable.castShadow = true;
+  // Unlit: facing down, a lit ceiling would take the hemisphere light's grass-green ground colour.
+  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xa8a092 }));
+  ceiling.position.set(x0 + w / 2, H - 0.02, z0 + d / 2);
+  g.add(roof, gable, ceiling);
+  return g;
+};
 
 /** A stable pseudo-random number per tile, so the dressing is the same every match. */
 const hash = (x: number, y: number, k = 0) => {
@@ -172,7 +222,9 @@ export const buildWorld = (scene: THREE.Scene): World => {
 
   // ---------- doorways: a frame, a dark opening and a doormat where the real doors are, so you
   // can see from outside where to walk in (the house models' own doors are only decoration)
-  const doorFrames = BUILDINGS.map((b) => {
+  /** The dark panels in the doorways, per building: shown from above, gone in first person. */
+  const openings: THREE.Mesh[][] = BUILDINGS.map(() => []);
+  const doorFrames = BUILDINGS.map((b, bi) => {
     const g = new THREE.Group();
     const frameMat = new THREE.MeshStandardMaterial({ color: 0xf4f0e6, roughness: 0.7 });
     const darkMat = new THREE.MeshStandardMaterial({ color: 0x1a1410, roughness: 1 });
@@ -207,6 +259,7 @@ export const buildWorld = (scene: THREE.Scene): World => {
         const mat = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.03, 0.9), matMat);
         mat.position.set(0, 0.015, sgn * 0.75);
         holder.add(opening, lintel, postL, postR, mat);
+        openings[bi].push(opening);
         holder.traverse((o) => o instanceof THREE.Mesh && (o.castShadow = true));
         g.add(holder);
       }
@@ -219,8 +272,14 @@ export const buildWorld = (scene: THREE.Scene): World => {
   const wallMat = new THREE.MeshStandardMaterial({ color: 0xece4d4, flatShading: true });
   const sillMat = new THREE.MeshStandardMaterial({ color: 0x8a6a4a, flatShading: true });
   const glassMat = new THREE.MeshStandardMaterial({ color: 0x9fd0ff, transparent: true, opacity: 0.35, roughness: 0.1 });
-  const interiors = BUILDINGS.map((b) => {
+  const facades: THREE.MeshStandardMaterial[] = [];
+  const interiors = BUILDINGS.map((b, bi) => {
     const g = new THREE.Group();
+    // In first person these walls are the house, inside and out: each house gets its own colour.
+    const facade = wallMat.clone();
+    facade.userData.inside = wallMat.color.clone();
+    facade.userData.outside = new THREE.Color(b.barn ? 0x9b3b30 : FACADES[bi % FACADES.length]);
+    facades.push(facade);
     const walls: THREE.Matrix4[] = [];
     const windows: THREE.Matrix4[] = [];
     for (let ty = b.y0; ty < b.y0 + b.h; ty++) {
@@ -231,7 +290,7 @@ export const buildWorld = (scene: THREE.Scene): World => {
         if (t === 'w') windows.push(m);
       }
     }
-    const wi = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE, 2.6, TILE), wallMat, walls.length);
+    const wi = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE, 2.6, TILE), facade, walls.length);
     walls.forEach((m, i) => wi.setMatrixAt(i, m));
     wi.castShadow = true;
     g.add(wi);
@@ -244,6 +303,14 @@ export const buildWorld = (scene: THREE.Scene): World => {
       });
       g.add(sill, glass);
     }
+    g.visible = false;
+    scene.add(g);
+    return g;
+  });
+
+  // ---------- first-person roofs: a gabled roof on the real walls, a ceiling under it
+  const roofs = BUILDINGS.map((b, i) => {
+    const g = buildRoof(b.x0 * TILE, b.y0 * TILE, b.w * TILE, b.h * TILE, b.barn, i);
     g.visible = false;
     scene.add(g);
     return g;
@@ -344,6 +411,20 @@ export const buildWorld = (scene: THREE.Scene): World => {
       updateNature(performance.now() / 1000, selfX, selfY, firstPerson ? 0 : 4.5);
       const inside = inBuilding(selfX, selfY);
       BUILDINGS.forEach((_, i) => {
+        roofs[i].visible = firstPerson;
+        openings[i].forEach((o) => (o.visible = !firstPerson));
+        facades[i].color.copy(firstPerson ? facades[i].userData.outside : facades[i].userData.inside);
+        if (firstPerson) {
+          // At eye level the house is its real walls, doors, windows and a roof: the shell
+          // models (built to be seen from above) would be walls you walk through.
+          const ext = exteriors[i];
+          if (ext) ext.visible = false;
+          interiors[i].visible = true;
+          interiors[i].scale.y = 1;
+          doorFrames[i].visible = true;
+          fade[i] = 1;
+          return;
+        }
         const want = i === inside ? 0 : 1;
         fade[i] += (want - fade[i]) * 0.2;
         const ext = exteriors[i];
