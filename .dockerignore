@@ -1,0 +1,6 @@
+# The lobby server image needs only server/ and src/game/net/lobby.ts (see server/Dockerfile).
+node_modules
+.next
+.git
+public
+*.log
