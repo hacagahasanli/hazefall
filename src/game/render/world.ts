@@ -92,9 +92,64 @@ export interface World {
   update: (state: GameState, selfX: number, selfY: number, firstPerson?: boolean) => void;
 }
 
+/**
+ * Close-up grain for the ground. The painted terrain has 6 px per metre: plenty from the
+ * top-down camera, soft at eye level. A small tiled noise texture, repeated every ~1.5 m and
+ * again every ~7.5 m, modulates its colour in the shader: grit and clumps up close, invisible
+ * from high up (it averages out in the mipmaps).
+ */
+const addGroundDetail = (m: THREE.MeshStandardMaterial) => {
+  const n = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = n;
+  const g = c.getContext('2d')!;
+  const img = g.createImageData(n, n);
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+  // Red: fine grit; green: soft clumps (blurred random, wrapped so the tile repeats seamlessly).
+  const coarse = Array.from({ length: 16 * 16 }, rnd);
+  const at = (x: number, y: number) => coarse[((y + 16) % 16) * 16 + ((x + 16) % 16)];
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const fx = (x / n) * 16;
+      const fy = (y / n) * 16;
+      const ix = Math.floor(fx);
+      const iy = Math.floor(fy);
+      const tx = fx - ix;
+      const ty = fy - iy;
+      const sx = tx * tx * (3 - 2 * tx);
+      const sy = ty * ty * (3 - 2 * ty);
+      const v = (at(ix, iy) * (1 - sx) + at(ix + 1, iy) * sx) * (1 - sy) + (at(ix, iy + 1) * (1 - sx) + at(ix + 1, iy + 1) * sx) * sy;
+      const o = (y * n + x) * 4;
+      img.data[o] = 90 + rnd() * 140;
+      img.data[o + 1] = v * 255;
+      img.data[o + 2] = 128;
+      img.data[o + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 8;
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uDetail = { value: tex };
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uDetail;')
+      .replace(
+        '#include <map_fragment>',
+        `#include <map_fragment>
+        float grit = texture2D(uDetail, vMapUv * ${(WORLD / 1.5).toFixed(1)}).r;
+        float clump = texture2D(uDetail, vMapUv * ${(WORLD / 7.5).toFixed(1)}).g;
+        diffuseColor.rgb *= mix(0.86, 1.12, grit) * mix(0.9, 1.08, clump);`,
+      );
+  };
+};
+
 export const buildWorld = (scene: THREE.Scene): World => {
   // ---------- ground
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(WORLD, WORLD), new THREE.MeshStandardMaterial({ map: paintTerrain(), roughness: 1 }));
+  const groundMat = new THREE.MeshStandardMaterial({ map: paintTerrain(), roughness: 1 });
+  addGroundDetail(groundMat);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(WORLD, WORLD), groundMat);
   ground.rotation.x = -Math.PI / 2;
   ground.position.set(WORLD / 2, 0, WORLD / 2);
   ground.receiveShadow = true;

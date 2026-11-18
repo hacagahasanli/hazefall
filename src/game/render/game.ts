@@ -479,18 +479,39 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize());
     return m;
   };
-  const GRIP = new THREE.Vector3(0.16, -0.19, -0.5);
-  const FORE = new THREE.Vector3(0.1, -0.16, -0.7);
-  viewmodel.add(
-    vmLimb(new THREE.Vector3(0.3, -0.42, -0.12), GRIP, 0.03, look.top),
-    vmLimb(new THREE.Vector3(-0.12, -0.44, -0.2), FORE, 0.03, look.top),
-  );
-  for (const at of [GRIP, FORE]) {
-    const hand = new THREE.Mesh(new THREE.IcosahedronGeometry(0.036, 0), vmMat(look.skin));
-    hand.position.copy(at);
-    viewmodel.add(hand);
-  }
+  /**
+   * The view model is rebuilt for each gun: the gun low and to the right, turned a little in
+   * towards the crosshair so its side shows; the right hand on the grip, the left hand under
+   * the fore-end (both on the grip for a pistol); forearms coming up from below the screen with
+   * the elbows bent, in your fighter's sleeves.
+   */
+  const GRIP = new THREE.Vector3(0.19, -0.23, -0.46);
+  const GUN_YAW = 0.09;
+  const vmArms = new THREE.Group();
+  viewmodel.add(vmArms);
+  const buildArms = (support: number) => {
+    vmArms.clear();
+    const fwd = new THREE.Vector3(-Math.sin(GUN_YAW), 0, -Math.cos(GUN_YAW));
+    const fore = support > 0 ? GRIP.clone().addScaledVector(fwd, support).add(new THREE.Vector3(-0.01, -0.035, 0)) : GRIP.clone().add(new THREE.Vector3(-0.045, -0.02, 0.02));
+    for (const [hand, elbow] of [
+      [GRIP, GRIP.clone().add(new THREE.Vector3(0.13, -0.22, 0.24))],
+      [fore, fore.clone().add(new THREE.Vector3(-0.16, -0.24, 0.22))],
+    ] as const) {
+      vmArms.add(vmLimb(elbow, hand, 0.034, look.top));
+      vmArms.add(vmLimb(elbow.clone().add(new THREE.Vector3(Math.sign(elbow.x - 0.05) * 0.08, -0.3, 0.3)), elbow, 0.045, look.top));
+      const h = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.05, 0.085), vmMat(look.skin));
+      h.position.copy(hand);
+      h.rotation.y = GUN_YAW;
+      vmArms.add(h);
+    }
+  };
+  /** How far along the gun the left hand holds it (m from the grip), by gun. */
+  const HOLD_SUPPORT: Partial<Record<WeaponKind, number>> = { smg: 0.24, shotgun: 0.3, rifle: 0.28, sniper: 0.32, rockets: 0.22 };
+  buildArms(0);
   let vmGun: THREE.Object3D | null = null;
+  /** The tip of the barrel in first person: your shots leave from here. */
+  const vmMuzzle = new THREE.Object3D();
+  const muzzleAt = new THREE.Vector3();
   let vmGunKind: WeaponKind | null = null;
 
   /**
@@ -628,7 +649,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           // Muzzle flash at the barrel, a brass casing kicked out to the side.
           const mx = e.x + Math.cos(e.angle) * 0.9;
           const my = e.y + Math.sin(e.angle) * 0.9;
-          vfx.burst(mx, 1.15, 5, 'spark', { z: my, speed: 3, up: 0.5, gravity: 0, life: 0.07, size: 1.6 });
+          if (e.owner === me && firstPerson() && vmGun) {
+            vmMuzzle.getWorldPosition(muzzleAt);
+            vfx.burst(muzzleAt.x, muzzleAt.y, 4, 'spark', { z: muzzleAt.z, speed: 1.2, up: 0.2, gravity: 0, life: 0.05, size: 0.5 });
+          } else vfx.burst(mx, 1.15, 5, 'spark', { z: my, speed: 3, up: 0.5, gravity: 0, life: 0.07, size: 1.6 });
           vfx.burst(e.x - Math.sin(e.angle) * 0.4, 1.1, 1, 'ko', { z: e.y + Math.cos(e.angle) * 0.4, speed: 2.5, up: 3, gravity: 18, life: 0.6, size: 0.45 });
         }
         if (d < 60) {
@@ -910,7 +934,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
   const prev = state.players.map((p) => ({ x: p.x, y: p.y, fall: p.fall }));
   let fallTime = 0;
-  let shadowWide = false;
+  let shadowHalf = 0;
   /** Dev only: ?cam=near brings the camera close to check animation. */
   const camNear = process.env.NODE_ENV !== 'production' && new URLSearchParams(window.location.search).get('cam') === 'near' ? 0.12 : 1;
   const camFocus = new THREE.Vector3(state.players[me].x, 0, state.players[me].y);
@@ -1153,6 +1177,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         m.visible = true;
         m.position.set(pr.x, 1.1, pr.y);
         m.rotation.set(0, -Math.atan2(pr.vy, pr.vx), 0);
+        if (pr.owner === me && firstPerson() && vmGun) {
+          // First person: the round leaves your own barrel and merges into its true line
+          // (chest height, where the game counts hits) over the first 10 m.
+          vmMuzzle.getWorldPosition(muzzleAt);
+          const k = Math.max(0, 1 - Math.hypot(pr.x - pr.sx, pr.y - pr.sy) / 10);
+          m.position.x += (muzzleAt.x - pr.sx) * k;
+          m.position.y += (muzzleAt.y - 1.1) * k;
+          m.position.z += (muzzleAt.z - pr.sy) * k;
+        }
       } else {
         const m = lobs[lb++];
         if (!m) continue;
@@ -1254,22 +1287,26 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const eyeY = selfH + (swim ? 0.25 : rig.chestY + 0.42) + bob;
       const c = Math.cos(viewYaw);
       const sn = Math.sin(viewYaw);
-      const lean = self.lean * 0.45;
+      // Leaning (Q/E) puts your head out past the corner and tilts the world, like a real lean.
+      const lean = self.lean * 0.72;
       camera.position.set(selfX - sn * lean + n(23, 1) * 0.08 * shake, eyeY, selfY + c * lean + n(19, 4) * 0.08 * shake);
       tmpV.set(camera.position.x + c * Math.cos(viewPitch), eyeY + Math.sin(viewPitch), camera.position.z + sn * Math.cos(viewPitch));
       camera.lookAt(tmpV);
-      camera.rotateZ(-self.lean * 0.12);
+      camera.rotateZ(-self.lean * 0.3);
       camPos.copy(camera.position);
       camLook.copy(tmpV);
       camFocus.set(selfX, 0, selfY);
       // The arms and gun: they sway with the stride, kick back by the gun's weight, dip to reload.
       if (vmGunKind !== self.weapon) {
         if (vmGun) viewmodel.remove(vmGun);
-        vmGun = self.weapon === 'fists' ? null : buildGun(GUN_MODEL[self.weapon]).root;
-        if (vmGun) {
-          vmGun.rotation.y = Math.PI;
-          vmGun.scale.setScalar(0.8);
-          vmGun.position.copy(GRIP).add(tmpV.set(-0.01, 0.025, 0));
+        const built = self.weapon === 'fists' ? null : buildGun(GUN_MODEL[self.weapon]);
+        vmGun = built?.root ?? null;
+        if (vmGun && built) {
+          vmMuzzle.position.set(0, 0.03, built.length);
+          vmGun.add(vmMuzzle);
+          vmGun.rotation.y = Math.PI + GUN_YAW;
+          vmGun.position.copy(GRIP).add(tmpV.set(0, 0.03, 0));
+          buildArms(self.weapon === 'pistol' ? 0 : HOLD_SUPPORT[self.weapon] ?? 0.3);
           vmGun.traverse((o) => (o.castShadow = false));
           viewmodel.add(vmGun);
         }
@@ -1291,14 +1328,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // Shadows: from the plane one fixed box over the whole map (a box that followed the camera made
     // shadows pop in and out across the map: the flicker); on the ground a box around you that
     // moves in steps of one shadow texel, so edges don't shimmer.
+    // First person: a tighter box, so the shadows at your feet are crisp.
     const wide = overview;
-    if (wide !== shadowWide) {
-      shadowWide = wide;
-      const half = wide ? WORLD * 0.62 : 40;
+    const half = wide ? WORLD * 0.62 : fp ? 24 : 40;
+    if (half !== shadowHalf) {
+      shadowHalf = half;
       Object.assign(sun.shadow.camera, { left: -half, right: half, top: half, bottom: -half, far: wide ? 400 : 160 });
       sun.shadow.camera.updateProjectionMatrix();
     }
-    const texel = (wide ? WORLD * 1.24 : 80) / 2048;
+    const texel = (half * 2) / 2048;
     const fxs = wide ? WORLD / 2 : Math.round(camFocus.x / texel) * texel;
     const fzs = wide ? WORLD / 2 : Math.round(camFocus.z / texel) * texel;
     sun.position.set(fxs - 20, wide ? 160 : 60, fzs + 14);
