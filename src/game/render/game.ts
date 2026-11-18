@@ -1036,6 +1036,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const prev = state.players.map((p) => ({ x: p.x, y: p.y, fall: p.fall }));
   let fallTime = 0;
   let shadowHalf = 0;
+  /** Dev only: ?zoom=0.6 brings the top-down camera that much closer (for trailer clips). */
+  const camZoom = process.env.NODE_ENV !== 'production' ? Number(new URLSearchParams(window.location.search).get('zoom') ?? 1) || 1 : 1;
   /** Dev only: ?cam=near brings the camera close to check animation. */
   const camNear = process.env.NODE_ENV !== 'production' && new URLSearchParams(window.location.search).get('cam') === 'near' ? 0.12 : 1;
   const camFocus = new THREE.Vector3(state.players[me].x, 0, state.players[me].y);
@@ -1374,7 +1376,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       }
     } else {
       // Narrow screens (a phone held upright) pull the camera up so you still see around you.
-      const k = camera.aspect < 1.3 ? Math.min(1.75, 1.3 / camera.aspect) : 1;
+      const k = (camera.aspect < 1.3 ? Math.min(1.75, 1.3 / camera.aspect) : 1) * camZoom;
       want = camNear < 1 ? new THREE.Vector3(selfX + 2, 3.2, selfY + 4) : new THREE.Vector3(selfX, 36 * k, selfY + 22 * k);
       look = camNear < 1 ? new THREE.Vector3(selfX, 1.1, selfY) : new THREE.Vector3(selfX, 0, selfY + 1);
     }
