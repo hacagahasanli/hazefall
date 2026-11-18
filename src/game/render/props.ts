@@ -122,6 +122,103 @@ const mesh = (g: THREE.BufferGeometry, m: THREE.Material = flat) => {
   return o;
 };
 
+/** A box from `a` to `b` (a beam, a cable, a diagonal), `w` x `h` in section. */
+const beam = (a: THREE.Vector3, b: THREE.Vector3, w: number, h: number, color: THREE.ColorRepresentation) => {
+  const len = a.distanceTo(b);
+  const g = box(w, h, len, 0, 0, 0, color);
+  const m = new THREE.Matrix4().lookAt(b, a, new THREE.Vector3(0, 1, 0));
+  if (Math.abs(b.x - a.x) < 1e-6 && Math.abs(b.z - a.z) < 1e-6) m.lookAt(b, a, new THREE.Vector3(1, 0, 0)); // vertical
+  m.setPosition(a.clone().add(b).multiplyScalar(0.5));
+  g.applyMatrix4(m);
+  return g;
+};
+
+/**
+ * A river bridge, built to be seen from above: a deck on the tile rectangle, and along both
+ * sides, outside the walkway, big columns standing in the river with a side truss between them
+ * (no beams overhead, so the people on it stay in view). The big bridge on the main path is a
+ * road bridge: concrete columns, a steel Warren truss, an asphalt deck with edge lines, tall
+ * portal pylons with lamps at both banks. The two others are stone footbridges: square stone
+ * pillars with caps, a stone parapet and an iron rail, a timber deck.
+ */
+const bridge = (bx: number, bw: number) => {
+  let y0 = SIZE;
+  let y1 = 0;
+  for (let y = 0; y < SIZE; y++) {
+    if (MAP[y][bx] !== 'd') continue;
+    y0 = Math.min(y0, y);
+    y1 = Math.max(y1, y);
+  }
+  const big = bw >= 4;
+  const x0 = bx * TILE;
+  const x1 = (bx + bw) * TILE;
+  const z0 = y0 * TILE;
+  const z1 = (y1 + 1) * TILE;
+  const cx = (x0 + x1) / 2;
+  const parts: THREE.BufferGeometry[] = [];
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const STONE = big ? 0xb9b4a8 : 0x9c9488;
+  const CAP = big ? 0x8f8b82 : 0x77706a;
+  const STEEL = 0x4f6b6e;
+  // The deck: asphalt with white edge lines on the road bridge, timber on the footbridges.
+  if (big) {
+    parts.push(box(x1 - x0 + 0.3, 0.3, z1 - z0, cx, DECK_Y - 0.15, (z0 + z1) / 2, 0x8d8f8a));
+    parts.push(box(x1 - x0 - 0.4, 0.02, z1 - z0, cx, DECK_Y + 0.01, (z0 + z1) / 2, 0x3f4247));
+    for (const x of [x0 + 0.45, x1 - 0.45]) parts.push(box(0.12, 0.025, z1 - z0, x, DECK_Y + 0.015, (z0 + z1) / 2, 0xe8e6df));
+    for (let z = z0 + 1; z < z1 - 1; z += 3) parts.push(box(0.12, 0.025, 1.5, cx, DECK_Y + 0.015, z + 0.75, 0xe9c46a)); // centre dashes
+  } else {
+    for (let z = z0; z < z1 - 0.01; z += 0.4) parts.push(box(x1 - x0 + 0.2, 0.08, 0.36, cx, DECK_Y - 0.04, z + 0.2, Math.round(z / 0.4) % 2 ? 0x9a7048 : 0x8a623e));
+    parts.push(box(x1 - x0 + 0.3, 0.22, z1 - z0, cx, DECK_Y - 0.19, (z0 + z1) / 2, 0x6a5038));
+  }
+  // Columns along both sides, out in the water, every few metres; taller pylons at the banks.
+  const span = big ? 4 : 3.4;
+  const n = Math.max(2, Math.round((z1 - z0) / span));
+  const colW = big ? 1.0 : 0.65;
+  const colTop = DECK_Y + (big ? 2.8 : 1.4);
+  const pylonTop = DECK_Y + (big ? 5.2 : 2.2);
+  for (const side of [-1, 1]) {
+    const x = side < 0 ? x0 - colW / 2 - 0.05 : x1 + colW / 2 + 0.05;
+    const tops: THREE.Vector3[] = [];
+    for (let k = 0; k <= n; k++) {
+      const z = z0 + ((z1 - z0) * k) / n;
+      const end = k === 0 || k === n;
+      const top = end ? pylonTop : colTop;
+      const w = end ? colW * 1.35 : colW;
+      parts.push(box(w, top + 1.6, w, x, (top - 1.6) / 2, z, STONE)); // from the riverbed up
+      parts.push(box(w + 0.18, 0.18, w + 0.18, x, top + 0.09, z, CAP));
+      if (!end) parts.push(box(w + 0.35, 0.25, w + 0.35, x, WATER_Y + 0.05, z, CAP)); // the pier's waterline collar
+      if (end && big) {
+        // A lamp on each pylon.
+        parts.push(box(0.12, 0.7, 0.12, x, top + 0.53, z, 0x2b2e33));
+        parts.push(box(0.36, 0.22, 0.36, x, top + 0.95, z, 0xfff1c4));
+      }
+      tops.push(v(x, Math.min(top, colTop) - 0.15, z));
+    }
+    if (big) {
+      // A Warren truss between the columns: top and bottom chords and alternating diagonals.
+      const bot = DECK_Y + 0.25;
+      for (let k = 0; k < n; k++) {
+        const a = tops[k];
+        const b = tops[k + 1];
+        parts.push(beam(v(x, a.y, a.z), v(x, b.y, b.z), 0.22, 0.3, STEEL));
+        parts.push(beam(v(x, bot, a.z), v(x, bot, b.z), 0.22, 0.3, STEEL));
+        const mid = (a.z + b.z) / 2;
+        parts.push(beam(v(x, bot, a.z), v(x, a.y, mid), 0.14, 0.14, STEEL));
+        parts.push(beam(v(x, a.y, mid), v(x, bot, b.z), 0.14, 0.14, STEEL));
+        parts.push(beam(v(x, bot, mid), v(x, a.y, mid), 0.1, 0.1, STEEL));
+      }
+    } else {
+      // A low stone parapet with an iron rail on short posts.
+      const px = side < 0 ? x0 - 0.15 : x1 + 0.15;
+      parts.push(box(0.3, 0.55, z1 - z0, px, DECK_Y + 0.27, (z0 + z1) / 2, STONE));
+      parts.push(box(0.36, 0.08, z1 - z0, px, DECK_Y + 0.58, (z0 + z1) / 2, CAP));
+      for (let z = z0 + 0.5; z < z1; z += 1) parts.push(box(0.05, 0.4, 0.05, px, DECK_Y + 0.82, z, 0x2b2e33));
+      parts.push(box(0.06, 0.06, z1 - z0, px, DECK_Y + 1.02, (z0 + z1) / 2, 0x2b2e33));
+    }
+  }
+  return mesh(join(parts));
+};
+
 /** World centre of a prop's tile rectangle, and whether it runs along x. */
 const centre = (p: Prop) => ({ x: (p.x0 + p.w / 2) * TILE, y: (p.y0 + p.h / 2) * TILE, alongX: p.w >= p.h });
 
@@ -351,6 +448,7 @@ export const buildProps = (scene: THREE.Scene) => {
   for (let ty = 0; ty < SIZE; ty++) {
     for (let tx = 0; tx < SIZE; tx++) {
       if (MAP[ty][tx] !== 'd') continue;
+      if (RIVER.bridges.some(([bx, bw]) => tx >= bx && tx < bx + bw)) continue; // bridges are built below
       const x0 = tx * TILE;
       const z0 = ty * TILE;
       const rail = railSides(tx, ty);
@@ -377,6 +475,7 @@ export const buildProps = (scene: THREE.Scene) => {
     }
   }
   if (planks.length) scene.add(mesh(join(planks)));
+  for (const [bx, bw] of RIVER.bridges) scene.add(bridge(bx, bw));
 
   const herd = animals(scene);
   updates.push(herd.update, birds(scene));

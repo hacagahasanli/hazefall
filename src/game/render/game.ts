@@ -629,6 +629,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   };
   const hitFlash = state.players.map(() => 0);
   const deck = state.players.map(() => 0);
+  /** How deep a body sinks in the water before it is gone (m). */
+  const SINK_DEPTH = 1.6;
   const steps = state.players.map(() => 0);
   const surfaceAt = (x: number, y: number) => {
     const t = MAP[Math.floor(y / TILE)]?.[Math.floor(x / TILE)] ?? 'g';
@@ -884,6 +886,18 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       deck[i] += (onDeck - deck[i]) * Math.min(1, dt * 14);
       if (p.stage === 'ground') h += deck[i];
       if (p.vault > 0) h = Math.sin((1 - p.vault / VAULT.time) * Math.PI) * 0.7 + deck[i]; // the hop over
+      // Knocked out in the water: the body floats for a moment, then slowly sinks out of sight,
+      // a few bubbles coming up as it goes.
+      if (fallen && inWater(p.x, p.y)) {
+        const t = time - deadAt[i];
+        const sink = t < 1.4 ? 0 : Math.min(SINK_DEPTH, (t - 1.4) * 0.38);
+        h = -0.1 - sink;
+        rig.root.visible = sink < SINK_DEPTH;
+        if (sink > 0 && sink < SINK_DEPTH && Math.floor(t / 0.35) !== Math.floor((t - dt) / 0.35)) {
+          vfx.burst(x + (Math.random() - 0.5) * 0.8, WATER_Y + 0.05, 2, 'foam', { z: y + (Math.random() - 0.5) * 0.8, speed: 0.3, up: 0.8, gravity: 2, life: 0.4, size: 0.3 });
+          if (Math.random() < 0.4) vfx.ring(x, WATER_Y + 0.03, 0xdff2ff, { z: y, flat: true, life: 1.2, grow: 2 });
+        }
+      }
       rig.root.position.set(x, h, y);
       if (i === me) {
         selfX = x;
