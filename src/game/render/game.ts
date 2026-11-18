@@ -75,6 +75,8 @@ export interface HudState {
   host: boolean;
   /** How many dropped into this round. */
   total: number;
+  /** Seconds since the round started (the title card shows for the first few). */
+  planeTime: number;
   /** First person on the ground (the crosshair shows), and whether the mouse is captured. */
   firstPerson: boolean;
   mouseLocked: boolean;
@@ -1512,6 +1514,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       net: session.net,
       host: session.host,
       total: state.players.length,
+      planeTime: state.tick * DT,
       firstPerson: firstPerson(),
       mouseLocked: locked,
     });
