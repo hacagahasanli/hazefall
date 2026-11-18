@@ -802,9 +802,10 @@ export const poseChute = (rig: Rig, p: { dt: number; time: number; seed: number;
   rig.legR.rotation.set(-dangle * 0.8 - 0.05, 0, 0.05);
   rig.shinL.rotation.set(0.35 + dangle * 0.5, 0, 0);
   rig.shinR.rotation.set(0.25 - dangle * 0.4, 0, 0);
-  // Both hands high on the risers; turning, the hand on that side pulls its riser down.
-  const tL = 0.8 - Math.max(0, -sx) * 0.35;
-  const tR = 0.8 - Math.max(0, sx) * 0.35;
+  // Each hand on its own riser, out at the side about head height, elbow bent; turning, the
+  // hand on that side pulls its riser down.
+  const tL = 0.42 - Math.max(0, -sx) * 0.18;
+  const tR = 0.42 - Math.max(0, sx) * 0.18;
   reach(rig.armL, rig.foreL, rig.shoulderL, riserGrip(-1, rig.shoulderL.y, tL), rig.armLen, -1);
   rig.weapon.visible = p.shooting;
   if (p.shooting) {

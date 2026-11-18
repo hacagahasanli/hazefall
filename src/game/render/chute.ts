@@ -2,7 +2,8 @@ import * as THREE from 'three';
 
 /** How far above the backpack the canopy flies, and where the lines meet the risers. */
 export const CHUTE_UP = 4.6;
-const JUNCTION = { x: 0.3, y: 1.15 };
+/** The risers part to the sides: out past the shoulders, so the hands hold on at the sides, elbows bent. */
+const JUNCTION = { x: 0.62, y: 1.3 };
 /** Where each riser leaves the backpack's shoulder strap (x), relative to the harness point. */
 const STRAP_X = 0.17;
 /** Where the chute is attached to the body: the top of the backpack, behind the shoulders (body space z). */
@@ -65,5 +66,5 @@ export const buildChute = (color: string) => {
  * with the body, so this is exactly on the webbing). `t` runs from the strap (0) to the junction
  * (1): the hands hold on high up, and pulling a riser down to steer slides the hand down it.
  */
-export const riserGrip = (side: -1 | 1, shoulderY: number, t = 0.78) =>
+export const riserGrip = (side: -1 | 1, shoulderY: number, t = 0.5) =>
   new THREE.Vector3(side * (STRAP_X + (JUNCTION.x - STRAP_X) * t), shoulderY + JUNCTION.y * t, HARNESS_BACK + 0.04);
