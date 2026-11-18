@@ -44,6 +44,10 @@ and the super (G):
 Pistol, SMG, shotgun, rifle, sniper and rockets, with magazines and spare rounds, plus bombs, armor
 vests, ammo boxes and med kits. Loot glows by rarity.
 
+## Support
+
+Last Commit Standing is free. If you enjoyed it, you can [☕ support the studio](https://mergeconflictgames.itch.io/support).
+
 ## Run it
 
 ```bash

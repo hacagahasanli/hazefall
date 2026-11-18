@@ -6,6 +6,7 @@ import { startMatch } from '~/game/render/game';
 import { FIGHTERS } from '~/game/sim/constants';
 
 import { AimChoice, readAim, saveAim } from '~/components/AimChoice';
+import { SupportLink } from '~/components/SupportLink';
 import { TouchControls, useTouch } from '~/components/TouchControls';
 import type { Session } from '~/game/net/session';
 import type { HudState } from '~/game/render/game';
@@ -173,6 +174,9 @@ const Result = ({
             </button>
           )}
         </div>
+        <p className="flex flex-wrap items-center gap-x-2 text-sm text-cream/60">
+          Enjoyed it? <SupportLink />
+        </p>
       </div>
     </div>
   );
@@ -592,6 +596,7 @@ export const Match = ({
                   {online && hud.host ? 'End the round for everyone' : 'Leave match'}
                 </button>
                 {!touch && <p className="text-[10px] text-cream/40">Esc to resume</p>}
+                <SupportLink />
               </div>
             </div>
           )}

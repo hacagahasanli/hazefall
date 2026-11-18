@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from 'react';
 
 import { DISTRICTS, FIGHTERS, WORLD } from '~/game/sim/constants';
 
+import { SupportLink } from '~/components/SupportLink';
+
 import type { FighterId } from '~/game/sim/types';
 
 const IDS = Object.keys(FIGHTERS) as FighterId[];
@@ -282,6 +284,10 @@ export const Home = () => {
             </div>
           ))}
         </section>
+
+        <footer className="flex items-center justify-center pt-2">
+          <SupportLink />
+        </footer>
       </div>
     </main>
   );
