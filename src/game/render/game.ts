@@ -826,6 +826,12 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** Dev only: ?cam=near brings the camera close to check animation. */
   const camNear = process.env.NODE_ENV !== 'production' && new URLSearchParams(window.location.search).get('cam') === 'near' ? 0.12 : 1;
   const camFocus = new THREE.Vector3(state.players[me].x, 0, state.players[me].y);
+  /** Dev close-up offset under the parachute: ?orbit=x,y,z (metres from the jumper). */
+  const camOrbit = (() => {
+    const o = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('orbit');
+    const [x, y, z] = (o ?? '4,0.5,5').split(',').map(Number);
+    return new THREE.Vector3(x, y, z);
+  })();
   const camPos = new THREE.Vector3(state.drone.x0, DROP.height + 20, state.drone.y0 + 30);
   const camLook = new THREE.Vector3(state.drone.x0, DROP.height, state.drone.y0);
   let time = 0;
@@ -958,11 +964,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       setFlash(rig, hitFlash[i] > 0);
       rig.root.updateMatrixWorld(true);
       if (chutes[i].visible) {
-        // Attached to the top of the backpack, turned with the body, tipped the way you steer;
-        // the canopy unfolds out of the pack over 0.7 s when it opens.
-        rig.root.localToWorld(harness.set(0, rig.shoulderL.y, HARNESS_BACK));
+        // Rigidly attached to the top of the backpack: the rig hangs from the canopy, so the canopy
+        // takes the body's own position and tilt (its swing and its banking into turns), and the
+        // risers always leave from the shoulder straps, through the hands, to the lines. The
+        // canopy unfolds out of the pack over 0.7 s when it opens.
+        rig.body.localToWorld(harness.set(0, rig.shoulderL.y, HARNESS_BACK));
         chutes[i].position.copy(harness);
-        chutes[i].rotation.set(p.vy * 0.03, Math.PI / 2 - yw.a, Math.sin(time * 1.3 + i) * 0.05 - p.vx * 0.03, 'YXZ');
+        rig.body.getWorldQuaternion(chutes[i].quaternion);
         if (chuteAt[i] === undefined) chuteAt[i] = time;
         const k = Math.min(1, (time - chuteAt[i]) / 0.7);
         const open = 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2); // ease out with a little overshoot
@@ -1102,6 +1110,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // Looking steeply down past the jumper: you see yourself in the middle and the ground below.
       want = new THREE.Vector3(selfX, hh + (chute ? 17 : 12), selfY + (chute ? 13 : 7));
       look = new THREE.Vector3(selfX, hh - (chute ? 1 : 4), selfY);
+      if (camNear < 1) {
+        // Dev close-up: beside and a little below the jumper, looking up at body, risers and canopy.
+        want = new THREE.Vector3(selfX + camOrbit.x, hh + camOrbit.y, selfY + camOrbit.z);
+        look = new THREE.Vector3(selfX, hh + 2.2, selfY);
+      }
     } else {
       // Narrow screens (a phone held upright) pull the camera up so you still see around you.
       const k = camera.aspect < 1.3 ? Math.min(1.75, 1.3 / camera.aspect) : 1;

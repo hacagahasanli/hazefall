@@ -40,6 +40,8 @@ export interface Rig {
   /** Where the hips and legs face on the map (they lag the upper body and follow the run). */
   hipYaw: number;
   hipInit: boolean;
+  /** The pendulum swing under the parachute (angular velocities). */
+  chuteSwing: { vx: number; vz: number };
 }
 
 interface Spec {
@@ -405,7 +407,7 @@ export const buildRig = (id: CharacterId): Rig => {
   return {
     root, body, armL, armR, foreL: left.fore, foreR: right.fore, armLen: s.armLen,
     shinL: ll.shin, shinR: lr.shin, legLen: s.legLen,
-    head, vest, hipYaw: 0, hipInit: false,
+    head, vest, hipYaw: 0, hipInit: false, chuteSwing: { vx: 0, vz: 0 },
     shoulderL: armL.position.clone(), shoulderR: armR.position.clone(),
     legL, legR, weapon, hand, chestY, phase: 0, turn: 0,
   };
@@ -780,17 +782,30 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
  */
 export const poseChute = (rig: Rig, p: { dt: number; time: number; seed: number; steerX: number; steerZ: number; shooting: boolean }) => {
   const { dt, time, seed } = p;
+  // Steering, -1..1 each way (the inputs come in m/s).
+  const sx = Math.max(-1, Math.min(1, p.steerX / 7));
+  const sz = Math.max(-1, Math.min(1, p.steerZ / 7));
   rig.body.position.set(0, 0, 0);
-  rig.body.rotation.x = damp(rig.body.rotation.x, p.steerZ * 0.12, 4, dt);
-  rig.body.rotation.z = damp(rig.body.rotation.z, -p.steerX * 0.12, 4, dt);
+  // Hanging from the harness: the opening shock swings you from flat to upright, and the swing
+  // dies out like a pendulum (an under-damped spring). Steering banks the whole rig a little.
+  const want = { x: sz * 0.14, z: -sx * 0.2 };
+  const sw = rig.chuteSwing;
+  for (const k of ['x', 'z'] as const) {
+    const w = 7;
+    const zeta = 0.35;
+    sw[`v${k}`] += (w * w * (want[k] - rig.body.rotation[k]) - 2 * zeta * w * sw[`v${k}`]) * dt;
+    rig.body.rotation[k] += sw[`v${k}`] * dt;
+  }
   rig.body.rotation.y = 0;
   const dangle = Math.sin(time * 1.7 + seed) * 0.18;
   rig.legL.rotation.set(dangle - 0.1, 0, -0.05);
   rig.legR.rotation.set(-dangle * 0.8 - 0.05, 0, 0.05);
   rig.shinL.rotation.set(0.35 + dangle * 0.5, 0, 0);
   rig.shinR.rotation.set(0.25 - dangle * 0.4, 0, 0);
-  // Both hands up on the risers, which rise from the backpack straps over the shoulders.
-  reach(rig.armL, rig.foreL, rig.shoulderL, riserGrip(-1, rig.shoulderL.y), rig.armLen, -1);
+  // Both hands high on the risers; turning, the hand on that side pulls its riser down.
+  const tL = 0.8 - Math.max(0, -sx) * 0.35;
+  const tR = 0.8 - Math.max(0, sx) * 0.35;
+  reach(rig.armL, rig.foreL, rig.shoulderL, riserGrip(-1, rig.shoulderL.y, tL), rig.armLen, -1);
   rig.weapon.visible = p.shooting;
   if (p.shooting) {
     const h = HOLD.pistol;
@@ -801,7 +816,7 @@ export const poseChute = (rig: Rig, p: { dt: number; time: number; seed: number;
     tmpGrip.set(0, -0.02, h.grip).applyMatrix4(rig.weapon.matrix);
     reach(rig.armR, rig.foreR, rig.shoulderR, tmpGrip, rig.armLen, 1);
   } else {
-    reach(rig.armR, rig.foreR, rig.shoulderR, riserGrip(1, rig.shoulderR.y), rig.armLen, 1);
+    reach(rig.armR, rig.foreR, rig.shoulderR, riserGrip(1, rig.shoulderR.y, tR), rig.armLen, 1);
   }
 };
 

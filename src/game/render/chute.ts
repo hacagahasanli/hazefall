@@ -3,6 +3,8 @@ import * as THREE from 'three';
 /** How far above the backpack the canopy flies, and where the lines meet the risers. */
 export const CHUTE_UP = 4.6;
 const JUNCTION = { x: 0.3, y: 1.15 };
+/** Where each riser leaves the backpack's shoulder strap (x), relative to the harness point. */
+const STRAP_X = 0.17;
 /** Where the chute is attached to the body: the top of the backpack, behind the shoulders (body space z). */
 export const HARNESS_BACK = -0.25;
 
@@ -50,7 +52,7 @@ export const buildChute = (color: string) => {
     deploy.add(line);
   }
   // The risers: flat webbing from the backpack's shoulder straps up to the junctions.
-  for (const [j, x] of [[jL, -0.17], [jR, 0.17]] as const) {
+  for (const [j, x] of [[jL, -STRAP_X], [jR, STRAP_X]] as const) {
     const riser = strand(new THREE.Vector3(x, 0, 0), j, 0.035, webMat);
     riser.userData.line = true;
     g.add(riser);
@@ -58,5 +60,10 @@ export const buildChute = (color: string) => {
   return g;
 };
 
-/** Where the risers end, in body space relative to the shoulders: the hands hold on just below. */
-export const riserGrip = (side: -1 | 1, shoulderY: number) => new THREE.Vector3(side * JUNCTION.x * 0.9, shoulderY + JUNCTION.y - 0.18, HARNESS_BACK + 0.08);
+/**
+ * A point on a riser, in body space (the chute hangs at (0, shoulderY, HARNESS_BACK) and turns
+ * with the body, so this is exactly on the webbing). `t` runs from the strap (0) to the junction
+ * (1): the hands hold on high up, and pulling a riser down to steer slides the hand down it.
+ */
+export const riserGrip = (side: -1 | 1, shoulderY: number, t = 0.78) =>
+  new THREE.Vector3(side * (STRAP_X + (JUNCTION.x - STRAP_X) * t), shoulderY + JUNCTION.y * t, HARNESS_BACK + 0.04);
