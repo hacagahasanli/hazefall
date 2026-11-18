@@ -196,7 +196,7 @@ export const Home = () => {
               {[
                 ['10', 'players drop'],
                 ['176 m', 'battleground'],
-                ['~3 min', 'to the last circle'],
+                ['~4 min', 'to the last circle'],
                 ['1', 'winner'],
               ].map(([n, label]) => (
                 <div key={label} className="flex flex-col">

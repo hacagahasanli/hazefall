@@ -196,7 +196,7 @@ You spawn on a cargo drone that crosses the map on a random line (`createGame`, 
 
 ### 4.8 The Deadline (zone) (`step.ts:395-435`)
 
-`ZONE_PHASES` has 5 phases of wait, shrink, target radius and damage per second: for example phase 1 waits 22 s, shrinks over 16 s to radius 44, then deals 20 hp/s outside. The first circle has radius `WORLD * 0.72` (about 92 m, bigger than the map). Each next circle's centre is chosen at random inside the current one (`pickNextCircle`, within 60 % of the spare room) using `nextRandom`, so it is deterministic. Waits plus shrinks total 118 s after everyone has landed. Outside the circle you take `dps * DT` per tick through `hurt(..., ignoreArmor)`.
+`ZONE_PHASES` has 5 phases of wait, shrink, target radius and damage per second: for example phase 1 waits 42 s, shrinks over 32 s to radius 60, then deals 12 hp/s outside. The first circle has radius `WORLD * 0.72` (about 92 m, bigger than the map). Each next circle's centre is chosen at random inside the current one (`pickNextCircle`, within 60 % of the spare room) using `nextRandom`, so it is deterministic. Waits plus shrinks total 224 s after everyone has landed. Outside the circle you take `dps * DT` per tick through `hurt(..., ignoreArmor)`.
 
 ### 4.9 Visibility
 

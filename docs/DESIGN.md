@@ -1,6 +1,6 @@
 # Last Commit Standing: design
 
-A Merge Conflict game. **Top-down battle royale for 10 players in short rounds (~3 minutes).**
+A Merge Conflict game. **Top-down battle royale for 10 players in short rounds (~4 minutes: the Deadline takes about 3 min 45 s from landing to the last circle).**
 The Deadline closes in, the office shrinks, and the last developer standing ships.
 
 Everything here is original: names, characters, abilities, items, art and rules. The genre (a
