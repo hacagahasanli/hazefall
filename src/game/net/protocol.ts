@@ -11,6 +11,7 @@ export const SNAPSHOT_EVERY_TICKS = 3;
 const BUTTONS = ['fire', 'super', 'use', 'reload', 'roll', 'jump'] as const;
 const LEAN_L = 1 << 6;
 const LEAN_R = 1 << 7;
+const SNAP = 1 << 8;
 /** Presses that must survive when inputs are folded together (everything but leaning). */
 export const PRESS_BITS = 0b111111;
 
@@ -27,6 +28,7 @@ export const encodeInput = (tick: number, i: Input): WireInput => {
   });
   if (i.lean < -0.5) bits |= LEAN_L;
   if (i.lean > 0.5) bits |= LEAN_R;
+  if (i.snap) bits |= SNAP;
   return [tick, bits, Math.round(i.mx * 100), Math.round(i.my * 100), r2(i.aimX), r2(i.aimY)];
 };
 
@@ -36,6 +38,7 @@ export const decodeInput = (w: WireInput): Input => {
     s[b] = (w[1] & (1 << n)) !== 0;
   });
   s.lean = w[1] & LEAN_L ? -1 : w[1] & LEAN_R ? 1 : 0;
+  s.snap = (w[1] & SNAP) !== 0;
   return s;
 };
 

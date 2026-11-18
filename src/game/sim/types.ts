@@ -21,6 +21,8 @@ export interface Input {
   /** Dodge roll (Shift). */
   roll: boolean;
   jump: boolean;
+  /** First-person view: the body turns to the aim at once (the mouse is the neck), no turn rate. */
+  snap?: boolean;
   /** Aim point on the map. */
   aimX: number;
   aimY: number;

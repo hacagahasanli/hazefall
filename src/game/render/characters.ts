@@ -915,3 +915,6 @@ export const poseSwim = (rig: Rig, p: { dt: number; time: number; speed: number;
   rig.shinL.rotation.set(0.25 + Math.max(0, kick) * 0.5, 0, 0);
   rig.shinR.rotation.set(0.25 + Math.max(0, -kick) * 0.5, 0, 0);
 };
+
+/** A fighter's skin and sleeve colours (the first-person arms wear them). */
+export const fighterLook = (id: CharacterId) => ({ skin: SPECS[id].skin, top: SPECS[id].top });

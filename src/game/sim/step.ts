@@ -824,7 +824,7 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     const want = swimTurn ? Math.atan2(p.vy, p.vx) : Math.atan2(input.aimY - p.y, input.aimX - p.x);
     let d = want - p.heading;
     d = Math.atan2(Math.sin(d), Math.cos(d));
-    const maxTurn = MOVE.turn * DT;
+    const maxTurn = input.snap && !swimTurn ? Math.PI : MOVE.turn * DT;
     p.heading += Math.max(-maxTurn, Math.min(maxTurn, d));
   }
 

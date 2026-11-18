@@ -88,7 +88,8 @@ const buildBarn = (w: number, d: number) => {
 
 export interface World {
   /** Hide the house you're standing in, swap crates for broken ones. */
-  update: (state: GameState, selfX: number, selfY: number) => void;
+  /** `firstPerson`: walls stay full height inside and the tree canopies are never cut away. */
+  update: (state: GameState, selfX: number, selfY: number, firstPerson?: boolean) => void;
 }
 
 export const buildWorld = (scene: THREE.Scene): World => {
@@ -283,9 +284,9 @@ export const buildWorld = (scene: THREE.Scene): World => {
 
   const zero = new THREE.Matrix4().makeScale(0, 0, 0);
   return {
-    update: (state, selfX, selfY) => {
+    update: (state, selfX, selfY, firstPerson = false) => {
       // Wind, and the canopy cut-out around you (4.5 m) so trees never hide your fighter.
-      updateNature(performance.now() / 1000, selfX, selfY, 4.5);
+      updateNature(performance.now() / 1000, selfX, selfY, firstPerson ? 0 : 4.5);
       const inside = inBuilding(selfX, selfY);
       BUILDINGS.forEach((_, i) => {
         const want = i === inside ? 0 : 1;
@@ -299,7 +300,7 @@ export const buildWorld = (scene: THREE.Scene): World => {
         }
         interiors[i].visible = fade[i] < 0.98;
         // Inside, the walls are cut down to waist height so the whole room reads from above.
-        interiors[i].scale.y = 0.4 + 0.6 * fade[i];
+        interiors[i].scale.y = firstPerson ? 1 : 0.4 + 0.6 * fade[i];
         doorFrames[i].visible = fade[i] > 0.5;
       });
       crates.forEach((t, k) => {

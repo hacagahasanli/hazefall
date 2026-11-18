@@ -8,7 +8,7 @@ import { canSee, inPlant, inWater, lineOfSight, lootUnder, throwDistance } from 
 import { createOfflineSession } from '../net/session';
 import { NO_INPUT } from '../sim/types';
 
-import { buildRig, poseChute, poseDeath, poseFreefall, poseRig, poseSwim, poseTopDown } from './characters';
+import { buildRig, fighterLook, poseChute, poseDeath, poseFreefall, poseRig, poseSwim, poseTopDown } from './characters';
 import { buildGun } from './guns';
 import { mat, mesh, PALETTE } from './palette';
 import { createVfx } from './vfx';
@@ -75,6 +75,9 @@ export interface HudState {
   host: boolean;
   /** How many dropped into this round. */
   total: number;
+  /** First person on the ground (the crosshair shows), and whether the mouse is captured. */
+  firstPerson: boolean;
+  mouseLocked: boolean;
 }
 
 export type AimMode = 'auto' | 'mouse';
@@ -440,6 +443,56 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   window.addEventListener('keyup', onUp);
   window.addEventListener('blur', onBlur);
 
+  // ---------- first person (prototype: ?view=fpp). On the ground the camera is your eyes, the
+  // mouse is your neck (pointer lock), WASD walks the way you look, and you see your own arms
+  // and gun. The drop (plane, free fall, parachute) stays in third person.
+  const fpp = new URLSearchParams(window.location.search).get('view') === 'fpp';
+  let viewYaw = 0;
+  let viewPitch = -0.04;
+  let viewInit = false;
+  let locked = false;
+  const firstPerson = () => fpp && state.players[me].stage === 'ground' && state.players[me].alive;
+  const onLockChange = () => {
+    locked = document.pointerLockElement === canvas;
+  };
+  const onLook = (e: MouseEvent) => {
+    if (!locked) return;
+    viewYaw += e.movementX * 0.0022;
+    viewPitch = Math.max(-1.1, Math.min(1.1, viewPitch - e.movementY * 0.0022));
+  };
+  const onLockClick = () => {
+    if (fpp && !locked && firstPerson()) void canvas.requestPointerLock();
+  };
+  document.addEventListener('pointerlockchange', onLockChange);
+  document.addEventListener('mousemove', onLook);
+  canvas.addEventListener('click', onLockClick);
+  scene.add(camera);
+  /** Your own arms and gun in front of the camera. */
+  const viewmodel = new THREE.Group();
+  viewmodel.visible = false;
+  camera.add(viewmodel);
+  const look = fighterLook(opts.session ? state.players[me].fighter : opts.fighter);
+  const vmMat = (c: number) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.8, flatShading: true });
+  const vmLimb = (from: THREE.Vector3, to: THREE.Vector3, r: number, c: number) => {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.1, from.distanceTo(to), 8), vmMat(c));
+    m.position.copy(from).add(to).multiplyScalar(0.5);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize());
+    return m;
+  };
+  const GRIP = new THREE.Vector3(0.16, -0.19, -0.5);
+  const FORE = new THREE.Vector3(0.1, -0.16, -0.7);
+  viewmodel.add(
+    vmLimb(new THREE.Vector3(0.3, -0.42, -0.12), GRIP, 0.03, look.top),
+    vmLimb(new THREE.Vector3(-0.12, -0.44, -0.2), FORE, 0.03, look.top),
+  );
+  for (const at of [GRIP, FORE]) {
+    const hand = new THREE.Mesh(new THREE.IcosahedronGeometry(0.036, 0), vmMat(look.skin));
+    hand.position.copy(at);
+    viewmodel.add(hand);
+  }
+  let vmGun: THREE.Object3D | null = null;
+  let vmGunKind: WeaponKind | null = null;
+
   /**
    * Auto-aim: anyone you can see on your screen, in any direction (whichever way you're running or
    * facing), with a clear line to them; the nearest wins. Out of sight behind a wall or hidden in
@@ -498,6 +551,39 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   let lastMove = { x: 1, y: 0 };
   const readInput = (): Input => {
     const p = state.players[me];
+    if (firstPerson()) {
+      if (!viewInit) {
+        viewYaw = p.heading;
+        viewInit = true;
+      }
+      const fwd = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - stick.y;
+      const side = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0) + stick.x;
+      const c = Math.cos(viewYaw);
+      const sn = Math.sin(viewYaw);
+      let mx = fwd * c - side * sn;
+      let my = fwd * sn + side * c;
+      const len = Math.hypot(mx, my);
+      if (len > 1) {
+        mx /= len;
+        my /= len;
+      }
+      const input: Input = {
+        mx, my,
+        fire: keys.has('Space') || mouseDown || btn('fire'),
+        jump: keys.has('Space') || btn('fire'),
+        super: keys.has('KeyG') || btn('super'),
+        use: keys.has('KeyF') || btn('use'),
+        lean: (keys.has('KeyE') || btn('leanR') ? 1 : 0) - (keys.has('KeyQ') || btn('leanL') ? 1 : 0),
+        roll: keys.has('ShiftLeft') || keys.has('ShiftRight') || btn('roll'),
+        reload: keys.has('KeyR') || btn('reload'),
+        snap: true,
+        aimX: p.x + c * 30,
+        aimY: p.y + sn * 30,
+      };
+      touchLatched.clear();
+      return input;
+    }
+    if (fpp) viewInit = false;
     const clamp = (v: number) => Math.max(-1, Math.min(1, v));
     const mx = clamp((keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0) + stick.x);
     const my = clamp((keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) + stick.y);
@@ -874,7 +960,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // The fallen stay where they fell (you can see who went down where).
       const fallen = !p.alive && p.stage === 'ground' && deadAt[i] !== undefined;
       const visible = fallen || (p.alive && p.stage !== 'drone' && (i === me || p.stage === 'falling' || canSee(state, self, p)));
-      rig.root.visible = visible;
+      rig.root.visible = visible && !(i === me && firstPerson());
       const chuteOpen = p.stage === 'falling' && p.fall <= DROP.chute;
       chutes[i].visible = visible && chuteOpen;
       // Free fall from the plane down to chute height, then drift slowly under the canopy.
@@ -1004,12 +1090,12 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         rig.hand.getWorldQuaternion(tmpQ);
         gun.position.copy(tmpV);
         gun.quaternion.copy(tmpQ);
-        gun.visible = visible && p.alive && (p.stage === 'ground' ? p.vault <= 0 && sinceLand >= ROLL_TIME : chuteOpen && sinceShot < 1.5);
+        gun.visible = !(i === me && firstPerson()) && visible && p.alive && (p.stage === 'ground' ? p.vault <= 0 && sinceLand >= ROLL_TIME : chuteOpen && sinceShot < 1.5);
       }
 
       // Health bar over the head, facing the camera.
       const bar = bars[i];
-      bar.g.visible = visible && p.alive && p.stage === 'ground';
+      bar.g.visible = visible && p.alive && p.stage === 'ground' && !(i === me && firstPerson());
       bar.g.position.set(x, 2.7, y);
       bar.g.quaternion.copy(camera.quaternion);
       const k = Math.max(0.001, p.hp / p.maxHp);
@@ -1020,11 +1106,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       bar.armor.position.x = -0.8 * (1 - a);
       bar.armor.visible = p.armor > 0;
     });
-    world.update(state, self.x, self.y);
+    world.update(state, self.x, self.y, firstPerson());
     updateThrowPreview(self, selfX, selfY);
     // By id: online the state object is replaced on every correction from the host.
     const tgt = aimMode === 'auto' && self.alive && self.stage !== 'drone' && aimTarget ? state.players[aimTarget.id] : null;
-    reticle.visible = !!tgt && tgt.alive;
+    reticle.visible = !!tgt && tgt.alive && !firstPerson();
     if (tgt) {
       const ti = tgt.id;
       reticle.position.set(prev[ti].x + (tgt.x - prev[ti].x) * alpha, 0.1, prev[ti].y + (tgt.y - prev[ti].y) * alpha);
@@ -1144,10 +1230,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     camLook.lerp(look, follow);
     // Wider lens and see-through clouds while you pick your spot from the plane.
     const overview = self.stage === 'drone' && state.phase === 'drop';
-    const fov = THREE.MathUtils.damp(camera.fov, overview ? 52 : 42, 3, dt);
+    const fp = firstPerson();
+    const fov = fp ? 74 : THREE.MathUtils.damp(camera.fov, overview ? 52 : 42, 3, dt);
     // Far away above the map, a nearer near-plane wastes depth precision and the ground and the
     // roads fight (flicker); push it out while in the overview.
-    const near = overview ? 4 : camNear < 1 ? 0.05 : 0.5;
+    const near = overview ? 4 : camNear < 1 || fp ? 0.05 : 0.5;
     if (Math.abs(fov - camera.fov) > 0.01 || camera.near !== near) {
       camera.fov = fov;
       camera.near = near;
@@ -1157,9 +1244,49 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // solid again once you're on the ground and they're only sky.
     cloudMat.opacity = THREE.MathUtils.damp(cloudMat.opacity, overview ? 0.22 : self.stage === 'falling' ? 0.1 : 0.92, 5, dt);
     cloudMat.depthWrite = false;
-    camera.position.set(camPos.x + n(23, 1) * 0.5 * shake, camPos.y, camPos.z + n(19, 4) * 0.4 * shake);
-    camera.lookAt(camLook);
-    camFocus.set(camLook.x, 0, camLook.z);
+    if (fp) {
+      // Your eyes: head height (plus the deck or the water), a little bob with each stride,
+      // leaning out sideways with Q/E, the hit shake as a small jolt.
+      const rig = rigs[me];
+      const speed = Math.hypot(self.vx, self.vy);
+      const swim = inWater(self.x, self.y);
+      const bob = swim ? Math.sin(time * 2) * 0.05 : Math.sin(rig.phase * 2) * 0.035 * Math.min(1, speed / 5);
+      const eyeY = selfH + (swim ? 0.25 : rig.chestY + 0.42) + bob;
+      const c = Math.cos(viewYaw);
+      const sn = Math.sin(viewYaw);
+      const lean = self.lean * 0.45;
+      camera.position.set(selfX - sn * lean + n(23, 1) * 0.08 * shake, eyeY, selfY + c * lean + n(19, 4) * 0.08 * shake);
+      tmpV.set(camera.position.x + c * Math.cos(viewPitch), eyeY + Math.sin(viewPitch), camera.position.z + sn * Math.cos(viewPitch));
+      camera.lookAt(tmpV);
+      camera.rotateZ(-self.lean * 0.12);
+      camPos.copy(camera.position);
+      camLook.copy(tmpV);
+      camFocus.set(selfX, 0, selfY);
+      // The arms and gun: they sway with the stride, kick back by the gun's weight, dip to reload.
+      if (vmGunKind !== self.weapon) {
+        if (vmGun) viewmodel.remove(vmGun);
+        vmGun = self.weapon === 'fists' ? null : buildGun(GUN_MODEL[self.weapon]).root;
+        if (vmGun) {
+          vmGun.rotation.y = Math.PI;
+          vmGun.scale.setScalar(0.8);
+          vmGun.position.copy(GRIP).add(tmpV.set(-0.01, 0.025, 0));
+          vmGun.traverse((o) => (o.castShadow = false));
+          viewmodel.add(vmGun);
+        }
+        vmGunKind = self.weapon;
+      }
+      const since = lastShot[me] === undefined ? 9 : time - lastShot[me];
+      const kick = Math.max(0, 1 - since / 0.14);
+      const reload = self.reload > 0 ? Math.sin((1 - self.reload / WEAPONS[self.weapon].reload) * Math.PI) : 0;
+      viewmodel.visible = !swim;
+      viewmodel.position.set(Math.sin(rig.phase) * 0.012 * Math.min(1, speed / 5), bob * 0.5 - reload * 0.12, kick * 0.07);
+      viewmodel.rotation.set(kick * 0.12 - reload * 0.5, 0, reload * 0.3);
+    } else {
+      viewmodel.visible = false;
+      camera.position.set(camPos.x + n(23, 1) * 0.5 * shake, camPos.y, camPos.z + n(19, 4) * 0.4 * shake);
+      camera.lookAt(camLook);
+      camFocus.set(camLook.x, 0, camLook.z);
+    }
     trauma = Math.max(0, trauma - dt * 1.5);
     // Shadows: from the plane one fixed box over the whole map (a box that followed the camera made
     // shadows pop in and out across the map: the flicker); on the ground a box around you that
@@ -1268,6 +1395,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       net: session.net,
       host: session.host,
       total: state.players.length,
+      firstPerson: firstPerson(),
+      mouseLocked: locked,
     });
   };
 
@@ -1340,6 +1469,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     },
     dispose: () => {
       cancelAnimationFrame(raf);
+      document.removeEventListener('pointerlockchange', onLockChange);
+      document.removeEventListener('mousemove', onLook);
+      canvas.removeEventListener('click', onLockClick);
+      if (document.pointerLockElement === canvas) document.exitPointerLock();
       canvas.removeEventListener('mousemove', onMouseMove);
       canvas.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('mouseup', onMouseUp);

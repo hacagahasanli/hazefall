@@ -409,6 +409,24 @@ export const Match = ({
             </div>
           </div>
 
+          {/* First person: a crosshair, and how to take the mouse. */}
+          {hud.firstPerson && !over && (
+            <>
+              <div className="pointer-events-none absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2" aria-hidden>
+                <span className="absolute left-1/2 top-0 h-2 w-0.5 -translate-x-1/2 bg-cream/90 shadow" />
+                <span className="absolute bottom-0 left-1/2 h-2 w-0.5 -translate-x-1/2 bg-cream/90 shadow" />
+                <span className="absolute left-0 top-1/2 h-0.5 w-2 -translate-y-1/2 bg-cream/90 shadow" />
+                <span className="absolute right-0 top-1/2 h-0.5 w-2 -translate-y-1/2 bg-cream/90 shadow" />
+                <span className="absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold" />
+              </div>
+              {!hud.mouseLocked && !touch && (
+                <div className="pointer-events-none absolute inset-x-0 top-[58%] flex justify-center">
+                  <span className="panel-cut bg-ink-deep/85 px-4 py-2 text-sm text-cream">Click to look around with the mouse · Esc lets it go</span>
+                </div>
+              )}
+            </>
+          )}
+
           {/* Online: how the line is doing. */}
           {hud.net && (
             <div
