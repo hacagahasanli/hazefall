@@ -24,6 +24,10 @@ const strings = (c: Copy): string[] => [
   c.intro.line,
   ...(c.intro.below ? [c.intro.below] : []),
   ...c.howTo.flat(),
+  ...c.items.rarity,
+  c.items.bandage,
+  c.items.medkit,
+  c.items.coffee,
 ];
 
 /** Developer jokes that must never reach the portal audience. */

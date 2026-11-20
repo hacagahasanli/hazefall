@@ -31,6 +31,8 @@ export interface Copy {
   result: { won: string; lost: string; wonLine: (others: number) => string };
   /** The title card on the plane: optional lines above and below, two title lines, one sentence. */
   intro: { above: string | null; title: (players: number) => [string, string]; line: string; below: string | null };
+  /** Item names: the three gun grades (common, tuned, prime) and the heals. */
+  items: { rarity: [string, string, string]; bandage: string; medkit: string; coffee: string };
   /** The lobby's three how-to cards. */
   howTo: [string, string][];
 }

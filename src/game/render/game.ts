@@ -2,12 +2,12 @@ import * as THREE from 'three';
 
 import { COPY } from '../copy/studio';
 import { createSfx } from '../sfx';
-import { actionFor, DEFAULT_SETTINGS, keyMap } from '../settings';
+import { actionFor, DEFAULT_SETTINGS, keyLabel, keyMap } from '../settings';
 
 import type { VolumeKind } from '../sfx';
 import type { Action, Settings } from '../settings';
-import { ARMOR, ROLL, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, ITEMS, MAP, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
-import { canSee, inPlant, inWater, lineOfSight, lootUnder, solidAt, throwDistance } from '../sim/step';
+import { ARMOR, HEALS, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, ITEMS, MAP, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
+import { canSee, carryCap, healChoice, inPlant, inWater, lineOfSight, lootUnder, reloadTime, solidAt, throwDistance } from '../sim/step';
 import { createOfflineSession } from '../net/session';
 import { NO_INPUT } from '../sim/types';
 
@@ -29,7 +29,7 @@ import type { Rig } from './characters';
 import type { GunKind } from './guns';
 import type { Tier } from './quality';
 import type { NetStatus, Session } from '../net/session';
-import type { FighterId, GameEvent, GameState, Input, ItemKind, LootKind, Player, WeaponKind } from '../sim/types';
+import type { FighterId, GameEvent, GameState, HealKind, Input, Loot, LootKind, Player, WeaponKind } from '../sim/types';
 
 // ---------------------------------------------------------------------------
 // HUD snapshot for React (throttled to 10 Hz)
@@ -48,7 +48,24 @@ export interface HudState {
   ammo: number;
   /** 0..1 while reloading, else null. */
   reloading: number | null;
-  item: ItemKind | null;
+  /** Both gun slots in key order (slot 1, slot 2): what is in it (null = empty), its grade, rounds, and which one is in your hands. */
+  slots: { name: string | null; rarity: number; mag: number; ammo: number; active: boolean }[];
+  /** Seconds left of drawing the other gun (0 = ready). */
+  swapping: number;
+  /** Vest tier (0..3) and its full points; backpack tier (0..2). */
+  vest: number;
+  vestMax: number;
+  pack: number;
+  /** What you carry, and how much of each the backpack holds. */
+  bag: { bandages: number; medkits: number; coffees: number; bombs: number; cap: { bandage: number; medkit: number; coffee: number; bomb: number } };
+  /** A heal in progress: which and how far along (0..1), else null. */
+  using: { kind: HealKind; name: string; progress: number } | null;
+  /** Seconds of coffee left. */
+  buzz: number;
+  /** What the heal button would use now (its label), or null. */
+  healNext: string | null;
+  /** The grade of the loot the prompt names (0 common, 1 tuned, 2 prime), to colour it; null for anything else. */
+  promptGrade: number | null;
   superCharge: number;
   superName: string;
   /** 0..1 how recharged the dodge roll is. */
@@ -100,7 +117,7 @@ export interface HudState {
 }
 
 export type AimMode = 'auto' | 'mouse';
-export type TouchButton = 'fire' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR' | 'scope';
+export type TouchButton = 'fire' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR' | 'scope' | 'swap' | 'heal';
 
 export interface MatchOptions {
   fighter: FighterId;
@@ -130,13 +147,16 @@ export interface MatchOptions {
 const GUN_MODEL: Record<Exclude<WeaponKind, 'fists'>, GunKind> = {
   pistol: 'pistol', smg: 'smg', shotgun: 'shotgun', rifle: 'rifle', sniper: 'sniper', rockets: 'launcher',
 };
-/** Loot rarity colours: common white, uncommon green, rare blue, epic violet. */
-const RARITY: Record<LootKind, number> = {
-  pistol: 0xe8eef7, medkit: 0xe8eef7,
-  smg: 0x3ddc84, shotgun: 0x3ddc84, bomb: 0x3ddc84,
-  rifle: 0x3ec5ff, armor: 0x3ec5ff, ammo: 0x3ddc84,
-  sniper: 0xc77dff, rockets: 0xc77dff,
-};
+/**
+ * Loot beams by grade: common white, tuned blue, prime gold (a gun's rarity, a vest's tier I/II/III, a backpack's I/II).
+ * Heals, ammo and bombs are supplies: a soft green. Higher grades also get a taller, brighter beam, so it reads without colour.
+ */
+export const GRADE_COLOR = [0xe8eef7, 0x3ec5ff, 0xffb020];
+export const GRADE_CSS = ['#e8eef7', '#3ec5ff', '#ffb020'];
+const SUPPLY_COLOR = 0x3ddc84;
+/** 0 common, 1 tuned / Vest II / Backpack II, 2 prime / Vest III; null for supplies. */
+const lootGrade = (l: Pick<Loot, 'kind' | 'tier'>): number | null =>
+  l.kind in WEAPONS ? Math.min(2, l.tier ?? 0) : l.kind === 'armor' ? Math.max(0, (l.tier ?? 3) - 1) : l.kind === 'backpack' ? Math.max(0, (l.tier ?? 1) - 1) : null;
 
 /** A soft round glow, drawn once, shared by every loot spot. */
 const glowTexture = (() => {
@@ -174,8 +194,19 @@ const SOUND: Record<Exclude<WeaponKind, 'fists' | 'rockets'>, 'pistol' | 'smg' |
 };
 const LOOT_NAME: Record<LootKind, string> = {
   pistol: 'Pistol', smg: 'SMG', shotgun: 'Shotgun', rifle: 'Rifle', sniper: 'Sniper', rockets: 'Rockets',
-  armor: 'Armor vest', medkit: 'Med kit', bomb: 'Bomb', ammo: 'Ammo box',
+  armor: 'Vest', medkit: COPY.items.medkit, bomb: 'Bomb', ammo: 'Ammo box', bandage: COPY.items.bandage, coffee: COPY.items.coffee, backpack: 'Backpack',
 };
+const ROMAN = ['', 'I', 'II', 'III'];
+/** What a piece of loot is called on the prompt: "Tuned Rifle", "Vest III", "Backpack II", "Bandage x2". */
+export const lootLabel = (l: Pick<Loot, 'kind' | 'tier' | 'ammo'>) =>
+  l.kind in WEAPONS
+    ? (l.tier ?? 0) > 0 ? `${COPY.items.rarity[l.tier ?? 0]} ${LOOT_NAME[l.kind]}` : LOOT_NAME[l.kind]
+    : l.kind === 'armor'
+      ? `${LOOT_NAME.armor} ${ROMAN[l.tier ?? 3]}`
+      : l.kind === 'backpack'
+        ? `${LOOT_NAME.backpack} ${ROMAN[l.tier ?? 1]}`
+        : l.kind === 'bandage' && l.ammo > 1 ? `${LOOT_NAME.bandage} x${l.ammo}` : LOOT_NAME[l.kind];
+const HEAL_NAME: Record<HealKind, string> = { bandage: COPY.items.bandage, medkit: COPY.items.medkit, coffee: COPY.items.coffee };
 
 /** Map (x, y) is the ground plane (x, z) in Three.js. */
 const v3 = (x: number, y: number, h = 0) => new THREE.Vector3(x, h, y);
@@ -321,12 +352,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
   // ---------- loot, projectiles, temp walls and fields (pooled / keyed)
   const lootViews = new Map<number, THREE.Object3D>();
-  const lootModel = (kind: LootKind): THREE.Object3D => {
+  const lootModel = (l: Loot): THREE.Object3D => {
     // Root sits on the ground; `item` floats and turns (see the loot loop), `glow` pulses.
+    const kind = l.kind;
     const g = new THREE.Group();
     const item = new THREE.Group();
     item.name = 'item';
-    const color = RARITY[kind];
+    const grade = lootGrade(l);
+    const color = grade === null ? SUPPLY_COLOR : GRADE_COLOR[grade];
     if (kind in GUN_MODEL) {
       const gun = buildGun(GUN_MODEL[kind as keyof typeof GUN_MODEL]).root;
       gun.scale.setScalar(1.7);
@@ -334,12 +367,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       gun.rotation.set(-0.5, Math.PI / 2, 0);
       item.add(gun);
     } else if (kind === 'armor') {
-      const vest = new THREE.MeshStandardMaterial({ color: 0x4a5a3a, roughness: 0.85 });
+      // Vest I olive canvas, II slate, III black with a gold-edged plate.
+      const vest = new THREE.MeshStandardMaterial({ color: [0x4a5a3a, 0x4a5a3a, 0x3b4656, 0x23262c][l.tier ?? 3], roughness: 0.85 });
       const strap = new THREE.MeshStandardMaterial({ color: 0x2a2f24, roughness: 0.9 });
       const body = mesh(new THREE.BoxGeometry(0.75, 0.85, 0.3), vest);
       const collar = mesh(new THREE.BoxGeometry(0.4, 0.12, 0.32), strap);
       collar.position.y = 0.45;
-      const plate = mesh(new THREE.BoxGeometry(0.5, 0.45, 0.06), mat(0x3a4a2e));
+      const plate = mesh(new THREE.BoxGeometry(0.5, 0.45, 0.06), mat([0x3a4a2e, 0x3a4a2e, 0x55606e, 0x8a6a22][l.tier ?? 3]));
       plate.position.set(0, 0.05, 0.17);
       const pouches = [-0.22, 0, 0.22].map((x) => at(mesh(new THREE.BoxGeometry(0.17, 0.2, 0.08), strap), x, -0.25, 0.18));
       item.add(body, collar, plate, ...pouches);
@@ -353,6 +387,33 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       crossA.position.z = crossB.position.z = 0.13;
       item.add(caseM, handle, crossA, crossB);
       item.rotation.x = -0.6;
+    } else if (kind === 'bandage') {
+      // A white roll of bandage with a loose end.
+      const roll = mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.26, 16).rotateZ(Math.PI / 2), mat(0xf4f1ea));
+      const tail = mesh(new THREE.BoxGeometry(0.24, 0.02, 0.3), mat(0xe8e3d8));
+      tail.position.set(0, -0.16, 0.16);
+      const band = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.06, 0.37), new THREE.MeshBasicMaterial({ color: 0xd8312a }));
+      item.add(roll, tail, band);
+      item.scale.setScalar(1.3);
+    } else if (kind === 'coffee') {
+      // A takeaway cup: sleeve, lid.
+      const cup = mesh(new THREE.CylinderGeometry(0.19, 0.14, 0.5, 16), mat(0xf1ede4));
+      const sleeve = mesh(new THREE.CylinderGeometry(0.185, 0.165, 0.2, 16), mat(0x8a5a32));
+      sleeve.position.y = -0.02;
+      const lid = mesh(new THREE.CylinderGeometry(0.205, 0.2, 0.07, 16), mat(0x2a2f38));
+      lid.position.y = 0.28;
+      item.add(cup, sleeve, lid);
+    } else if (kind === 'backpack') {
+      // A rucksack: body, flap, two side pockets; II is darker with a gold buckle.
+      const two = (l.tier ?? 1) >= 2;
+      const body = mesh(new THREE.BoxGeometry(0.6, 0.75, 0.34), mat(two ? 0x33414f : 0x5b6b3e));
+      const flap = mesh(new THREE.BoxGeometry(0.62, 0.3, 0.38), mat(two ? 0x26313c : 0x4a5832));
+      flap.position.y = 0.26;
+      const buckle = mesh(new THREE.BoxGeometry(0.1, 0.08, 0.04), mat(two ? 0xd8a23a : 0x9aa0a8));
+      buckle.position.set(0, 0.12, 0.2);
+      const pockets = [-0.34, 0.34].map((x) => at(mesh(new THREE.BoxGeometry(0.1, 0.3, 0.24), mat(two ? 0x26313c : 0x4a5832)), x, -0.15, 0));
+      item.add(body, flap, buckle, ...pockets);
+      item.rotation.x = -0.4;
     } else if (kind === 'ammo') {
       // A green metal ammo can with a handle and stencil band.
       const can = mesh(new THREE.BoxGeometry(0.62, 0.4, 0.3), mat(0x4f5a34));
@@ -380,8 +441,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     glow.position.y = 0.04;
     const beam = new THREE.Mesh(
       beamGeometry,
-      new THREE.MeshBasicMaterial({ color, vertexColors: true, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+      new THREE.MeshBasicMaterial({
+        color, vertexColors: true, transparent: true, opacity: grade === null ? 0.4 : [0.5, 0.65, 0.8][grade], blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+      }),
     );
+    // Better grades stand taller: 2.6 m, 3.9 m, 5.2 m; supplies stay low.
+    beam.scale.set(1, grade === null ? 0.7 : [1, 1.5, 2][grade], 1);
+    if (grade === 2) glow.scale.setScalar(1.25);
     g.add(glow, beam);
     return g;
   };
@@ -528,6 +594,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
   // ---------- input: keyboard; aim is automatic unless mouse aim is on
   const keys = new Set<string>();
+  /** Keys pressed since the last input read: a tap shorter than a frame (or a slow frame) still counts once. */
+  const tapped = new Set<string>();
   let aimMode: AimMode = opts.aimMode;
   let paused = false;
   let holding = !!opts.held;
@@ -554,6 +622,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     if (e.button === 2) rightDown = false;
   };
   const onContext = (e: Event) => e.preventDefault();
+  /** The mouse wheel swaps guns: one press per notch (a trackpad's flood of small deltas counts once per 250 ms). */
+  let wheelSwap = false;
+  let wheelAt = 0;
+  const onWheel = (e: WheelEvent) => {
+    if (Math.abs(e.deltaY) < 4 || performance.now() - wheelAt < 250) return;
+    wheelAt = performance.now();
+    wheelSwap = true;
+  };
+  canvas.addEventListener('wheel', onWheel, { passive: true });
   canvas.addEventListener('contextmenu', onContext);
   canvas.addEventListener('mousemove', onMouseMove);
   canvas.addEventListener('mousedown', onMouseDown);
@@ -578,9 +655,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     if (action === 'aim' && !e.repeat) aimMode = aimMode === 'auto' ? 'mouse' : 'auto';
     if (e.code === PERF_KEY && !e.repeat && process.env.NODE_ENV !== 'production') perf.toggle();
     keys.add(e.code);
+    if (!e.repeat) tapped.add(e.code);
   };
   const onUp = (e: KeyboardEvent) => keys.delete(e.code);
-  const onBlur = () => keys.clear();
+  const onBlur = () => {
+    keys.clear();
+    tapped.clear();
+  };
   window.addEventListener('keydown', onDown);
   window.addEventListener('keyup', onUp);
   window.addEventListener('blur', onBlur);
@@ -798,7 +879,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const btn = (b: TouchButton) => touchHeld.has(b) || touchLatched.has(b);
   let lastMove = { x: 1, y: 0 };
   /** Is any key bound to this action held? */
-  const held = (a: Action) => bound[a].some((k) => keys.has(k));
+  const held = (a: Action) => bound[a].some((k) => keys.has(k) || tapped.has(k));
   const readInput = (): Input => {
     const p = state.players[me];
     if (mouseLook()) {
@@ -828,6 +909,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         lean: (held('leanR') || btn('leanR') ? 1 : 0) - (held('leanL') || btn('leanL') ? 1 : 0),
         roll: held('roll') || btn('roll'),
         reload: held('reload') || btn('reload'),
+        ...slotKeys(),
         snap: true,
         scope: scopeHeld(p),
         pitch: viewPitch,
@@ -836,6 +918,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       };
       lastThrowAim = null;
       touchLatched.clear();
+      tapped.clear();
       return input;
     }
     if (fpp || shoulder) viewInit = false;
@@ -862,6 +945,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       lean: clamp((held('leanR') || btn('leanR') ? 1 : 0) - (held('leanL') || btn('leanL') ? 1 : 0)),
       roll: held('roll') || btn('roll'),
       reload: held('reload') || btn('reload'),
+      ...slotKeys(),
       scope: scopeHeld(p),
       // Mouse aim: a bomb lands under the cursor.
       throwAt: !!pointed,
@@ -870,7 +954,19 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     };
     lastThrowAim = pointed ? { x: pointed.x, y: pointed.y } : null;
     touchLatched.clear();
+    tapped.clear();
     return input;
+  };
+  /** Gun slots and heals: 1 / 2 draw a slot, X or the mouse wheel (one notch, latched until read) the other gun; C heals, V drinks coffee. */
+  const slotKeys = () => {
+    const cycle = held('swap') || btn('swap') || wheelSwap;
+    wheelSwap = false;
+    return {
+      slot: held('slot1') ? 1 : held('slot2') ? 2 : 0,
+      cycle,
+      heal: held('heal') || btn('heal'),
+      coffee: held('coffee'),
+    };
   };
   /** Looking through the scope: a sniper in hand, on your feet, right mouse / Z / the touch button held. */
   const scopeHeld = (p: Player) =>
@@ -986,6 +1082,12 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         break;
       case 'pickup':
         if (e.player === me) sfx.pickup();
+        break;
+      case 'swap':
+        if (e.player === me) sfx.reload();
+        break;
+      case 'heal':
+        if (e.player === me && e.done) sfx.pickup();
         break;
       case 'land':
         landAt[e.player] = time;
@@ -1378,7 +1480,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         poseTopDown(rig, {
           dt, time, vx: p.vx, vy: p.vy, yaw: yw.a, yawRate: yw.v, onGround: true, dashing: p.dashTime > 0,
           gun: p.weapon, sinceShot,
-          reload: p.reload > 0 ? 1 - p.reload / WEAPONS[p.weapon].reload : null,
+          reload: p.reload > 0 ? 1 - p.reload / reloadTime(p) : null,
           lean: p.lean,
           vault: p.vault > 0 ? 1 - p.vault / VAULT.time : null,
           // The landing roll, or a dodge roll (Shift).
@@ -1479,7 +1581,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       seen.add(l.id);
       let v = lootViews.get(l.id);
       if (!v) {
-        v = lootModel(l.kind);
+        v = lootModel(l);
         scene.add(v);
         lootViews.set(l.id, v);
       }
@@ -1712,7 +1814,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       }
       const since = lastShot[me] === undefined ? 9 : time - lastShot[me];
       const kick = Math.max(0, 1 - since / 0.14);
-      const reload = self.reload > 0 ? Math.sin((1 - self.reload / WEAPONS[self.weapon].reload) * Math.PI) : 0;
+      const reload = self.reload > 0 ? Math.sin((1 - self.reload / reloadTime(self)) * Math.PI) : 0;
       viewmodel.visible = !swim && !air && !scoped;
       swimArms.visible = swim && !air;
       if (swim) poseSwimArms(rig.phase, Math.min(1, speed / 1.6));
@@ -1854,23 +1956,28 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
             ? { label: COPY.zone.closing, seconds: Math.ceil(z.timer), outside }
             : { label: COPY.zone.final, seconds: 0, outside };
     const k = self.stage === 'ground' ? lootUnder(state, self) : null;
+    const healNext = healChoice(self);
     const prompt = !self.alive
       ? null
       : self.stage === 'drone'
         ? (touch ? 'Tap JUMP' : 'Space · jump')
         : self.stage === 'ground' && inWater(self.x, self.y)
           ? 'Swimming · no shooting in the water'
+        : self.using
+          ? `${HEAL_NAME[self.using]}… · shoot or roll to stop`
         : k
-          ? `${touch ? 'USE' : 'F'} · pick up ${LOOT_NAME[k.kind]}`
+          ? `${touch ? 'USE' : 'F'} · pick up ${lootLabel(k)}`
           : self.charging
             ? lastThrowAim ? 'Point where it lands · let go of F to throw' : 'Hold to throw farther · let go to throw'
             : self.weapon === 'sniper' && self.mag + self.ammo > 0 && !scoped && !touch
               ? `${aimMode === 'mouse' || fpp ? 'Right click' : 'Z'} · scope`
           : self.weapon !== 'fists' && self.mag + self.ammo === 0
             ? 'Out of ammo · find an ammo box or another gun'
-            : self.item
-              ? self.item === 'bomb' ? `Hold ${touch ? 'USE' : 'F'} to throw the bomb` : `${touch ? 'USE' : 'F'} · use med kit`
-              : null;
+            : self.hp < self.maxHp * 0.6 && healNext && healNext !== 'coffee' && self.sinceCombat > 1.5
+              ? `${touch ? 'HEAL' : keyLabel(settings.keys.heal)} · use ${HEAL_NAME[healNext].toLowerCase()}`
+              : self.bombs > 0 && self.sinceCombat < 4
+                ? `Hold ${touch ? 'USE' : 'F'} to throw a bomb`
+                : null;
     opts.onHud({
       phase: state.phase,
       stage: self.stage,
@@ -1881,8 +1988,20 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       weapon: WEAPONS[self.weapon].name,
       mag: self.mag,
       ammo: self.ammo,
-      reloading: self.reload > 0 ? 1 - self.reload / WEAPONS[self.weapon].reload : null,
-      item: self.item,
+      reloading: self.reload > 0 ? 1 - self.reload / reloadTime(self) : null,
+      slots: slotsOf(self),
+      swapping: self.swapping,
+      vest: self.vest,
+      vestMax: VEST.points[self.vest] || ARMOR.points,
+      pack: self.pack,
+      bag: {
+        bandages: self.bandages, medkits: self.medkits, coffees: self.coffees, bombs: self.bombs,
+        cap: { bandage: carryCap(self, 'bandage'), medkit: carryCap(self, 'medkit'), coffee: carryCap(self, 'coffee'), bomb: carryCap(self, 'bomb') },
+      },
+      using: self.using ? { kind: self.using, name: HEAL_NAME[self.using], progress: 1 - self.useLeft / HEALS[self.using].time } : null,
+      buzz: self.buzz,
+      healNext: healNext ? HEAL_NAME[healNext] : null,
+      promptGrade: k && !self.using && self.alive ? lootGrade(k) : null,
       superCharge: self.superCharge,
       roll: 1 - self.rollCooldown / ROLL.cooldown,
       superName: FIGHTERS[self.fighter].superName,
@@ -1921,6 +2040,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     });
   };
 
+  /** Slot 1 and slot 2 for the HUD, whichever is in your hands. */
+  const slotsOf = (p: Player): HudState['slots'] => {
+    const inHand = { name: p.weapon === 'fists' ? null : WEAPONS[p.weapon].name, rarity: p.rarity, mag: p.mag, ammo: p.ammo, active: true };
+    const h = p.holster;
+    const other = h && h.weapon !== 'fists' ? { name: WEAPONS[h.weapon].name, rarity: h.rarity, mag: h.mag, ammo: h.ammo, active: false } : { name: null, rarity: 0, mag: 0, ammo: 0, active: false };
+    return p.slot === 0 ? [inHand, other] : [other, inHand];
+  };
   /** Draw at another quality tier: pixel ratio, shadows and view distance change at once (antialiasing on the next load). */
   const setTier = (next: Tier) => {
     const spec = TIERS[next];
@@ -2075,6 +2201,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       canvas.removeEventListener('mousemove', onMouseMove);
       canvas.removeEventListener('mousedown', onMouseDown);
       canvas.removeEventListener('contextmenu', onContext);
+      canvas.removeEventListener('wheel', onWheel);
       window.removeEventListener('mouseup', onMouseUp);
       window.removeEventListener('keydown', onDown);
       window.removeEventListener('keyup', onUp);

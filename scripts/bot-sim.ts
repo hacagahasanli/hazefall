@@ -10,12 +10,15 @@
  * gaps under 6 s; stages are ground time 0-2 min (early), 2-5 min (mid) and 5 min on (late).
  */
 import { createBot } from '../src/game/sim/bot';
-import { lootValue } from '../src/game/sim/bot-params';
+import { loadoutScore, lootValue } from '../src/game/sim/bot-params';
 import { BUILDINGS, DT, TILE, WEAPONS } from '../src/game/sim/constants';
 import { canSee, createGame, lineOfSight, step } from '../src/game/sim/step';
 import { NO_INPUT } from '../src/game/sim/types';
 
-import type { GameState, Input } from '../src/game/sim/types';
+import type { GameState, Input, Player } from '../src/game/sim/types';
+
+/** One number for how geared someone is: the gun pair, the vest's points (per 50) and the backpack. */
+const gear = (p: Player) => loadoutScore({ weapon: p.weapon, rarity: p.rarity, mag: p.mag, ammo: p.ammo }, p.holster) + p.armor / 50 + p.pack * 0.3;
 
 const matches = Number(process.argv[2] ?? 20);
 const firstSeed = Number(process.argv[3] ?? 1);
@@ -51,7 +54,7 @@ const passive = (s: GameState): Input => {
     let bestLoot = 0;
     for (const k of s.loot) {
       const kd = Math.hypot(k.x - me.x, k.y - me.y);
-      const v = k.active && kd < 20 ? lootValue(k.kind, me) / (1 + kd / 10) : 0;
+      const v = k.active && kd < 20 ? lootValue(k, me) / (1 + kd / 10) : 0;
       if (v > bestLoot && (k.kind in WEAPONS || k.kind === 'armor')) {
         bestLoot = v;
         out.mx = (k.x - me.x) / Math.max(0.5, kd);
@@ -113,6 +116,14 @@ type Row = {
   /** Deadline phase the match ended in, and how often the lull breaker cut a wait short. */
   endPhase: number;
   lulls: number;
+  /** Gun, vest and backpack pickups per bot alive at 3:00 from Play (by then), and all pickups. */
+  gearBy3: number;
+  allBy3: number;
+  heals: number;
+  swaps: number;
+  /** KOs between two players where the less-geared one won, and all such KOs. */
+  upsets: number;
+  duels: number;
 };
 
 const rows: Row[] = [];
@@ -136,10 +147,36 @@ for (let m = 0; m < matches; m++) {
   const fightStarts: number[] = [];
   const damageAt: number[] = [];
   let lulls = 0;
+  const gearPicks = new Array(s.players.length).fill(0);
+  const allPicks = new Array(s.players.length).fill(0);
+  let survivors3: number[] | null = null;
+  let heals = 0;
+  let swaps = 0;
+  let upsets = 0;
+  let duels = 0;
+  const gearAt = new Map<number, number>();
   for (let i = 0; i < 60 * 900 && s.phase !== 'over'; i++) {
     const zBefore = { state: s.zone.state, phase: s.zone.phase, timer: s.zone.timer };
+    for (const p of s.players) gearAt.set(p.id, gear(p));
     step(s, s.players.map((p) => (p.id === 0 ? passive(s) : bots[p.id]!(s))));
     const t = s.tick * DT;
+    if (survivors3 === null && t >= 180) survivors3 = s.players.filter((p) => p.alive && p.bot).map((p) => p.id);
+    for (const e of s.events) {
+      if (e.type === 'pickup' && t < 180) {
+        allPicks[e.player] += 1;
+        if (e.kind in WEAPONS || e.kind === 'armor' || e.kind === 'backpack') gearPicks[e.player] += 1;
+      }
+      if (e.type === 'heal' && e.done) heals += 1;
+      if (e.type === 'swap') swaps += 1;
+      if (e.type === 'ko' && e.by !== null && e.by !== e.victim) {
+        const gk = gearAt.get(e.by)!;
+        const gv = gearAt.get(e.victim)!;
+        if (Math.abs(gk - gv) >= 0.5) {
+          duels += 1;
+          if (gk < gv) upsets += 1;
+        }
+      }
+    }
     if (s.zone.state === 'wait' && zBefore.state === 'wait' && zBefore.phase === s.zone.phase && zBefore.timer - s.zone.timer > DT * 2) lulls += 1;
     if (s.tick % 3600 === 0) alive[s.tick / 3600 - 1] = s.players.filter((p) => p.alive).length;
     for (const e of s.events) {
@@ -218,6 +255,12 @@ for (let m = 0; m < matches; m++) {
     windows,
     endPhase: s.zone.phase,
     lulls,
+    gearBy3: survivors3 && survivors3.length ? survivors3.reduce((a, id) => a + gearPicks[id], 0) / survivors3.length : NaN,
+    allBy3: survivors3 && survivors3.length ? survivors3.reduce((a, id) => a + allPicks[id], 0) / survivors3.length : NaN,
+    heals,
+    swaps,
+    upsets,
+    duels,
   });
 }
 
@@ -281,3 +324,11 @@ console.log(`dead air after the first ground minute: ${windows ? ((dead / window
 const phases: Record<number, number> = {};
 for (const r of rows) phases[r.endPhase] = (phases[r.endPhase] ?? 0) + 1;
 console.log(`Deadline phase at the end: ${Object.entries(phases).map(([k, v]) => `${k}: ${v}`).join(', ')}; lull breaker fired ${f1(avg((r) => r.lulls))} times per match`);
+
+console.log('');
+console.log('progression');
+const ups = rows.reduce((a, r) => a + r.upsets, 0);
+const duels = rows.reduce((a, r) => a + r.duels, 0);
+console.log(`per bot alive at 3:00 from Play: ${f1(avg((r) => r.gearBy3))} gun / vest / backpack pickups by then, ${f1(avg((r) => r.allBy3))} pickups of anything (matches with a bot alive at 3:00: ${rows.filter((r) => Number.isFinite(r.gearBy3)).length})`);
+console.log(`heals used ${f1(avg((r) => r.heals))} per match, gun swaps ${f1(avg((r) => r.swaps))} per match`);
+console.log(`KOs between unevenly geared players (gear gap >= 0.5) won by the less-geared one: ${duels ? ((ups / duels) * 100).toFixed(0) : '-'}% of ${duels}`);

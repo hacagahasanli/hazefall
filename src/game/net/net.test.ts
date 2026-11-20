@@ -129,6 +129,18 @@ describe('online play', () => {
     expect(q.next().roll).toBe(true); // tick 1 folded into tick 3, the roll kept
   });
 
+  it('gun slots, swap, heal and coffee presses survive the wire and folding', () => {
+    for (const i of [{ slot: 1 }, { slot: 2 }, { cycle: true }, { heal: true }, { coffee: true }]) {
+      expect(decodeInput(encodeInput(3, { ...NO_INPUT, ...i }))).toMatchObject(i);
+    }
+    expect(decodeInput(encodeInput(3, NO_INPUT))).toMatchObject({ slot: 0, cycle: false, heal: false, coffee: false });
+    const q = createInputQueue();
+    q.push([encodeInput(1, { ...NO_INPUT, heal: true, slot: 2 }), ...[2, 3, 4, 5, 6].map((t) => encodeInput(t, NO_INPUT))]);
+    const n = q.next();
+    expect(n.heal).toBe(true);
+    expect(n.slot).toBe(2);
+  });
+
   it('a snapshot is small and comes back the same', () => {
     const s = createMatch(
       start(0, true).seats.map((x) => ({ ...x, fighter: x.fighter as never })),

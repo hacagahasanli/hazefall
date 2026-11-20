@@ -17,9 +17,17 @@ import {
   SHAPES,
   treeSpot,
   FIGHTERS,
+  foundRounds,
+  HEALS,
   ITEMS,
-  LOOT_TABLE,
+  LOOT_TABLES,
+  lootTierAt,
+  magOf,
   MAP,
+  PACK,
+  RARITY,
+  SWAP_TIME,
+  VEST,
   PLANT_REVEAL,
   PLAYER_RADIUS,
   PLAYERS,
@@ -38,7 +46,7 @@ import {
 } from './constants';
 import { NO_INPUT } from './types';
 
-import type { FighterId, GameState, Input, Loot, LootKind, Player, Projectile, WeaponKind } from './types';
+import type { FighterId, GameState, Gun, HealKind, Input, Loot, LootKind, Player, Projectile, WeaponKind } from './types';
 
 const CENTER = WORLD / 2;
 
@@ -297,10 +305,41 @@ const freeSpot = (state: GameState, x: number, y: number) => {
 
 // ---------- setup
 
-const rollLoot = (state: GameState): LootKind => LOOT_TABLE[Math.floor(nextRandom(state) * LOOT_TABLE.length)] as LootKind;
+/** Index picked from weights (they need not sum to 1). */
+const pickWeighted = (state: GameState, weights: number[]) => {
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = nextRandom(state) * total;
+  for (let i = 0; i < weights.length; i++) {
+    r -= weights[i];
+    if (r < 0 && weights[i] > 0) return i;
+  }
+  return weights.length - 1;
+};
 
-const addLoot = (state: GameState, kind: LootKind, x: number, y: number, ammo?: number) => {
-  state.loot.push({ id: state.nextId++, kind, x, y, ammo: ammo ?? (isWeapon(kind) ? WEAPONS[kind].ammo : 0), active: true });
+/** A piece of loot for a place of loot tier `tier` (1 quiet .. 3 risky): its kind, grade and how much of it. */
+export const rollLoot = (state: GameState, tier: number): { kind: LootKind; tier: number; ammo: number } => {
+  const t = LOOT_TABLES[Math.max(1, Math.min(LOOT_TABLES.length - 1, tier))];
+  const kinds = Object.keys(t.kinds) as LootKind[];
+  const kind = kinds[pickWeighted(state, kinds.map((k) => t.kinds[k] ?? 0))];
+  if (isWeapon(kind)) {
+    const rarity = pickWeighted(state, t.rarity);
+    return { kind, tier: rarity, ammo: foundRounds(kind, rarity) };
+  }
+  if (kind === 'armor') {
+    const v = pickWeighted(state, t.vest);
+    return { kind, tier: v, ammo: VEST.points[v] };
+  }
+  if (kind === 'backpack') return { kind, tier: pickWeighted(state, t.pack), ammo: 0 };
+  if (kind === 'bandage') return { kind, tier: 0, ammo: HEALS.bandage.stack };
+  return { kind, tier: 0, ammo: kind === 'ammo' ? 0 : 1 };
+};
+
+const addLoot = (state: GameState, kind: LootKind, x: number, y: number, ammo?: number, tier = 0) => {
+  state.loot.push({ id: state.nextId++, kind, x, y, ammo: ammo ?? (isWeapon(kind) ? foundRounds(kind, tier) : 0), tier, active: true });
+};
+const addRolled = (state: GameState, x: number, y: number) => {
+  const r = rollLoot(state, lootTierAt(x, y));
+  addLoot(state, r.kind, x, y, r.ammo, r.tier);
 };
 
 /** One place in a match: a person (online or this browser) or a bot. `fighter: null` = pick at random. */
@@ -368,7 +407,7 @@ export const createMatch = (seats: Seat[], seed = 1): GameState => {
 
   MAP.forEach((row, ty) =>
     [...row].forEach((c, tx) => {
-      if (c === 'l' || (c === 's' && nextRandom(state) < 0.7)) addLoot(state, rollLoot(state), tx * TILE + TILE / 2, ty * TILE + TILE / 2);
+      if (c === 'l' || (c === 's' && nextRandom(state) < 0.7)) addRolled(state, tx * TILE + TILE / 2, ty * TILE + TILE / 2);
     }),
   );
   return state;
@@ -387,13 +426,24 @@ const newPlayer = (id: number, name: string, fighter: FighterId, bot: boolean, x
   armor: 0,
   alive: true,
   weapon: START_WEAPON.kind,
+  rarity: 0,
   mag: START_WEAPON.mag,
   ammo: START_WEAPON.spare,
+  slot: 0,
+  holster: null,
+  swapping: 0,
+  vest: 0,
+  pack: 0,
+  bandages: 0,
+  medkits: 0,
+  coffees: 0,
+  bombs: 0,
+  using: null,
+  useLeft: 0,
+  buzz: 0,
   reload: 0,
   cooldown: 0,
-  item: null,
   superCharge: 0,
-  healLeft: 0,
   sinceCombat: 99,
   revealed: 0,
   dashTime: 0,
@@ -591,10 +641,21 @@ const knockOut = (state: GameState, p: Player) => {
   p.killedBy = by;
   if (by !== null && state.players[by].alive) state.players[by].kills += 1;
   state.events.push({ type: 'ko', victim: p.id, by, with: p.killedWith, x: p.x, y: p.y });
-  // Everything you carried is up for grabs.
-  if (p.weapon !== 'fists' && roundsLeft(p) > 0) addLoot(state, p.weapon, p.x + 0.8, p.y, roundsLeft(p));
-  if (p.item) addLoot(state, p.item, p.x - 0.8, p.y);
-  if (p.armor > 50) addLoot(state, 'armor', p.x, p.y + 0.8);
+  // Everything you carried is up for grabs, in a ring round where you fell.
+  const drops: [LootKind, number, number][] = [];
+  if (p.weapon !== 'fists' && roundsLeft(p) > 0) drops.push([p.weapon, roundsLeft(p), p.rarity]);
+  if (p.holster && p.holster.weapon !== 'fists' && p.holster.mag + p.holster.ammo > 0) drops.push([p.holster.weapon, p.holster.mag + p.holster.ammo, p.holster.rarity]);
+  if (p.armor >= 1 && p.vest > 0) drops.push(['armor', Math.round(p.armor), p.vest]);
+  if (p.pack > 0) drops.push(['backpack', 0, p.pack]);
+  if (p.bandages > 0) drops.push(['bandage', p.bandages, 0]);
+  if (p.medkits > 0) drops.push(['medkit', p.medkits, 0]);
+  if (p.coffees > 0) drops.push(['coffee', p.coffees, 0]);
+  if (p.bombs > 0) drops.push(['bomb', p.bombs, 0]);
+  drops.forEach(([kind, ammo, tier], i) => {
+    const a = (i / drops.length) * Math.PI * 2;
+    const r = drops.length > 1 ? 0.9 : 0;
+    addLoot(state, kind, p.x + Math.cos(a) * r, p.y + Math.sin(a) * r, ammo, tier);
+  });
   const alive = alivePlayers(state);
   if (alive.length <= 1) {
     state.phase = 'over';
@@ -621,7 +682,7 @@ const hitRack = (state: GameState, tx: number, ty: number, amount: number) => {
     const x = tx * TILE + TILE / 2;
     const y = ty * TILE + TILE / 2;
     state.events.push({ type: 'rackBroken', x, y });
-    if (nextRandom(state) < 0.4) addLoot(state, rollLoot(state), x, y);
+    if (nextRandom(state) < 0.4) addRolled(state, x, y);
   }
 };
 
@@ -655,6 +716,9 @@ const aimedAt = (state: GameState, p: Player, aimX: number, aimY: number) => {
   return best;
 };
 
+/** A gun's damage per bullet at the rarity in hand (fists are fists). */
+const gunDamage = (p: Player) => WEAPONS[p.weapon].damage * (p.weapon === 'fists' ? 1 : (RARITY.damage[p.rarity] ?? 1));
+
 const fireBullet = (state: GameState, p: Player, angle: number, aim?: { x: number; y: number }) => {
   const w = WEAPONS[p.weapon];
   // Leaning out, the muzzle is out past the corner too.
@@ -667,7 +731,7 @@ const fireBullet = (state: GameState, p: Player, angle: number, aim?: { x: numbe
     id: state.nextId++, owner: p.id, kind: 'bullet', weapon: p.weapon,
     x, y,
     vx: Math.cos(angle) * w.speed, vy: Math.sin(angle) * w.speed,
-    damage: w.damage, life: w.range / w.speed,
+    damage: gunDamage(p), life: w.range / w.speed,
     sx: x, sy: y, tx: 0, ty: 0, t: 0, duration: 0, radius: 0,
     h: h0, h0, h1: target ? chestHeight(target) : h0, hd: target ? Math.max(1, Math.hypot(target.x - x, target.y - y)) : 1,
   });
@@ -696,7 +760,7 @@ const fireRocket = (state: GameState, p: Player, angle: number, pitch: number) =
   state.projectiles.push({
     id: state.nextId++, owner: p.id, kind: 'rocket', weapon: 'rockets',
     x, y, vx: Math.cos(angle) * flat, vy: Math.sin(angle) * flat,
-    damage: w.damage, life: w.range / w.speed,
+    damage: gunDamage(p), life: w.range / w.speed,
     sx: x, sy: y, tx: 0, ty: 0, t: 0, duration: 0, radius: w.lob!.radius, rocket: true,
     h: chestHeight(p) + (ROCKET.launchHeight - 1.1), vh: Math.sin(pt) * w.speed,
   });
@@ -716,15 +780,17 @@ const lob = (state: GameState, p: Player, aimX: number, aimY: number, range: num
 /** Rounds this player has for the gun in hand (magazine + spare). */
 export const roundsLeft = (p: Player) => (p.weapon === 'fists' ? Infinity : p.mag + p.ammo);
 
+/** Seconds a full reload of the gun in hand takes (quicker on better grades). */
+export const reloadTime = (p: Player) => WEAPONS[p.weapon].reload * (RARITY.reload[p.rarity] ?? 1);
+
 const startReload = (state: GameState, p: Player) => {
-  const w = WEAPONS[p.weapon];
-  if (p.weapon === 'fists' || p.reload > 0 || p.ammo <= 0 || p.mag >= w.mag) return;
-  p.reload = w.reload;
+  if (p.weapon === 'fists' || p.reload > 0 || p.ammo <= 0 || p.mag >= magOf(p.weapon, p.rarity)) return;
+  p.reload = reloadTime(p);
   state.events.push({ type: 'reload', player: p.id, weapon: p.weapon, x: p.x, y: p.y });
 };
 
 const shoot = (state: GameState, p: Player, input: Input) => {
-  if (p.reload > 0) return;
+  if (p.reload > 0 || p.swapping > 0) return;
   // Out of rounds altogether: the empty gun stays in your hands and you hit with it.
   const empty = p.weapon !== 'fists' && p.mag <= 0 && p.ammo <= 0;
   if (p.weapon !== 'fists' && p.mag <= 0 && !empty) {
@@ -760,7 +826,7 @@ const updateReload = (p: Player) => {
   p.reload -= DT;
   if (p.reload > 0) return;
   p.reload = 0;
-  const take = Math.min(WEAPONS[p.weapon].mag - p.mag, p.ammo);
+  const take = Math.min(magOf(p.weapon, p.rarity) - p.mag, p.ammo);
   p.mag += take;
   p.ammo -= take;
 };
@@ -823,43 +889,158 @@ export const lootUnder = (state: GameState, p: Player): Loot | null => {
   return best;
 };
 
+/** Spare rounds a gun can hold with this backpack. */
+export const spareCap = (p: Player, g: { weapon: WeaponKind; rarity: number }) => (g.weapon === 'fists' ? 0 : magOf(g.weapon, g.rarity) * PACK.spareMags[p.pack]);
+/** How many of a carried item (heals, bombs) this backpack holds. */
+export const carryCap = (p: Player, kind: HealKind | 'bomb') => PACK[kind][p.pack];
+const CARRIED = { bandage: 'bandages', medkit: 'medkits', coffee: 'coffees', bomb: 'bombs' } as const;
+/** How many of a carried item you have. */
+export const carried = (p: Player, kind: HealKind | 'bomb') => p[CARRIED[kind]];
+/** Points a vest on the floor still has. */
+export const vestPoints = (k: Loot) => (k.ammo > 0 ? k.ammo : VEST.points[k.tier ?? 3] ?? VEST.points[3]);
+
+const handGun = (p: Player): Gun => ({ weapon: p.weapon, rarity: p.rarity, mag: p.mag, ammo: p.ammo });
+const toHand = (p: Player, g: Gun) => {
+  p.weapon = g.weapon;
+  p.rarity = g.rarity;
+  p.mag = g.mag;
+  p.ammo = g.ammo;
+  p.reload = 0;
+};
+const gunRounds = (g: Gun | null) => (g ? g.mag + g.ammo : 0);
+
+/** Draw the other gun: what is in your hands goes to its slot. Cancels a heal and a reload; a moment before you can fire. */
+const swapGuns = (state: GameState, p: Player) => {
+  if (!p.holster) return;
+  const was = handGun(p);
+  toHand(p, p.holster);
+  p.holster = was;
+  p.slot = 1 - p.slot;
+  p.swapping = SWAP_TIME;
+  p.using = null;
+  p.useLeft = 0;
+  p.charging = null;
+  p.charge = 0;
+  state.events.push({ type: 'swap', player: p.id, weapon: p.weapon });
+};
+
+/**
+ * Take a piece of loot. A gun goes into an empty slot (and into your hands); with both slots full it replaces the gun in your
+ * hands, which drops. Ammo tops up the gun in your hands (else the other) to what the backpack holds. A vest replaces yours
+ * (yours drops if anything is left of it). A backpack only ever upgrades. Heals and bombs stack up to the backpack's room;
+ * whatever does not fit stays on the floor. Returns false when nothing could be taken.
+ */
 const takeLoot = (state: GameState, p: Player, k: Loot) => {
+  const tier = k.tier ?? 0;
   if (isWeapon(k.kind)) {
-    // Swap: drop what you hold (if it still has rounds) where you stand.
-    if (p.weapon !== 'fists' && roundsLeft(p) > 0) addLoot(state, p.weapon, p.x, p.y + 0.4, roundsLeft(p));
-    p.weapon = k.kind;
-    p.mag = Math.min(WEAPONS[k.kind].mag, k.ammo);
-    p.ammo = k.ammo - p.mag;
-    p.reload = 0;
+    const mag = Math.min(magOf(k.kind, tier), k.ammo);
+    const gun: Gun = { weapon: k.kind, rarity: tier, mag, ammo: k.ammo - mag };
+    if (p.weapon === 'fists') toHand(p, gun);
+    else if (!p.holster) {
+      p.holster = handGun(p);
+      toHand(p, gun);
+      p.slot = 1 - p.slot;
+      p.swapping = SWAP_TIME;
+    } else {
+      // Both slots full: swap the one in your hands for it, and drop yours where you stand.
+      if (roundsLeft(p) > 0) addLoot(state, p.weapon, p.x, p.y + 0.4, roundsLeft(p), p.rarity);
+      toHand(p, gun);
+    }
+    p.using = null;
   } else if (k.kind === 'ammo') {
-    if (p.weapon === 'fists') return;
-    p.ammo += WEAPONS[p.weapon].mag * AMMO_BOX_MAGS;
-    if (p.mag <= 0) startReload(state, p);
+    const box = (g: { weapon: WeaponKind; rarity: number; ammo: number }) => {
+      if (g.weapon === 'fists') return 0;
+      const room = spareCap(p, g) - g.ammo;
+      return room > 0 ? Math.min(room, magOf(g.weapon, g.rarity) * AMMO_BOX_MAGS) : 0;
+    };
+    const inHand = box(p);
+    if (inHand > 0) {
+      p.ammo += inHand;
+      if (p.mag <= 0) startReload(state, p);
+    } else if (p.holster && box(p.holster) > 0) p.holster.ammo += box(p.holster);
+    else return false;
   } else if (k.kind === 'armor') {
-    p.armor = ARMOR.points;
+    if (p.armor >= 1 && p.vest > 0) addLoot(state, 'armor', p.x, p.y + 0.4, Math.round(p.armor), p.vest);
+    p.vest = k.tier ?? 3;
+    p.armor = vestPoints(k);
+  } else if (k.kind === 'backpack') {
+    if (tier <= p.pack) return false;
+    p.pack = tier;
   } else {
-    if (p.item) addLoot(state, p.item, p.x, p.y + 0.4);
-    p.item = k.kind;
+    const kind = k.kind as HealKind | 'bomb';
+    const have = carried(p, kind);
+    const count = Math.max(1, k.ammo);
+    const take = Math.min(count, carryCap(p, kind) - have);
+    if (take <= 0) return false;
+    p[CARRIED[kind]] = have + take;
+    if (take < count) {
+      // The rest of the stack stays where it was.
+      k.ammo = count - take;
+      state.events.push({ type: 'pickup', player: p.id, kind: k.kind });
+      return true;
+    }
   }
   k.active = false;
   state.events.push({ type: 'pickup', player: p.id, kind: k.kind });
+  return true;
 };
 
-/** Picked up without pressing anything: a gun when you only have fists, armor when you need it, an item into an empty slot. */
-const autoTakes = (p: Player, k: Loot) =>
-  (isWeapon(k.kind) && (p.weapon === 'fists' || roundsLeft(p) === 0)) ||
-  (k.kind === 'ammo' && p.weapon !== 'fists' && p.ammo < WEAPONS[p.weapon].mag * 2) ||
-  (k.kind === 'armor' && p.armor < ARMOR.points * 0.5) ||
-  ((k.kind === 'medkit' || k.kind === 'bomb') && p.item === null);
-
-const useItem = (state: GameState, p: Player, input: Input) => {
-  if (p.item === 'bomb') {
-    lob(state, p, input.aimX, input.aimY, ITEMS.bomb.range, ITEMS.bomb.damage, ITEMS.bomb.radius);
-    p.revealed = 1;
-  } else if (p.item === 'medkit') {
-    p.healLeft += ITEMS.medkit.heal;
+/**
+ * Picked up without pressing anything: a gun when you have only fists, an empty gun or a free slot (not a second of the
+ * kind in your hands), ammo when you run low, a vest or backpack that is better than yours, heals and bombs you have room for.
+ */
+export const autoTakes = (p: Player, k: Loot) => {
+  if (isWeapon(k.kind)) return p.weapon === 'fists' || roundsLeft(p) === 0 || (!p.holster && k.kind !== p.weapon);
+  if (k.kind === 'ammo') {
+    const low = (g: Gun) => g.weapon !== 'fists' && g.ammo < Math.min(spareCap(p, g), magOf(g.weapon, g.rarity) * 2);
+    return low(handGun(p)) || (!!p.holster && low(p.holster));
   }
-  p.item = null;
+  if (k.kind === 'armor') return vestPoints(k) > p.armor + 0.5;
+  if (k.kind === 'backpack') return (k.tier ?? 0) > p.pack;
+  const kind = k.kind as HealKind | 'bomb';
+  return carried(p, kind) < carryCap(p, kind);
+};
+
+/** Throw a bomb (bots throw at once at the aim point; people hold to charge, see updatePlayer). */
+const useItem = (state: GameState, p: Player, input: Input) => {
+  if (p.bombs <= 0) return;
+  lob(state, p, input.aimX, input.aimY, ITEMS.bomb.range, ITEMS.bomb.damage, ITEMS.bomb.radius);
+  p.revealed = 1;
+  p.bombs -= 1;
+};
+
+/** Which heal the heal button uses now: a med kit when badly hurt, else a bandage, else coffee (null = nothing to use). */
+export const healChoice = (p: Player): HealKind | null => {
+  const missing = p.maxHp - p.hp;
+  const bandageOk = p.bandages > 0 && p.hp < HEALS.bandage.upTo;
+  if (missing >= 40 && p.medkits > 0) return 'medkit';
+  if (bandageOk) return 'bandage';
+  if (missing > 0.5 && p.medkits > 0) return 'medkit';
+  if (p.coffees > 0) return 'coffee';
+  return null;
+};
+
+const startHeal = (state: GameState, p: Player, kind: HealKind) => {
+  if (p.using || carried(p, kind) <= 0) return;
+  if (kind === 'bandage' && p.hp >= HEALS.bandage.upTo) return;
+  if (kind === 'medkit' && p.hp >= p.maxHp) return;
+  p.using = kind;
+  p.useLeft = HEALS[kind].time;
+  p.reload = 0;
+  p.charging = null;
+  p.charge = 0;
+  state.events.push({ type: 'heal', player: p.id, kind, done: false });
+};
+
+const finishHeal = (state: GameState, p: Player) => {
+  const kind = p.using!;
+  p.using = null;
+  p.useLeft = 0;
+  p[CARRIED[kind]] -= 1;
+  if (kind === 'bandage') p.hp = Math.max(p.hp, Math.min(HEALS.bandage.upTo, p.hp + HEALS.bandage.heal));
+  else if (kind === 'medkit') p.hp = Math.min(p.maxHp, p.hp + HEALS.medkit.heal);
+  else p.buzz = HEALS.coffee.buzz;
+  state.events.push({ type: 'heal', player: p.id, kind, done: true });
 };
 
 // ---------- per tick
@@ -871,13 +1052,13 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
   p.slowed = Math.max(0, p.slowed - DT);
   p.sinceCombat += DT;
 
-  if (p.healLeft > 0) {
-    const h = Math.min(p.healLeft, (ITEMS.medkit.heal / ITEMS.medkit.over) * DT);
-    p.healLeft -= h;
-    p.hp = Math.min(p.maxHp, p.hp + h);
-  } else if (p.sinceCombat >= REGEN.after) {
-    p.hp = Math.min(p.maxHp, p.hp + REGEN.perSecond * DT);
+  p.swapping = Math.max(0, p.swapping - DT);
+  if (p.buzz > 0) {
+    // Coffee: a steady trickle of health, fight or no fight.
+    p.buzz = Math.max(0, p.buzz - DT);
+    p.hp = Math.min(p.maxHp, p.hp + HEALS.coffee.perSecond * DT);
   }
+  if (p.sinceCombat >= REGEN.after) p.hp = Math.min(p.maxHp, p.hp + REGEN.perSecond * DT);
 
   // Turn towards the aim at a limited rate, never snapping. Swimming, you face where you swim.
   const swimming = inWater(p.x, p.y);
@@ -890,8 +1071,22 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     p.heading += Math.max(-maxTurn, Math.min(maxTurn, d));
   }
 
+  // Two gun slots: 1 / 2 draw one, X (or the wheel, or SWAP) the other one.
+  const slotPress = input.slot && input.slot !== (p.prev.slot ?? 0) ? input.slot - 1 : -1;
+  if ((input.cycle && !p.prev.cycle) || (slotPress >= 0 && slotPress !== p.slot)) swapGuns(state, p);
+
+  // Heals: a moment of standing nearly still with something in your hands that is not a gun.
+  if (swimming && p.using) p.using = null;
+  if (p.using) {
+    p.useLeft -= DT;
+    if (p.useLeft <= 0) finishHeal(state, p);
+  } else if (!swimming && input.heal && !p.prev.heal) {
+    const kind = healChoice(p);
+    if (kind) startHeal(state, p, kind);
+  } else if (!swimming && input.coffee && !p.prev.coffee && p.coffees > 0) startHeal(state, p, 'coffee');
+
   updateReload(p);
-  if (pressed('reload')) startReload(state, p);
+  if (pressed('reload') && !p.using) startReload(state, p);
   p.rollCooldown = Math.max(0, p.rollCooldown - DT);
 
   // The dodge roll: the way you're moving (or facing), sliding along whatever it meets.
@@ -899,6 +1094,7 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     const len = Math.hypot(input.mx, input.my);
     p.rollDir = len > 0.01 ? Math.atan2(input.my, input.mx) : p.heading;
     p.rolling = ROLL.time;
+    p.using = null;
     p.rollCooldown = ROLL.cooldown;
     state.events.push({ type: 'roll', player: p.id, x: p.x, y: p.y });
   }
@@ -941,7 +1137,8 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     const len = Math.hypot(input.mx, input.my);
     p.lean += ((swimming ? 0 : Math.max(-1, Math.min(1, input.lean))) - p.lean) * Math.min(1, LEAN.rate * DT);
     const top =
-      FIGHTERS[p.fighter].speed * (p.slowed > 0 ? SUPERS.timebox.slow : 1) * (Math.abs(p.lean) > 0.3 ? LEAN.speed : 1) * (swimming ? SWIM.speed : 1);
+      FIGHTERS[p.fighter].speed * (p.slowed > 0 ? SUPERS.timebox.slow : 1) * (Math.abs(p.lean) > 0.3 ? LEAN.speed : 1) * (swimming ? SWIM.speed : 1) *
+      (p.using ? HEALS.walk : 1) * (p.buzz > 0 ? HEALS.coffee.speed : 1);
     const wantX = len > 0.01 ? (input.mx / Math.max(1, len)) * top : 0;
     const wantY = len > 0.01 ? (input.my / Math.max(1, len)) * top : 0;
     const rate = (len > 0.01 ? MOVE.accel : MOVE.friction) * DT;
@@ -981,6 +1178,9 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     // Both hands are swimming: no shooting, no throwing.
     p.charging = null;
     p.charge = 0;
+  } else if (input.fire && p.using) {
+    // Pulling the trigger puts the heal away (a fresh press, so holding fire through a heal you started does not).
+    if (!p.prev.fire) p.using = null;
   } else if (input.fire && p.cooldown <= 0) shoot(state, p, input);
   else if (input.fire && p.weapon !== 'fists' && p.mag <= 0 && p.ammo <= 0 && !p.prev.fire) state.events.push({ type: 'dryFire', player: p.id });
   if (p.charging === 'rockets') {
@@ -990,8 +1190,16 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
   if (pressed('super') && !swimming && p.superCharge >= 1 && p.dashTime <= 0) useSuper(state, p, input);
 
   const k = lootUnder(state, p);
-  if (k && autoTakes(p, k)) takeLoot(state, p, k);
-  else if (!p.bot && !swimming && p.item === 'bomb' && !k && (input.use || p.charging === 'bomb')) {
+  // Walking over a pile, take whatever of it is wanted (the nearest first).
+  let auto: Loot | null = k && autoTakes(p, k) ? k : null;
+  if (!auto) {
+    for (const o of state.loot) if (o.active && Math.hypot(o.x - p.x, o.y - p.y) < 1.2 && autoTakes(p, o)) {
+      auto = o;
+      break;
+    }
+  }
+  if (auto) takeLoot(state, p, auto);
+  else if (!p.bot && !swimming && p.bombs > 0 && !k && !p.using && (input.use || p.charging === 'bomb')) {
     // A bomb: hold F to throw it farther, let go to throw.
     if (input.use) {
       p.charging = 'bomb';
@@ -1003,13 +1211,13 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
       const a = input.throwAt && toAim > 0.3 ? Math.atan2(input.aimY - p.y, input.aimX - p.x) : p.heading;
       lob(state, p, p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, ITEMS.bomb.range, ITEMS.bomb.damage, ITEMS.bomb.radius);
       p.revealed = 1;
-      p.item = null;
+      p.bombs -= 1;
       p.charge = 0;
       p.charging = null;
     }
   } else if (pressed('use')) {
     if (k) takeLoot(state, p, k);
-    else if (p.item && !swimming) useItem(state, p, input);
+    else if (p.bombs > 0 && !swimming && !p.using) useItem(state, p, input);
   }
   p.prev = { ...input };
 };

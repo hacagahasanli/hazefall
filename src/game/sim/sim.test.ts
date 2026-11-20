@@ -224,7 +224,7 @@ describe('loot and fighting', () => {
     const s = landed();
     clearAround(s);
     const p = s.players[0];
-    Object.assign(p, { item: 'bomb', heading: 0, x: OPEN.x, y: OPEN.y });
+    Object.assign(p, { bombs: 1, heading: 0, x: OPEN.x, y: OPEN.y });
     const hold = idle();
     hold[0] = { ...NO_INPUT, use: true, throwAt: true, aimX: p.x + 25, aimY: p.y };
     for (let i = 0; i < 3; i++) step(s, hold);
@@ -253,11 +253,11 @@ describe('loot and fighting', () => {
     expect(Math.abs(h.x - p.x)).toBeLessThan(0.01);
   });
 
-  it('E swaps your gun for the one on the floor and drops yours', () => {
+  it('with both slots full, F swaps the gun in your hands for the one on the floor and drops yours', () => {
     const s = landed();
     clearAround(s);
     const p = s.players[0];
-    Object.assign(p, { weapon: 'smg', mag: 30, ammo: 10 });
+    Object.assign(p, { weapon: 'smg', mag: 30, ammo: 10, holster: { weapon: 'pistol', rarity: 0, mag: 12, ammo: 0 } });
     s.loot.push({ id: 999, kind: 'sniper', x: p.x, y: p.y, ammo: 8, active: true });
     step(s, idle());
     expect(p.weapon).toBe('smg');

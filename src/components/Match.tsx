@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentType } from 'react';
 
 import { COPY } from '~/game/copy/studio';
-import { startMatch } from '~/game/render/game';
+import { GRADE_CSS, startMatch } from '~/game/render/game';
 import { FIGHTERS } from '~/game/sim/constants';
 
 import { AimChoice, readAim, saveAim } from '~/components/AimChoice';
@@ -29,6 +29,13 @@ const Bar = ({ value, max, color }: { value: number; max: number; color: string 
       style={{ width: `${Math.max(0, Math.min(1, value / max)) * 100}%`, background: color }}
     />
   </div>
+);
+
+const ROMAN = ['', 'I', 'II', 'III'];
+const Chip = ({ children, color }: { children: React.ReactNode; color?: string }) => (
+  <span className="rounded-sm bg-ink-deep/70 px-1.5 py-px text-cream/85" style={color ? { color, boxShadow: `inset 2px 0 0 ${color}` } : undefined}>
+    {children}
+  </span>
 );
 
 const Key = ({ k }: { k: string }) => (
@@ -393,15 +400,6 @@ export const Match = ({
               <span className="font-display text-lg" style={{ color: f.color }}>
                 {f.name}
               </span>
-              <span className="text-xs text-cream/60">{hud.weapon}</span>
-              {hud.mag !== Infinity && (
-                <span
-                  className={`font-display text-sm ${hud.mag === 0 ? 'text-orange' : 'text-cream'}`}
-                >
-                  {hud.mag}
-                  <span className="text-cream/50"> / {hud.ammo}</span>
-                </span>
-              )}
               {hud.reloading !== null && (
                 <span className="flex items-center gap-1 text-[10px] font-bold tracking-widest text-gold">
                   RELOADING
@@ -413,18 +411,44 @@ export const Match = ({
                   </span>
                 </span>
               )}
-              {hud.item && (
-                <span className="rounded bg-cream/10 px-1.5 text-xs">
-                  {hud.item === 'bomb' ? 'Bomb' : 'Med kit'}
-                </span>
-              )}
+            </div>
+            {/* Two gun slots: the one in your hands lit, its grade as the colour of the edge. */}
+            <div className="flex gap-1.5">
+              {hud.slots.map((sl, i) => (
+                <div
+                  key={i}
+                  className={`flex min-w-[5.5rem] items-baseline gap-1.5 rounded-sm border-l-[3px] px-1.5 py-0.5 sm:min-w-[7.5rem] ${sl.active ? 'bg-ink-deep/85' : 'bg-ink-deep/50 opacity-60'}`}
+                  style={{ borderColor: sl.name ? GRADE_CSS[sl.rarity] : 'rgba(232,238,247,0.2)' }}
+                >
+                  {!touch && <span className="text-[10px] font-bold text-cream/50">{keyLabel(i === 0 ? settings.keys.slot1 : settings.keys.slot2)}</span>}
+                  <span className="text-xs font-semibold" style={{ color: sl.name ? (sl.rarity > 0 ? GRADE_CSS[sl.rarity] : '#e8eef7') : 'rgba(232,238,247,0.4)' }}>
+                    {sl.name ?? 'empty'}
+                  </span>
+                  {sl.name && (
+                    <span className={`font-display text-sm ${sl.mag === 0 ? 'text-orange' : 'text-cream'}`}>
+                      {sl.mag}
+                      <span className="text-cream/50">/{sl.ammo}</span>
+                    </span>
+                  )}
+                </div>
+              ))}
             </div>
             <Bar
               value={hud.hp}
               max={hud.maxHp}
               color={hud.hp / hud.maxHp > 0.35 ? (settings.colorBlind ? '#3ec5ff' : '#3ddc84') : settings.colorBlind ? '#ff9f1c' : '#ff3d6e'}
             />
-            {hud.armor > 0 && <Bar value={hud.armor} max={100} color="#3ec5ff" />}
+            {hud.armor > 0 && <Bar value={hud.armor} max={hud.vestMax} color="#3ec5ff" />}
+            {/* What you carry: vest and backpack grades, heals and bombs out of what the backpack holds, coffee left. */}
+            <div className="flex flex-wrap items-center gap-1 text-[10px] font-semibold">
+              {hud.vest > 0 && <Chip color={GRADE_CSS[hud.vest - 1]}>Vest {ROMAN[hud.vest]}</Chip>}
+              {hud.pack > 0 && <Chip color={GRADE_CSS[hud.pack - 1]}>Pack {ROMAN[hud.pack]}</Chip>}
+              {hud.bag.bandages > 0 && <Chip>{COPY.items.bandage} {hud.bag.bandages}/{hud.bag.cap.bandage}</Chip>}
+              {hud.bag.medkits > 0 && <Chip>{COPY.items.medkit} {hud.bag.medkits}/{hud.bag.cap.medkit}</Chip>}
+              {hud.bag.coffees > 0 && <Chip>{COPY.items.coffee} {hud.bag.coffees}</Chip>}
+              {hud.bag.bombs > 0 && <Chip>Bomb {hud.bag.bombs}</Chip>}
+              {hud.buzz > 0 && <Chip color="#ffd23f">{COPY.items.coffee} {Math.ceil(hud.buzz)}s</Chip>}
+            </div>
             <div className="flex items-center gap-2 text-[11px]">
               <span className="text-cream/60">
                 {touch ? 'Super' : keyLabel(settings.keys.super)} · {hud.superName}
@@ -619,9 +643,24 @@ export const Match = ({
             <div
               className={`pointer-events-none absolute inset-x-0 flex justify-center ${touch ? 'bottom-[150px] sm:bottom-6' : 'bottom-24'}`}
             >
-              <span className="panel-cut bg-ink-deep/85 px-4 py-1.5 text-sm text-cream" style={{ zoom: hudZoom }}>
+              <span
+                className="panel-cut bg-ink-deep/85 px-4 py-1.5 text-sm text-cream"
+                style={{ zoom: hudZoom, ...(hud.promptGrade !== null && hud.promptGrade > 0 ? { color: GRADE_CSS[hud.promptGrade], boxShadow: `inset 3px 0 0 ${GRADE_CSS[hud.promptGrade]}` } : {}) }}
+              >
                 {hud.prompt}
               </span>
+            </div>
+          )}
+
+          {/* A heal in progress: what, and how far along. */}
+          {hud.using && !over && (
+            <div className={`pointer-events-none absolute inset-x-0 flex justify-center ${touch ? 'bottom-[190px] sm:bottom-16' : 'bottom-36'}`}>
+              <div className="flex w-52 flex-col items-center gap-1" style={{ zoom: hudZoom }}>
+                <span className="text-xs font-bold tracking-wider text-green">{hud.using.name}</span>
+                <span className="panel-cut h-2 w-full overflow-hidden bg-ink-deep/80">
+                  <span className="block h-full bg-green" style={{ width: `${Math.min(1, hud.using.progress) * 100}%` }} />
+                </span>
+              </div>
             </div>
           )}
 
@@ -643,6 +682,9 @@ export const Match = ({
               superReady={hud.superCharge}
               rollReady={Math.min(1, hud.roll)}
               sniper={hud.sniper}
+              canSwap={hud.slots.every((sl) => sl.name !== null)}
+              swapLabel={hud.slots.find((sl) => !sl.active)?.name ?? null}
+              heal={hud.healNext}
             />
           )}
 
@@ -670,6 +712,15 @@ export const Match = ({
               </span>
               <span className="flex items-center gap-1">
                 <Key k={keyLabel(settings.keys.reload)} /> reload
+              </span>
+              <span className="flex items-center gap-1">
+                <Key k={keyLabel(settings.keys.slot1)} />
+                <Key k={keyLabel(settings.keys.slot2)} />
+                <Key k={keyLabel(settings.keys.swap)} /> / wheel · guns
+              </span>
+              <span className="flex items-center gap-1">
+                <Key k={keyLabel(settings.keys.heal)} /> heal
+                <Key k={keyLabel(settings.keys.coffee)} /> {COPY.items.coffee.toLowerCase()}
               </span>
               <span className="flex items-center gap-1">
                 <Key k={keyLabel(settings.keys.roll)} /> roll
