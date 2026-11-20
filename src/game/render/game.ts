@@ -6,7 +6,7 @@ import { actionFor, DEFAULT_SETTINGS, keyLabel, keyMap } from '../settings';
 
 import type { VolumeKind } from '../sfx';
 import type { Action, Settings } from '../settings';
-import { ARMOR, HEALS, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, ITEMS, MAP, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
+import { ARMOR, HEALS, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, ITEMS, MAP, PLAYERS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
 import { canSee, carryCap, healChoice, inPlant, inWater, lineOfSight, lootUnder, reloadTime, solidAt, throwDistance } from '../sim/step';
 import { createOfflineSession } from '../net/session';
 import { NO_INPUT } from '../sim/types';
@@ -665,13 +665,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     return g;
   });
   let smokeClock = 0;
-  const tempWalls = Array.from({ length: 10 }, () => {
+  // One wall and one slow field per fighter: enough even if everyone uses their super at once.
+  const tempWalls = Array.from({ length: PLAYERS }, () => {
     const m = mesh(new THREE.BoxGeometry(1, 2.2, 1), mat(PALETTE.green));
     m.visible = false;
     scene.add(m);
     return m;
   });
-  const fields = Array.from({ length: 10 }, () => {
+  const fields = Array.from({ length: PLAYERS }, () => {
     const m = new THREE.Mesh(new THREE.CircleGeometry(1, 40), new THREE.MeshBasicMaterial({ color: 0x3ec5ff, transparent: true, opacity: 0.22, depthWrite: false }));
     m.rotation.x = -Math.PI / 2;
     m.visible = false;
@@ -2159,7 +2160,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       superName: FIGHTERS[self.fighter].superName,
       fighter: self.fighter,
       zone,
-      feed: feed.filter((f) => time - f.at < 6).map(({ id, text }) => ({ id, text })),
+      // The last five of the past 6 s: twenty fighters can drop several at once early on.
+      feed: feed.filter((f) => time - f.at < 6).slice(-5).map(({ id, text }) => ({ id, text })),
       prompt,
       dead: !self.alive,
       placement: self.placement,

@@ -14,7 +14,7 @@ import { setUiSound, uiTick } from '~/components/uiSound';
 import { deviceFacts } from '~/game/render/deviceFacts';
 import { resolveTier } from '~/game/render/quality';
 import { keyLabel } from '~/game/settings';
-import { FIGHTERS } from '~/game/sim/constants';
+import { FIGHTERS, PLAYERS } from '~/game/sim/constants';
 import { brandUrl } from '~/lib/assets';
 import { GAME_TITLE } from '~/lib/studio';
 
@@ -128,7 +128,7 @@ export const MainMenu = ({
   useEffect(() => setUiSound(settings.master, settings.muted || platform.muted()), [settings.master, settings.muted, platform]);
 
   const items: { id: string; label: string; sub?: string; primary?: boolean; run: () => void }[] = [
-    { id: 'play', label: 'Play', sub: 'Solo · 9 bots', primary: true, run: onPlay },
+    { id: 'play', label: 'Play', sub: `Solo · ${PLAYERS - 1} bots`, primary: true, run: onPlay },
     { id: 'fighter', label: 'Fighter', sub: f.name, run: () => setPanel('fighter') },
     { id: 'settings', label: 'Settings', run: () => setPanel('settings') },
     { id: 'how', label: 'How to play', run: () => setPanel('how') },

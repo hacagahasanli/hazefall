@@ -48,7 +48,7 @@ export interface Session {
 
 const randomSeed = () => (Math.random() * 1e9) | 0;
 
-/** You and nine bots, in this browser only. */
+/** You and nineteen bots, in this browser only. */
 export const createOfflineSession = (fighter: FighterId, name: string): Session => {
   const state = createGame(fighter, randomSeed(), name);
   const bots = state.players.map((p) => (p.bot ? createBot(p.id, randomSeed()) : null));

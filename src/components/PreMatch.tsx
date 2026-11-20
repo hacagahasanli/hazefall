@@ -2,7 +2,7 @@
 
 /**
  * The lobby before a round: Play leads here, not straight into the match. Behind the UI the squad waits on the airstrip
- * by the idling cargo plane (render/staging). You pick your fighter while the lobby fills with the other nine; nothing
+ * by the idling cargo plane (render/staging). You pick your fighter while the lobby fills with the other nineteen; nothing
  * starts until you press Ready. Then the fighter is locked, the match starts loading underneath (held, see Match `held`),
  * and a "match starting" strip counts down at the bottom. The last seconds are the launch: the camera cranes over the
  * squad to the battleground, the engines spool up, a big 3-2-1, a fade to black, and the plane scene comes straight up
@@ -16,7 +16,7 @@ import { setUiSound, startHum, uiTick } from '~/components/uiSound';
 import { COPY } from '~/game/copy/studio';
 import { deviceFacts } from '~/game/render/deviceFacts';
 import { resolveTier } from '~/game/render/quality';
-import { FIGHTERS } from '~/game/sim/constants';
+import { FIGHTERS, PLAYERS } from '~/game/sim/constants';
 
 import type { Staging } from '~/game/render/staging';
 import type { Settings } from '~/game/settings';
@@ -179,9 +179,9 @@ export const PreMatch = ({
     return () => window.removeEventListener('keydown', onKey);
   }, [ready, pick, onBack, fighter, launching]);
 
-  // The lobby: you first, then the nine joining over the first few seconds (already there on Play again).
-  const names = COPY.botNames.slice(0, 9);
-  const joinEvery = quick ? 0 : 0.32;
+  // The lobby: you first, then the other nineteen joining over the first three seconds (already there on Play again).
+  const names = COPY.botNames.slice(0, PLAYERS - 1);
+  const joinEvery = quick ? 0 : 2.9 / names.length;
   const joined = quick ? names.length : Math.min(names.length, Math.floor(Math.max(0, t - 0.6) / joinEvery));
   const full = joined >= names.length;
   const secs = Number.isFinite(left) ? Math.ceil(left - 0.001) : 0;
@@ -219,7 +219,7 @@ export const PreMatch = ({
         <div className="flex flex-col items-end gap-0.5 text-right" aria-live="polite">
           <span className="text-sm font-semibold text-cream/70">{status}</span>
           <span className="font-display text-2xl leading-none tabular-nums text-gold drop-shadow-[0_2px_12px_rgba(0,0,0,0.7)] sm:text-3xl">
-            {joined + 1}/10
+            {joined + 1}/{PLAYERS}
           </span>
         </div>
       </header>
@@ -280,19 +280,19 @@ export const PreMatch = ({
 
       {/* Right: the lobby filling (hidden on short phones, where the clock already says it). */}
       <aside
-        className={`fixed right-0 top-1/2 flex w-[min(300px,30vw)] -translate-y-1/2 flex-col gap-2 pr-5 transition-all duration-500 sm:pr-8 max-sm:hidden [@media(max-height:500px)]:hidden ${launching ? 'translate-x-8 opacity-0' : 'opacity-100'}`}
+        className={`fixed right-0 top-1/2 flex w-[min(340px,34vw)] -translate-y-1/2 flex-col gap-2 pr-5 transition-all duration-500 sm:pr-8 max-sm:hidden [@media(max-height:500px)]:hidden ${launching ? 'translate-x-8 opacity-0' : 'opacity-100'}`}
         style={{ paddingRight: 'max(1.25rem, env(safe-area-inset-right))' }}
         aria-label="Players in this match"
       >
         <div className="flex items-baseline justify-between">
           <h2 className="font-display text-lg">Match lobby</h2>
-          <span className="font-display text-lg tabular-nums text-gold">{joined + 1}/10</span>
+          <span className="font-display text-lg tabular-nums text-gold">{joined + 1}/{PLAYERS}</span>
         </div>
         <div className="h-1 overflow-hidden bg-cream/10">
-          <div className="h-full bg-gold transition-[width] duration-300" style={{ width: `${((joined + 1) / 10) * 100}%` }} />
+          <div className="h-full bg-gold transition-[width] duration-300" style={{ width: `${((joined + 1) / PLAYERS) * 100}%` }} />
         </div>
-        <ol className="flex flex-col gap-1">
-          <li className="panel-cut flex items-center gap-2 bg-ink/80 px-3 py-1.5 text-sm">
+        <ol className="grid grid-cols-2 gap-1">
+          <li className="panel-cut col-span-2 flex items-center gap-2 bg-ink/80 px-3 py-1.5 text-sm">
             <span className="h-2 w-2 rounded-full" style={{ background: f.color }} />
             <b className="flex-1">You</b>
             <span className={`text-xs ${readied ? 'text-green' : 'text-cream/50'}`}>{readied ? 'ready' : f.name}</span>
@@ -300,11 +300,10 @@ export const PreMatch = ({
           {names.map((n, i) => (
             <li
               key={n}
-              className={`panel-cut flex items-center gap-2 bg-ink/60 px-3 py-1.5 text-sm transition-all duration-300 ${i < joined ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0'}`}
+              className={`panel-cut flex min-w-0 items-center gap-2 bg-ink/60 px-2.5 py-1 text-xs transition-all duration-300 ${i < joined ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0'}`}
             >
-              <span className="h-2 w-2 rounded-full bg-cream/40" />
-              <span className="flex-1 text-cream/85">{n}</span>
-              <span className="text-xs text-cream/40">{i < joined ? 'ready' : ''}</span>
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green/70" />
+              <span className="min-w-0 flex-1 truncate text-cream/85">{n}</span>
             </li>
           ))}
         </ol>
@@ -329,7 +328,7 @@ export const PreMatch = ({
                 style={{ width: `${(joining ? 1 : progress) * 100}%` }}
               />
             </div>
-            <span className="text-xs text-cream/60">10/10 ready · {loaded ? 'map ready' : 'loading the map'}</span>
+            <span className="text-xs text-cream/60">{PLAYERS}/{PLAYERS} ready · {loaded ? 'map ready' : 'loading the map'}</span>
           </div>
         </div>
       )}
@@ -343,7 +342,7 @@ export const PreMatch = ({
           >
             {big}
           </span>
-          <span className="text-base font-semibold text-cream/85 drop-shadow sm:text-lg">{COPY.intro.title(10).join(' · ')}</span>
+          <span className="text-base font-semibold text-cream/85 drop-shadow sm:text-lg">{COPY.intro.title(PLAYERS).join(' · ')}</span>
         </div>
       )}
       <div className="pointer-events-none fixed inset-0 bg-black" style={{ opacity: fade }} />
