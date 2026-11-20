@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 
+import { mergeRigid } from './merge';
+
 /**
  * Guns built in code with realistic proportions and materials: gunmetal, black polymer,
  * walnut and olive furniture, a scoped bolt-action, a pump shotgun with a tube magazine.
@@ -139,5 +141,7 @@ const BUILDERS: Record<GunKind, (g: THREE.Group) => number> = { pistol, smg, sho
 export const buildGun = (kind: GunKind): GunView => {
   const root = new THREE.Group();
   const length = BUILDERS[kind](root) * S;
+  // Its parts never move relative to each other: one mesh per material.
+  mergeRigid(root);
   return { kind, root, length };
 };

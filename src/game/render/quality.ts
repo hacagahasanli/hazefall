@@ -4,7 +4,9 @@
  *
  *  - high:   device pixel ratio up to 2, sun shadows (2048 map, soft PCF), antialiasing;
  *  - medium: pixel ratio up to 1.5, shadows with a 1024 map, antialiasing;
- *  - low:    pixel ratio 1, no shadows, no antialiasing, a shorter view distance.
+ *  - low:    pixel ratio 1, no shadows, no antialiasing, a shorter view distance (at eye level the fog closes in to 180 m).
+ *
+ * Every tier also sets how far grass reaches at eye level and where trees and bushes switch to fewer faces.
  *
  * 'auto' picks one from what the browser says about the device (`autoTier`), then steps down once if the frame rate stays
  * low (`FpsGuard`). The player can pick a tier in the pause menu; that choice is saved and wins over auto.
@@ -20,14 +22,21 @@ export interface TierSpec {
   shadowMap: number;
   /** Antialiasing is fixed when the WebGL context is made: a change applies on the next load. */
   antialias: boolean;
-  /** Fog end (m): the far edge of the view, so less is drawn on low. */
+  /** Fog start and end (m): the far edge of the view, so less is drawn on low (nothing past the end is drawn). */
+  fogNear: number;
   fogFar: number;
+  /** View-distance scale for small things (grass, tall grass): they shrink away at their reach times this. */
+  reach: number;
+  /** Distance (m) from the camera beyond which trees and bushes are drawn with fewer faces (at eye level and falling). */
+  lodNear: number;
+  /** At eye level on the ground (first person, over the shoulder): a nearer fog, tree switch and grass reach, when set. */
+  eye?: { fogNear: number; fogFar: number; lodNear: number; reach: number };
 }
 
 export const TIERS: Record<Tier, TierSpec> = {
-  high: { dprCap: 2, shadows: true, shadowMap: 2048, antialias: true, fogFar: 300 },
-  medium: { dprCap: 1.5, shadows: true, shadowMap: 1024, antialias: true, fogFar: 290 },
-  low: { dprCap: 1, shadows: false, shadowMap: 512, antialias: false, fogFar: 260 },
+  high: { dprCap: 2, shadows: true, shadowMap: 2048, antialias: true, fogNear: 120, fogFar: 300, reach: 1, lodNear: 120 },
+  medium: { dprCap: 1.5, shadows: true, shadowMap: 1024, antialias: true, fogNear: 120, fogFar: 290, reach: 0.9, lodNear: 110 },
+  low: { dprCap: 1, shadows: false, shadowMap: 512, antialias: false, fogNear: 120, fogFar: 260, reach: 0.75, lodNear: 90, eye: { fogNear: 70, fogFar: 180, lodNear: 75, reach: 0.6 } },
 };
 
 export interface DeviceFacts {

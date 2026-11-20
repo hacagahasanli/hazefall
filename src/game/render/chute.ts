@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 
+import { mergeSiblings } from './merge';
+
 /** How far above the backpack the canopy flies, and where the lines meet the risers. */
 export const CHUTE_UP = 4.6;
 /** The risers part to the sides: out past the shoulders, so the hands hold on at the sides, elbows bent. */
@@ -58,6 +60,8 @@ export const buildChute = (color: string) => {
     riser.userData.line = true;
     g.add(riser);
   }
+  // Panels of one colour, and the lines, as one mesh each (the tags carry over).
+  mergeSiblings(g);
   return g;
 };
 

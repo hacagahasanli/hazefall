@@ -21,6 +21,8 @@ import { buildChute, HARNESS_BACK } from './chute';
 import { paintMapImage } from './mapImage';
 import { buildPlane } from './plane';
 import { buildProps, DECK_Y, WATER_Y } from './props';
+import { chunkedInstances } from './chunks';
+import { mergeRigid } from './merge';
 import { createPerfOverlay, PERF_KEY, perfRequested } from './perfOverlay';
 import { FpsGuard, lowerTier, TIERS } from './quality';
 import { buildWorld } from './world';
@@ -220,7 +222,9 @@ const at = <T extends THREE.Object3D>(o: T, x: number, y: number, z: number) => 
 
 export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** Performance tier (see quality.ts): pixel ratio, shadows, antialiasing and view distance. */
-  let tier: Tier = opts.tier ?? 'high';
+  // ?perf&tier=low forces a tier from the start (measuring only: antialiasing is fixed when the context is made).
+  const perfTier = perfRequested() ? new URLSearchParams(window.location.search).get('tier') : null;
+  let tier: Tier = perfTier === 'low' || perfTier === 'medium' || perfTier === 'high' ? perfTier : (opts.tier ?? 'high');
   let settings: Settings = opts.settings ?? DEFAULT_SETTINGS;
   let bound = keyMap(settings.keys);
   const pixelRatio = () => Math.min(window.devicePixelRatio, TIERS[tier].dprCap, touch ? 1.5 : 2) * settings.resolution;
@@ -240,7 +244,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x9fd3f5);
-  scene.fog = new THREE.Fog(0x9fd3f5, 120, TIERS[tier].fogFar);
+  scene.fog = new THREE.Fog(0x9fd3f5, TIERS[tier].fogNear, TIERS[tier].fogFar);
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 600);
 
   // Offline the match runs here with bots; online the session is the host's or a guest's.
@@ -269,7 +273,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   scene.add(sun, sun.target);
 
   // ---------- the world: ground, houses, trees, bushes, rocks, fences, crates
+  const buildT0 = performance.now();
   const world = buildWorld(scene);
+  const buildMs = performance.now() - buildT0;
   // Cars, containers, tents, the windmill, the pond, animals and birds.
   const props = buildProps(scene);
 
@@ -315,21 +321,32 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         );
       }
     }
-    const im = new THREE.InstancedMesh(puff, cloudMat, parts.length);
-    parts.forEach((m, i) => im.setMatrixAt(i, m));
-    clouds.add(im);
+    // Chunked like the trees: only the puffs the camera can see are drawn.
+    const set = chunkedInstances(puff, cloudMat, parts.map((m) => ({ x: m.elements[12], z: m.elements[14], matrix: m })), {
+      height: DROP.cloudHigh + 10,
+      bottom: DROP.cloudLow - 10,
+      radius: 14,
+      castShadow: false,
+    });
+    set.meshes.forEach((m) => {
+      m.receiveShadow = false;
+      clouds.add(m);
+    });
+    world.track(set);
   }
   scene.add(clouds);
 
   // ---------- players
   const rigs: Rig[] = state.players.map((p) => {
     const r = buildRig(p.fighter);
+    r.root.name = 'rig';
     scene.add(r.root);
     return r;
   });
   // Parachutes hang from a point at the jumper's raised hands (see chute.ts).
   const chutes = state.players.map((p) => {
     const g = buildChute(FIGHTERS[p.fighter].color);
+    g.name = 'chute';
     g.visible = false;
     scene.add(g);
     return g;
@@ -346,13 +363,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     fill.renderOrder = 21;
     armor.renderOrder = 21;
     g.add(bg, fill, armor);
+    g.name = 'bar';
     scene.add(g);
     return { g, fill, armor };
   });
 
   // ---------- loot, projectiles, temp walls and fields (pooled / keyed)
-  const lootViews = new Map<number, THREE.Object3D>();
-  const lootModel = (l: Loot): THREE.Object3D => {
+  const lootModel = (l: Pick<Loot, 'kind' | 'tier'>): THREE.Object3D => {
     // Root sits on the ground; `item` floats and turns (see the loot loop), `glow` pulses.
     const kind = l.kind;
     const g = new THREE.Group();
@@ -430,27 +447,140 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       bomb.scale.setScalar(2.4);
       item.add(bomb);
     }
+    mergeRigid(item);
     item.position.y = 0.75;
     g.add(item);
-    const glow = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.4, 2.4),
-      new THREE.MeshBasicMaterial({ map: glowTexture(), color, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }),
-    );
-    glow.name = 'glow';
-    glow.rotation.x = -Math.PI / 2;
-    glow.position.y = 0.04;
-    const beam = new THREE.Mesh(
-      beamGeometry,
-      new THREE.MeshBasicMaterial({
-        color, vertexColors: true, transparent: true, opacity: grade === null ? 0.4 : [0.5, 0.65, 0.8][grade], blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
-      }),
-    );
-    // Better grades stand taller: 2.6 m, 3.9 m, 5.2 m; supplies stay low.
-    beam.scale.set(1, grade === null ? 0.7 : [1, 1.5, 2][grade], 1);
-    if (grade === 2) glow.scale.setScalar(1.25);
-    g.add(glow, beam);
+    // The glow and the beam are drawn for all loot at once (see lootFx): the model carries their colour and size.
+    // Better grades stand taller and brighter: 2.6 m, 3.9 m, 5.2 m; supplies stay low.
+    g.userData.color = new THREE.Color(color);
+    g.userData.beam = grade === null ? 0.4 : [0.5, 0.65, 0.8][grade];
+    g.userData.beamH = grade === null ? 0.7 : [1, 1.5, 2][grade];
+    g.userData.glowS = grade === 2 ? 1.25 : 1;
     return g;
   };
+  /**
+   * The glow on the ground and the light beam over every item, for all loot at once: two instanced meshes, the rarity
+   * colour per instance. Both blend additively, so the glow's pulse is its colour scaled (the same as its opacity).
+   */
+  const lootFx = (() => {
+    let cap = 0;
+    const glowMat = new THREE.MeshBasicMaterial({ map: glowTexture(), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+    const beamMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const glowGeo = new THREE.PlaneGeometry(2.4, 2.4).rotateX(-Math.PI / 2).translate(0, 0.04, 0);
+    let glows: THREE.InstancedMesh | null = null;
+    let beams: THREE.InstancedMesh | null = null;
+    const grow = (n: number) => {
+      if (n <= cap) return;
+      cap = Math.max(64, n * 2);
+      for (const old of [glows, beams]) if (old) {
+        scene.remove(old);
+        old.dispose();
+      }
+      glows = new THREE.InstancedMesh(glowGeo, glowMat, cap);
+      beams = new THREE.InstancedMesh(beamGeometry, beamMat, cap);
+      for (const im of [glows, beams]) {
+        im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
+        im.frustumCulled = false;
+        im.count = 0;
+        scene.add(im);
+      }
+    };
+    const m = new THREE.Matrix4();
+    const c = new THREE.Color();
+    type Fx = { x: number; y: number; id: number; color: THREE.Color; beam: number; beamH: number; glowS: number };
+    return (list: Fx[]) => {
+      grow(list.length);
+      if (!glows || !beams) return;
+      list.forEach((l, i) => {
+        glows!.setMatrixAt(i, m.makeScale(l.glowS, 1, l.glowS).setPosition(l.x, 0, l.y));
+        beams!.setMatrixAt(i, m.makeScale(1, l.beamH, 1).setPosition(l.x, 0, l.y));
+        glows!.setColorAt(i, c.copy(l.color).multiplyScalar(0.6 + Math.sin(time * 3 + l.id) * 0.2));
+        // Additive: the beam's opacity is its colour scaled.
+        beams!.setColorAt(i, c.copy(l.color).multiplyScalar(l.beam));
+      });
+      for (const im of [glows, beams]) {
+        im.count = list.length;
+        im.visible = list.length > 0;
+        im.instanceMatrix.needsUpdate = true;
+        im.instanceColor!.needsUpdate = true;
+      }
+    };
+  })();
+  const lootFxList: Parameters<typeof lootFx>[0] = [];
+  /**
+   * The items themselves, instanced per kind (and tier, which changes a vest's or a backpack's look): each one's model is built once (merged to a mesh or two), and every
+   * frame each item's place, bob and turn go into that kind's instances. Loot costs a draw call or two per kind on
+   * screen, not per item.
+   */
+  const lootLooks = new Map<string, { tilt: THREE.Euler; color: THREE.Color; beam: number; beamH: number; glowS: number; add: (m: THREE.Matrix4) => void; flush: () => void }>();
+  const lootLook = (l: Pick<Loot, 'kind' | 'tier'>) => {
+    const key = `${l.kind}|${l.tier ?? ''}`;
+    let look = lootLooks.get(key);
+    if (look) return look;
+    const model = lootModel(l);
+    const item = model.getObjectByName('item')!;
+    const parts = item.children.filter((o): o is THREE.Mesh => o instanceof THREE.Mesh);
+    let cap = 0;
+    let n = 0;
+    let meshes: THREE.InstancedMesh[] = [];
+    const grow = () => {
+      cap = Math.max(16, cap * 2);
+      meshes.forEach((im) => {
+        scene.remove(im);
+        im.dispose();
+      });
+      meshes = parts.map((p) => {
+        const im = new THREE.InstancedMesh(p.geometry, p.material, cap);
+        im.castShadow = p.castShadow;
+        im.receiveShadow = p.receiveShadow;
+        im.frustumCulled = false;
+        im.count = 0;
+        im.name = 'loot';
+        scene.add(im);
+        return im;
+      });
+    };
+    const local = parts.map((p) => {
+      p.updateMatrix();
+      return p.matrix.clone();
+    });
+    const tmp = new THREE.Matrix4();
+    look = {
+      tilt: item.rotation.clone(),
+      color: model.userData.color as THREE.Color,
+      beam: model.userData.beam as number,
+      beamH: model.userData.beamH as number,
+      glowS: model.userData.glowS as number,
+      add: (m) => {
+        if (n >= cap) {
+          // Growing drops what was written this frame: keep it.
+          const keep = meshes.map((im) => (im.instanceMatrix.array as Float32Array).slice(0, n * 16));
+          grow();
+          meshes.forEach((im, i) => (im.instanceMatrix.array as Float32Array).set(keep[i] ?? []));
+        }
+        meshes.forEach((im, i) => im.setMatrixAt(n, tmp.multiplyMatrices(m, local[i])));
+        n++;
+      },
+      flush: () => {
+        for (const im of meshes) {
+          im.count = n;
+          im.visible = n > 0;
+          im.instanceMatrix.needsUpdate = true;
+        }
+        n = 0;
+      },
+    };
+    lootLooks.set(key, look);
+    return look;
+  };
+  const lootDraw = () => lootLooks.forEach((l) => l.flush());
+  const lootEuler = new THREE.Euler();
+  const lootM = new THREE.Matrix4();
+  const lootQ = new THREE.Quaternion();
+  const lootPos = new THREE.Vector3();
+  const lootOne = new THREE.Vector3(1, 1, 1);
+  const lootFrustum = new THREE.Frustum();
+  const tmpM4 = new THREE.Matrix4();
   // Bullets: a brass round with a copper tip, and a short faint heat trail behind it.
   const bulletGeo = new THREE.CylinderGeometry(0.055, 0.055, 0.3, 8).rotateZ(Math.PI / 2);
   const tipGeo = new THREE.ConeGeometry(0.055, 0.12, 8).rotateZ(-Math.PI / 2).translate(0.21, 0, 0);
@@ -1536,7 +1666,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       if (gunKinds[i] !== p.weapon) {
         if (guns[i]) scene.remove(guns[i]!);
         guns[i] = p.weapon === 'fists' ? null : buildGun(GUN_MODEL[p.weapon]).root;
-        if (guns[i]) scene.add(guns[i]!);
+        if (guns[i]) scene.add(Object.assign(guns[i]!, { name: 'gun' }));
         gunKinds[i] = p.weapon;
       }
       const gun = guns[i];
@@ -1575,29 +1705,20 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     }
     setPeople(state.players.filter((q) => q.alive && q.stage === 'ground').map((q) => ({ x: q.x, y: q.y })));
 
-    // Loot.
-    const seen = new Set<number>();
+    // Loot: every item floats and turns; all items of a kind are drawn together (see lootDraw).
     for (const l of state.loot) {
-      seen.add(l.id);
-      let v = lootViews.get(l.id);
-      if (!v) {
-        v = lootModel(l);
-        scene.add(v);
-        lootViews.set(l.id, v);
-      }
-      v.position.set(l.x, 0, l.y);
-      const item = v.getObjectByName('item')!;
-      item.position.y = 0.75 + Math.sin(time * 2.6 + l.id) * 0.1;
-      item.rotation.y = time * 0.9 + l.id;
-      const glow = v.getObjectByName('glow') as THREE.Mesh;
-      (glow.material as THREE.MeshBasicMaterial).opacity = 0.6 + Math.sin(time * 3 + l.id) * 0.2;
+      const look = lootLook(l);
+      lootFxList.push({ x: l.x, y: l.y, id: l.id, color: look.color, beam: look.beam, beamH: look.beamH, glowS: look.glowS });
+      // Off screen (last frame's view, with a margin): not drawn.
+      lootPos.set(l.x, 0.8, l.y);
+      if (lootFrustum.planes.some((pl) => pl.distanceToPoint(lootPos) < -3)) continue;
+      lootEuler.set(look.tilt.x, time * 0.9 + l.id, look.tilt.z, look.tilt.order);
+      lootM.compose(lootPos.set(l.x, 0.75 + Math.sin(time * 2.6 + l.id) * 0.1, l.y), lootQ.setFromEuler(lootEuler), lootOne);
+      look.add(lootM);
     }
-    for (const [id, v] of lootViews) {
-      if (!seen.has(id)) {
-        scene.remove(v);
-        lootViews.delete(id);
-      }
-    }
+    lootDraw();
+    lootFx(lootFxList);
+    lootFxList.length = 0;
 
     // Projectiles.
     let t = 0;
@@ -1920,6 +2041,26 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     updateHitFx(dt, selfX, selfH, selfY);
     updateGroundChutes(dt);
     props.update(time, dt);
+    // Trees, bushes, rocks and grass: only the chunks this camera sees, the far ones cheaper, shadows only near the box.
+    const spec = TIERS[tier];
+    // At eye level on the ground the low tier closes the fog in (eased, so landing or switching views never jumps).
+    const eye = (fp || sv) && self.stage === 'ground' && spec.eye ? spec.eye : null;
+    if (scene.fog instanceof THREE.Fog) {
+      scene.fog.near = THREE.MathUtils.damp(scene.fog.near, eye ? eye.fogNear : spec.fogNear, 2, dt);
+      scene.fog.far = THREE.MathUtils.damp(scene.fog.far, eye ? eye.fogFar : spec.fogFar, 2, dt);
+    }
+    world.cull(camera, {
+      shadow: shadowsOn() ? { x: fxs, z: fzs, half: wide ? WORLD : half * 1.15 + 5 } : null,
+      // From above (the high camera) the view itself is small: grass is drawn wherever the frustum reaches. At eye level
+      // (first person, over the shoulder) and from the plane it thins out with distance, per tier.
+      reach: eye ? eye.reach : fp || sv || overview ? spec.reach : 4,
+      // Trees switch to fewer faces only where the switch can't be seen: everywhere from the plane, past the start of
+      // the fog at eye level and on the way down, never in the high view (its whole frustum is close).
+      lodNear: overview ? 0 : eye ? eye.lodNear : fp || sv || self.stage === 'falling' ? spec.lodNear : Infinity,
+      // Fog is by depth, not distance: a little past its end so nothing at the edge of the screen pops.
+      far: (scene.fog instanceof THREE.Fog ? scene.fog.far : spec.fogFar) * 1.3,
+    });
+    lootFrustum.setFromProjectionMatrix(tmpM4.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
     renderer.render(scene, camera);
   };
 
@@ -2060,7 +2201,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       sun.shadow.map?.dispose();
       sun.shadow.map = null as unknown as THREE.WebGLRenderTarget;
     }
-    if (scene.fog instanceof THREE.Fog) scene.fog.far = spec.fogFar;
+    // (The fog follows the tier each frame: see the cull before rendering.)
     // Turning shadows on or off changes the shaders: every material must recompile once.
     if (hadShadows !== shadowsOn())
       scene.traverse((o) => {
@@ -2084,7 +2225,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     time += dt;
     if (dt > 0) fps += (1 / dt - fps) * 0.05;
     // Auto quality: a frame rate that stays low during real play steps the tier down (never up, so the picture does not pump).
-    if (opts.autoTier && !paused && state.phase !== 'drop' && tier !== 'low' && fpsGuard.frame(dt)) {
+    if (opts.autoTier && !perfTier && !paused && state.phase !== 'drop' && tier !== 'low' && fpsGuard.frame(dt)) {
       setTier(lowerTier(tier));
       opts.onTier?.(tier);
     }
@@ -2131,6 +2272,47 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   };
   raf = requestAnimationFrame(frame);
   if (process.env.NODE_ENV !== 'production') (window as unknown as { __lcs?: unknown }).__lcs = { state: () => state, buildings: BUILDINGS, map: MAP, animals: props.animals, preview: () => ({ ring: landRing.visible, x: landRing.position.x, y: landRing.position.y, z: landRing.position.z, s: landRing.scale.x, parent: !!landRing.parent, op: (landRing.material as THREE.MeshBasicMaterial).opacity, dots: arcDots.filter((d) => d.visible).length, aim: lastThrowAim }) };
+
+  // Measuring (?perf only, any build): draw calls and triangles of the last frame, the world's build time, a synchronous
+  // render benchmark, and a way to put the player at a fixed spot with the sim frozen, so before/after shots match.
+  if (perfRequested()) {
+    (window as unknown as { __lcsPerf?: unknown }).__lcsPerf = {
+      buildMs,
+      scene,
+      camera,
+      tier: () => tier,
+      /** The live tier table (to try other view distances while measuring). */
+      tiers: TIERS,
+      setTier: (t: Tier) => setTier(t),
+      stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles }),
+      state: () => state,
+      pause: (on: boolean) => {
+        paused = on;
+      },
+      place: (x: number, y: number, yaw: number, pitch = -0.04) => {
+        const p = state.players[me];
+        Object.assign(p, { x, y, vx: 0, vy: 0, heading: yaw });
+        Object.assign(prev[me], { x, y });
+        viewYaw = yaw;
+        viewPitch = pitch;
+        viewInit = true;
+      },
+      /** Puts the plane at a fixed point of a fixed route (with the sim paused, for the same view from the plane). */
+      drone: (d: { x0: number; y0: number; x1: number; y1: number; t: number }) => Object.assign(state.drone, d),
+      /** Renders the current view n times, waiting for the GPU each time: ms per frame, shadows included. */
+      bench: (n = 30) => {
+        const gl = renderer.getContext();
+        const px = new Uint8Array(4);
+        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        const t0 = performance.now();
+        for (let i = 0; i < n; i++) {
+          renderer.render(scene, camera);
+          gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        }
+        return (performance.now() - t0) / n;
+      },
+    };
+  }
 
   return {
     touch,

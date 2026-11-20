@@ -3,6 +3,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 import { DISTRICTS, MAP, PROPS, RIVER, SIZE, TILE, railSides, riverCentre, tileHash } from '../sim/constants';
 
+import { mergeRigid, mergeStatic } from './merge';
+
 import type { Prop } from '../sim/constants';
 
 /**
@@ -296,6 +298,8 @@ export const buildProps = (scene: THREE.Scene) => {
 
   /** Water tiles already covered by a sheet (the pond and the river each draw their own). */
   const wet = new Set<number>();
+  /** Everything that never moves (cars, containers, tents, the windmill's tower, the fire ring, decks and bridges): merged per material at the end. */
+  const statics = new THREE.Group();
   for (const p of PROPS) {
     const c = centre(p);
     let o: THREE.Object3D | null = null;
@@ -305,7 +309,7 @@ export const buildProps = (scene: THREE.Scene) => {
     if (o) {
       o.position.set(c.x, 0, c.y);
       o.rotation.y = (c.alongX ? 0 : Math.PI / 2) + (p.seed - 0.5) * 0.12;
-      scene.add(o);
+      statics.add(o);
     }
 
     if (p.kind === 'windmill') {
@@ -314,7 +318,10 @@ export const buildProps = (scene: THREE.Scene) => {
       tower.position.y = 5;
       const cap = mesh(new THREE.ConeGeometry(1.5, 2, 8), new THREE.MeshStandardMaterial({ color: 0x7a3b2e, flatShading: true }));
       cap.position.y = 11;
-      g.add(tower, cap);
+      const still = new THREE.Group();
+      still.add(tower, cap);
+      still.position.set(c.x, 0, c.y);
+      statics.add(still);
       // The sails face the camera (south) and turn slowly.
       const rotor = new THREE.Group();
       rotor.position.set(0, 9.6, 1.6);
@@ -328,6 +335,8 @@ export const buildProps = (scene: THREE.Scene) => {
         blade.rotation.z = (i / 4) * Math.PI * 2;
         rotor.add(blade);
       }
+      // The sails turn as one: one mesh.
+      mergeRigid(rotor);
       g.add(rotor);
       g.position.set(c.x, 0, c.y);
       scene.add(g);
@@ -336,18 +345,21 @@ export const buildProps = (scene: THREE.Scene) => {
 
     if (p.kind === 'campfire') {
       const g = new THREE.Group();
+      const ring = new THREE.Group();
+      ring.position.set((p.x0 + 0.5) * TILE, 0, (p.y0 + 0.5) * TILE);
+      statics.add(ring);
       for (let i = 0; i < 8; i++) {
         const a = (i / 8) * Math.PI * 2;
         const stone = mesh(new THREE.DodecahedronGeometry(0.22, 0), new THREE.MeshStandardMaterial({ color: 0x8a8580, flatShading: true }));
         stone.position.set(Math.cos(a) * 0.75, 0.12, Math.sin(a) * 0.75);
-        g.add(stone);
+        ring.add(stone);
       }
       for (let i = 0; i < 3; i++) {
         const log = mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.1, 6), new THREE.MeshStandardMaterial({ color: 0x4a3020 }));
         log.rotation.z = Math.PI / 2;
         log.rotation.y = (i / 3) * Math.PI;
         log.position.y = 0.15;
-        g.add(log);
+        ring.add(log);
       }
       const flame = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1, 8), new THREE.MeshBasicMaterial({ color: 0xffa630, transparent: true, opacity: 0.9 }));
       flame.position.y = 0.6;
@@ -358,26 +370,42 @@ export const buildProps = (scene: THREE.Scene) => {
       light.position.y = 1;
       g.add(light);
       // Smoke: soft grey puffs rising and spreading.
-      const puffMat = new THREE.MeshBasicMaterial({ color: 0x9a9a9a, transparent: true, opacity: 0.35, depthWrite: false });
-      const puffs = Array.from({ length: 10 }, (_, i) => {
-        const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.35, 1), puffMat.clone());
-        m.userData.t = i / 10;
-        g.add(m);
-        return m;
-      });
+      // All ten puffs are one instanced mesh; each fades on its own through a per-instance opacity.
+      const puffMat = new THREE.MeshBasicMaterial({ color: 0x9a9a9a, transparent: true, depthWrite: false });
+      const puffAlpha = new THREE.InstancedBufferAttribute(new Float32Array(10), 1);
+      puffMat.onBeforeCompile = (sh) => {
+        sh.vertexShader = sh.vertexShader
+          .replace('#include <common>', '#include <common>\nattribute float aAlpha;\nvarying float vAlpha;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvAlpha = aAlpha;');
+        sh.fragmentShader = sh.fragmentShader
+          .replace('#include <common>', '#include <common>\nvarying float vAlpha;')
+          .replace('#include <alphamap_fragment>', '#include <alphamap_fragment>\ndiffuseColor.a *= vAlpha;');
+      };
+      puffMat.customProgramCacheKey = () => 'puff-alpha';
+      const puffGeo = new THREE.IcosahedronGeometry(0.35, 1);
+      puffGeo.setAttribute('aAlpha', puffAlpha);
+      const puffMesh = new THREE.InstancedMesh(puffGeo, puffMat, 10);
+      puffMesh.frustumCulled = false;
+      g.add(puffMesh);
+      const puffM = new THREE.Matrix4();
+      const puffQ = new THREE.Quaternion();
+      const puffS = new THREE.Vector3();
+      const puffs = Array.from({ length: 10 }, (_, i) => ({ t: i / 10, position: new THREE.Vector3() }));
       g.position.set((p.x0 + 0.5) * TILE, 0, (p.y0 + 0.5) * TILE);
       scene.add(g);
       updates.push((time, dt) => {
         const f = 1 + Math.sin(time * 17) * 0.12 + Math.sin(time * 29) * 0.08;
         flame.scale.set(f, f * (1 + Math.sin(time * 11) * 0.1), f);
         light.intensity = 5 + Math.sin(time * 13) * 1.2;
-        for (const m of puffs) {
-          m.userData.t = (m.userData.t + dt * 0.18) % 1;
-          const k = m.userData.t as number;
+        puffs.forEach((m, i) => {
+          m.t = (m.t + dt * 0.18) % 1;
+          const k = m.t;
           m.position.set(Math.sin(k * 6 + time * 0.5) * 0.4 * k + k * 1.2, 1 + k * 7, Math.cos(k * 5) * 0.3 * k);
-          m.scale.setScalar(0.6 + k * 2.4);
-          (m.material as THREE.MeshBasicMaterial).opacity = 0.35 * (1 - k);
-        }
+          puffMesh.setMatrixAt(i, puffM.compose(m.position, puffQ, puffS.setScalar(0.6 + k * 2.4)));
+          puffAlpha.setX(i, 0.35 * (1 - k));
+        });
+        puffMesh.instanceMatrix.needsUpdate = true;
+        puffAlpha.needsUpdate = true;
       });
     }
 
@@ -459,8 +487,10 @@ export const buildProps = (scene: THREE.Scene) => {
       }
     }
   }
-  if (planks.length) scene.add(mesh(join(planks)));
-  for (const [bx, bw] of RIVER.bridges) scene.add(bridge(bx, bw));
+  if (planks.length) statics.add(mesh(join(planks)));
+  for (const [bx, bw] of RIVER.bridges) statics.add(bridge(bx, bw));
+  // A few draw calls per quarter of the map instead of one per car, container, bar and stone.
+  scene.add(mergeStatic(statics, { chunk: 88, bake: true }));
 
   const herd = animals(scene);
   updates.push(herd.update, birds(scene));
@@ -541,11 +571,45 @@ const animals = (scene: THREE.Scene) => {
       const s0 = spot(h.area);
       g.position.set(s0.x, 0, s0.y);
       g.scale.setScalar(h.kind === 'cow' ? 1 : 0.95);
-      scene.add(g);
+      g.userData.kind = h.kind;
       const t = spot(h.area, s0);
       list.push({ g, legs, head: rnd() * 6, tx: t.x, ty: t.y, wait: rnd() * 4, area: h.area, speed: h.kind === 'cow' ? 0.7 : 0.9 });
     }
   }
+  // Drawn instanced (all bodies of a kind, all legs: three draw calls); the groups above only hold the pose.
+  const herdOf = (kind: 'cow' | 'sheep') => list.filter((a) => a.g.userData.kind === kind);
+  const inst = (geo: THREE.BufferGeometry, m: THREE.Material, n: number) => {
+    const im = new THREE.InstancedMesh(geo, m, Math.max(1, n));
+    im.count = n;
+    im.castShadow = true;
+    im.receiveShadow = true;
+    im.frustumCulled = false;
+    scene.add(im);
+    return im;
+  };
+  const cows = herdOf('cow');
+  const sheep = herdOf('sheep');
+  const bodies = [
+    { herd: cows, im: inst(geos.cow, flat, cows.length) },
+    { herd: sheep, im: inst(geos.sheep, flat, sheep.length) },
+  ];
+  const legGeo = { cow: list.find((a) => a.g.userData.kind === 'cow')?.legs[0].geometry, sheep: list.find((a) => a.g.userData.kind === 'sheep')?.legs[0].geometry };
+  const legSets = (['cow', 'sheep'] as const).map((k) => ({ herd: herdOf(k), im: legGeo[k] ? inst(legGeo[k]!, legMat, herdOf(k).length * 4) : null }));
+  const draw = () => {
+    for (const { herd, im } of bodies) {
+      herd.forEach((a, i) => {
+        a.g.updateMatrixWorld(true);
+        im.setMatrixAt(i, a.g.children[0].matrixWorld);
+      });
+      im.instanceMatrix.needsUpdate = true;
+    }
+    for (const { herd, im } of legSets) {
+      if (!im) continue;
+      herd.forEach((a, i) => a.legs.forEach((l, k) => im.setMatrixAt(i * 4 + k, l.matrixWorld)));
+      im.instanceMatrix.needsUpdate = true;
+    }
+  };
+  draw();
   return {
     list,
     update: (time: number, dt: number) => {
@@ -585,6 +649,7 @@ const animals = (scene: THREE.Scene) => {
         // Grazing: the head (the front of the body) dips.
         a.g.children[0].rotation.z = walking ? 0 : -0.12 + Math.sin(time * 1.3 + a.head) * 0.05;
       }
+      draw();
     },
   };
 };
