@@ -11,7 +11,8 @@ export const SIZE = 88;
 const O = 12;
 export const WORLD = TILE * SIZE;
 export const PLAYER_RADIUS = 0.55;
-export const PLAYERS = 10;
+/** Fighters in a match: you and nineteen bots offline, or people plus bots online. */
+export const PLAYERS = 20;
 
 // ---------------------------------------------------------------------------
 // The map: an original countryside with a dense old town in the middle, farms around it,
@@ -671,6 +672,14 @@ export const lootTierAt = (x: number, y: number) => {
 export const THROW = { min: 4, full: 1.2 };
 /** Rockets: how fast they sink (m/s^2), the height they leave at, and when they explode on walls. */
 export const ROCKET = { gravity: 0.32, launchHeight: 1.35, wallHeight: 3.2 };
+
+/**
+ * How much lies on the map, sized for PLAYERS fighters: every loot spot in a building ('l') has one roll, and a second on
+ * the next open floor tile with chance `second`; a supply spot outdoors ('s') has a roll with chance `supply`. With ten
+ * fighters it was one roll per spot and 0.7 per supply spot (about 84 pieces, 8 per fighter); twenty need nearly twice as
+ * much for everyone to find a gun in the first building they land in.
+ */
+export const LOOT_SPOTS = { second: 1, supply: 0.9 };
 
 /** An ammo box gives the gun in your hands this many magazines of spare rounds. */
 export const AMMO_BOX_MAGS = 2;

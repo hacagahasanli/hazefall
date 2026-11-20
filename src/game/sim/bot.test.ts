@@ -1,5 +1,5 @@
 import { createBot, VS_HUMAN } from './bot';
-import { BUILDINGS, DT, MAP, TILE } from './constants';
+import { BUILDINGS, DT, MAP, PLAYERS, TILE } from './constants';
 import { createGame, lineOfSight, step } from './step';
 import { NO_INPUT } from './types';
 
@@ -7,7 +7,7 @@ import type { GameState, Input } from './types';
 
 type Bot = ReturnType<typeof createBot>;
 
-const idle = (): Input[] => Array.from({ length: 10 }, () => ({ ...NO_INPUT }));
+const idle = (): Input[] => Array.from({ length: PLAYERS }, () => ({ ...NO_INPUT }));
 
 /** The middle of a stretch of open meadow 30 tiles long: nothing in the way. */
 const OPEN = (() => {
@@ -33,7 +33,7 @@ const meanPairwise = (pts: { x: number; y: number }[]) => {
   return n ? sum / n : 0;
 };
 
-/** Nine bots and an idle player 0 (pushed out of the drone at the end of the route). */
+/** PLAYERS - 1 bots and an idle player 0 (pushed out of the drone at the end of the route). */
 const botMatch = (seed: number) => {
   const s = createGame('hotfix', seed);
   const bots = s.players.map((p) => createBot(p.id, seed * 31 + p.id));
@@ -77,7 +77,7 @@ const firstShot = (s: GameState, bot: Bot, id: number, seconds: number) => {
 };
 
 describe('bots behave like separate people', () => {
-  it('land spread over the map: at least 6 different buildings, never more than 2 bots in one', () => {
+  it('land spread over the map: at least 12 different buildings, never more than 2 bots in one', () => {
     for (const seed of [1, 2, 3, 4, 5, 6]) {
       const { s, tick } = botMatch(seed);
       const lands: number[] = [];
@@ -85,9 +85,9 @@ describe('bots behave like separate people', () => {
         tick();
         for (const e of s.events) if (e.type === 'land' && e.player !== 0) lands.push(buildingAt(e.x, e.y));
       }
-      expect(lands).toHaveLength(9);
+      expect(lands).toHaveLength(PLAYERS - 1);
       const used = lands.filter((b) => b >= 0);
-      expect(new Set(used).size).toBeGreaterThanOrEqual(6);
+      expect(new Set(used).size).toBeGreaterThanOrEqual(12);
       for (const b of new Set(used)) expect(used.filter((x) => x === b).length).toBeLessThanOrEqual(2);
     }
   });
@@ -147,13 +147,17 @@ describe('bots behave like separate people', () => {
     expect(hidden || Math.hypot(hurt.me.x - hurt.them.x, hurt.me.y - hurt.them.y) > d0 + 3).toBe(true);
     expect(Math.hypot(hurt.me.x - OPEN.x, hurt.me.y - OPEN.y)).toBeGreaterThan(3);
 
+    // Healthy, it takes the fight and never falls back (it may lose sight of them as it strafes).
     const fine = duel(8, 2, (b) => b.info().persona!.name === 'rusher');
+    const modes = new Set<string>();
     for (let i = 0; i < 60; i++) {
       const inputs = idle();
       inputs[fine.me.id] = fine.bot(fine.s);
       step(fine.s, inputs);
+      modes.add(fine.bot.info().mode);
     }
-    expect(fine.bot.info().mode).toBe('engage');
+    expect(modes.has('engage')).toBe(true);
+    expect(modes.has('retreat')).toBe(false);
   });
 
   it('come in four personalities, each a parameter set with its own jitter', () => {

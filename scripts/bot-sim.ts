@@ -1,5 +1,5 @@
 /**
- * Headless bot report: plays N full matches (nine bots and one passive stand-in for the player)
+ * Headless bot report: plays N full matches (PLAYERS - 1 bots and one passive stand-in for the player)
  * and prints how the bots spread, when the first fights happen, how long rounds last and who
  * wins, plus the pacing numbers: match length percentiles, how many are alive each minute, fights per minute in each
  * stage, dead air (20 s stretches after the first minute of ground play in which nobody damages anybody) and Deadline
@@ -11,7 +11,7 @@
  */
 import { createBot } from '../src/game/sim/bot';
 import { loadoutScore, lootValue } from '../src/game/sim/bot-params';
-import { BUILDINGS, DT, TILE, WEAPONS } from '../src/game/sim/constants';
+import { BUILDINGS, DT, PLAYERS, TILE, WEAPONS } from '../src/game/sim/constants';
 import { canSee, createGame, lineOfSight, step } from '../src/game/sim/step';
 import { NO_INPUT } from '../src/game/sim/types';
 
@@ -25,6 +25,10 @@ const firstSeed = Number(process.argv[3] ?? 1);
 
 const buildingAt = (x: number, y: number) =>
   BUILDINGS.findIndex((b) => x > b.x0 * TILE - 4 && x < (b.x0 + b.w) * TILE + 4 && y > b.y0 * TILE - 4 && y < (b.y0 + b.h) * TILE + 4);
+
+/** Per landing, the distance to the nearest other bot's landing (m). */
+const nearestOther = (pts: { x: number; y: number }[]) =>
+  pts.map((a, i) => Math.min(...pts.filter((_, j) => j !== i).map((b) => Math.hypot(a.x - b.x, a.y - b.y))));
 
 const meanPairwise = (pts: { x: number; y: number }[]) => {
   let sum = 0;
@@ -91,6 +95,9 @@ type Row = {
   buildings: number;
   inBuilding: number;
   landSpread: number;
+  /** Median distance from a bot's landing to the nearest other bot's, and pairs of bots landing within 10 m. */
+  landNearest: number;
+  landClose: number;
   spread60: number;
   firstBvB: number;
   firstBvP: number;
@@ -234,6 +241,11 @@ for (let m = 0; m < matches; m++) {
     buildings: new Set(blds.filter((b) => b >= 0)).size,
     inBuilding: blds.filter((b) => b >= 0).length,
     landSpread: meanPairwise(lands),
+    landNearest: (() => {
+      const v = nearestOther(lands).sort((a, b) => a - b);
+      return v[Math.floor(v.length / 2)];
+    })(),
+    landClose: nearestOther(lands).filter((d) => d < 10).length / 2,
     spread60,
     firstBvB: firstBvB < 0 ? NaN : firstBvB - playerLanded,
     firstBvP: firstBvP < 0 ? NaN : firstBvP - playerLanded,
@@ -274,7 +286,7 @@ const med = (f: (r: Row) => number) => {
 };
 const f1 = (n: number) => n.toFixed(1);
 console.log(`${rows.length} matches`);
-console.log(`landing: distinct buildings ${f1(avg((r) => r.buildings))} / 9 bots (min ${Math.min(...rows.map((r) => r.buildings))}), in/next to a building ${f1(avg((r) => r.inBuilding))}, mean pairwise distance ${f1(avg((r) => r.landSpread))} m`);
+console.log(`landing: distinct buildings ${f1(avg((r) => r.buildings))} / ${PLAYERS - 1} bots (min ${Math.min(...rows.map((r) => r.buildings))}), in/next to a building ${f1(avg((r) => r.inBuilding))}, mean pairwise distance ${f1(avg((r) => r.landSpread))} m, nearest other bot median ${f1(avg((r) => r.landNearest))} m, bots landing within 10 m of another ${f1(avg((r) => r.landClose * 2))}`);
 console.log(`spread 60 s after everyone landed: mean pairwise distance ${f1(avg((r) => r.spread60))} m`);
 console.log(`first fight after the player lands (s): any avg ${f1(avg((r) => r.firstAny))} / median ${f1(med((r) => r.firstAny))}; bot-vs-bot avg ${f1(avg((r) => r.firstBvB))} median ${f1(med((r) => r.firstBvB))}; bot-vs-player avg ${f1(avg((r) => r.firstBvP))} median ${f1(med((r) => r.firstBvP))} (never in ${rows.filter((r) => !Number.isFinite(r.firstBvP)).length})`);
 console.log(`first fight after Play is pressed (s): avg ${f1(avg((r) => r.firstAbs))}`);

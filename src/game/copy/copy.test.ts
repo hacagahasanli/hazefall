@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { PLAYERS } from '../sim/constants';
+
 import { COPY as NEUTRAL } from './neutral';
 import { COPY as STUDIO } from './studio';
 
@@ -46,6 +48,13 @@ describe('portal copy', () => {
 
   it('the studio copy really is the joke one (so the check above means something)', () => {
     expect(strings(STUDIO).filter((s) => JOKES.test(s)).length).toBeGreaterThan(10);
+  });
+
+  it('has a distinct bot name for every seat after yours', () => {
+    for (const c of [STUDIO, NEUTRAL]) {
+      expect(c.botNames).toHaveLength(PLAYERS - 1);
+      expect(new Set(c.botNames).size).toBe(c.botNames.length);
+    }
   });
 
   it('gives fighters and bots distinct names', () => {

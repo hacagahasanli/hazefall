@@ -20,6 +20,7 @@ import {
   foundRounds,
   HEALS,
   ITEMS,
+  LOOT_SPOTS,
   LOOT_TABLES,
   lootTierAt,
   magOf,
@@ -349,14 +350,14 @@ export interface Seat {
   bot: boolean;
 }
 
-/** Offline: you and nine bots. */
+/** Offline: you and nineteen bots (PLAYERS - 1). */
 export const createGame = (you: FighterId, seed = 1, youName = 'you', others: FighterId[] = []): GameState =>
   createMatch(
     Array.from({ length: PLAYERS }, (_, i) => (i === 0 ? { name: youName, fighter: you, bot: false } : { name: BOT_NAMES[i - 1], fighter: others[i - 1] ?? null, bot: true })),
     seed,
   );
 
-/** Any match: up to ten seats in the given order (player i is seat i), everyone on one plane. */
+/** Any match: up to PLAYERS seats in the given order (player i is seat i), everyone on one plane. */
 /** Crate health on a fresh map. */
 export const initialRacks = () => {
   const racks = new Array(SIZE * SIZE).fill(0);
@@ -407,13 +408,20 @@ export const createMatch = (seats: Seat[], seed = 1): GameState => {
 
   MAP.forEach((row, ty) =>
     [...row].forEach((c, tx) => {
-      if (c === 'l' || (c === 's' && nextRandom(state) < 0.7)) addRolled(state, tx * TILE + TILE / 2, ty * TILE + TILE / 2);
+      if (c === 'l' || (c === 's' && nextRandom(state) < LOOT_SPOTS.supply)) addRolled(state, tx * TILE + TILE / 2, ty * TILE + TILE / 2);
+      if (c === 'l' && nextRandom(state) < LOOT_SPOTS.second) {
+        // The second piece goes on an open floor tile next to the first (or beside it on the same tile).
+        const k = Math.floor(nextRandom(state) * 4);
+        const [dx, dy] = [[1, 0], [0, 1], [-1, 0], [0, -1]][k];
+        const open = MAP[ty + dy]?.[tx + dx] === '.';
+        addRolled(state, (tx + (open ? dx : 0)) * TILE + TILE / 2 + (open ? 0 : 0.6), (ty + (open ? dy : 0)) * TILE + TILE / 2);
+      }
     }),
   );
   return state;
 };
 
-const newPlayer = (id: number, name: string, fighter: FighterId, bot: boolean, x: number, y: number): Player => ({
+export const newPlayer = (id: number, name: string, fighter: FighterId, bot: boolean, x: number, y: number): Player => ({
   id, name, fighter, bot,
   stage: 'drone',
   fall: 0,
