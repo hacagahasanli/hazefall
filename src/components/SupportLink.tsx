@@ -6,18 +6,67 @@ import { SUPPORT_URL } from '~/lib/links';
  * dist/portal (scripts/portal-report.mjs checks it).
  */
 
-/** A small warm pill to the studio's support page, for the lobby and the results screen. Opens in a new tab; never shown during play. */
-export const SupportLink = ({ className = '' }: { className?: string }) => (
-  <a
-    href={SUPPORT_URL}
-    target="_blank"
-    rel="noopener"
-    className={`inline-flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3 py-1 text-xs font-semibold text-gold transition hover:bg-gold hover:text-ink-deep focus-visible:bg-gold focus-visible:text-ink-deep motion-reduce:transition-none ${className}`}
-  >
-    <span aria-hidden>☕</span> Buy us a coffee
-    <span className="sr-only"> (opens in a new tab)</span>
-  </a>
+/** A cup of coffee with steam curling off it, in the game's colours (the steam rises unless motion is reduced). */
+const SteamingCup = ({ className = '' }: { className?: string }) => (
+  <svg viewBox="0 0 48 48" aria-hidden className={className}>
+    <g className="lcs-steam" fill="none" stroke="#e6ebf5" strokeWidth="2.2" strokeLinecap="round" opacity="0.85">
+      <path d="M17 15c-3-3 3-5 0-9" />
+      <path d="M24 15c-3-3 3-5 0-9" />
+      <path d="M31 15c-3-3 3-5 0-9" />
+    </g>
+    <path d="M9 19h29v9c0 8-6 14-14.5 14S9 36 9 28z" fill="#ffd23f" stroke="#0a0d18" strokeWidth="2" />
+    <path d="M38 22h2.5a5 5 0 010 10H37" fill="none" stroke="#ffd23f" strokeWidth="3.2" />
+    <path d="M12 23h23" stroke="#0a0d18" strokeWidth="1.5" opacity="0.25" />
+    <path d="M17 31c2 2.5 4.5 3.5 6.5 3.5s4.5-1 6.5-3.5" fill="none" stroke="#0a0d18" strokeWidth="1.8" strokeLinecap="round" opacity="0.55" />
+    <ellipse cx="23.5" cy="44" rx="15" ry="2" fill="#0a0d18" opacity="0.35" />
+  </svg>
 );
+
+/**
+ * The support link inside a round (the lobby passes it to Match). `pill` (the pause menu): a small warm pill. `card` (the
+ * round report): a friendly card with a steaming cup, a line on why it helps, and a gold button. Opens in a new tab; never
+ * shown during play.
+ */
+export const SupportLink = ({ className = '', variant = 'pill' }: { className?: string; variant?: 'pill' | 'card' }) =>
+  variant === 'card' ? (
+    <a
+      href={SUPPORT_URL}
+      target="_blank"
+      rel="noopener"
+      className={`panel-cut group relative flex w-full max-w-xl items-center gap-3 overflow-hidden border border-gold/35 bg-[linear-gradient(110deg,rgba(255,210,63,0.16),rgba(255,61,110,0.07)_55%,rgba(20,26,43,0.92))] p-3 pr-4 transition hover:border-gold/80 focus-visible:border-cream focus-visible:outline-none sm:gap-4 sm:p-3.5 ${className}`}
+    >
+      {/* A soft light passes over the card when you point at it. */}
+      <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.16),transparent)] opacity-0 group-hover:opacity-100 group-hover:[animation:lcsSweep_0.9s_ease-out] motion-reduce:hidden" />
+      <SteamingCup className="h-12 w-12 shrink-0 sm:h-14 sm:w-14" />
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="font-display text-base leading-tight text-cream sm:text-lg">Enjoyed the round?</span>
+        <span className="text-xs leading-snug text-cream/70 sm:text-sm">The game is free to play. A coffee for the studio keeps the next update coming.</span>
+        <span aria-hidden className="mt-1 text-sm font-bold text-gold sm:hidden">
+          Buy us a coffee →
+        </span>
+      </span>
+      <span className="panel-cut hidden shrink-0 items-center gap-1.5 bg-gold px-3.5 py-2 text-sm font-bold text-ink-deep transition group-hover:brightness-110 sm:inline-flex">
+        Buy us a coffee
+        <span aria-hidden className="transition group-hover:translate-x-0.5 motion-reduce:transition-none">
+          →
+        </span>
+      </span>
+      <span className="sr-only"> Buy us a coffee (opens the Nalbaki Games support page in a new tab)</span>
+    </a>
+  ) : (
+    <a
+      href={SUPPORT_URL}
+      target="_blank"
+      rel="noopener"
+      className={`group inline-flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3 py-1 text-xs font-semibold text-gold transition hover:bg-gold hover:text-ink-deep focus-visible:bg-gold focus-visible:text-ink-deep motion-reduce:transition-none ${className}`}
+    >
+      <span aria-hidden className="lcs-cup inline-block">
+        ☕
+      </span>{' '}
+      Buy us a coffee
+      <span className="sr-only"> (opens in a new tab)</span>
+    </a>
+  );
 
 /** A crate of coffee under a little striped parachute, drawn in the game's colours. Sways gently unless motion is reduced. */
 const SupplyDrop = () => (
