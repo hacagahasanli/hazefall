@@ -1,9 +1,9 @@
 // The match's wire format between the host's browser and the guests' browsers.
 
-import { initialRacks } from '../sim/step';
+import { initialRacks, newPlayer } from '../sim/step';
 import { NO_INPUT } from '../sim/types';
 
-import type { GameEvent, GameState, Input, Loot } from '../sim/types';
+import type { GameEvent, GameState, Input, Loot, Player } from '../sim/types';
 
 /** The host sends a snapshot every 3 ticks: 20 a second. */
 export const SNAPSHOT_EVERY_TICKS = 3;
@@ -178,27 +178,74 @@ const reviver = (_k: string, v: unknown) =>
   v === INF ? Infinity : v === `-${INF}` ? -Infinity : v;
 
 /**
- * Snapshots are small: the crates travel as the few that differ from a fresh map, and the loot
- * list only when the host says so (it changes rarely: when it changes and once a second).
+ * The players are nearly all of a snapshot (about 1 KB each as plain JSON, over half of it key
+ * names), so each travels as an array of its values in a fixed key order, and its last input the
+ * same way. Keys the order does not know (added to the sim later, or an input's optional presses)
+ * ride along in an object at the end, so nothing is lost if the two lists drift apart.
+ */
+const PLAYER_KEYS = Object.keys(newPlayer(0, '', 'hotfix', false, 0, 0)).filter((k) => k !== 'prev');
+const INPUT_KEYS = [...Object.keys(NO_INPUT), 'snap', 'pitch', 'scope', 'throwAt', 'slot', 'cycle', 'heal', 'coffee'];
+
+const PLAYER_KNOWN = new Set([...PLAYER_KEYS, 'prev']);
+const INPUT_KNOWN = new Set(INPUT_KEYS);
+
+const pack = (o: object, keys: string[], known: Set<string>): unknown[] => {
+  const rec = o as Record<string, unknown>;
+  const values: unknown[] = keys.map((k) => rec[k]);
+  let extra: Record<string, unknown> | null = null;
+  for (const k of Object.keys(rec)) if (!known.has(k)) (extra ??= {})[k] = rec[k];
+  if (extra) values.push(extra);
+  return values;
+};
+/** `dropNull`: a key that came as null was missing or undefined (inputs have no null fields). */
+const unpack = (values: unknown[], keys: string[], dropNull: boolean) => {
+  const o: Record<string, unknown> = {};
+  keys.forEach((k, i) => {
+    if (!(dropNull && values[i] === null)) o[k] = values[i];
+  });
+  const extra = values[keys.length];
+  if (extra && typeof extra === 'object') Object.assign(o, extra);
+  return o;
+};
+const packPlayer = (p: Player) => [pack(p, PLAYER_KEYS, PLAYER_KNOWN), pack(p.prev, INPUT_KEYS, INPUT_KNOWN)];
+const unpackPlayer = ([body, prev]: [unknown[], unknown[]]) =>
+  ({ ...unpack(body, PLAYER_KEYS, false), prev: unpack(prev, INPUT_KEYS, true) }) as unknown as Player;
+
+/**
+ * Snapshots are small: the crates travel as the few that differ from a fresh map, the players
+ * as packed arrays (see `pack`), and the loot list only when the host says so (it changes
+ * rarely: when it changes and once a second). About 12 KB with twenty players.
  */
 export const encodeSnapshot = (s: Snapshot, withLoot: boolean) => {
   const racks: [number, number][] = [];
   s.state.racks.forEach((v, i) => {
     if (v !== INITIAL_RACKS[i]) racks.push([i, v]);
   });
-  const state = { ...s.state, racks, events: [], loot: withLoot ? s.state.loot : undefined };
+  const state = {
+    ...s.state,
+    racks,
+    players: s.state.players.map(packPlayer),
+    events: [],
+    loot: withLoot ? s.state.loot : undefined,
+  };
   return JSON.stringify({ ...s, state }, replacer);
 };
 
 /** `prevLoot` fills in the loot when this snapshot left it out. */
 export const decodeSnapshot = (raw: string, prevLoot: Loot[]): Snapshot => {
   const s = JSON.parse(raw, reviver) as Snapshot & {
-    state: GameState & { racks: [number, number][]; loot?: Loot[] };
+    state: Omit<GameState, 'players'> & { racks: [number, number][]; loot?: Loot[]; players: [unknown[], unknown[]][] };
   };
   const racks = INITIAL_RACKS.slice();
   for (const [i, v] of s.state.racks) racks[i] = v;
   return {
     ...s,
-    state: { ...s.state, racks, loot: s.state.loot ?? prevLoot.map((l) => ({ ...l })), events: [] },
+    state: {
+      ...s.state,
+      racks,
+      players: s.state.players.map(unpackPlayer),
+      loot: s.state.loot ?? prevLoot.map((l) => ({ ...l })),
+      events: [],
+    },
   };
 };
