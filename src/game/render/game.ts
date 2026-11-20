@@ -1210,6 +1210,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
   const prev = state.players.map((p) => ({ x: p.x, y: p.y, fall: p.fall }));
   let fallTime = 0;
+  /** The high camera leans ahead: a few metres the way you move and aim, eased (half-life ~0.35 s). */
+  const ahead = new THREE.Vector2();
   let shadowHalf = 0;
   /** Dev only: ?zoom=0.6 brings the top-down camera that much closer (for trailer clips). */
   const camZoom = process.env.NODE_ENV !== 'production' ? Number(new URLSearchParams(window.location.search).get('zoom') ?? 1) || 1 : 1;
@@ -1593,8 +1595,20 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     } else {
       // Narrow screens (a phone held upright) pull the camera up so you still see around you.
       const k = (camera.aspect < 1.3 ? Math.min(1.75, 1.3 / camera.aspect) : 1) * camZoom;
-      want = camNear < 1 ? new THREE.Vector3(selfX + 2, 3.2, selfY + 4) : new THREE.Vector3(selfX, 36 * k, selfY + 22 * k);
-      look = camNear < 1 ? new THREE.Vector3(selfX, 1.1, selfY) : new THREE.Vector3(selfX, 0, selfY + 1);
+      // Look-ahead: 0.35 s of your velocity plus 2.5 m the way you face, capped at 4 m, so more of the screen shows where
+      // you are going and shooting. Off while standing still and aiming nowhere in particular: the view settles on you.
+      const lx = self.vx * 0.35 + Math.cos(self.heading) * 2.5;
+      const ly = self.vy * 0.35 + Math.sin(self.heading) * 2.5;
+      const ll = Math.hypot(lx, ly);
+      const cap = ll > 4 ? 4 / ll : 1;
+      const still = Math.hypot(self.vx, self.vy) < 0.5 && !(mouseDown || held('fire'));
+      const ka = 1 - Math.exp(-2 * dt);
+      ahead.x += ((still ? 0 : lx * cap) - ahead.x) * ka;
+      ahead.y += ((still ? 0 : ly * cap) - ahead.y) * ka;
+      const ax0 = settings.reducedMotion ? 0 : ahead.x;
+      const ay0 = settings.reducedMotion ? 0 : ahead.y;
+      want = camNear < 1 ? new THREE.Vector3(selfX + 2, 3.2, selfY + 4) : new THREE.Vector3(selfX + ax0, 36 * k, selfY + ay0 + 22 * k);
+      look = camNear < 1 ? new THREE.Vector3(selfX, 1.1, selfY) : new THREE.Vector3(selfX + ax0, 0, selfY + ay0 + 1);
       if (scoped && camNear >= 1) {
         // Through the scope from above: the view slides far out the way you aim and pulls up,
         // so you see (and auto-aim reaches) people well past the normal screen.
