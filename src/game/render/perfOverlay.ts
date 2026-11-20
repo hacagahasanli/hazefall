@@ -27,7 +27,7 @@ export const createPerfOverlay = (renderer: THREE.WebGLRenderer, tierName: () =>
       el.setAttribute('data-perf', '');
       el.setAttribute('aria-hidden', 'true');
       Object.assign(el.style, {
-        position: 'fixed', top: '6px', left: '50%', transform: 'translateX(-50%)', zIndex: '9999', pointerEvents: 'none',
+        position: 'fixed', top: '112px', left: '12px', zIndex: '9999', pointerEvents: 'none',
         font: '11px/1.35 ui-monospace, Menlo, Consolas, monospace', color: '#e8ffe8', background: 'rgba(0,0,0,0.62)',
         padding: '4px 8px', borderRadius: '4px', whiteSpace: 'pre',
       });
