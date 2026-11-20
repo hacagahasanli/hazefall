@@ -1249,7 +1249,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   };
   const updateHitFx = (dt: number, selfX: number, selfH: number, selfY: number) => {
     if (!hitFx) return;
-    const fp = firstPerson();
+    // Over the shoulder works like first person here: the marker on the crosshair, the arcs turned with the view.
+    const fp = mouseLook();
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
     const centre = { x: w / 2, y: h / 2 };
