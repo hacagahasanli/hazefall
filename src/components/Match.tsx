@@ -1,18 +1,24 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { COPY } from '~/game/copy/studio';
 import { startMatch } from '~/game/render/game';
 import { FIGHTERS } from '~/game/sim/constants';
 
 import { AimChoice, readAim, saveAim } from '~/components/AimChoice';
+import { useBreaks } from '~/components/useBreaks';
+import { deviceFacts } from '~/game/render/deviceFacts';
+import { parseSetting, resolveTier } from '~/game/render/quality';
+import { createWebPlatform } from '~/platform/web';
 import { SupportLink } from '~/components/SupportLink';
 import { TouchControls, useTouch } from '~/components/TouchControls';
 import type { Session } from '~/game/net/session';
 import type { HudState } from '~/game/render/game';
 import type { VolumeKind } from '~/game/sfx';
+import type { QualitySetting } from '~/game/render/quality';
 import type { FighterId } from '~/game/sim/types';
+import type { Platform } from '~/platform/types';
 
 const Bar = ({ value, max, color }: { value: number; max: number; color: string }) => (
   <div className="panel-cut h-3 w-44 bg-ink-deep/80 sm:w-64">
@@ -66,6 +72,38 @@ const SoundSliders = ({ game }: { game: ReturnType<typeof startMatch> | null }) 
   );
 };
 
+const QUALITY_KEY = 'lcs:quality';
+const QUALITY_LABELS: [QualitySetting, string][] = [
+  ['auto', 'Auto'],
+  ['low', 'Low'],
+  ['medium', 'Medium'],
+  ['high', 'High'],
+];
+
+/** Graphics: Auto picks a tier for this device (and steps down if it stutters); a manual pick is saved and wins. */
+const GraphicsChoice = ({ value, onChange, current }: { value: QualitySetting; onChange: (q: QualitySetting) => void; current: string }) => (
+  <div className="flex w-full flex-col gap-2 text-left">
+    <span className="flex justify-between text-[10px] font-semibold tracking-widest text-cream/50">
+      <span>GRAPHICS</span>
+      <span className="text-cream/40">now {current}</span>
+    </span>
+    <div className="grid grid-cols-4 gap-1" role="radiogroup" aria-label="Graphics">
+      {QUALITY_LABELS.map(([q, label]) => (
+        <button
+          key={q}
+          type="button"
+          role="radio"
+          aria-checked={value === q}
+          onClick={() => onChange(q)}
+          className={`panel-cut px-2 py-1.5 text-xs font-bold uppercase tracking-wider ${value === q ? 'bg-gold text-ink-deep' : 'bg-cream/10 text-cream/80 hover:bg-cream/20'}`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
 const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
 /**
@@ -77,11 +115,18 @@ const Result = ({
   onPlayAgain,
   onExit,
   online,
+  links,
+  exitLabel,
+  busy,
 }: {
   hud: HudState;
   onPlayAgain: () => void;
   onExit: () => void;
   online: boolean;
+  links: boolean;
+  exitLabel: string;
+  /** A midgame ad is playing: the buttons wait. */
+  busy: boolean;
 }) => {
   // The host's browser runs the round: it must stay until the round is over.
   const hostWaits = online && hud.host && hud.phase !== 'over';
@@ -159,7 +204,7 @@ const Result = ({
           <button
             type="button"
             autoFocus
-            disabled={hostWaits}
+            disabled={hostWaits || busy}
             onClick={onPlayAgain}
             className="panel-cut flex items-center gap-3 bg-gold px-10 py-4 font-display text-xl uppercase disabled:opacity-40 [@media(max-height:520px)]:py-3 text-ink-deep shadow-[0_0_40px_rgba(255,210,63,0.3)] hover:brightness-110"
           >
@@ -168,16 +213,19 @@ const Result = ({
           {!online && (
             <button
               type="button"
+              disabled={busy}
               onClick={onExit}
-              className="panel-cut bg-cream/10 px-8 py-4 font-bold uppercase tracking-wider text-cream/90 hover:bg-cream/20 [@media(max-height:520px)]:py-3"
+              className="panel-cut bg-cream/10 px-8 py-4 font-bold uppercase tracking-wider text-cream/90 hover:bg-cream/20 disabled:opacity-40 [@media(max-height:520px)]:py-3"
             >
-              Back to lobby
+              {exitLabel}
             </button>
           )}
         </div>
-        <p className="flex flex-wrap items-center gap-x-2 text-sm text-cream/60">
-          Enjoyed it? <SupportLink />
-        </p>
+        {links && (
+          <p className="flex flex-wrap items-center gap-x-2 text-sm text-cream/60">
+            Enjoyed it? <SupportLink />
+          </p>
+        )}
       </div>
     </div>
   );
@@ -188,13 +236,28 @@ export const Match = ({
   session,
   onExit,
   onPlayAgain,
+  platform: platformProp,
+  links = true,
+  credit,
+  exitLabel = 'Back to lobby',
 }: {
   fighter: FighterId;
   session?: Session;
   onExit: () => void;
   onPlayAgain: () => void;
+  /** The page's platform (a portal SDK); our own site gets the no-op web adapter. */
+  platform?: Platform;
+  /** Outbound links (the support link). Off in the portal build: portals allow none. */
+  links?: boolean;
+  /** A studio credit line in the pause menu. */
+  credit?: string;
+  /** The report's second button. */
+  exitLabel?: string;
 }) => {
   const online = !!session?.online;
+  const platform = useMemo(() => platformProp ?? createWebPlatform(), [platformProp]);
+  const [quality, setQuality] = useState<QualitySetting>(() => parseSetting(platform.storage.getItem(QUALITY_KEY)));
+  const [game, setGame] = useState<ReturnType<typeof startMatch> | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mapRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<ReturnType<typeof startMatch> | null>(null);
@@ -214,6 +277,7 @@ export const Match = ({
     const raf = requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         if (cancelled) return;
+        const setting = parseSetting(platform.storage.getItem(QUALITY_KEY));
         m = startMatch(canvas, {
           fighter,
           name: 'you',
@@ -221,17 +285,21 @@ export const Match = ({
           minimap,
           onHud: setHud,
           session,
+          tier: resolveTier(setting, deviceFacts(platform.deviceType())),
+          autoTier: setting === 'auto',
         });
         gameRef.current = m;
+        setGame(m);
       }),
     );
     return () => {
       cancelled = true;
       cancelAnimationFrame(raf);
       gameRef.current = null;
+      setGame(null);
       m?.dispose();
     };
-  }, [fighter, session]);
+  }, [fighter, session, platform]);
 
   const f = FIGHTERS[fighter];
   const over = hud && (hud.dead || hud.phase === 'over');
@@ -239,9 +307,20 @@ export const Match = ({
   const showResult =
     !!hud && ((hud.dead && hud.deadFor > 1.6) || (hud.won && hud.phase === 'over'));
 
+  const breaks = useBreaks(platform, game, {
+    loaded: !!hud,
+    playing: !!hud && !menuOpen && !showResult && hud.phase !== 'over',
+    roundOver: showResult,
+  });
+
   // Esc twice opens the menu and pauses the match (it's offline, so pausing is fair). Esc closes it.
+  // P does the same in one press (in a portal's fullscreen, Esc belongs to the browser).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.code === 'KeyP' && !e.repeat) {
+        if (!over) setMenuOpen((o) => !o);
+        return;
+      }
       if (e.code !== 'Escape') return;
       if (menuOpen) {
         setMenuOpen(false);
@@ -254,7 +333,7 @@ export const Match = ({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [menuOpen]);
+  }, [menuOpen, over]);
 
   useEffect(() => {
     gameRef.current?.setPaused(menuOpen);
@@ -554,7 +633,7 @@ export const Match = ({
                 <Key k="M" /> mute
               </span>
               <span className="flex items-center gap-1">
-                <Key k="Esc" />
+                <Key k="P" /> / <Key k="Esc" />
                 <Key k="Esc" /> menu
               </span>
               <span>{hud.fps} fps</span>
@@ -583,6 +662,15 @@ export const Match = ({
                   <AimChoice value={hud.aimMode} onChange={(m) => gameRef.current?.setAimMode(m)} />
                 )}
                 <SoundSliders game={gameRef.current} />
+                <GraphicsChoice
+                  value={quality}
+                  current={hud.tier}
+                  onChange={(q) => {
+                    setQuality(q);
+                    platform.storage.setItem(QUALITY_KEY, q);
+                    gameRef.current?.setTier(resolveTier(q, deviceFacts(platform.deviceType())));
+                  }}
+                />
                 <button
                   type="button"
                   autoFocus
@@ -598,15 +686,24 @@ export const Match = ({
                 >
                   {online && hud.host ? 'End the round for everyone' : 'Leave match'}
                 </button>
-                {!touch && <p className="text-[10px] text-cream/40">Esc to resume</p>}
-                <SupportLink />
+                {!touch && <p className="text-[10px] text-cream/40">Esc or P to resume</p>}
+                {links && <SupportLink />}
+                {credit && <p className="text-[10px] tracking-widest text-cream/40">A game by {credit}</p>}
               </div>
             </div>
           )}
 
           {/* Result: after the fall (or the win) settles, a full-screen round report. */}
           {showResult && (
-            <Result hud={hud} onPlayAgain={onPlayAgain} onExit={onExit} online={online} />
+            <Result
+              hud={hud}
+              onPlayAgain={() => void breaks.next(onPlayAgain)}
+              onExit={() => void breaks.next(onExit)}
+              online={online}
+              links={links}
+              exitLabel={exitLabel}
+              busy={breaks.inBreak}
+            />
           )}
         </>
       )}

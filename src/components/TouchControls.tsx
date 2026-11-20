@@ -17,6 +17,10 @@ export const useTouch = () => {
 
 /** Ask once for fullscreen: on Android it hides the browser bars and turns the phone sideways. */
 let askedFullscreen = false;
+/** Portals run the game in their own frame with their own fullscreen button: the game must not ask for it itself. */
+export const disableAutoFullscreen = () => {
+  askedFullscreen = true;
+};
 const goFullscreen = () => {
   if (askedFullscreen || typeof document === 'undefined') return;
   askedFullscreen = true;
