@@ -5,10 +5,15 @@
  * - voices -> category bus (sfx, ui, ambience) -> master -> compressor, plus a room reverb send;
  * - gunshots are layered: crack (high-passed noise), body (band-passed noise), thump (falling sine);
  * - every voice gets random detune and gain, and a stereo pan from its world x;
- * - rapid fire has a voice budget; mute is remembered.
+ * - rapid fire has a voice budget; mute is remembered;
+ * - every other repeatable sound asks the budget gate (audioBudget.ts, docs/SOUND.md); a limiter sits after the master.
  * No ambience bed: a noise loop read as old-TV static, so the room stays quiet between fights.
  */
 import { assetUrl } from '../lib/assets';
+
+import { BUDGET, createGate } from './audioBudget';
+
+import type { SoundName } from './audioBudget';
 
 export type Sfx = ReturnType<typeof createSfx>;
 
@@ -59,6 +64,9 @@ export const createSfx = () => {
   /** While a gun voice is being scheduled, everything it plays goes to the guns bus. */
   let busOverride: Bus | null = null;
   let shotVoices = 0;
+  const gate = createGate(BUDGET);
+  /** Over budget: the sound is dropped. */
+  const may = (name: SoundName) => !!ctx && gate.allow(name, ctx.currentTime * 1000);
   /** The last hit-confirm tick (audio clock) and how strong it was, for its voice limit. */
   const lastTick = { at: -1, rank: 0 };
   /** Recorded sounds (see ASSETS.md), decoded once the audio context exists. */
@@ -106,7 +114,14 @@ export const createSfx = () => {
     comp.release.value = 0.12;
     master = ctx.createGain();
     master.gain.value = level();
-    comp.connect(master).connect(ctx.destination);
+    // A fast limiter after the master: the compressor shapes the mix, this only catches a stray peak.
+    const limit = ctx.createDynamicsCompressor();
+    limit.threshold.value = -3;
+    limit.knee.value = 0;
+    limit.ratio.value = 20;
+    limit.attack.value = 0.001;
+    limit.release.value = 0.1;
+    comp.connect(master).connect(limit).connect(ctx.destination);
     const verb = ctx.createConvolver();
     verb.buffer = makeRoom(ctx);
     wet = ctx.createGain();
@@ -319,7 +334,7 @@ export const createSfx = () => {
     },
     /** The reload of that gun (each has its own recording), panned and quieter with distance. */
     reloadAt: (weapon: string, x = 0, distance = 0) => {
-      if (distance > 30) return;
+      if (distance > 30 || !may('reload')) return;
       const o = { pan: panOf(x), gain: 0.7 * Math.max(0.15, 1 - distance / 30), bus: 'guns' as Bus };
       if (!sample(`reload_${weapon}`, o) && !sample('reload', o)) {
         click(0, 3000, 0.25, panOf(x));
@@ -328,6 +343,7 @@ export const createSfx = () => {
     },
     /** The trigger on an empty gun. */
     dryFire: () => {
+      if (!may('dryFire')) return;
       if (sample('dryfire', { gain: 0.6 })) return;
       click(0, 4200, 0.18);
       click(0.05, 2400, 0.12);
@@ -338,6 +354,8 @@ export const createSfx = () => {
      */
     footstep: (surface: 'grass' | 'hard' | 'wood' | 'dirt' | 'leaves' | 'water', x = 0, distance = 0, heavy = 1, gear = false) => {
       if (!ctx || muted || distance > 28) return;
+      // Your own steps always play; everyone else's share a small pool.
+      if (distance > 0 && !may('step')) return;
       const v = volumes.steps * Math.max(0.08, 1 - distance / 28) * heavy;
       const pan = panOf(x);
       const dull = Math.max(0.35, 1 - distance / 30);
@@ -387,7 +405,7 @@ export const createSfx = () => {
     },
     /** Climbing over a fence or sill: cloth, a hand slap, the landing. */
     vault: (x = 0, distance = 0) => {
-      if (distance > 28) return;
+      if (distance > 28 || !may('vault')) return;
       const v = Math.max(0.1, 1 - distance / 28);
       const pan = panOf(x);
       noise('bandpass', 900, 2400, 0.18, 0.25 * v, 1, { pan, room: 0.1 });
@@ -395,6 +413,8 @@ export const createSfx = () => {
       tone('sine', 110, 55, 0.08, 0.35 * v, { pan, room: 0.1, delay: 0.36 });
       noise('lowpass', 900, 200, 0.07, 0.25 * v, 1, { pan, room: 0.1, delay: 0.36 });
     },
+    /** Dev meter: plays and drops per gated sound. */
+    stats: () => gate.stats(),
     get volumes() {
       return { ...volumes };
     },
@@ -430,6 +450,7 @@ export const createSfx = () => {
       return muted;
     },
     hit: (power: number, x?: number) => {
+      if (!may('hit')) return;
       const p = Math.min(1, power / 20);
       const pan = panOf(x);
       tone('sine', 140 + p * 40, 45, 0.12 + p * 0.1, 0.6 + p * 0.3, { room: 0.3, pan });
@@ -437,6 +458,7 @@ export const createSfx = () => {
     },
     shot,
     explosion: (x?: number) => {
+      if (!may('explosion')) return;
       const pan = panOf(x);
       duck(-12, 0.9);
       tone('sine', 75, 22, 0.9, 1.2, { room: 0.8, pan });
@@ -458,10 +480,12 @@ export const createSfx = () => {
     deflect: (x?: number) => tone('triangle', 1600, 2600, 0.12, 0.2, { pan: panOf(x) }),
     empty: () => click(0, 4000, 0.2),
     push: (x?: number) => {
+      if (!may('push')) return;
       tone('sawtooth', 120, 55, 0.3, 0.3, { pan: panOf(x) });
       noise('lowpass', 1400, 200, 0.3, 0.5, 1, { pan: panOf(x) });
     },
     glass: (x?: number) => {
+      if (!may('glass')) return;
       duck(-8, 0.6);
       noise('highpass', 6000, 3000, 0.4, 0.55, 1, { pan: panOf(x) });
       for (let i = 0; i < 6; i++) tone('sine', 2200 + Math.random() * 3200, 1600 + Math.random() * 2000, 0.3, 0.07, { delay: Math.random() * 0.15, pan: panOf(x) });
@@ -523,6 +547,7 @@ export const createSfx = () => {
       noise('highpass', 8000, 6000, 0.2, 0.06, 1, { ...o, delay: 0.14 });
     },
     ko: (x?: number) => {
+      if (!may('ko')) return;
       duck(-14, 1.2);
       tone('sawtooth', 420, 50, 0.7, 0.3, { pan: panOf(x) });
       noise('lowpass', 3000, 100, 0.6, 0.5, 1, { pan: panOf(x) });

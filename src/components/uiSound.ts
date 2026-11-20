@@ -2,7 +2,10 @@
  * The menu's sound: a short soft tick on focus and a brighter one on select, synthesised (no files). Silent until the
  * first key press or click (the browser's autoplay rule), when muted, and while the portal mutes the game.
  */
+import { BUDGET, createGate } from '~/game/audioBudget';
+
 let ctx: AudioContext | null = null;
+const gate = createGate(BUDGET);
 let level = 0.8;
 let silent = false;
 
@@ -17,6 +20,8 @@ export const uiTick = (strong = false) => {
     ctx ??= new AudioContext();
     if (ctx.state === 'suspended') void ctx.resume();
     if (ctx.state !== 'running' && !navigator.userActivation?.hasBeenActive) return;
+    // A held arrow key repeats ~30 times a second: one tick per 45 ms (a select always ticks).
+    if (!gate.allow('uiTick', ctx.currentTime * 1000) && !strong) return;
     const t = ctx.currentTime;
     const o = ctx.createOscillator();
     const g = ctx.createGain();
@@ -35,7 +40,8 @@ export const uiTick = (strong = false) => {
 };
 
 /**
- * The pre-match bed: wind over the airstrip and the cargo plane's engines idling, both synthesised. Returns a function
+ * The pre-match bed: wind over the airstrip and the cargo plane's engines idling, both synthesised. Kept about
+ * -48 dBFS and dark (two low-pass poles, nothing above ~500 Hz) so it reads as a place, not as hiss. Returns a function
  * that fades it out. `rev()` spools the engines up for the launch. Silent under the same rules as the ticks.
  */
 export const startHum = (): { stop: () => void; rev: () => void } => {
@@ -64,18 +70,23 @@ export const startHum = (): { stop: () => void; rev: () => void } => {
     noise.loop = true;
     const lp = c.createBiquadFilter();
     lp.type = 'lowpass';
-    lp.frequency.value = 420;
+    lp.frequency.value = 300;
+    lp.Q.value = 0.5;
+    const lp2 = c.createBiquadFilter();
+    lp2.type = 'lowpass';
+    lp2.frequency.value = 420;
+    lp2.Q.value = 0.5;
     const lfo = c.createOscillator();
     const lfoGain = c.createGain();
     lfo.frequency.value = 0.13;
-    lfoGain.gain.value = 180;
+    lfoGain.gain.value = 110;
     lfo.connect(lfoGain).connect(lp.frequency);
     const windGain = c.createGain();
-    windGain.gain.value = 0.12;
-    noise.connect(lp).connect(windGain).connect(out);
+    windGain.gain.value = 0.03;
+    noise.connect(lp).connect(lp2).connect(windGain).connect(out);
     // Engines: two detuned saws, filtered to a distant drone with a slow beat.
     const engGain = c.createGain();
-    engGain.gain.value = 0.035;
+    engGain.gain.value = 0.02;
     const engLp = c.createBiquadFilter();
     engLp.type = 'lowpass';
     engLp.frequency.value = 260;
@@ -94,7 +105,7 @@ export const startHum = (): { stop: () => void; rev: () => void } => {
         const n = c.currentTime;
         oscs.forEach((o, i) => o.frequency.linearRampToValueAtTime(i ? 118 : 116, n + 2.6));
         engLp.frequency.linearRampToValueAtTime(900, n + 2.6);
-        engGain.gain.linearRampToValueAtTime(0.07, n + 2.6);
+        engGain.gain.linearRampToValueAtTime(0.045, n + 2.6);
       },
       stop: () => {
         if (stopped) return;
