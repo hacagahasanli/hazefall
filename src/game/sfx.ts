@@ -59,6 +59,8 @@ export const createSfx = () => {
   /** While a gun voice is being scheduled, everything it plays goes to the guns bus. */
   let busOverride: Bus | null = null;
   let shotVoices = 0;
+  /** The last hit-confirm tick (audio clock) and how strong it was, for its voice limit. */
+  const lastTick = { at: -1, rank: 0 };
   /** Recorded sounds (see ASSETS.md), decoded once the audio context exists. */
   const samples = new Map<string, AudioBuffer>();
   const SAMPLE_NAMES = [
@@ -473,6 +475,52 @@ export const createSfx = () => {
     drop: (x?: number) => {
       tone('triangle', 880, 440, 0.15, 0.12, { pan: panOf(x), bus: 'ui' });
       tone('triangle', 660, 330, 0.2, 0.08, { delay: 0.1, pan: panOf(x), bus: 'ui' });
+    },
+    /**
+     * The hit confirm for a hit YOU land: a short, dry tick in the middle of the stereo field (not
+     * placed in the world), so you know it connected even when the target is off to one side.
+     * A plain hit ticks; a hit on armor rings a little higher and metallic; the hit that strips
+     * the last of the armor jumps up in pitch with a small shatter. Rapid fire: one tick per
+     * 45 ms at most (a stronger tick always gets through).
+     */
+    hitTick: (kind: 'body' | 'armor' | 'break') => {
+      const c = ctx;
+      if (!c || muted) return;
+      const rank = kind === 'break' ? 2 : kind === 'armor' ? 1 : 0;
+      if (c.currentTime - lastTick.at < 0.045 && rank <= lastTick.rank) return;
+      lastTick.at = c.currentTime;
+      lastTick.rank = rank;
+      const o = { room: 0, bus: 'ui' as Bus };
+      if (kind === 'body') {
+        tone('triangle', 1900, 1500, 0.045, 0.22, o);
+        noise('bandpass', 5200, 4200, 0.012, 0.14, 4, o);
+      } else if (kind === 'armor') {
+        tone('square', 2700, 2500, 0.04, 0.07, o);
+        tone('sine', 4100, 3800, 0.06, 0.1, o);
+        noise('highpass', 6500, 6000, 0.015, 0.1, 1, o);
+      } else {
+        tone('triangle', 2300, 3600, 0.07, 0.2, o);
+        tone('sine', 3600, 5200, 0.09, 0.1, { ...o, delay: 0.035 });
+        noise('highpass', 7000, 4500, 0.16, 0.22, 0.8, { ...o, room: 0.2 });
+        for (let i = 0; i < 4; i++) tone('sine', 3800 + Math.random() * 2600, 3000, 0.07, 0.04, { ...o, delay: 0.02 + Math.random() * 0.08 });
+      }
+    },
+    /**
+     * You eliminated someone: a heavy low punch and a bright two-note rise, in the middle (not
+     * placed in the world) and on the ui bus, so it reads over the gunfight.
+     */
+    elim: () => {
+      const c = ctx;
+      if (!c || muted) return;
+      duck(-10, 0.8);
+      const o = { room: 0.25, bus: 'ui' as Bus };
+      tone('sine', 150, 42, 0.32, 0.9, o);
+      noise('lowpass', 1800, 120, 0.12, 0.45, 0.8, o);
+      tone('triangle', 784, 784, 0.12, 0.2, { ...o, delay: 0.05 });
+      tone('triangle', 1175, 1175, 0.1, 0.1, { ...o, delay: 0.05 });
+      tone('triangle', 1047, 1047, 0.32, 0.24, { ...o, delay: 0.14 });
+      tone('triangle', 1568, 1568, 0.28, 0.12, { ...o, delay: 0.14 });
+      noise('highpass', 8000, 6000, 0.2, 0.06, 1, { ...o, delay: 0.14 });
     },
     ko: (x?: number) => {
       duck(-14, 1.2);
