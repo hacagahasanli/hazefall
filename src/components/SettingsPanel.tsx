@@ -256,7 +256,7 @@ export const SettingsPanel = ({
                 <AimChoice value={aim.value} onChange={aim.onChange} />
               )}
               <Section title="MOUSE">
-                <Row label="Look sensitivity" hint="First-person camera">
+                <Row label="Look sensitivity" hint="Over the shoulder and first person">
                   <Slider label="Look sensitivity" value={s.sensitivity} min={0.2} max={3} step={0.05} onChange={(v) => patch({ sensitivity: v })} format={(v) => `${v.toFixed(2)}x`} />
                 </Row>
                 <Row label="Invert Y">
@@ -280,16 +280,16 @@ export const SettingsPanel = ({
 
           {tab === 'camera' && (
             <Section title="CAMERA">
-              <Row label="View" hint={touch ? 'First person needs a mouse: on a touch screen the camera stays above.' : 'First person on the ground; the drop stays in third person.'}>
+              <Row label="View" hint={touch ? 'Over the shoulder and first person need a mouse: on a touch screen the camera stays above.' : 'Third person: high camera with auto-aim. Over the shoulder and first person: aim with the mouse.'}>
                 <Choice
                   label="View"
                   value={touch ? 'third' : s.camera}
-                  options={touch ? [['third', 'Third person']] : [['third', 'Third person'], ['first', 'First person']]}
+                  options={touch ? [['third', 'Third person']] : [['third', 'Third person'], ['shoulder', 'Over the shoulder'], ['first', 'First person']]}
                   onChange={(v) => patch({ camera: v })}
                 />
               </Row>
-              <Row label="Field of view" hint="First person">
-                <Slider label="Field of view" value={s.fov} min={60} max={100} step={1} onChange={(v) => patch({ fov: v })} format={(v) => `${v}°`} disabled={touch || s.camera !== 'first'} />
+              <Row label="Field of view" hint="Over the shoulder (up to 78°) and first person">
+                <Slider label="Field of view" value={s.fov} min={60} max={100} step={1} onChange={(v) => patch({ fov: v })} format={(v) => `${v}°`} disabled={touch || s.camera === 'third'} />
               </Row>
               <Row label="Mouse sensitivity">
                 <Slider label="Mouse sensitivity" value={s.sensitivity} min={0.2} max={3} step={0.05} onChange={(v) => patch({ sensitivity: v })} format={(v) => `${v.toFixed(2)}x`} disabled={touch} />

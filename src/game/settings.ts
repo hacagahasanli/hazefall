@@ -55,7 +55,8 @@ export const FIXED_KEYS: Partial<Record<Action, string[]>> = {
 /** Keys that can never be bound (menus, the browser, the portal's fullscreen). */
 export const RESERVED = new Set(['Escape', 'Tab', 'F11', 'F5', 'MetaLeft', 'MetaRight', ...Object.values(FIXED_KEYS).flat()]);
 
-export type CameraView = 'third' | 'first';
+/** 'third' is the high follow view (auto-aim, phones), 'shoulder' the over-the-shoulder view, 'first' your eyes. */
+export type CameraView = 'third' | 'shoulder' | 'first';
 
 export interface Settings {
   keys: Record<Action, string>;
@@ -135,7 +136,7 @@ export const normalize = (raw: unknown): Settings => {
     touchSize: clamp(r.touchSize, 0.7, 1.4, d.touchSize),
     touchOpacity: clamp(r.touchOpacity, 0.3, 1, d.touchOpacity),
     leftHanded: bool(r.leftHanded, d.leftHanded),
-    camera: r.camera === 'first' ? 'first' : 'third',
+    camera: r.camera === 'first' || r.camera === 'shoulder' ? r.camera : 'third',
     fov: clamp(r.fov, 60, 100, d.fov),
     quality: r.quality === 'low' || r.quality === 'medium' || r.quality === 'high' ? r.quality : 'auto',
     shadows: bool(r.shadows, d.shadows),

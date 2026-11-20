@@ -471,7 +471,7 @@ export const Match = ({
               <div
                 className="absolute inset-0"
                 style={{
-                  background: hud.firstPerson
+                  background: hud.firstPerson || hud.shoulder
                     ? 'radial-gradient(circle at 50% 50%, transparent 0, transparent min(38vh, 38vw), rgba(0,0,0,0.92) calc(min(38vh, 38vw) + 3px), #000 calc(min(38vh, 38vw) + 40px))'
                     : 'radial-gradient(circle at 50% 50%, transparent 0, transparent 30%, rgba(5,8,16,0.55) 62%)',
                 }}
@@ -484,7 +484,7 @@ export const Match = ({
           )}
 
           {/* First person: a crosshair, and how to take the mouse. */}
-          {hud.firstPerson && !over && !hud.scoped && (
+          {(hud.firstPerson || hud.shoulder) && !over && !hud.scoped && (
             <>
               <div className="pointer-events-none absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2" aria-hidden>
                 <span className="absolute left-1/2 top-0 h-2 w-0.5 -translate-x-1/2 bg-cream/90 shadow" />

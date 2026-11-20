@@ -6,7 +6,7 @@ import { actionFor, DEFAULT_SETTINGS, keyMap } from '../settings';
 
 import type { VolumeKind } from '../sfx';
 import type { Action, Settings } from '../settings';
-import { ARMOR, ROLL, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, ITEMS, MAP, SIZE, SUPERS, TILE, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
+import { ARMOR, ROLL, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, ITEMS, MAP, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
 import { canSee, inPlant, inWater, lineOfSight, lootUnder, solidAt, throwDistance } from '../sim/step';
 import { createOfflineSession } from '../net/session';
 import { NO_INPUT } from '../sim/types';
@@ -15,7 +15,7 @@ import { buildRig, fighterLook, poseChute, poseDeath, poseFreefall, poseRig, pos
 import { buildGun } from './guns';
 import { mat, mesh, PALETTE } from './palette';
 import { createVfx } from './vfx';
-import { setPeople } from './nature';
+import { setPeople, updateNature } from './nature';
 import { buildChute, HARNESS_BACK } from './chute';
 import { paintMapImage } from './mapImage';
 import { buildPlane } from './plane';
@@ -88,6 +88,8 @@ export interface HudState {
   sniper: boolean;
   /** First person on the ground (the crosshair shows), and whether the mouse is captured. */
   firstPerson: boolean;
+  /** Over the shoulder: crosshair in the middle, mouse look. */
+  shoulder: boolean;
   mouseLocked: boolean;
   /** The quality tier being drawn. */
   tier: Tier;
@@ -571,6 +573,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   // First person is a setting (mouse and keyboard only: on a touch screen the camera stays above); ?view=fpp still forces it.
   const fppParam = new URLSearchParams(window.location.search).get('view') === 'fpp';
   let fpp = !touch && (fppParam || settings.camera === 'first');
+  /**
+   * Over the shoulder (a third view, mouse and keyboard only): the camera sits on a short arm behind your right shoulder,
+   * the mouse turns it (pointer lock) exactly as in first person, WASD walks the way it looks, and the crosshair in the
+   * middle of the screen is where your shots go. The arm pulls in at once when a wall or a ceiling is in the way and
+   * eases back out, so the camera never ends up inside a wall or hides you behind one.
+   */
+  const tpsParam = new URLSearchParams(window.location.search).get('view') === 'tps';
+  let shoulder = !touch && !fpp && (tpsParam || settings.camera === 'shoulder');
   let viewYaw = 0;
   let viewPitch = -0.04;
   let viewInit = false;
@@ -579,6 +589,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** Looking through the sniper's scope this frame (set every frame from the input). */
   let scoped = false;
   const firstPerson = () => fpp && state.players[me].stage !== 'drone' && state.players[me].alive;
+  /** Over the shoulder once you're out of the plane. */
+  const shoulderView = () => shoulder && state.players[me].stage !== 'drone' && state.players[me].alive;
+  /** The mouse turns the view (first person or over the shoulder). */
+  const mouseLook = () => firstPerson() || shoulderView();
+  /** The shoulder camera's arm: how far out it is now (pulled in by walls, eased back out). */
+  let armNow = 3.2;
+  /** Where the crosshair points on the map this frame (the shoulder view aims there, not straight ahead of you). */
+  const crossAim = { x: 0, y: 0 };
   const onLockChange = () => {
     locked = document.pointerLockElement === canvas;
   };
@@ -590,7 +608,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     viewPitch = Math.max(-1.1, Math.min(1.1, viewPitch - e.movementY * sens * (settings.invertY ? -1 : 1)));
   };
   const onLockClick = () => {
-    if (fpp && !locked && firstPerson()) void canvas.requestPointerLock();
+    if ((fpp || shoulder) && !locked && mouseLook()) void canvas.requestPointerLock();
   };
   document.addEventListener('pointerlockchange', onLockChange);
   document.addEventListener('mousemove', onLook);
@@ -765,11 +783,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const held = (a: Action) => bound[a].some((k) => keys.has(k));
   const readInput = (): Input => {
     const p = state.players[me];
-    if (firstPerson()) {
+    if (mouseLook()) {
       if (!viewInit) {
         viewYaw = p.stage === 'falling' ? Math.atan2(state.drone.y1 - state.drone.y0, state.drone.x1 - state.drone.x0) : p.heading;
         // Out of the plane you look down at the ground you're falling towards.
-        viewPitch = p.stage === 'falling' ? -0.75 : -0.04;
+        viewPitch = p.stage === 'falling' ? (shoulder ? -0.45 : -0.75) : shoulder ? -0.12 : -0.04;
         viewInit = true;
       }
       const fwd = (held('up') ? 1 : 0) - (held('down') ? 1 : 0) - stick.y;
@@ -795,14 +813,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         snap: true,
         scope: scopeHeld(p),
         pitch: viewPitch,
-        aimX: p.x + c * 30,
-        aimY: p.y + sn * 30,
+        aimX: shoulder ? crossAim.x : p.x + c * 30,
+        aimY: shoulder ? crossAim.y : p.y + sn * 30,
       };
       lastThrowAim = null;
       touchLatched.clear();
       return input;
     }
-    if (fpp) viewInit = false;
+    if (fpp || shoulder) viewInit = false;
     const clamp = (v: number) => Math.max(-1, Math.min(1, v));
     const mx = clamp((held('right') ? 1 : 0) - (held('left') ? 1 : 0) + stick.x);
     const my = clamp((held('down') ? 1 : 0) - (held('up') ? 1 : 0) + stick.y);
@@ -1328,7 +1346,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
       // Health bar over the head, facing the camera.
       const bar = bars[i];
-      bar.g.visible = visible && p.alive && p.stage === 'ground' && !(i === me && firstPerson());
+      bar.g.visible = visible && p.alive && p.stage === 'ground' && !(i === me && mouseLook());
       bar.g.position.set(x, 2.7, y);
       bar.g.quaternion.copy(camera.quaternion);
       const k = Math.max(0.001, p.hp / p.maxHp);
@@ -1339,11 +1357,12 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       bar.armor.position.x = -0.8 * (1 - a);
       bar.armor.visible = p.armor > 0;
     });
-    world.update(state, self.x, self.y, firstPerson());
+    // Over the shoulder the camera can be indoors with you: buildings are drawn as in first person (ceilings, no lifted roofs).
+    world.update(state, self.x, self.y, firstPerson() || shoulderView());
     updateThrowPreview(self, selfX, selfY);
     // By id: online the state object is replaced on every correction from the host.
     const tgt = aimMode === 'auto' && self.alive && self.stage !== 'drone' && aimTarget ? state.players[aimTarget.id] : null;
-    reticle.visible = !!tgt && tgt.alive && !firstPerson();
+    reticle.visible = !!tgt && tgt.alive && !mouseLook();
     if (tgt) {
       const ti = tgt.id;
       reticle.position.set(prev[ti].x + (tgt.x - prev[ti].x) * alpha, 0.1, prev[ti].y + (tgt.y - prev[ti].y) * alpha);
@@ -1508,10 +1527,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // Wider lens and see-through clouds while you pick your spot from the plane.
     const overview = self.stage === 'drone' && state.phase === 'drop';
     const fp = firstPerson();
-    const fov = fp ? THREE.MathUtils.damp(camera.fov, scoped ? 16 : settings.fov, 18, dt) : THREE.MathUtils.damp(camera.fov, overview ? 52 : 42, 3, dt);
+    const sv = shoulderView();
+    const fov = fp
+      ? THREE.MathUtils.damp(camera.fov, scoped ? 16 : settings.fov, 18, dt)
+      : sv
+        ? THREE.MathUtils.damp(camera.fov, scoped ? 30 : Math.min(settings.fov, 78), 14, dt)
+        : THREE.MathUtils.damp(camera.fov, overview ? 52 : 42, 3, dt);
     // Far away above the map, a nearer near-plane wastes depth precision and the ground and the
     // roads fight (flicker); push it out while in the overview.
-    const near = overview ? 4 : camNear < 1 || fp ? 0.05 : 0.5;
+    const near = overview ? 4 : camNear < 1 || fp || sv ? 0.05 : 0.5;
     if (Math.abs(fov - camera.fov) > 0.001 || camera.near !== near) {
       camera.fov = fov;
       camera.near = near;
@@ -1575,6 +1599,76 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       if (swim) poseSwimArms(rig.phase, Math.min(1, speed / 1.6));
       viewmodel.position.set(Math.sin(rig.phase) * 0.012 * Math.min(1, speed / 5), bob * 0.5 - reload * 0.12, kick * 0.07);
       viewmodel.rotation.set(kick * 0.12 - reload * 0.5, 0, reload * 0.3);
+    } else if (shoulderView()) {
+      viewmodel.visible = false;
+      swimArms.visible = false;
+      // The pivot: just above your head, where the eyes of a third-person player would be.
+      const air = self.stage === 'falling';
+      const c = Math.cos(viewYaw);
+      const sn = Math.sin(viewYaw);
+      const cp = Math.cos(viewPitch);
+      const pivotY = selfH + (air ? 1.2 : 1.62);
+      // Right of the shoulder, so you see past yourself; scoped the arm comes in and the lens narrows (aim down sights).
+      const side = air ? 0 : scoped ? 0.45 : 0.62;
+      const px = selfX - sn * side;
+      const pz = selfY + c * side;
+      const wantArm = air ? 7 : scoped ? 1.4 : 3.2;
+      // Walls and ceilings: march out along the arm and stop short of the first wall (2D walls, the 2.6 m ceiling indoors).
+      const bx = -c * cp;
+      const bz = -sn * cp;
+      const by = -Math.sin(viewPitch);
+      let reach = wantArm;
+      if (!air) {
+        const indoor = tileAt(Math.floor(selfX / TILE), Math.floor(selfY / TILE)) === '.';
+        for (let d = 0.25; d <= wantArm; d += 0.25) {
+          const x = px + bx * d;
+          const z = pz + bz * d;
+          const y = pivotY + by * d;
+          if (solidAt(state, x, z) || y < 0.25 || (indoor && y > 2.35)) {
+            reach = Math.max(0.35, d - 0.3);
+            break;
+          }
+        }
+      }
+      // In at once, out gently (half-life ~0.2 s): a wall never sits between you and the camera, and it never pops.
+      armNow = reach < armNow ? reach : THREE.MathUtils.damp(armNow, reach, 3.5, dt);
+      camera.position.set(px + bx * armNow, pivotY + by * armNow, pz + bz * armNow);
+      // The view turns with the mouse unsmoothed (the crosshair is the aim); only the hit shake adds a small jolt.
+      tmpV.set(camera.position.x + c * cp, camera.position.y + Math.sin(viewPitch), camera.position.z + sn * cp);
+      camera.lookAt(tmpV);
+      if (shake > 0) camera.rotateZ(n(17, 2) * 0.02 * shake);
+      // Too close (a tight corner): hide your own body rather than fill the screen with it.
+      rigs[me].root.visible = rigs[me].root.visible && armNow > 0.75;
+      camPos.copy(camera.position);
+      camLook.copy(tmpV);
+      camFocus.set(selfX, 0, selfY);
+      // Tree canopies: the dithered cut-out sits on the line from the camera to you (not on you), so leaves never come
+      // between you and the lens, under the canopy on the way down or walking through the woods.
+      updateNature(performance.now() / 1000, (camera.position.x + selfX) / 2, (camera.position.z + selfY) / 2, armNow / 2 + 3);
+      // Where the crosshair lands: the first fighter near the ray, else the ground, else 60 m out. Shots go from you
+      // to that point, so what is under the crosshair is what you hit even though the camera is off to the side.
+      const dx = c * cp;
+      const dy = Math.sin(viewPitch);
+      const dz = sn * cp;
+      let hitT = dy < -0.01 ? Math.min(60, -camera.position.y / dy) : 60;
+      for (let i = 0; i < state.players.length; i++) {
+        const o = state.players[i];
+        if (i === me || !o.alive || o.stage === 'drone') continue;
+        const ox = o.x - camera.position.x;
+        const oy = (o.stage === 'falling' ? fallHeight(Math.max(0, o.fall)) : 0) + 1.1 - camera.position.y;
+        const oz = o.y - camera.position.z;
+        const along = ox * dx + oy * dy + oz * dz;
+        if (along <= armNow || along >= hitT) continue;
+        const off = Math.hypot(ox - dx * along, oy - dy * along, oz - dz * along);
+        if (off < 0.9) hitT = along;
+      }
+      crossAim.x = camera.position.x + dx * hitT;
+      crossAim.y = camera.position.z + dz * hitT;
+      // Never aim behind yourself (looking steeply down past your own feet).
+      if ((crossAim.x - self.x) * c + (crossAim.y - self.y) * sn < 1.5) {
+        crossAim.x = self.x + c * 30;
+        crossAim.y = self.y + sn * 30;
+      }
     } else {
       viewmodel.visible = false;
       swimArms.visible = false;
@@ -1693,6 +1787,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       total: state.players.length,
       planeTime: state.tick * DT,
       firstPerson: firstPerson(),
+      shoulder: shoulderView(),
       scoped,
       sniper: self.weapon === 'sniper' && self.alive,
       mouseLocked: locked,
@@ -1797,10 +1892,12 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       settings = next;
       bound = keyMap(next.keys);
       const wantFpp = !touch && (fppParam || next.camera === 'first');
-      if (wantFpp !== fpp) {
+      const wantShoulder = !touch && !wantFpp && (tpsParam || next.camera === 'shoulder');
+      if (wantFpp !== fpp || wantShoulder !== shoulder) {
         fpp = wantFpp;
+        shoulder = wantShoulder;
         viewInit = false;
-        if (!fpp && document.pointerLockElement === canvas) document.exitPointerLock();
+        if (!fpp && !shoulder && document.pointerLockElement === canvas) document.exitPointerLock();
       }
       sfx.setVolume('master', next.master);
       sfx.setVolume('guns', next.guns);
