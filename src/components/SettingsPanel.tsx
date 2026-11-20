@@ -216,7 +216,6 @@ export const SettingsPanel = ({
       >
         <header className="flex items-end justify-between gap-4 px-5 pb-3 pt-5 sm:px-7">
           <h2 className="font-display text-3xl italic text-green sm:text-4xl">Settings</h2>
-          <span className="pb-1 text-[10px] tracking-widest text-cream/40">SAVED AS YOU GO</span>
         </header>
         <div
           role="tablist"

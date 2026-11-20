@@ -74,7 +74,7 @@ export const FighterCard = ({ fighter, portraits }: { fighter: FighterId; portra
         />
         <div className="relative z-10 flex flex-1 flex-col justify-between gap-4 p-5 sm:p-6">
           <div className="flex flex-col gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-cream/55">
+            <span className="text-sm font-semibold text-cream/60">
               You drop as
             </span>
             <h1

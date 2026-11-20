@@ -85,9 +85,9 @@ const Result = ({
           </div>
           <div className="flex flex-col gap-2 pb-6 [@media(max-height:520px)]:pb-2">
             <span
-              className={`text-xs font-bold tracking-[0.35em] ${hud.won ? 'text-green' : 'text-orange'}`}
+              className={`text-base font-bold ${hud.won ? 'text-green' : 'text-orange'}`}
             >
-              {hud.won ? 'ROUND WON' : 'ELIMINATED'}
+              {hud.won ? 'Round won' : 'Eliminated'}
             </span>
             <h2 className="font-display text-3xl leading-none sm:text-5xl [@media(max-height:520px)]:text-3xl">
               {hud.won ? COPY.result.won : COPY.result.lost}

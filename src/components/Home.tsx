@@ -168,14 +168,6 @@ export const Home = () => {
       <div className="pointer-events-none fixed inset-0 bg-ink-deep/55 lg:hidden" />
 
       <div className="relative mx-auto flex min-h-[100dvh] max-w-7xl flex-col justify-between gap-10 px-5 pb-8 pt-8 sm:px-8">
-        <header className="flex items-center justify-between text-xs font-semibold tracking-[0.3em] text-blue">
-          <span>
-            <span className="text-green">&lt;&lt;&lt;&lt;</span> MERGE CONFLICT PRESENTS <span className="text-orange">&gt;&gt;&gt;&gt;</span>
-          </span>
-          <span className="hidden items-center gap-2 text-cream/60 sm:flex">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-green" /> BATTLEGROUND · 10 PLAYERS
-          </span>
-        </header>
 
         <section className="grid items-center gap-10 lg:grid-cols-[1fr_auto]">
           <div className="flex max-w-xl flex-col gap-6">

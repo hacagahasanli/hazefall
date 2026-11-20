@@ -170,7 +170,6 @@ export const MainMenu = ({
         style={{ paddingLeft: 'max(1.5rem, env(safe-area-inset-left))', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
       >
         <div className="flex flex-col gap-1 [animation:slideIn_0.5s_ease-out] max-sm:mb-auto max-sm:mt-2 [@media(max-height:500px)]:gap-0">
-          <span className="text-[10px] font-bold tracking-[0.4em] text-blue">BATTLE ROYALE · 10 PLAYERS</span>
           <h1 className="m-0">
             {/* The wordmark (brand/last-commit-standing/logo.svg): a fixed-ratio image, so a plain <img> is right. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -217,11 +216,11 @@ export const MainMenu = ({
           ))}
         </nav>
 
-        <footer className="flex items-center justify-between gap-3 text-[10px] tracking-widest text-cream/45 max-sm:mt-2">
-          <span>{credit.toUpperCase()}</span>
+        <footer className="flex items-center justify-between gap-3 text-xs text-cream/50 max-sm:mt-2">
+          <span>{credit}</span>
           <span>
             v{GAME_VERSION}
-            {!touch && <span className="ml-3 hidden lg:inline">↑ ↓ · ENTER</span>}
+            {!touch && <span className="ml-3 hidden lg:inline">↑ ↓ · Enter</span>}
           </span>
         </footer>
       </div>
@@ -266,7 +265,7 @@ export const MainMenu = ({
       {panel === 'credits' && (
         <SidePanel title="Credits" onClose={() => setPanel(null)}>
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-bold tracking-[0.3em] text-cream/45">A GAME BY</span>
+            <span className="text-sm font-semibold text-cream/55">A game by</span>
             <span className="font-display text-3xl">{credit}</span>
           </div>
           <div className="flex flex-col gap-2 text-sm text-cream/75">
@@ -276,7 +275,7 @@ export const MainMenu = ({
             <p>Fonts: Bungee and Chakra Petch (SIL Open Font License).</p>
             <p>Built with three.js and React.</p>
           </div>
-          <span className="text-[10px] tracking-widest text-cream/40">VERSION {GAME_VERSION}</span>
+          <span className="text-xs text-cream/45">Version {GAME_VERSION}</span>
         </SidePanel>
       )}
     </main>
