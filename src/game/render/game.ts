@@ -1221,7 +1221,6 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         break;
       case 'land':
         landAt[e.player] = time;
-        dropChute(e.player, e.x, e.y);
         vfx.burst(e.x, 0.2, 12, 'dust', { z: e.y,  speed: 3, up: 1, gravity: 4, life: 0.4 });
         if (e.player === me) sfx.land();
         break;
@@ -1273,44 +1272,60 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** When each player touched down (for the landing roll), and the canopies left on the ground. */
   const landAt: number[] = [];
   const ROLL_TIME = 0.75;
-  const groundChutes: { g: THREE.Group; t: number; dir: number; q0: THREE.Quaternion }[] = [];
-  const foldTo = new THREE.Quaternion();
-  const foldEuler = new THREE.Euler();
-  const dropChute = (i: number, x: number, y: number) => {
-    const p = state.players[i];
-    const g = chutes[i].clone(true);
+  /**
+   * Canopies let go: the moment a canopy stops hanging over its fighter (touchdown, or knocked out in the air) a copy is
+   * left where it was drawn and collapses there in 0.7 s: it keels over ahead of the fighter, deflates (flattens and
+   * shrinks towards the harness), fades and is gone. It never turns about its own axis and never lies on the ground
+   * as an open disc. Knocked out in the air it also drops as it goes.
+   */
+  const COLLAPSE = 0.7;
+  const collapsing: { g: THREE.Group; deploy: THREE.Object3D; t: number; q0: THREE.Quaternion; p0: THREE.Vector3; s0: number; air: boolean }[] = [];
+  const keel = new THREE.Quaternion();
+  const xAxis = new THREE.Vector3(1, 0, 0);
+  const releaseChute = (i: number, air: boolean) => {
+    const src = chutes[i];
+    // userData.deploy is a scene node: keep it out of the clone (Object3D.clone serialises userData to JSON).
+    const deploy = src.userData.deploy as THREE.Object3D;
+    delete src.userData.deploy;
+    const g = src.clone(true);
+    src.userData.deploy = deploy;
+    g.name = 'chute (collapsing)';
     g.traverse((o) => {
-      if (o instanceof THREE.Mesh) o.material = (o.material as THREE.Material).clone();
+      if (!(o instanceof THREE.Mesh)) return;
+      // Lines and risers go at once; the fabric gets its own material so it can fade alone.
       if (o.userData.line) o.visible = false;
+      else {
+        const m = (o.material as THREE.Material).clone();
+        m.transparent = true;
+        o.material = m;
+      }
     });
     g.visible = true;
-    g.position.set(x, 1, y);
-    g.userData.from = { x, y };
     scene.add(g);
-    // It starts exactly as it hung in the air (same turn and tilt) and settles from there: no snap on touchdown.
-    groundChutes.push({ g, t: 0, dir: Math.hypot(p.vx, p.vy) > 0.3 ? Math.atan2(p.vy, p.vx) : p.heading + Math.PI, q0: chutes[i].quaternion.clone() });
+    collapsing.push({ g, deploy: g.children[0], t: 0, q0: src.quaternion.clone(), p0: src.position.clone(), s0: deploy.scale.x, air });
   };
-  /** The canopy settles down behind you, lies there a while, then fades. */
-  const updateGroundChutes = (dt: number) => {
-    for (let k = groundChutes.length - 1; k >= 0; k--) {
-      const c = groundChutes[k];
+  const updateCollapsing = (dt: number) => {
+    for (let k = collapsing.length - 1; k >= 0; k--) {
+      const c = collapsing[k];
       c.t += dt;
-      // It drifts on a few metres with the wind and sinks, flattening out as it lands.
-      const fall = Math.min(1, c.t / 1.4);
-      const e = 1 - (1 - fall) * (1 - fall);
-      const from = c.g.userData.from as { x: number; y: number };
-      // It drifts on a couple of metres and folds into a long, narrow strip of fabric lying behind
-      // you (about 3 x 1.3 m, the long side along the way you came), not a big round sheet.
-      c.g.position.set(from.x + Math.cos(c.dir) * 2.2 * e, 1 - e, from.y + Math.sin(c.dir) * 2.2 * e);
-      c.g.quaternion.slerpQuaternions(c.q0, foldTo.setFromEuler(foldEuler.set(0, -c.dir, 0)), e);
-      c.g.scale.set(1 - e * 0.42, 1 - e * 0.95, 1 - e * 0.75);
-      const fade = c.t > 8 ? 1 - (c.t - 8) / 2 : 1;
+      const f = Math.min(1, c.t / COLLAPSE);
+      const e = 1 - Math.pow(1 - f, 3);
+      // Keels over ahead of the fighter (away from an over-the-shoulder camera), about its own left-right axis; no turn about the vertical.
+      c.g.quaternion.copy(c.q0).multiply(keel.setFromAxisAngle(xAxis, 1.3 * e));
+      c.g.position.copy(c.p0);
+      if (c.air) c.g.position.y = Math.max(0.1, c.p0.y - 6 * f * f);
+      // Deflates: the dome flattens and pulls in towards the harness.
+      c.deploy.scale.set(c.s0 * (1 - 0.55 * e), c.s0 * (1 - 0.85 * e), c.s0 * (1 - 0.55 * e));
+      const fade = f < 0.35 ? 1 : 1 - (f - 0.35) / 0.65;
       c.g.traverse((o) => {
-        if (o instanceof THREE.Mesh) (o.material as THREE.MeshStandardMaterial).opacity = Math.max(0, fade);
+        if (o instanceof THREE.Mesh) (o.material as THREE.MeshStandardMaterial).opacity = fade;
       });
-      if (fade <= 0) {
+      if (f >= 1) {
         scene.remove(c.g);
-        groundChutes.splice(k, 1);
+        c.g.traverse((o) => {
+          if (o instanceof THREE.Mesh) (o.material as THREE.Material).dispose();
+        });
+        collapsing.splice(k, 1);
       }
     }
   };
@@ -1546,7 +1561,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const visible = fallen || (p.alive && p.stage !== 'drone' && (i === me || p.stage === 'falling' || canSee(state, self, p)));
       rig.root.visible = visible && !(i === me && firstPerson());
       const chuteOpen = p.stage === 'falling' && p.fall <= DROP.chute;
+      const hadChute = chutes[i].visible;
       chutes[i].visible = visible && chuteOpen;
+      // The canopy stops hanging over this fighter (landed, or knocked out in the air): it collapses where it was.
+      if (hadChute && !chutes[i].visible) releaseChute(i, p.stage === 'falling');
       // Free fall from the plane down to chute height, then drift slowly under the canopy.
       // Height interpolated between ticks like x and y, so the fall is smooth at any frame rate.
       const fall = prev[i].fall + (p.fall - prev[i].fall) * alpha;
@@ -2050,7 +2068,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     vfx.update(frozen ? 0 : dt);
     updateDamage(dt);
     updateHitFx(dt, selfX, selfH, selfY);
-    updateGroundChutes(dt);
+    updateCollapsing(dt);
     props.update(time, dt);
     // Trees, bushes, rocks and grass: only the chunks this camera sees, the far ones cheaper, shadows only near the box.
     const spec = TIERS[tier];
