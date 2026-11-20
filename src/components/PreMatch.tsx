@@ -1,11 +1,13 @@
 'use client';
 
 /**
- * The minutes before a round, squeezed into ten seconds: Play leads here, not straight into the match. Behind the UI the
- * squad waits on the airstrip by the idling cargo plane (render/staging). You can still change your fighter, the lobby
- * fills with the other nine, and a countdown runs; Ready (Space) cuts it to the last three seconds. Those last seconds
- * are the launch: the camera cranes over the squad to the battleground, the engines spool up, a big 3-2-1, a fade to
- * black, and the match takes over. Esc goes back to the menu. Play again runs a shorter version.
+ * The lobby before a round: Play leads here, not straight into the match. Behind the UI the squad waits on the airstrip
+ * by the idling cargo plane (render/staging). You pick your fighter while the lobby fills with the other nine; nothing
+ * starts until you press Ready. Then the fighter is locked, the match starts loading underneath (held, see Match `held`),
+ * and a "match starting" strip counts down at the bottom. The last seconds are the launch: the camera cranes over the
+ * squad to the battleground, the engines spool up, a big 3-2-1, a fade to black, and the plane scene comes straight up
+ * out of the black, already loaded. If the device is still building the map, the strip says so and waits. Esc goes back
+ * to the menu.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -31,6 +33,8 @@ export const PreMatch = ({
   settings,
   fighter,
   onFighter,
+  onReady,
+  loaded,
   onLaunch,
   onBack,
   quick = false,
@@ -40,19 +44,29 @@ export const PreMatch = ({
   settings: Settings;
   fighter: FighterId;
   onFighter: (id: FighterId) => void;
+  /** Ready pressed: the fighter is locked, start loading the match. */
+  onReady: () => void;
+  /** The match underneath has loaded and may be launched into. */
+  loaded: boolean;
   onLaunch: () => void;
   onBack: () => void;
   /** Play again: a shorter wait, the lobby already full. */
   quick?: boolean;
   touch: boolean;
 }) => {
-  const total = quick ? 6.5 : 11;
+  /** Seconds from Ready to the match. */
+  const count = quick ? 7 : 9;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const staging = useRef<Staging | null>(null);
   const [live, setLive] = useState(false);
   const [t, setT] = useState(0);
-  const end = useRef(total);
+  const end = useRef(Infinity);
+  const loadedRef = useRef(loaded);
+  loadedRef.current = loaded;
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
   const [readied, setReadied] = useState(false);
+  const [readyAt, setReadyAt] = useState(0);
   const portraits = usePortraits();
   const f = FIGHTERS[fighter];
   const tier = resolveTier(settings.quality, deviceFacts(platform.deviceType()));
@@ -95,17 +109,19 @@ export const PreMatch = ({
     if (!live) return;
     let raf = 0;
     const start = performance.now();
-    let lastWhole = Math.ceil(end.current);
+    let lastWhole = 99;
     const tick = (now: number) => {
       const s = (now - start) / 1000;
       setT(s);
+      // Not loaded yet as the launch nears: the strip waits ("Joining") rather than cutting to a loading screen.
+      if (!loadedRef.current && end.current - s < LAUNCH + 0.6) end.current = s + LAUNCH + 0.6;
       const left = end.current - s;
       if (left <= LAUNCH && !launched.current) {
         launched.current = true;
         staging.current?.launch(LAUNCH - FADE + 0.2);
         hum.current?.rev();
       }
-      const whole = Math.ceil(left);
+      const whole = Number.isFinite(left) ? Math.ceil(left) : 99;
       if (whole !== lastWhole && whole >= 1 && whole <= 3) uiTick(false);
       if (whole !== lastWhole && whole === 0) uiTick(true);
       lastWhole = whole;
@@ -122,21 +138,24 @@ export const PreMatch = ({
   }, [live]);
 
   const ready = useCallback(() => {
-    if (readied) return;
+    if (readied || !live) return;
     uiTick(true);
     setReadied(true);
-    end.current = Math.min(end.current, t + LAUNCH + 0.05);
-  }, [readied, t]);
+    setReadyAt(t);
+    end.current = t + count;
+    onReadyRef.current();
+  }, [readied, live, t, count]);
 
   const left = Math.max(0, end.current - t);
   const launching = left <= LAUNCH;
   const pick = useCallback(
     (id: FighterId) => {
-      if (launching || id === fighter) return;
+      // Ready locks your fighter: the match is already being built with it.
+      if (readied || id === fighter) return;
       uiTick(false);
       onFighter(id);
     },
-    [launching, fighter, onFighter],
+    [readied, fighter, onFighter],
   );
 
   useEffect(() => {
@@ -165,10 +184,13 @@ export const PreMatch = ({
   const joinEvery = quick ? 0 : 0.32;
   const joined = quick ? names.length : Math.min(names.length, Math.floor(Math.max(0, t - 0.6) / joinEvery));
   const full = joined >= names.length;
-  const count = Math.ceil(left - 0.001);
-  const big = launching && count >= 1 && count <= 3 ? count : null;
+  const secs = Number.isFinite(left) ? Math.ceil(left - 0.001) : 0;
+  const big = launching && secs >= 1 && secs <= 3 ? secs : null;
   const fade = Math.min(1, Math.max(0, (FADE - left) / FADE));
-  const status = !full ? 'Players joining' : launching ? 'Launching' : readied ? 'Ready' : 'Lobby full';
+  const status = !full ? 'Players joining' : readied ? 'Ready' : 'Lobby full';
+  /** After Ready: 0..1 through the countdown, for the strip. */
+  const progress = readied ? Math.min(1, (t - readyAt) / Math.max(0.1, end.current - readyAt)) : 0;
+  const joining = readied && !loaded && left <= LAUNCH + 0.7;
 
   return (
     <main className="relative h-[100dvh] w-screen select-none overflow-hidden bg-ink-deep text-cream">
@@ -196,8 +218,8 @@ export const PreMatch = ({
         </button>
         <div className="flex flex-col items-end gap-0.5 text-right" aria-live="polite">
           <span className="text-sm font-semibold text-cream/70">{status}</span>
-          <span className="font-display text-4xl leading-none tabular-nums text-gold drop-shadow-[0_2px_12px_rgba(0,0,0,0.7)] sm:text-5xl">
-            0:{String(Math.max(0, count)).padStart(2, '0')}
+          <span className="font-display text-2xl leading-none tabular-nums text-gold drop-shadow-[0_2px_12px_rgba(0,0,0,0.7)] sm:text-3xl">
+            {joined + 1}/10
           </span>
         </div>
       </header>
@@ -230,7 +252,8 @@ export const PreMatch = ({
                 aria-checked={on}
                 aria-label={c.name}
                 onClick={() => pick(id)}
-                className={`panel-cut relative h-20 w-16 overflow-hidden border-2 bg-ink/80 transition sm:h-24 sm:w-20 [@media(max-height:500px)]:h-16 [@media(max-height:500px)]:w-14 ${on ? '-translate-y-1' : 'opacity-75 hover:opacity-100'}`}
+                disabled={readied && !on}
+                className={`panel-cut relative h-20 w-16 overflow-hidden border-2 bg-ink/80 transition sm:h-24 sm:w-20 [@media(max-height:500px)]:h-16 [@media(max-height:500px)]:w-14 ${on ? '-translate-y-1' : readied ? 'opacity-25' : 'opacity-75 hover:opacity-100'}`}
                 style={{ borderColor: on ? c.color : 'rgba(230,235,245,0.12)' }}
               >
                 <span className="absolute inset-0 opacity-40" style={{ background: `radial-gradient(circle at 50% 80%, ${c.color}, transparent 70%)` }} />
@@ -246,12 +269,13 @@ export const PreMatch = ({
         <button
           type="button"
           onClick={ready}
-          disabled={readied}
-          className={`panel-cut mt-2 w-fit px-8 py-3 font-display text-xl uppercase transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream sm:text-2xl ${readied ? 'bg-cream/15 text-cream/60' : 'bg-green text-ink-deep hover:brightness-110'}`}
+          disabled={readied || !live}
+          className={`panel-cut relative mt-2 w-fit px-8 py-3 font-display text-xl uppercase transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream sm:text-2xl ${readied ? 'bg-cream/15 text-cream/70' : 'bg-green text-ink-deep hover:brightness-110'} ${!readied && live && !settings.reducedMotion ? '[animation:readyPulse_1.6s_ease-in-out_infinite]' : ''}`}
         >
-          {readied ? 'Ready' : 'Ready up'}
+          {readied ? 'Ready ✓' : 'Ready'}
           {!touch && !readied && <span className="ml-3 text-sm opacity-70">Space</span>}
         </button>
+        {!readied && live && full && <span className="text-xs text-cream/60">The match starts when you are ready.</span>}
       </section>
 
       {/* Right: the lobby filling (hidden on short phones, where the clock already says it). */}
@@ -271,7 +295,7 @@ export const PreMatch = ({
           <li className="panel-cut flex items-center gap-2 bg-ink/80 px-3 py-1.5 text-sm">
             <span className="h-2 w-2 rounded-full" style={{ background: f.color }} />
             <b className="flex-1">You</b>
-            <span className="text-xs text-cream/50">{f.name}</span>
+            <span className={`text-xs ${readied ? 'text-green' : 'text-cream/50'}`}>{readied ? 'ready' : f.name}</span>
           </li>
           {names.map((n, i) => (
             <li
@@ -285,6 +309,30 @@ export const PreMatch = ({
           ))}
         </ol>
       </aside>
+
+      {/* After Ready: the match-starting strip, bottom centre. */}
+      {readied && !launching && (
+        <div
+          className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] flex justify-center px-4 max-sm:bottom-auto max-sm:top-20"
+          aria-live="polite"
+        >
+          <div className="panel-cut flex w-[min(420px,92vw)] flex-col gap-2 bg-ink-deep/85 px-5 py-3 backdrop-blur [animation:riseIn_0.35s_ease-out]">
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="font-display text-base uppercase tracking-wide text-cream">{joining ? 'Joining match' : 'Match starting'}</span>
+              <span className="font-display text-3xl leading-none tabular-nums text-gold">
+                {joining ? '…' : `0:${String(Math.max(0, secs)).padStart(2, '0')}`}
+              </span>
+            </div>
+            <div className="h-1.5 overflow-hidden bg-cream/10">
+              <div
+                className={`h-full bg-gold ${joining && !settings.reducedMotion ? 'animate-pulse' : ''}`}
+                style={{ width: `${(joining ? 1 : progress) * 100}%` }}
+              />
+            </div>
+            <span className="text-xs text-cream/60">10/10 ready · {loaded ? 'map ready' : 'loading the map'}</span>
+          </div>
+        </div>
+      )}
 
       {/* The launch: 3-2-1 and the fade. */}
       {big !== null && (

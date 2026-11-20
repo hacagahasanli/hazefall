@@ -25,9 +25,13 @@ export const PortalGame = ({ platform, credit }: { platform: Platform; credit: s
     return saved && FIGHTER_IDS.includes(saved) ? saved : 'hotfix';
   });
   const [round, setRound] = useState(0);
-  const [inMenu, setInMenu] = useState(true);
-  /** Play leads to the pre-match (fighter, lobby, countdown), not straight into the round; Play again runs a short one. */
-  const [staging, setStaging] = useState<null | 'full' | 'quick'>(null);
+  /**
+   * menu → lobby (fighter, lobby filling, wait for Ready) → readying (the match loads underneath, held, while the
+   * countdown runs) → match. Play again goes back to the lobby with everyone already there.
+   */
+  const [stage, setStage] = useState<'menu' | 'lobby' | 'readying' | 'match'>('menu');
+  const [quick, setQuick] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [aim, setAim] = useState<AimMode>(() => readAim());
   const [settings, setSettings] = useSettings(platform.storage);
   const touch = useTouch();
@@ -36,43 +40,53 @@ export const PortalGame = ({ platform, credit }: { platform: Platform; credit: s
     setFighter(id);
     platform.storage.setItem(PICK_KEY, id);
   };
+  const toLobby = (again: boolean) => {
+    setQuick(again);
+    setLoaded(false);
+    setStage('lobby');
+  };
+  const toMenu = () => {
+    setAim(readAim());
+    setStage('menu');
+  };
 
-  if (staging) {
+  if (stage !== 'menu') {
     return (
-      <PreMatch
-        platform={platform}
-        settings={settings}
-        fighter={fighter}
-        onFighter={pickFighter}
-        quick={staging === 'quick'}
-        touch={touch}
-        onBack={() => {
-          setStaging(null);
-          setInMenu(true);
-        }}
-        onLaunch={() => {
-          setRound((r) => r + 1);
-          setStaging(null);
-          setInMenu(false);
-        }}
-      />
-    );
-  }
-
-  if (!inMenu) {
-    return (
-      <Match
-        key={round}
-        fighter={fighter}
-        platform={platform}
-        credit={credit}
-        exitLabel="Main menu"
-        onPlayAgain={() => setStaging('quick')}
-        onExit={() => {
-          setAim(readAim());
-          setInMenu(true);
-        }}
-      />
+      <>
+        {/* The match: built underneath the lobby once you are ready, released at the end of the launch. */}
+        {(stage === 'readying' || stage === 'match') && (
+          <Match
+            key={round}
+            fighter={fighter}
+            platform={platform}
+            credit={credit}
+            exitLabel="Main menu"
+            held={stage !== 'match'}
+            onLoaded={() => setLoaded(true)}
+            onPlayAgain={() => toLobby(true)}
+            onExit={toMenu}
+          />
+        )}
+        {(stage === 'lobby' || stage === 'readying') && (
+          <div className="fixed inset-0 z-50">
+            <PreMatch
+              platform={platform}
+              settings={settings}
+              fighter={fighter}
+              onFighter={pickFighter}
+              quick={quick}
+              touch={touch}
+              loaded={loaded}
+              onReady={() => {
+                setRound((r) => r + 1);
+                setStage('readying');
+              }}
+              onBack={toMenu}
+              onLaunch={() => setStage('match')}
+            />
+          </div>
+        )}
+      </>
     );
   }
 
@@ -88,7 +102,7 @@ export const PortalGame = ({ platform, credit }: { platform: Platform; credit: s
         setAim(m);
         saveAim(m);
       }}
-      onPlay={() => setStaging('full')}
+      onPlay={() => toLobby(false)}
       credit={credit}
       touch={touch}
     />

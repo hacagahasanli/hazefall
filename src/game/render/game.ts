@@ -103,6 +103,11 @@ export type TouchButton = 'fire' | 'use' | 'super' | 'roll' | 'reload' | 'leanL'
 
 export interface MatchOptions {
   fighter: FighterId;
+  /**
+   * Built behind the pre-match screen: the map loads and draws a few frames (so shaders are compiled), then the match
+   * waits frozen, silent and undrawn until `setHeld(false)`, so the launch cuts straight into the plane.
+   */
+  held?: boolean;
   name: string;
   /** Auto-aim (Space shoots the nearest visible enemy) or mouse aim (point and click). */
   aimMode: AimMode;
@@ -521,6 +526,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const keys = new Set<string>();
   let aimMode: AimMode = opts.aimMode;
   let paused = false;
+  let holding = !!opts.held;
+  let heldFrames = 0;
+  if (holding) sfx.setMuted('held', true);
   /** The mouse on the canvas in normalised device coordinates, and the left button. */
   const mouse = new THREE.Vector2(0, 0);
   let mouseDown = false;
@@ -1948,6 +1956,17 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       setTier(lowerTier(tier));
       opts.onTier?.(tier);
     }
+    if (holding) {
+      // Waiting behind the pre-match screen: draw the first frames (compiles shaders, uploads textures), report ready,
+      // then sleep until released.
+      if (heldFrames < 3) {
+        heldFrames++;
+        renderFrame(dt, 0);
+        if (heldFrames === 3) emitHud();
+      }
+      raf = requestAnimationFrame(frame);
+      return;
+    }
     // Paused (offline only): the world freezes, the camera and effects keep drawing.
     acc = paused && !session.online ? 0 : acc + dt;
     while (acc >= DT) {
@@ -1994,6 +2013,12 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         touchHeld.add(b);
         touchLatched.add(b);
       } else touchHeld.delete(b);
+    },
+    /** Release (or hold) a match built behind the pre-match screen. */
+    setHeld: (on: boolean) => {
+      holding = on;
+      sfx.setMuted('held', on);
+      last = performance.now();
     },
     setPaused: (on: boolean) => {
       paused = on;

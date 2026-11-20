@@ -28,9 +28,12 @@ export interface Staging {
 }
 
 const IDS = Object.keys(FIGHTERS) as FighterId[];
-/** Where the squad stands: on the apron 40 m south of the map, looking at the camera (south). */
+/**
+ * Where the squad stands: on an apron 70 m south of the map, clear of the forest band that rings it (26 m deep), so the
+ * plane parks on open ground with the treeline and the town layered behind it.
+ */
 const C = WORLD / 2;
-const Z0 = WORLD + 40;
+const Z0 = WORLD + 70;
 /** The three behind you, staggered so every face reads. */
 const BACK: [number, number, number][] = [
   [-1.9, -1.6, 0.35],
@@ -132,7 +135,9 @@ export const startStaging = (
 
   // The plane idles on the strip behind the squad, nose to the east.
   const plane = buildPlane();
-  plane.position.set(C + 2, 2.1, Z0 - 16);
+  plane.position.set(C + 8, 2.1, Z0 - 19);
+  // Angled away a little: its nose and props read, and the treeline and sky open up behind the squad.
+  plane.rotation.y = -0.5;
   scene.add(plane);
   const rotors = plane.children.filter((ch) => ch.userData.rotor);
 
@@ -191,8 +196,8 @@ export const startStaging = (
   const pos = new THREE.Vector3();
   const orbitPos = new THREE.Vector3();
   const orbitLook = new THREE.Vector3();
-  const cranePos = new THREE.Vector3(C - 3, 16, Z0 + 9);
-  const craneLook = new THREE.Vector3(C, 4, Z0 - 70);
+  const cranePos = new THREE.Vector3(C - 3, 24, Z0 + 10);
+  const craneLook = new THREE.Vector3(C, 6, WORLD * 0.6);
   let launchAt = -1;
   let launchLen = 3;
 

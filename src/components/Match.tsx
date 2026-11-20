@@ -176,6 +176,8 @@ export const Match = ({
   support: Support,
   credit,
   exitLabel = 'Back to lobby',
+  held = false,
+  onLoaded,
 }: {
   fighter: FighterId;
   session?: Session;
@@ -189,7 +191,15 @@ export const Match = ({
   credit?: string;
   /** The report's second button, and the pause menu's way out. */
   exitLabel?: string;
+  /** Built behind the pre-match screen: loads, then waits frozen and silent until this turns false. */
+  held?: boolean;
+  /** The map is built and the first frames are drawn (the pre-match screen may launch). */
+  onLoaded?: () => void;
 }) => {
+  const heldRef = useRef(held);
+  heldRef.current = held;
+  const onLoadedRef = useRef(onLoaded);
+  onLoadedRef.current = onLoaded;
   const online = !!session?.online;
   const platform = useMemo(() => platformProp ?? createWebPlatform(), [platformProp]);
   const [settings, setSettings] = useSettings(platform.storage);
@@ -221,6 +231,7 @@ export const Match = ({
         const st = settingsRef.current;
         m = startMatch(canvas, {
           fighter,
+          held: heldRef.current,
           name: 'you',
           aimMode: readAim(),
           minimap,
@@ -255,6 +266,14 @@ export const Match = ({
     }
   }, [game, settings, platform]);
 
+  // Held behind the pre-match screen until the launch; then the picture comes up out of the launch's black.
+  useEffect(() => {
+    game?.setHeld(held);
+  }, [game, held]);
+  useEffect(() => {
+    if (hud) onLoadedRef.current?.();
+  }, [!!hud]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const f = FIGHTERS[fighter];
   const over = hud && (hud.dead || hud.phase === 'over');
   // Let the fall play out first (or the win sink in) before the report comes up: going down,
@@ -265,8 +284,8 @@ export const Match = ({
   const killColor = settings.colorBlind ? '#ff9f1c' : '#ff3d6e';
 
   const breaks = useBreaks(platform, game, {
-    loaded: !!hud,
-    playing: !!hud && !menuOpen && !showResult && hud.phase !== 'over',
+    loaded: !!hud && !held,
+    playing: !!hud && !held && !menuOpen && !showResult && hud.phase !== 'over',
     roundOver: showResult,
   });
 
@@ -274,7 +293,7 @@ export const Match = ({
   // P does the same in one press (in a portal's fullscreen, Esc belongs to the browser).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (settingsOpen) return;
+      if (settingsOpen || heldRef.current) return;
       if (e.code === settingsRef.current.keys.pause && !e.repeat) {
         if (!over) setMenuOpen((o) => !o);
         return;
@@ -306,7 +325,8 @@ export const Match = ({
 
   return (
     <main className="relative h-[100dvh] w-screen touch-none select-none overflow-hidden bg-ink-deep">
-      {!hud && (
+      {!held && hud && <div className="pointer-events-none absolute inset-0 z-[60] bg-black [animation:fadeOut_0.8s_ease-out_forwards]" />}
+      {!hud && !held && (
         <div
           className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-ink-deep"
           role="status"
