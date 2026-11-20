@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 
+import { COPY } from '../copy/studio';
 import { createSfx } from '../sfx';
 
 import type { VolumeKind } from '../sfx';
@@ -890,7 +891,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         deadAt[e.victim] = time;
         const v = state.players[e.victim];
         const by = e.by !== null ? state.players[e.by] : null;
-        feed.push({ id: feedId++, text: by ? `${by.name} ⟶ ${v.name}` : `${v.name} missed the Deadline`, at: time });
+        feed.push({ id: feedId++, text: by ? `${by.name} ⟶ ${v.name}` : COPY.zone.caught(v.name), at: time });
         vfx.burst(e.x, 1, 30, 'ko', { z: e.y,  speed: 7, up: 4, life: 0.8 });
         sfx.ko(e.x - camX());
         if (e.victim === me || e.by === me) trauma = 1;
@@ -1574,7 +1575,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** In words, what took a player out. */
   const causeName = (p: Player) => {
     const w = p.killedWith;
-    if (w === 'zone') return 'the Deadline';
+    if (w === 'zone') return COPY.zone.name;
     if (w === 'explosion') return 'an explosion';
     if (w === 'super' && p.killedBy !== null) return FIGHTERS[state.players[p.killedBy].fighter].superName;
     if (w === 'fists') return 'bare hands';
@@ -1591,10 +1592,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           ? { label: touch ? 'Tap JUMP to jump' : 'Jump with Space', seconds: Math.ceil((1 - state.drone.t) * DROP.flight), outside: false }
           : { label: 'Everyone is landing', seconds: 0, outside: false }
         : z.state === 'wait'
-          ? { label: 'Deadline moves in', seconds: Math.ceil(z.timer), outside }
+          ? { label: COPY.zone.waiting, seconds: Math.ceil(z.timer), outside }
           : z.state === 'shrink'
-            ? { label: 'Deadline closing', seconds: Math.ceil(z.timer), outside }
-            : { label: 'Final Deadline', seconds: 0, outside };
+            ? { label: COPY.zone.closing, seconds: Math.ceil(z.timer), outside }
+            : { label: COPY.zone.final, seconds: 0, outside };
     const k = self.stage === 'ground' ? lootUnder(state, self) : null;
     const prompt = !self.alive
       ? null

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import { COPY } from '~/game/copy/studio';
 import { startMatch } from '~/game/render/game';
 import { FIGHTERS } from '~/game/sim/constants';
 
@@ -111,11 +112,11 @@ const Result = ({
               {hud.won ? 'ROUND WON' : 'ELIMINATED'}
             </span>
             <h2 className="font-display text-3xl leading-none sm:text-5xl [@media(max-height:520px)]:text-3xl">
-              {hud.won ? 'MERGED TO MAIN' : 'YOUR COMMIT WAS REVERTED'}
+              {hud.won ? COPY.result.won : COPY.result.lost}
             </h2>
             <p className="text-lg text-cream/80">
               {hud.won ? (
-                <>{hud.total - 1} down, one standing. You shipped it.</>
+                <>{COPY.result.wonLine(hud.total - 1)}</>
               ) : hud.killedBy ? (
                 <>
                   Taken out by{' '}
@@ -125,7 +126,7 @@ const Result = ({
                   with {hud.killedWith}.
                 </>
               ) : (
-                <>Caught outside by {hud.killedWith ?? 'the Deadline'}.</>
+                <>Caught outside by {hud.killedWith ?? COPY.zone.name}.</>
               )}
             </p>
           </div>
@@ -398,16 +399,18 @@ export const Match = ({
           {/* The first seconds on the plane: what this game is about. */}
           {hud.stage === 'drone' && hud.phase === 'drop' && hud.planeTime < 3.2 && (
             <div className="pointer-events-none absolute inset-0 z-[4] flex flex-col items-center justify-center gap-4 bg-[radial-gradient(ellipse_at_center,rgba(10,13,24,0.6),rgba(10,13,24,0.1)_70%)] px-6 text-center">
-              <div className="font-mono text-xs tracking-[0.3em] text-green/90 [animation:fadeIn_0.4s_ease-out]">&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD</div>
+              {COPY.intro.above && (
+                <div className="font-mono text-xs tracking-[0.3em] text-green/90 [animation:fadeIn_0.4s_ease-out]">{COPY.intro.above}</div>
+              )}
               <div className="font-display text-4xl leading-none text-gold drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)] [animation:riseIn_0.5s_ease-out] sm:text-7xl">
-                {hud.total} DEVELOPERS
+                {COPY.intro.title(hud.total)[0]}
                 <br />
-                ONE MERGE
+                {COPY.intro.title(hud.total)[1]}
               </div>
-              <div className="max-w-lg text-sm text-cream/85 [animation:fadeIn_0.8s_ease-out] sm:text-base">
-                Nobody agrees, the Deadline closes in, and only the last commit standing gets merged.
-              </div>
-              <div className="font-mono text-xs tracking-[0.3em] text-orange/90 [animation:fadeIn_0.4s_ease-out]">&gt;&gt;&gt;&gt;&gt;&gt;&gt; their-branch</div>
+              <div className="max-w-lg text-sm text-cream/85 [animation:fadeIn_0.8s_ease-out] sm:text-base">{COPY.intro.line}</div>
+              {COPY.intro.below && (
+                <div className="font-mono text-xs tracking-[0.3em] text-orange/90 [animation:fadeIn_0.4s_ease-out]">{COPY.intro.below}</div>
+              )}
             </div>
           )}
 
@@ -421,7 +424,7 @@ export const Match = ({
               <span
                 className={`text-sm ${hud.zone.outside ? 'font-bold text-orange' : 'text-cream/80'}`}
               >
-                {hud.zone.outside ? 'Outside the Deadline!' : hud.zone.label}
+                {hud.zone.outside ? COPY.zone.outside : hud.zone.label}
                 {hud.zone.seconds > 0 && (
                   <span className="ml-2 font-display text-gold">{hud.zone.seconds}s</span>
                 )}

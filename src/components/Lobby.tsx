@@ -8,6 +8,7 @@ import { Match } from '~/components/Match';
 import { OnlinePanel } from '~/components/OnlinePanel';
 import { createRoom, joinRoom } from '~/game/net/client';
 import { createGuestSession, createHostSession } from '~/game/net/session';
+import { COPY } from '~/game/copy/studio';
 import { BOT_NAMES, FIGHTERS } from '~/game/sim/constants';
 
 import type { LobbyState, StartMessage } from '~/game/net/lobby';
@@ -19,7 +20,7 @@ import type { Room } from '@colyseus/sdk';
 const IDS: FighterId[] = ['hotfix', 'legacy', 'standup', 'intern'];
 const PICK_KEY = 'lcs:fighter';
 const NAME_KEY = 'lcs:name';
-const randomName = () => `dev_${Math.floor(1000 + Math.random() * 9000)}`;
+const randomName = () => `${COPY.guestPrefix}${Math.floor(1000 + Math.random() * 9000)}`;
 
 const SPEEDS = IDS.map((id) => FIGHTERS[id].speed);
 const COSTS = IDS.map((id) => FIGHTERS[id].superCost);

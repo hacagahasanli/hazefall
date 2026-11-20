@@ -1,3 +1,5 @@
+import { COPY } from '../copy/studio';
+
 import type { FighterId, WeaponKind } from './types';
 
 export const DT = 1 / 60;
@@ -535,11 +537,12 @@ export interface FighterStats {
   color: string;
 }
 
+/** Names, roles and supers are words (from the copy module, so the portal build can swap them); the numbers are here. */
 export const FIGHTERS: Record<FighterId, FighterStats> = {
-  hotfix: { name: 'Hotfix', role: 'On-call engineer', hp: 100, speed: 6.6, superCost: 160, superName: 'Deploy', superText: 'a fast dash that hits everyone in its path', color: '#ff6a3d' },
-  legacy: { name: 'Legacy', role: 'Senior maintainer', hp: 100, speed: 5.9, superCost: 140, superName: 'Deprecated', superText: 'drops a wall that blocks bullets', color: '#3ddc84' },
-  standup: { name: 'Standup', role: 'Scrum lead', hp: 100, speed: 6.9, superCost: 130, superName: 'Timebox', superText: 'a field that slows enemies', color: '#3ec5ff' },
-  intern: { name: 'Intern', role: 'First week', hp: 100, speed: 6.3, superCost: 150, superName: 'Force push to main', superText: 'a blast that throws everyone back', color: '#ffd23f' },
+  hotfix: { ...COPY.fighters.hotfix, hp: 100, speed: 6.6, superCost: 160, color: '#ff6a3d' },
+  legacy: { ...COPY.fighters.legacy, hp: 100, speed: 5.9, superCost: 140, color: '#3ddc84' },
+  standup: { ...COPY.fighters.standup, hp: 100, speed: 6.9, superCost: 130, color: '#3ec5ff' },
+  intern: { ...COPY.fighters.intern, hp: 100, speed: 6.3, superCost: 150, color: '#ffd23f' },
 };
 
 // ---------------------------------------------------------------------------
@@ -676,4 +679,4 @@ export const ZONE_PHASES = [
 ];
 export const ZONE_START_RADIUS = WORLD * 0.72;
 
-export const BOT_NAMES = ['merge_bot', 'lint_fail', 'null_ptr', 'race_cond', 'off_by_1', 'rm_rf', 'yolo_push', 'flaky_test', 'tech_debt'];
+export const BOT_NAMES = COPY.botNames;
