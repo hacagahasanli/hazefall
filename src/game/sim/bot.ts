@@ -1,5 +1,5 @@
-import { aimError, bestLoot, campSpot, coverPoint, ENGAGE_AT, engageScore, fallbackPersona, FIRE_RANGE, isAutomatic, landingPlan, makePersona, mulberry32, PREFERRED, tierOf } from './bot-params';
-import { DT, WEAPONS } from './constants';
+import { aimError, bestLoot, campSpot, coverPoint, ENGAGE_AT, engageScore, fallbackPersona, FIRE_RANGE, isAutomatic, landingPlan, makePersona, mulberry32, PREFERRED, LANDING_GRACE, stagePace, tierOf } from './bot-params';
+import { DT, WEAPONS, WORLD } from './constants';
 import { canSee, lineOfSight, lootUnder } from './step';
 import { NO_INPUT } from './types';
 
@@ -129,18 +129,18 @@ export const createBot = (id: number, seed: number) => {
   };
 
   /** A waypoint of my own inside the next circle; campers pick a wall or bush and sit there. */
-  const roamTo = (state: GameState, me: Player, now: number) => {
+  const roamTo = (state: GameState, me: Player, now: number, pace: ReturnType<typeof stagePace>) => {
     const z = state.zone;
     const key = `${z.phase}${z.state}`;
     const reached = Math.hypot(wpX - me.x, wpY - me.y) < 3;
-    if (p!.aggro > 0.5 && now - lastSeen < 3 && targetId >= 0 && state.players[targetId].alive) {
+    if (p!.aggro + pace.aggro > 0.5 && now - lastSeen < 3 && targetId >= 0 && state.players[targetId].alive) {
       // Lost sight of who I was fighting: push to where they were.
       wpX = lastTX;
       wpY = lastTY;
       wpKey = '';
       return;
     }
-    if (p!.chase > 0 && heard && now - heard.t < 2 && heard.t > chased && Math.hypot(heard.x - me.x, heard.y - me.y) < p!.chase) {
+    if (p!.chase > 0 && heard && now - heard.t < 2 && heard.t > chased && Math.hypot(heard.x - me.x, heard.y - me.y) < p!.chase * pace.chase) {
       // Gunfire: rushers and tactical players go and see.
       chased = heard.t;
       wpX = heard.x;
@@ -150,11 +150,27 @@ export const createBot = (id: number, seed: number) => {
     }
     if (key === wpKey && !(reached && now > holdUntil) && Math.hypot(wpX - z.toX, wpY - z.toY) < z.toR + 4) return;
     wpKey = key;
-    // My own side of the circle, so bots don't all meet on one ring.
-    const a = Math.atan2(me.y - z.toY, me.x - z.toX) + between(-1, 1);
-    const r = Math.max(2, z.toR) * between(0.3, 0.8);
-    wpX = z.toX + Math.cos(a) * r;
-    wpY = z.toY + Math.sin(a) * r;
+    if (z.phase === 0 && z.state === 'wait' && Math.hypot(me.x - z.toX, me.y - z.toY) < z.toR * 0.8) {
+      // Already inside the first circle while it waits: wander my own patch of it rather than head for the middle.
+      const a = between(0, Math.PI * 2);
+      const r = between(12, 28);
+      let x = me.x + Math.cos(a) * r;
+      let y = me.y + Math.sin(a) * r;
+      const d = Math.hypot(x - z.toX, y - z.toY);
+      if (d > z.toR * 0.8) {
+        x = z.toX + ((x - z.toX) / d) * z.toR * 0.8;
+        y = z.toY + ((y - z.toY) / d) * z.toR * 0.8;
+      }
+      wpX = Math.min(WORLD - 10, Math.max(10, x));
+      wpY = Math.min(WORLD - 10, Math.max(10, y));
+    } else {
+      // My own side of the circle, so bots don't all meet on one ring.
+      const a = Math.atan2(me.y - z.toY, me.x - z.toX) + between(-1, 1);
+      // The last few head for the middle, where the final circle will be, so the end is a fight and not a search.
+      const r = Math.max(2, z.toR) * (pace.hunt ? between(0, 0.3) : between(0.3, 0.8));
+      wpX = z.toX + Math.cos(a) * r;
+      wpY = z.toY + Math.sin(a) * r;
+    }
     if (p!.name === 'camper') {
       const c = campSpot(state, wpX, wpY);
       wpX = c.x;
@@ -168,7 +184,7 @@ export const createBot = (id: number, seed: number) => {
     const out: Input = { ...NO_INPUT };
     perceive(state, me, now);
     const ratio = (me.hp + me.armor) / me.maxHp;
-    const endgame = z.phase >= 3 || state.players.filter((o) => o.alive).length <= 3;
+    const pace = stagePace(z.phase, state.players.filter((o) => o.alive).length);
     const hurtRecently = now - hitAt < 2;
     const armed = tierOf(me) > 0;
 
@@ -181,7 +197,7 @@ export const createBot = (id: number, seed: number) => {
     if (target) {
       const tRatio = (target.hp + target.armor) / target.maxHp;
       const finish = p!.name === 'rusher' && tRatio < 0.3;
-      if (mode !== 'retreat' && ratio < p!.back && now > noRetreatUntil && !finish) {
+      if (mode !== 'retreat' && ratio < p!.back + pace.back && now > noRetreatUntil && !finish) {
         mode = 'retreat';
         retreatAt = now;
         cover = null;
@@ -189,8 +205,8 @@ export const createBot = (id: number, seed: number) => {
       if (mode !== 'retreat') {
         // Fresh off the parachute everyone grabs a gun first, unless someone starts it. A person gets a few seconds more
         // than a bot before anyone picks a fight with them: the first minute is where new players decide to stay.
-        const landing = now - landedAt < (target.bot ? 20 : 28) && !hurtRecently;
-        const score = engageScore(p!, me, target, td, { endgame, hurtRecently, landing });
+        const landing = now - landedAt < (target.bot ? LANDING_GRACE.bot : LANDING_GRACE.human) && !hurtRecently;
+        const score = engageScore(p!, me, target, td, { stage: pace.aggro, hurtRecently, landing });
         const ambush = p!.name === 'camper' && armed && !landing && td < FIRE_RANGE[me.weapon] * 0.7;
         engaged = score >= ENGAGE_AT || ambush;
         mode = engaged ? 'engage' : 'roam';
@@ -238,7 +254,7 @@ export const createBot = (id: number, seed: number) => {
       const under = lootUnder(state, me);
       out.use = under !== null && under.id === loot.id;
     } else {
-      roamTo(state, me, now);
+      roamTo(state, me, now, pace);
       wantX = wpX;
       wantY = wpY;
     }
