@@ -58,6 +58,9 @@ export const DEFAULT_KEYS: Record<Action, string> = {
   pause: 'KeyP',
 };
 
+/** Free keys handed to a newly added action when an old save already uses its default. */
+const SPARE_KEYS = ['Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'KeyB', 'KeyN', 'KeyH', 'KeyJ', 'KeyK', 'KeyL', 'KeyU', 'KeyI', 'KeyO', 'KeyY'];
+
 /** Always on, whatever the bindings: arrows move, the right Shift rolls too, Esc belongs to menus and the browser. */
 export const FIXED_KEYS: Partial<Record<Action, string[]>> = {
   up: ['ArrowUp'],
@@ -136,9 +139,22 @@ export const normalize = (raw: unknown): Settings => {
   const keys = { ...DEFAULT_KEYS };
   const rk = (r.keys && typeof r.keys === 'object' ? r.keys : {}) as Record<string, unknown>;
   const used = new Set<string>();
-  for (const [a] of ACTIONS) {
+  const saved = (a: Action) => {
     const k = rk[a];
-    if (typeof k === 'string' && k && !RESERVED.has(k) && !used.has(k)) keys[a] = k;
+    return typeof k === 'string' && k && !RESERVED.has(k) ? k : null;
+  };
+  // Saved bindings first; an action the save doesn't know (added since) gets its default, or a spare key if a saved
+  // binding took that, so new actions never wipe a player's own layout.
+  for (const [a] of ACTIONS) {
+    const k = saved(a);
+    if (k && !used.has(k)) {
+      keys[a] = k;
+      used.add(k);
+    }
+  }
+  for (const [a] of ACTIONS) {
+    if (saved(a) && keys[a] === saved(a)) continue;
+    keys[a] = !used.has(DEFAULT_KEYS[a]) ? DEFAULT_KEYS[a] : (SPARE_KEYS.find((k) => !used.has(k)) ?? DEFAULT_KEYS[a]);
     used.add(keys[a]);
   }
   // A duplicate left by an old save falls back to the defaults as a whole: never two actions on one key.

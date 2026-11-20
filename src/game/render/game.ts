@@ -594,6 +594,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
   // ---------- input: keyboard; aim is automatic unless mouse aim is on
   const keys = new Set<string>();
+  /** Keys pressed since the last input read: a tap shorter than a frame (or a slow frame) still counts once. */
+  const tapped = new Set<string>();
   let aimMode: AimMode = opts.aimMode;
   let paused = false;
   let holding = !!opts.held;
@@ -653,9 +655,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     if (action === 'aim' && !e.repeat) aimMode = aimMode === 'auto' ? 'mouse' : 'auto';
     if (e.code === PERF_KEY && !e.repeat && process.env.NODE_ENV !== 'production') perf.toggle();
     keys.add(e.code);
+    if (!e.repeat) tapped.add(e.code);
   };
   const onUp = (e: KeyboardEvent) => keys.delete(e.code);
-  const onBlur = () => keys.clear();
+  const onBlur = () => {
+    keys.clear();
+    tapped.clear();
+  };
   window.addEventListener('keydown', onDown);
   window.addEventListener('keyup', onUp);
   window.addEventListener('blur', onBlur);
@@ -873,7 +879,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const btn = (b: TouchButton) => touchHeld.has(b) || touchLatched.has(b);
   let lastMove = { x: 1, y: 0 };
   /** Is any key bound to this action held? */
-  const held = (a: Action) => bound[a].some((k) => keys.has(k));
+  const held = (a: Action) => bound[a].some((k) => keys.has(k) || tapped.has(k));
   const readInput = (): Input => {
     const p = state.players[me];
     if (mouseLook()) {
@@ -912,6 +918,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       };
       lastThrowAim = null;
       touchLatched.clear();
+      tapped.clear();
       return input;
     }
     if (fpp || shoulder) viewInit = false;
@@ -947,6 +954,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     };
     lastThrowAim = pointed ? { x: pointed.x, y: pointed.y } : null;
     touchLatched.clear();
+    tapped.clear();
     return input;
   };
   /** Gun slots and heals: 1 / 2 draw a slot, X or the mouse wheel (one notch, latched until read) the other gun; C heals, V drinks coffee. */

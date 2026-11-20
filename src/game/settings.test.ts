@@ -39,6 +39,18 @@ describe('settings store', () => {
     expect(normalize({ keys: { ...DEFAULT_KEYS, fire: 'KeyW' } }).keys).toEqual(DEFAULT_KEYS);
   });
 
+  it('keeps a layout saved before the gun slot and heal keys existed, giving those a free key', () => {
+    const old = Object.fromEntries(Object.entries(DEFAULT_KEYS).filter(([a]) => !['slot1', 'slot2', 'swap', 'heal', 'coffee'].includes(a)));
+    const keys = normalize({ keys: { ...old, use: 'Digit1', reload: 'KeyC' } }).keys;
+    expect(keys.use).toBe('Digit1');
+    expect(keys.reload).toBe('KeyC');
+    expect(keys.slot2).toBe('Digit2');
+    expect(keys.swap).toBe('KeyX');
+    expect(keys.slot1).not.toBe('Digit1');
+    expect(keys.heal).not.toBe('KeyC');
+    expect(new Set(Object.values(keys)).size).toBe(ACTIONS.length);
+  });
+
   it('never throws when storage does', () => {
     const bad = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('full'); } };
     expect(loadSettings(bad)).toEqual(DEFAULT_SETTINGS);
