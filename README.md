@@ -6,7 +6,7 @@
 
 A game by **[Nalbaki Games](https://nalbakigames.com)**.
 
-### [▶ Play with friends](https://last-commit-standing.vercel.app/play) · [Studio](https://nalbakigames.com) · [Floor 42](https://floor-42.vercel.app)
+### [▶ Play with friends](https://lastcommit.nalbakigames.com/play) · [Studio](https://nalbakigames.com) · [Floor 42](https://floor42.nalbakigames.com)
 
 </div>
 

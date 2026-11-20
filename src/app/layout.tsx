@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   description: 'Ten developers, one countryside, and the Deadline closing in. The last commit standing ships.',
   // Added to the iPhone home screen it opens full screen, with no browser bars.
   appleWebApp: { capable: true, title: 'Last Commit', statusBarStyle: 'black-translucent' },
-  metadataBase: new URL('https://last-commit-standing.vercel.app'),
+  metadataBase: new URL('https://lastcommit.nalbakigames.com'),
   // The studio's logo set (brand/last-commit-standing): favicons, home-screen icons, the share card.
   icons: {
     icon: [
