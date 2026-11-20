@@ -19,6 +19,10 @@ const now = () => performance.now() / 1000;
 /** One scheduler for the whole visit (a Match is remounted every round). */
 let shared: BreakScheduler | null = null;
 const scheduler = () => (shared ??= new BreakScheduler());
+/** Dev only (`?testBreaks` on the portal dev server): rules that make every gap between rounds due an ad. */
+export const setBreakRules = (rules: ConstructorParameters<typeof BreakScheduler>[0]) => {
+  shared = new BreakScheduler(rules);
+};
 
 export interface Breaks {
   /** A midgame ad is playing (or being requested): the report's buttons are blocked. */
