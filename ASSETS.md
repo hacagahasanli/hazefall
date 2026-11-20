@@ -14,3 +14,9 @@ Not from a pack: the cars, containers, tents, windmill, campfire, pond, pier, an
 synthesised sound effect (explosions, hits, UI) are built in code in this repo.
 
 The original downloads are not committed; only the files the game loads are.
+
+## Logo and icons
+
+The wordmark, emblem, favicons, app icons and share image come from the studio's own brand set
+(`games-studio/brand/last-commit-standing`, built from SIL OFL fonts turned into outlines): `public/favicon*`,
+`public/apple-touch-icon.png`, `public/icons/`, `public/og.jpg`, `public/brand/`, and the portal copies in `portal/static/`.

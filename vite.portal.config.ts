@@ -14,8 +14,9 @@ const out = path.resolve(__dirname, 'dist/portal');
 export default defineConfig({
   root: path.resolve(__dirname, 'portal'),
   base: './',
-  // Only the game's own files (models, sounds) are copied, below; the site's other public files stay out.
-  publicDir: false,
+  // Favicons, app icons, the web manifest and the logo (brand/last-commit-standing), copied next to index.html. The game's
+  // models and sounds are copied from public/assets below; the site's other public files stay out.
+  publicDir: path.resolve(__dirname, 'portal/static'),
   resolve: {
     alias: [
       // Neutral words only: the studio's copy module is replaced by the neutral one, so its jokes never reach the bundle.

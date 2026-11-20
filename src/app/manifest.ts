@@ -11,11 +11,12 @@ const manifest = (): MetadataRoute.Manifest => ({
   start_url: '/',
   display: 'fullscreen',
   orientation: 'landscape',
-  background_color: '#0a0d18',
-  theme_color: '#0a0d18',
+  background_color: '#16110E',
+  theme_color: '#0C1A17',
   icons: [
-    { src: '/icon', sizes: '512x512', type: 'image/png', purpose: 'any' },
-    { src: '/apple-icon', sizes: '180x180', type: 'image/png' },
+    { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+    { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+    { src: '/icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
   ],
 });
 

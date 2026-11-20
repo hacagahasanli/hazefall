@@ -15,6 +15,7 @@ import { deviceFacts } from '~/game/render/deviceFacts';
 import { resolveTier } from '~/game/render/quality';
 import { keyLabel } from '~/game/settings';
 import { FIGHTERS } from '~/game/sim/constants';
+import { brandUrl } from '~/lib/assets';
 import { GAME_TITLE } from '~/lib/studio';
 
 import type { AimMode } from '~/game/render/game';
@@ -169,10 +170,16 @@ export const MainMenu = ({
       >
         <div className="flex flex-col gap-1 [animation:slideIn_0.5s_ease-out] max-sm:mb-auto max-sm:mt-2 [@media(max-height:500px)]:gap-0">
           <span className="text-[10px] font-bold tracking-[0.4em] text-blue">BATTLE ROYALE · 10 PLAYERS</span>
-          <h1 className="font-display text-5xl italic leading-[0.9] drop-shadow-[0_4px_24px_rgba(0,0,0,0.7)] sm:text-6xl [@media(max-height:500px)]:text-4xl">
-            {GAME_TITLE.split(' ').slice(0, -1).join(' ').toUpperCase()}
-            <br />
-            <span className="text-gold">{GAME_TITLE.split(' ').slice(-1)[0].toUpperCase()}</span>
+          <h1 className="m-0">
+            {/* The wordmark (brand/last-commit-standing/logo.svg): a fixed-ratio image, so a plain <img> is right. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={brandUrl('logo.svg')}
+              alt={GAME_TITLE}
+              width={1130}
+              height={306}
+              className="h-auto w-full max-w-[400px] drop-shadow-[0_6px_28px_rgba(0,0,0,0.65)] [@media(max-height:500px)]:max-w-[260px]"
+            />
           </h1>
         </div>
 

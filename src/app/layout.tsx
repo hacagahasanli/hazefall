@@ -13,6 +13,19 @@ export const metadata: Metadata = {
   description: 'Ten developers, one countryside, and the Deadline closing in. The last commit standing ships.',
   // Added to the iPhone home screen it opens full screen, with no browser bars.
   appleWebApp: { capable: true, title: 'Last Commit', statusBarStyle: 'black-translucent' },
+  metadataBase: new URL('https://last-commit-standing.vercel.app'),
+  // The studio's logo set (brand/last-commit-standing): favicons, home-screen icons, the share card.
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: '48x48' },
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon-32.png', type: 'image/png', sizes: '32x32' },
+      { url: '/favicon-16.png', type: 'image/png', sizes: '16x16' },
+    ],
+    apple: { url: '/apple-touch-icon.png', sizes: '180x180' },
+  },
+  openGraph: { images: [{ url: '/og.jpg', width: 1200, height: 630 }] },
+  twitter: { card: 'summary_large_image', images: ['/og.jpg'] },
 };
 
 /** Phones: edge to edge (the notch is handled with safe-area insets), and no pinch zoom mid-fight. */
@@ -22,7 +35,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
-  themeColor: '#0a0d18',
+  themeColor: '#0C1A17',
 };
 
 const RootLayout = ({ children }: { children: ReactNode }) => (
