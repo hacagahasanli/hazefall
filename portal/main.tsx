@@ -9,6 +9,7 @@ import { createRoot } from 'react-dom/client';
 import { PortalGame } from '~/components/PortalGame';
 import { disableAutoFullscreen } from '~/components/TouchControls';
 import { setBreakRules } from '~/components/useBreaks';
+import { boot } from '~/lib/loading';
 import { STUDIO_NAME } from '~/lib/studio';
 import { detectPlatform } from '~/platform';
 
@@ -18,7 +19,9 @@ disableAutoFullscreen();
 // Dev only: ?testBreaks makes an ad due after every round (the SDK shows its demo ad on localhost).
 if (import.meta.env.DEV && new URLSearchParams(location.search).has('testBreaks')) setBreakRules({ firstAfterRounds: 1, firstAfterPlay: 0, interval: 0 });
 
+boot.step('Engine running', 0.64);
 void detectPlatform().then((platform) => {
+  boot.step('Platform ready', 0.68);
   platform.loadingStart();
   createRoot(document.getElementById('root')!).render(<PortalGame platform={platform} credit={STUDIO_NAME} />);
 });

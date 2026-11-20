@@ -46,6 +46,34 @@ export default defineConfig({
       transformIndexHtml: (html) => html.replaceAll('%GAME_TITLE%', GAME_TITLE).replaceAll('%STUDIO_NAME%', STUDIO_NAME),
     },
     {
+      // The boot screen's real progress (portal/index.html): the game's entry script is not left as a tag; the boot loader
+      // fetches it, counting its bytes against the size given here, then runs it. The boot screen's own two fonts are
+      // preloaded so its text is in the game's type from the first frames.
+      name: 'boot-loader',
+      apply: 'build',
+      transformIndexHtml: {
+        order: 'post',
+        handler(html, ctx) {
+          const bundle = ctx.bundle ?? {};
+          const entry = Object.values(bundle).find((c) => c.type === 'chunk' && c.isEntry);
+          if (!entry || entry.type !== 'chunk') return html;
+          const src = `./${entry.fileName}`;
+          const tag = `<script type="module" crossorigin src="${src}"></script>`;
+          if (!html.includes(tag)) throw new Error('boot-loader: entry script tag not found');
+          const font = (re: RegExp) => Object.keys(bundle).find((f) => re.test(f));
+          const bungee = font(/bungee-400-.*\.woff2$/);
+          const chakra = font(/chakra-petch-600-.*\.woff2$/);
+          const faces = [
+            bungee && `@font-face{font-family:BootBungee;src:url(./${bungee}) format('woff2');font-display:swap}`,
+            chakra && `@font-face{font-family:BootChakra;src:url(./${chakra}) format('woff2');font-display:swap}`,
+          ].filter(Boolean);
+          const preload = [bungee, chakra].filter(Boolean).map((f) => `<link rel="preload" as="font" type="font/woff2" crossorigin href="./${f}">`).join('');
+          const bytes = Buffer.byteLength(entry.code, 'utf8');
+          return html.replace(tag, `<script>window.__lcsEntry=${JSON.stringify({ src, bytes })}</script>${preload}<style>${faces.join('')}</style>`);
+        },
+      },
+    },
+    {
       // The dev server serves public/assets at ./assets/; the build copies it next to index.html.
       name: 'game-assets',
       configureServer(server) {

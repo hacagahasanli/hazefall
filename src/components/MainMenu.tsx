@@ -16,6 +16,7 @@ import { resolveTier } from '~/game/render/quality';
 import { keyLabel } from '~/game/settings';
 import { FIGHTERS } from '~/game/sim/constants';
 import { brandUrl } from '~/lib/assets';
+import { boot, loadCount, onLoadCount } from '~/lib/loading';
 import { GAME_TITLE } from '~/lib/studio';
 
 import type { AimMode } from '~/game/render/game';
@@ -29,7 +30,7 @@ export const GAME_VERSION = '1.0.0';
 type Panel = 'fighter' | 'settings' | 'how' | 'credits' | null;
 
 /** The live scene behind the menu, cheaper on the low tier and still with reduced motion. */
-const Backdrop = ({ settings, platform }: { settings: Settings; platform: Platform }) => {
+const Backdrop = ({ settings, platform, onLive }: { settings: Settings; platform: Platform; onLive?: () => void }) => {
   const ref = useRef<HTMLCanvasElement>(null);
   const [live, setLive] = useState(false);
   const tier = resolveTier(settings.quality, deviceFacts(platform.deviceType()));
@@ -42,7 +43,14 @@ const Backdrop = ({ settings, platform }: { settings: Settings; platform: Platfo
       requestAnimationFrame(() => {
         void import('~/game/render/showcase').then(({ startShowcase }) => {
           if (cancelled) return;
-          dispose = startShowcase(canvas, () => setLive(true), { tier, still: settings.reducedMotion }).dispose;
+          dispose = startShowcase(
+            canvas,
+            () => {
+              setLive(true);
+              onLive?.();
+            },
+            { tier, still: settings.reducedMotion },
+          ).dispose;
         });
       }),
     );
@@ -125,6 +133,42 @@ export const MainMenu = ({
 
   // The menu is the first thing a player can use: loading is over.
   useEffect(() => platform.loadingStop(), [platform]);
+
+  // First visit in the portal: the boot screen is still up over the menu. It follows the real loading of the scene behind
+  // (each model file, then the first frame) and goes when both are in; the menu's entrance plays as it goes.
+  const [entered, setEntered] = useState(() => !boot.active());
+  const bootLive = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (!boot.active()) return;
+    boot.step('Menu ready', 0.72);
+    boot.progress(0.72, 'Building the battleground');
+    boot.ready();
+    boot.onGone(() => setEntered(true));
+    const base = loadCount();
+    let live = false;
+    let models = false;
+    let finished = false;
+    const check = () => {
+      if (!live || !models || finished) return;
+      finished = true;
+      boot.step('First frame drawn', 1);
+      boot.done();
+    };
+    bootLive.current = () => {
+      live = true;
+      check();
+    };
+    return onLoadCount((c) => {
+      const total = c.total - base.total;
+      const done = c.done - base.done;
+      if (total <= 0 || models) return;
+      boot.progress(0.72 + 0.26 * (done / total), `Loading models  ${done} / ${total}`);
+      if (done < total) return;
+      models = true;
+      boot.step(`Models  ${total} / ${total}`, 0.98);
+      check();
+    });
+  }, []);
   useEffect(() => setUiSound(settings.master, settings.muted || platform.muted()), [settings.master, settings.muted, platform]);
 
   const items: { id: string; label: string; sub?: string; primary?: boolean; run: () => void }[] = [
@@ -155,16 +199,17 @@ export const MainMenu = ({
   useEffect(() => {
     if (!panel) buttons.current[focus]?.focus({ preventScroll: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panel]);
+  }, [panel, entered]);
 
   return (
     <main className="relative h-[100dvh] w-screen select-none overflow-hidden bg-ink-deep text-cream">
-      <Backdrop settings={settings} platform={platform} />
+      <Backdrop settings={settings} platform={platform} onLive={() => bootLive.current()} />
       {/* Dark on the left for the menu, a vignette round the edges, and on phones a floor of shade under the buttons. */}
       <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(90deg,rgba(10,13,24,0.94)_0%,rgba(10,13,24,0.78)_26%,rgba(10,13,24,0.15)_48%,rgba(10,13,24,0)_70%)] max-sm:bg-[linear-gradient(0deg,rgba(10,13,24,0.96)_0%,rgba(10,13,24,0.75)_45%,rgba(10,13,24,0.1)_75%)]" />
       <div className="pointer-events-none fixed inset-0 shadow-[inset_0_0_180px_rgba(0,0,0,0.55)]" />
 
       <div
+        key={entered ? 'in' : 'boot'}
         className={`relative flex h-full w-full flex-col justify-between gap-4 px-6 py-6 sm:w-[min(440px,38vw)] sm:min-w-[340px] sm:px-10 sm:py-9 max-sm:justify-end ${panel ? 'invisible' : ''}`}
         aria-hidden={!!panel}
         style={{ paddingLeft: 'max(1.5rem, env(safe-area-inset-left))', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
@@ -178,7 +223,7 @@ export const MainMenu = ({
               alt={GAME_TITLE}
               width={1130}
               height={306}
-              className="h-auto w-full max-w-[400px] drop-shadow-[0_6px_28px_rgba(0,0,0,0.65)] [@media(max-height:500px)]:max-w-[260px]"
+              className={`h-auto w-full max-w-[400px] drop-shadow-[0_6px_28px_rgba(0,0,0,0.65)] [@media(max-height:500px)]:max-w-[260px] ${settings.reducedMotion ? '' : 'lcs-glitch-in'}`}
             />
           </h1>
         </div>
