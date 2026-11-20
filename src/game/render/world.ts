@@ -223,12 +223,32 @@ export const buildWorld = (scene: THREE.Scene): World => {
 
   // ---------- doorways: a frame, a dark opening and a doormat where the real doors are, so you
   // can see from outside where to walk in (the house models' own doors are only decoration)
-  /** The dark panels in the doorways, per building: shown from above, gone in first person. */
+  /**
+   * The doorway panels, per building: shown from above (where the house is a shell model you cannot see into), gone in
+   * first person (where you see the real room through the door). They used to be near-black, so from above every
+   * entrance read as a dark hole while the same door in first person showed a bright room: now the panel is the lit room
+   * colour, self-lit so roof and eave shadows cannot darken it, and both cameras share a warm pool of light on the
+   * threshold. All of it is unlit or emissive, so it reads the same on every quality tier (no point lights needed).
+   */
   const openings: THREE.Mesh[][] = BUILDINGS.map(() => []);
+  const poolTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g2 = c.getContext('2d')!;
+    const grad = g2.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.45, 'rgba(255,255,255,0.45)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g2.fillStyle = grad;
+    g2.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  })();
+  const poolMat = new THREE.MeshBasicMaterial({ map: poolTex, color: 0xffcf8a, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, fog: true });
+  const poolGeo = new THREE.PlaneGeometry(4.6, 3.4).rotateX(-Math.PI / 2);
   const doorFrames = BUILDINGS.map((b, bi) => {
     const g = new THREE.Group();
     const frameMat = new THREE.MeshStandardMaterial({ color: 0xf4f0e6, roughness: 0.7 });
-    const darkMat = new THREE.MeshStandardMaterial({ color: 0x1a1410, roughness: 1 });
+    const roomMat = new THREE.MeshStandardMaterial({ color: 0xead8b4, emissive: 0x6b4c26, emissiveIntensity: 0.9, roughness: 1 });
     const matMat = new THREE.MeshStandardMaterial({ color: 0x6a4a2a, roughness: 1 });
     const ring = (x: number, y: number) => x === b.x0 || y === b.y0 || x === b.x0 + b.w - 1 || y === b.y0 + b.h - 1;
     const seen = new Set<string>();
@@ -249,7 +269,7 @@ export const buildWorld = (scene: THREE.Scene): World => {
         holder.rotation.y = horizontal ? 0 : Math.PI / 2;
         // After the quarter turn local +z is world +x, so 'out' is the outward side in both cases.
         const sgn = out;
-        const opening = new THREE.Mesh(new THREE.BoxGeometry(3.4, 2.4, 0.08), darkMat);
+        const opening = new THREE.Mesh(new THREE.BoxGeometry(3.4, 2.4, 0.08), roomMat);
         opening.position.set(0, 1.2, sgn * 0.06);
         const lintel = new THREE.Mesh(new THREE.BoxGeometry(3.9, 0.25, 0.22), frameMat);
         lintel.position.set(0, 2.5, sgn * 0.1);
@@ -259,9 +279,14 @@ export const buildWorld = (scene: THREE.Scene): World => {
         postR.position.x = 1.83;
         const mat = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.03, 0.9), matMat);
         mat.position.set(0, 0.015, sgn * 0.75);
+        // The light pool spills from the doorway onto the step, half inside and half out (added after the shadow pass).
+        const pool = new THREE.Mesh(poolGeo, poolMat);
+        pool.position.set(0, 0.04, sgn * 0.5);
+        pool.renderOrder = 2;
         holder.add(opening, lintel, postL, postR, mat);
         openings[bi].push(opening);
         holder.traverse((o) => o instanceof THREE.Mesh && (o.castShadow = true));
+        holder.add(pool);
         g.add(holder);
       }
     }
