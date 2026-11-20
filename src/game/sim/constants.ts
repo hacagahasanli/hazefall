@@ -641,7 +641,9 @@ export const SUPERS = {
  * opens once you're below it, and you drift down. Heights are in metres, times in seconds.
  */
 export const DROP = {
-  flight: 30,
+  flight: 20,
+  /** Past this point of the route everyone still aboard is pushed out. */
+  forceJump: 0.85,
   freefall: 3.2,
   chute: 5,
   freefallSpeed: 14,
@@ -659,19 +661,19 @@ export const fallHeight = (fall: number) =>
     ? 1 + (DROP.chuteHeight - 1) * (fall / DROP.chute)
     : DROP.chuteHeight + (DROP.height - DROP.chuteHeight) * Math.min(1, (fall - DROP.chute) / DROP.freefall);
 
-/** Movement feel: you speed up and slow down over a fraction of a second, and turn smoothly. */
 /** Swimming: a little under half running speed (a good swimmer's ~2 m/s). */
 export const SWIM = { speed: 0.42 };
-export const MOVE = { accel: 24, friction: 20, turn: 12 };
+/** Movement feel: about 0.16 s to top speed and 0.15 s to a stop (m/s^2), and the body's turn rate (rad/s). */
+export const MOVE = { accel: 40, friction: 45, turn: 12 };
 
 /** The Deadline: wait, then shrink, phase after phase, until nothing is left. */
 /**
- * About 3 min 45 s in all (224 s; it was 181 s). Outside the Deadline you lose this much a second, armor first, then
+ * About 3 min 30 s in all (212 s; the first wait was cut from 42 s to 30 s so the first squeeze comes sooner). Outside the Deadline you lose this much a second, armor first, then
  * health (out of up to 200): 12 in the first phase, rising to 45 in the last, so even the first
  * circle kills a fully armored player in about 17 s.
  */
 export const ZONE_PHASES = [
-  { wait: 42, shrink: 32, radius: 60, dps: 12 },
+  { wait: 30, shrink: 32, radius: 60, dps: 12 },
   { wait: 30, shrink: 25, radius: 32, dps: 16 },
   { wait: 22, shrink: 17, radius: 13, dps: 22 },
   { wait: 16, shrink: 15, radius: 4, dps: 30 },

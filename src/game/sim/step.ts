@@ -441,7 +441,7 @@ const updateDrop = (state: GameState, inputs: Input[]) => {
       p.y = dy;
       // Holding jump works too: you go as soon as the drone is over the campus.
       const jump = input.jump || input.fire;
-      if ((jump && overCampus) || d.t >= 0.92) {
+      if ((jump && overCampus) || d.t >= DROP.forceJump) {
         p.stage = 'falling';
         p.fall = DROP.freefall + DROP.chute;
         p.x = Math.min(WORLD - 4, Math.max(4, p.x));
