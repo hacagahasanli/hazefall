@@ -11,13 +11,14 @@ import { FIGHTERS } from '~/game/sim/constants';
 import { AimChoice, readAim, saveAim } from '~/components/AimChoice';
 import { useBreaks } from '~/components/useBreaks';
 import { deviceFacts } from '~/game/render/deviceFacts';
-import { parseSetting, resolveTier } from '~/game/render/quality';
+import { resolveTier } from '~/game/render/quality';
+import { keyLabel } from '~/game/settings';
+import { SettingsPanel } from '~/components/SettingsPanel';
+import { useSettings } from '~/components/useSettings';
 import { createWebPlatform } from '~/platform/web';
 import { TouchControls, useTouch } from '~/components/TouchControls';
 import type { Session } from '~/game/net/session';
 import type { HudState } from '~/game/render/game';
-import type { VolumeKind } from '~/game/sfx';
-import type { QualitySetting } from '~/game/render/quality';
 import type { FighterId } from '~/game/sim/types';
 import type { Platform } from '~/platform/types';
 
@@ -34,75 +35,6 @@ const Key = ({ k }: { k: string }) => (
   <kbd className="inline-flex min-w-5 items-center justify-center rounded-sm border border-b-2 border-cream/30 bg-cream/10 px-1 text-[10px] font-bold leading-4 text-cream">
     {k}
   </kbd>
-);
-
-const VOLUME_LABELS: { kind: VolumeKind; label: string }[] = [
-  { kind: 'master', label: 'All sound' },
-  { kind: 'guns', label: 'Gunshots' },
-  { kind: 'steps', label: 'Footsteps' },
-];
-
-/** Volume sliders, applied at once and remembered in this browser. */
-const SoundSliders = ({ game }: { game: ReturnType<typeof startMatch> | null }) => {
-  const [v, setV] = useState(() => game?.volumes() ?? { master: 0.8, guns: 0.6, steps: 0.8 });
-  return (
-    <div className="flex w-full flex-col gap-2 text-left">
-      <span className="text-[10px] font-semibold tracking-widest text-cream/50">SOUND</span>
-      {VOLUME_LABELS.map(({ kind, label }) => (
-        <label key={kind} className="flex items-center gap-3 text-sm text-cream/80">
-          <span className="w-24 shrink-0">{label}</span>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={Math.round(v[kind] * 100)}
-            onChange={(e) => {
-              const value = Number(e.target.value) / 100;
-              game?.setVolume(kind, value);
-              setV((old) => ({ ...old, [kind]: value }));
-            }}
-            className="h-1.5 flex-1 cursor-pointer accent-[#ffd23f]"
-            aria-label={label}
-          />
-          <span className="w-9 text-right text-xs tabular-nums text-cream/60">
-            {Math.round(v[kind] * 100)}
-          </span>
-        </label>
-      ))}
-    </div>
-  );
-};
-
-const QUALITY_KEY = 'lcs:quality';
-const QUALITY_LABELS: [QualitySetting, string][] = [
-  ['auto', 'Auto'],
-  ['low', 'Low'],
-  ['medium', 'Medium'],
-  ['high', 'High'],
-];
-
-/** Graphics: Auto picks a tier for this device (and steps down if it stutters); a manual pick is saved and wins. */
-const GraphicsChoice = ({ value, onChange, current }: { value: QualitySetting; onChange: (q: QualitySetting) => void; current: string }) => (
-  <div className="flex w-full flex-col gap-2 text-left">
-    <span className="flex justify-between text-[10px] font-semibold tracking-widest text-cream/50">
-      <span>GRAPHICS</span>
-      <span className="text-cream/40">now {current}</span>
-    </span>
-    <div className="grid grid-cols-4 gap-1" role="radiogroup" aria-label="Graphics">
-      {QUALITY_LABELS.map(([q, label]) => (
-        <button
-          key={q}
-          type="button"
-          role="radio"
-          aria-checked={value === q}
-          onClick={() => onChange(q)}
-          className={`panel-cut px-2 py-1.5 text-xs font-bold uppercase tracking-wider ${value === q ? 'bg-gold text-ink-deep' : 'bg-cream/10 text-cream/80 hover:bg-cream/20'}`}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  </div>
 );
 
 const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -252,12 +184,17 @@ export const Match = ({
   support?: ComponentType;
   /** A studio credit line in the pause menu. */
   credit?: string;
-  /** The report's second button. */
+  /** The report's second button, and the pause menu's way out. */
   exitLabel?: string;
 }) => {
   const online = !!session?.online;
   const platform = useMemo(() => platformProp ?? createWebPlatform(), [platformProp]);
-  const [quality, setQuality] = useState<QualitySetting>(() => parseSetting(platform.storage.getItem(QUALITY_KEY)));
+  const [settings, setSettings] = useSettings(platform.storage);
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  /** Larger HUD text (accessibility): the HUD blocks are zoomed as a whole, so nothing reflows. */
+  const hudZoom = settings.largeHud ? 1.25 : 1;
   const [game, setGame] = useState<ReturnType<typeof startMatch> | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mapRef = useRef<HTMLCanvasElement>(null);
@@ -278,7 +215,7 @@ export const Match = ({
     const raf = requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         if (cancelled) return;
-        const setting = parseSetting(platform.storage.getItem(QUALITY_KEY));
+        const st = settingsRef.current;
         m = startMatch(canvas, {
           fighter,
           name: 'you',
@@ -286,8 +223,10 @@ export const Match = ({
           minimap,
           onHud: setHud,
           session,
-          tier: resolveTier(setting, deviceFacts(platform.deviceType())),
-          autoTier: setting === 'auto',
+          tier: resolveTier(st.quality, deviceFacts(platform.deviceType())),
+          autoTier: st.quality === 'auto',
+          settings: st,
+          onMuteKey: () => setSettings({ ...settingsRef.current, muted: !settingsRef.current.muted }),
         });
         gameRef.current = m;
         setGame(m);
@@ -301,6 +240,17 @@ export const Match = ({
       m?.dispose();
     };
   }, [fighter, session, platform]);
+
+  // Settings changed (in the pause menu, or the mute key): applied to the running round at once.
+  const lastQuality = useRef(settings.quality);
+  useEffect(() => {
+    if (!game) return;
+    game.applySettings(settings);
+    if (lastQuality.current !== settings.quality) {
+      lastQuality.current = settings.quality;
+      game.setTier(resolveTier(settings.quality, deviceFacts(platform.deviceType())));
+    }
+  }, [game, settings, platform]);
 
   const f = FIGHTERS[fighter];
   const over = hud && (hud.dead || hud.phase === 'over');
@@ -318,7 +268,8 @@ export const Match = ({
   // P does the same in one press (in a portal's fullscreen, Esc belongs to the browser).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code === 'KeyP' && !e.repeat) {
+      if (settingsOpen) return;
+      if (e.code === settingsRef.current.keys.pause && !e.repeat) {
         if (!over) setMenuOpen((o) => !o);
         return;
       }
@@ -334,10 +285,11 @@ export const Match = ({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [menuOpen, over]);
+  }, [menuOpen, over, settingsOpen]);
 
   useEffect(() => {
     gameRef.current?.setPaused(menuOpen);
+    if (!menuOpen) setSettingsOpen(false);
   }, [menuOpen]);
 
   // Remember the aim choice, whether it was made in the menu or with T.
@@ -372,7 +324,7 @@ export const Match = ({
           <div
             key={hud.zoneHits}
             className="pointer-events-none absolute inset-0 z-20 animate-[zonePulse_0.7s_ease-out_forwards]"
-            style={{ boxShadow: 'inset 0 0 140px 40px rgba(255,40,60,0.75)' }}
+            style={{ boxShadow: `inset 0 0 140px 40px ${settings.colorBlind ? 'rgba(255,159,28,0.75)' : 'rgba(255,40,60,0.75)'}` }}
           />
         </>
       )}
@@ -409,7 +361,7 @@ export const Match = ({
           {/* You */}
           <div
             className="pointer-events-none absolute left-4 top-3 flex flex-col gap-1.5"
-            style={touch ? { marginLeft: 'env(safe-area-inset-left)' } : undefined}
+            style={{ ...(touch ? { marginLeft: 'env(safe-area-inset-left)' } : {}), zoom: hudZoom }}
           >
             <div className="flex items-baseline gap-2">
               <span className="font-display text-lg" style={{ color: f.color }}>
@@ -444,12 +396,12 @@ export const Match = ({
             <Bar
               value={hud.hp}
               max={hud.maxHp}
-              color={hud.hp / hud.maxHp > 0.35 ? '#3ddc84' : '#ff3d6e'}
+              color={hud.hp / hud.maxHp > 0.35 ? (settings.colorBlind ? '#3ec5ff' : '#3ddc84') : settings.colorBlind ? '#ff9f1c' : '#ff3d6e'}
             />
             {hud.armor > 0 && <Bar value={hud.armor} max={100} color="#3ec5ff" />}
             <div className="flex items-center gap-2 text-[11px]">
               <span className="text-cream/60">
-                {touch ? 'Super' : 'G'} · {hud.superName}
+                {touch ? 'Super' : keyLabel(settings.keys.super)} · {hud.superName}
               </span>
               <div className="h-1.5 w-28 overflow-hidden rounded bg-cream/15">
                 <div
@@ -463,7 +415,7 @@ export const Match = ({
               {hud.superCharge >= 1 && <span className="font-bold text-gold">ready</span>}
             </div>
             <div className="flex items-center gap-2 text-[11px]">
-              <span className="text-cream/60">{touch ? 'Roll' : 'Shift · Roll'}</span>
+              <span className="text-cream/60">{touch ? 'Roll' : `${keyLabel(settings.keys.roll)} · Roll`}</span>
               <div className="h-1.5 w-28 overflow-hidden rounded bg-cream/15">
                 <div
                   className="h-full"
@@ -498,7 +450,7 @@ export const Match = ({
           <div
             className={`pointer-events-none absolute inset-x-0 flex justify-center ${touch ? 'top-[124px] sm:top-3' : 'top-3'}`}
           >
-            <div className="panel-cut flex items-center gap-3 bg-ink-deep/85 px-3 py-1 sm:gap-4 sm:px-4 sm:py-1.5">
+            <div className="panel-cut flex items-center gap-3 bg-ink-deep/85 px-3 py-1 sm:gap-4 sm:px-4 sm:py-1.5" style={{ zoom: hudZoom }}>
               <span className="font-display text-xl text-cream">{hud.alive}</span>
               <span className="text-[10px] font-semibold tracking-widest text-cream/50">LEFT</span>
               <span
@@ -578,14 +530,23 @@ export const Match = ({
             <div
               className={`pointer-events-none absolute inset-x-0 flex justify-center ${touch ? 'bottom-[150px] sm:bottom-6' : 'bottom-24'}`}
             >
-              <span className="panel-cut bg-ink-deep/85 px-4 py-1.5 text-sm text-cream">
+              <span className="panel-cut bg-ink-deep/85 px-4 py-1.5 text-sm text-cream" style={{ zoom: hudZoom }}>
                 {hud.prompt}
               </span>
             </div>
           )}
 
+          {settings.showFps && (
+            <div className={`pointer-events-none absolute z-[6] rounded bg-ink-deep/75 px-1.5 py-0.5 font-mono text-[11px] tabular-nums ${hud.fps < 40 ? 'text-orange' : 'text-green'} ${touch ? 'bottom-2 left-1/2 -translate-x-1/2' : 'left-1/2 top-12 -translate-x-1/2'}`}>
+              {hud.fps} FPS · {hud.tier.toUpperCase()}
+            </div>
+          )}
+
           {touch && !over && !menuOpen && (
             <TouchControls
+              size={settings.touchSize}
+              opacity={settings.touchOpacity}
+              leftHanded={settings.leftHanded}
               press={(b, on) => gameRef.current?.press(b, on)}
               onMove={(x, y) => gameRef.current?.setStick(x, y)}
               onPause={() => setMenuOpen(true)}
@@ -600,44 +561,43 @@ export const Match = ({
           {!touch && (
             <div className="pointer-events-none absolute bottom-3 left-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-cream/50">
               <span className="flex items-center gap-1">
-                <Key k="W" />
-                <Key k="A" />
-                <Key k="S" />
-                <Key k="D" /> move
+                <Key k={keyLabel(settings.keys.up)} />
+                <Key k={keyLabel(settings.keys.left)} />
+                <Key k={keyLabel(settings.keys.down)} />
+                <Key k={keyLabel(settings.keys.right)} /> move
               </span>
               <span className="flex items-center gap-1">
-                <Key k="Space" /> shoot / jump
+                <Key k={keyLabel(settings.keys.fire)} /> shoot / jump
               </span>
               <span className="flex items-center gap-1">
-                <Key k="Q" />
-                <Key k="E" /> lean
+                <Key k={keyLabel(settings.keys.leanL)} />
+                <Key k={keyLabel(settings.keys.leanR)} /> lean
               </span>
               <span className="flex items-center gap-1">
-                <Key k="G" /> super
+                <Key k={keyLabel(settings.keys.super)} /> super
               </span>
               <span className="flex items-center gap-1">
-                <Key k="F" /> pick up / use
+                <Key k={keyLabel(settings.keys.use)} /> pick up / use
               </span>
               <span className="flex items-center gap-1">
-                <Key k="R" /> reload
+                <Key k={keyLabel(settings.keys.reload)} /> reload
               </span>
               <span className="flex items-center gap-1">
-                <Key k="Shift" /> roll
+                <Key k={keyLabel(settings.keys.roll)} /> roll
               </span>
               <span className="flex items-center gap-1">
-                <Key k="Z" /> / right click · scope
+                <Key k={keyLabel(settings.keys.scope)} /> / right click · scope
               </span>
               <span className="flex items-center gap-1">
-                <Key k="T" /> {hud.aimMode === 'mouse' ? 'mouse aim' : 'auto-aim'}
+                <Key k={keyLabel(settings.keys.aim)} /> {hud.aimMode === 'mouse' ? 'mouse aim' : 'auto-aim'}
               </span>
               <span className="flex items-center gap-1">
-                <Key k="M" /> mute
+                <Key k={keyLabel(settings.keys.mute)} /> mute
               </span>
               <span className="flex items-center gap-1">
-                <Key k="P" /> / <Key k="Esc" />
+                <Key k={keyLabel(settings.keys.pause)} /> / <Key k="Esc" />
                 <Key k="Esc" /> menu
               </span>
-              <span>{hud.fps} fps</span>
             </div>
           )}
 
@@ -655,23 +615,6 @@ export const Match = ({
                     Online the round keeps going while this menu is open.
                   </p>
                 )}
-                {touch ? (
-                  <p className="text-xs text-cream/60">
-                    On a touch screen FIRE aims by itself at whoever you can see.
-                  </p>
-                ) : (
-                  <AimChoice value={hud.aimMode} onChange={(m) => gameRef.current?.setAimMode(m)} />
-                )}
-                <SoundSliders game={gameRef.current} />
-                <GraphicsChoice
-                  value={quality}
-                  current={hud.tier}
-                  onChange={(q) => {
-                    setQuality(q);
-                    platform.storage.setItem(QUALITY_KEY, q);
-                    gameRef.current?.setTier(resolveTier(q, deviceFacts(platform.deviceType())));
-                  }}
-                />
                 <button
                   type="button"
                   autoFocus
@@ -682,16 +625,35 @@ export const Match = ({
                 </button>
                 <button
                   type="button"
+                  onClick={() => setSettingsOpen(true)}
+                  className="panel-cut w-full bg-cream/10 px-5 py-2 font-bold uppercase tracking-wider text-cream hover:bg-cream/20"
+                >
+                  Settings
+                </button>
+                <button
+                  type="button"
                   onClick={onExit}
                   className="panel-cut w-full bg-orange/90 px-5 py-2 font-bold uppercase tracking-wider text-ink-deep"
                 >
-                  {online && hud.host ? 'End the round for everyone' : 'Leave match'}
+                  {online && hud.host ? 'End the round for everyone' : exitLabel === 'Back to lobby' ? 'Leave match' : 'Quit to menu'}
                 </button>
-                {!touch && <p className="text-[10px] text-cream/40">Esc or P to resume</p>}
+                {!touch && <p className="text-[10px] text-cream/40">Esc or {keyLabel(settings.keys.pause)} to resume</p>}
                 {Support && <Support />}
                 {credit && <p className="text-[10px] tracking-widest text-cream/40">A game by {credit}</p>}
               </div>
             </div>
+          )}
+
+          {menuOpen && settingsOpen && (
+            <SettingsPanel
+              settings={settings}
+              onChange={setSettings}
+              onClose={() => setSettingsOpen(false)}
+              touch={touch}
+              tier={hud.tier}
+              portalMuted={platform.muted()}
+              aim={{ value: hud.aimMode, onChange: (m) => gameRef.current?.setAimMode(m) }}
+            />
           )}
 
           {/* Result: after the fall (or the win) settles, a full-screen round report. */}

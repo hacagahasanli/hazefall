@@ -42,7 +42,7 @@ const goFullscreen = () => {
  * The movement stick: analog, it appears where your thumb lands anywhere in the left half and
  * follows it if you drag past its rim, so you never run out of stick.
  */
-const Stick = ({ onMove }: { onMove: (x: number, y: number) => void }) => {
+const Stick = ({ onMove, right = false, opacity = 1 }: { onMove: (x: number, y: number) => void; right?: boolean; opacity?: number }) => {
   const [base, setBase] = useState<{ x: number; y: number } | null>(null);
   const [knob, setKnob] = useState({ x: 0, y: 0 });
   const pointer = useRef<number | null>(null);
@@ -58,7 +58,8 @@ const Stick = ({ onMove }: { onMove: (x: number, y: number) => void }) => {
 
   return (
     <div
-      className="absolute bottom-0 left-0 top-24 w-1/2 touch-none"
+      className={`absolute bottom-0 top-24 w-1/2 touch-none ${right ? 'right-0' : 'left-0'}`}
+      style={{ opacity }}
       onPointerDown={(e) => {
         goFullscreen();
         if (pointer.current !== null) return;
@@ -107,7 +108,7 @@ const Stick = ({ onMove }: { onMove: (x: number, y: number) => void }) => {
       ) : (
         <div
           className="pointer-events-none absolute bottom-8 flex h-28 w-28 items-center justify-center rounded-full border-2 border-dashed border-cream/25 text-[10px] font-semibold uppercase tracking-widest text-cream/50"
-          style={{ left: 'calc(20px + env(safe-area-inset-left))' }}
+          style={right ? { right: 'calc(20px + env(safe-area-inset-right))' } : { left: 'calc(20px + env(safe-area-inset-left))' }}
         >
           move
         </div>
@@ -203,6 +204,9 @@ export const TouchControls = ({
   superReady,
   rollReady,
   sniper = false,
+  size = 1,
+  opacity = 0.9,
+  leftHanded = false,
 }: {
   press: Press;
   onMove: (x: number, y: number) => void;
@@ -212,15 +216,24 @@ export const TouchControls = ({
   rollReady: number;
   /** A sniper in hand: a SCOPE button to hold. */
   sniper?: boolean;
+  /** Settings: the buttons' scale and opacity, and left-handed (stick on the right, buttons on the left). */
+  size?: number;
+  opacity?: number;
+  leftHanded?: boolean;
 }) => (
   <div
     className="absolute inset-0 z-[5] select-none"
     style={{ WebkitTouchCallout: 'none' } as React.CSSProperties}
   >
-    <Stick onMove={onMove} />
+    <Stick onMove={onMove} right={leftHanded} opacity={opacity} />
     <div
       className="absolute bottom-0 h-[300px] w-[260px]"
-      style={{ right: 'env(safe-area-inset-right)' }}
+      style={{
+        ...(leftHanded ? { left: 'env(safe-area-inset-left)' } : { right: 'env(safe-area-inset-right)' }),
+        opacity,
+        transform: `scale(${size})`,
+        transformOrigin: leftHanded ? 'bottom left' : 'bottom right',
+      }}
     >
       <Pad
         b="fire"

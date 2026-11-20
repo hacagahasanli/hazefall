@@ -10,6 +10,7 @@ import { buildPlane } from './plane';
 import { buildProps } from './props';
 import { buildWorld } from './world';
 
+import type { Tier } from './quality';
 import type { FighterId } from '../sim/types';
 
 /**
@@ -17,10 +18,13 @@ import type { FighterId } from '../sim/types';
  * over the town, the cargo plane crossing overhead, the four fighters drifting down under their
  * parachutes, and the blue Deadline standing round the map.
  */
-export const startShowcase = (canvas: HTMLCanvasElement, onReady: () => void) => {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-  renderer.shadowMap.enabled = true;
+export const startShowcase = (canvas: HTMLCanvasElement, onReady: () => void, opts: { tier?: Tier; still?: boolean } = {}) => {
+  // Kept cheap behind a menu: on the low tier a lighter picture without shadows at half the frame rate; `still` (reduced
+  // motion) draws a few frames and then holds the picture.
+  const low = opts.tier === 'low';
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: !low, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(low ? Math.min(window.devicePixelRatio, 1) * 0.75 : Math.min(window.devicePixelRatio, opts.tier === 'medium' ? 1.25 : 1.5));
+  renderer.shadowMap.enabled = !low;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.1;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -80,7 +84,14 @@ export const startShowcase = (canvas: HTMLCanvasElement, onReady: () => void) =>
   let time = 0;
   let ready = false;
   const look = new THREE.Vector3();
+  let frames = 0;
   const frame = (now: number) => {
+    frames++;
+    if (opts.still && frames > 20) return;
+    if (low && frames % 2 === 1 && ready) {
+      raf = requestAnimationFrame(frame);
+      return;
+    }
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     time += dt;
