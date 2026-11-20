@@ -1,7 +1,13 @@
 /**
  * Headless bot report: plays N full matches (nine bots and one passive stand-in for the player)
  * and prints how the bots spread, when the first fights happen, how long rounds last and who
- * wins. Run: npx tsx scripts/bot-sim.ts [matches=20] [firstSeed=1]
+ * wins, plus the pacing numbers: match length percentiles, how many are alive each minute, fights per minute in each
+ * stage, dead air (20 s stretches after the first minute of ground play in which nobody damages anybody) and Deadline
+ * deaths. Run: npx tsx scripts/bot-sim.ts [matches=20] [firstSeed=1]
+ *
+ * Definitions: times "from Play" count from the moment the match starts (the drone takes off); "ground time" counts from
+ * the moment the last player lands (when the Deadline starts). A fight is a run of hits between the same two players with
+ * gaps under 6 s; stages are ground time 0-2 min (early), 2-5 min (mid) and 5 min on (late).
  */
 import { createBot } from '../src/game/sim/bot';
 import { lootValue } from '../src/game/sim/bot-params';
@@ -69,6 +75,15 @@ const passive = (s: GameState): Input => {
   return out;
 };
 
+const FIGHT_GAP = 6;
+const DEAD_WINDOW = 20;
+const STAGES = [
+  { name: 'early 0-2', from: 0, to: 120 },
+  { name: 'mid 2-5', from: 120, to: 300 },
+  { name: 'late 5+', from: 300, to: Infinity },
+];
+const MINUTES = 12;
+
 type Row = {
   buildings: number;
   inBuilding: number;
@@ -86,6 +101,18 @@ type Row = {
   firstAbs: number;
   kills: Record<string, number>;
   bots: Record<string, number>;
+  /** Ground time when the Deadline starts, from Play. */
+  playStart: number;
+  /** Players alive at each whole minute from Play (1..MINUTES); a finished match counts its winner. */
+  alive: number[];
+  /** Ground time of every fight's first hit. */
+  fights: number[];
+  ground: number;
+  deadWindows: number;
+  windows: number;
+  /** Deadline phase the match ended in, and how often the lull breaker cut a wait short. */
+  endPhase: number;
+  lulls: number;
 };
 
 const rows: Row[] = [];
@@ -104,10 +131,25 @@ for (let m = 0; m < matches; m++) {
   let crowd = 0;
   const attackers = new Set<number>();
   let playerFirstShot = -1;
+  const alive: number[] = [];
+  const fightLast = new Map<number, number>();
+  const fightStarts: number[] = [];
+  const damageAt: number[] = [];
+  let lulls = 0;
   for (let i = 0; i < 60 * 900 && s.phase !== 'over'; i++) {
+    const zBefore = { state: s.zone.state, phase: s.zone.phase, timer: s.zone.timer };
     step(s, s.players.map((p) => (p.id === 0 ? passive(s) : bots[p.id]!(s))));
     const t = s.tick * DT;
+    if (s.zone.state === 'wait' && zBefore.state === 'wait' && zBefore.phase === s.zone.phase && zBefore.timer - s.zone.timer > DT * 2) lulls += 1;
+    if (s.tick % 3600 === 0) alive[s.tick / 3600 - 1] = s.players.filter((p) => p.alive).length;
     for (const e of s.events) {
+      if (e.type === 'hit' && e.by !== null && e.by !== e.target) {
+        damageAt.push(t);
+        const key = Math.min(e.by, e.target) * 100 + Math.max(e.by, e.target);
+        const lastHit = fightLast.get(key);
+        if (lastHit === undefined || t - lastHit > FIGHT_GAP) fightStarts.push(t);
+        fightLast.set(key, t);
+      }
       if (e.type === 'land' && e.player !== 0) lands.push({ x: e.x, y: e.y });
       if (e.type === 'land' && e.player === 0) playerLanded = t;
       if (e.type === 'shot' && e.owner === 0 && playerFirstShot < 0) playerFirstShot = t;
@@ -142,6 +184,15 @@ for (let m = 0; m < matches; m++) {
     console.log(`seed ${seed}: player first shot ${(playerFirstShot - playerLanded).toFixed(1)} s, first hit on it ${(firstBvP - playerLanded).toFixed(1)} s, placed ${me.placement}, killed by ${k === null ? me.killedWith : `${personaOf(k)} (${s.players[k].weapon})`}, player hits ${me.hits}/${me.shots}, damage ${me.damage.toFixed(0)}, weapon ${me.weapon}, armor ${me.armor}`);
   }
   const blds = lands.map((l) => buildingAt(l.x, l.y));
+  const end = s.tick * DT;
+  for (let k = 0; k < MINUTES; k++) alive[k] ??= (k + 1) * 60 > end ? s.players.filter((p) => p.alive).length : 0;
+  // Dead air: whole 20 s windows of ground time after the first minute with no player-on-player damage.
+  let windows = 0;
+  let deadWindows = 0;
+  for (let w = playStart + 60; w + DEAD_WINDOW <= end; w += DEAD_WINDOW) {
+    windows += 1;
+    if (!damageAt.some((d) => d >= w && d < w + DEAD_WINDOW)) deadWindows += 1;
+  }
   rows.push({
     buildings: new Set(blds.filter((b) => b >= 0)).size,
     inBuilding: blds.filter((b) => b >= 0).length,
@@ -151,7 +202,7 @@ for (let m = 0; m < matches; m++) {
     firstBvP: firstBvP < 0 ? NaN : firstBvP - playerLanded,
     firstAny: Math.min(...[firstBvB, firstBvP].filter((v) => v >= 0)) - playerLanded,
     length: s.tick * DT,
-    zoneDeaths: s.players.filter((p) => p.id !== 0 && !p.alive && p.killedWith === 'zone').length,
+    zoneDeaths: s.players.filter((p) => !p.alive && p.killedWith === 'zone').length,
     placement: s.players[0].placement,
     playerLife: (s.players[0].alive ? s.tick : s.players[0].diedAt) * DT - playerLanded,
     attackers: attackers.size,
@@ -159,6 +210,14 @@ for (let m = 0; m < matches; m++) {
     crowd,
     kills,
     bots: count,
+    playStart,
+    alive,
+    fights: fightStarts.map((f) => f - playStart),
+    ground: end - playStart,
+    deadWindows,
+    windows,
+    endPhase: s.zone.phase,
+    lulls,
   });
 }
 
@@ -177,7 +236,7 @@ console.log(`spread 60 s after everyone landed: mean pairwise distance ${f1(avg(
 console.log(`first fight after the player lands (s): any avg ${f1(avg((r) => r.firstAny))} / median ${f1(med((r) => r.firstAny))}; bot-vs-bot avg ${f1(avg((r) => r.firstBvB))} median ${f1(med((r) => r.firstBvB))}; bot-vs-player avg ${f1(avg((r) => r.firstBvP))} median ${f1(med((r) => r.firstBvP))} (never in ${rows.filter((r) => !Number.isFinite(r.firstBvP)).length})`);
 console.log(`first fight after Play is pressed (s): avg ${f1(avg((r) => r.firstAbs))}`);
 console.log(`match length (from Play): avg ${f1(avg((r) => r.length))} s, min ${f1(Math.min(...rows.map((r) => r.length)))}, max ${f1(Math.max(...rows.map((r) => r.length)))}`);
-console.log(`bots killed by the Deadline: ${f1(avg((r) => r.zoneDeaths))} per match`);
+console.log(`killed by the Deadline (bots and stand-in): ${f1(avg((r) => r.zoneDeaths))} per match, max ${Math.max(...rows.map((r) => r.zoneDeaths))}`);
 console.log(`passive player: avg placement ${f1(avg((r) => r.placement))}, survives ${f1(avg((r) => r.playerLife))} s after landing (median ${f1(med((r) => r.playerLife))}), shot at by ${f1(avg((r) => r.attackers))} different bots, won ${rows.filter((r) => r.placement === 1).length}, most bots within 30 m in first 60 s: avg ${f1(avg((r) => r.crowd))}, max ${Math.max(...rows.map((r) => r.crowd))}`);
 const totals: Record<string, [number, number]> = {};
 for (const r of rows) for (const k of Object.keys(r.bots)) {
@@ -188,3 +247,37 @@ for (const r of rows) for (const k of Object.keys(r.bots)) {
 console.log('kills per bot by personality: ' + Object.entries(totals).map(([k, [kills, n]]) => `${k} ${(kills / n).toFixed(2)} (${n} bots)`).join(', '));
 const modeTotal = Object.values(modeTime).reduce((a, b) => a + b, 0);
 if (modeTotal) console.log('bot time on the ground by state: ' + Object.entries(modeTime).map(([k, v]) => `${k} ${((v / modeTotal) * 100).toFixed(0)}%`).join(', '));
+
+// ---------- pacing
+const pct = (v: number[], q: number) => {
+  const sorted = [...v].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(q * sorted.length) - 1))];
+};
+const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
+const lengths = rows.map((r) => r.length);
+console.log('');
+console.log('pacing');
+console.log(`match length from Play: p10 ${mmss(pct(lengths, 0.1))}, median ${mmss(pct(lengths, 0.5))}, p90 ${mmss(pct(lengths, 0.9))} (avg ${mmss(avg((r) => r.length))}, min ${mmss(Math.min(...lengths))}, max ${mmss(Math.max(...lengths))}); Deadline starts ${f1(avg((r) => r.playStart))} s after Play`);
+const buckets = [90, 120, 150, 180, 210, 240, 270, 300, 360, 420, 480, Infinity];
+console.log(`length histogram (from Play): ${buckets.map((b, i) => {
+  const lo = i ? buckets[i - 1] : 0;
+  const n = lengths.filter((l) => l >= lo && l < b).length;
+  return n ? `${mmss(lo)}-${b === Infinity ? '' : mmss(b)} ${n}` : '';
+}).filter(Boolean).join(' | ')}`);
+console.log(`alive at each minute from Play (avg): ${Array.from({ length: MINUTES }, (_, k) => k).filter((k) => rows.some((r) => r.length > k * 60)).map((k) => `${k + 1}:00 ${f1(avg((r) => r.alive[k]))}`).join(', ')}`);
+console.log(`first fight: ${f1(avg((r) => r.firstAny))} s after the stand-in lands (median ${f1(med((r) => r.firstAny))}, p90 ${f1(pct(rows.map((r) => r.firstAny).filter(Number.isFinite), 0.9))})`);
+console.log(`fights per minute of ground time: ${STAGES.map((st) => {
+  let fights = 0;
+  let minutes = 0;
+  for (const r of rows) {
+    minutes += Math.max(0, Math.min(r.ground, st.to) - st.from) / 60;
+    fights += r.fights.filter((f) => f >= st.from && f < st.to).length;
+  }
+  return `${st.name} ${minutes ? (fights / minutes).toFixed(2) : '-'} (${f1(minutes)} min)`;
+}).join(', ')}`);
+const windows = rows.reduce((a, r) => a + r.windows, 0);
+const dead = rows.reduce((a, r) => a + r.deadWindows, 0);
+console.log(`dead air after the first ground minute: ${windows ? ((dead / windows) * 100).toFixed(1) : '-'}% of ${windows} 20 s windows (matches with any: ${rows.filter((r) => r.deadWindows > 0).length})`);
+const phases: Record<number, number> = {};
+for (const r of rows) phases[r.endPhase] = (phases[r.endPhase] ?? 0) + 1;
+console.log(`Deadline phase at the end: ${Object.entries(phases).map(([k, v]) => `${k}: ${v}`).join(', ')}; lull breaker fired ${f1(avg((r) => r.lulls))} times per match`);

@@ -21,6 +21,7 @@ import { buildChute, HARNESS_BACK } from './chute';
 import { paintMapImage } from './mapImage';
 import { buildPlane } from './plane';
 import { buildProps, DECK_Y, WATER_Y } from './props';
+import { createPerfOverlay, PERF_KEY, perfRequested } from './perfOverlay';
 import { FpsGuard, lowerTier, TIERS } from './quality';
 import { buildWorld } from './world';
 
@@ -202,6 +203,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  /** Developer readout (?perf, or F8 in a development build): fps, frame time, draw calls, triangles. */
+  const perf = createPerfOverlay(renderer, () => tier);
+  if (perfRequested()) perf.show(true);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x9fd3f5);
@@ -572,6 +576,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       else muted = sfx.toggleMute();
     }
     if (action === 'aim' && !e.repeat) aimMode = aimMode === 'auto' ? 'mouse' : 'auto';
+    if (e.code === PERF_KEY && !e.repeat && process.env.NODE_ENV !== 'production') perf.toggle();
     keys.add(e.code);
   };
   const onUp = (e: KeyboardEvent) => keys.delete(e.code);
@@ -1947,6 +1952,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   let hudTimer = 0;
   let mmTimer = 0;
   const frame = (now: number) => {
+    const cpu0 = performance.now();
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     time += dt;
@@ -1994,6 +2000,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       mmTimer = 0.1;
       drawMinimap();
     }
+    perf.frame(dt, performance.now() - cpu0);
     raf = requestAnimationFrame(frame);
   };
   raf = requestAnimationFrame(frame);
@@ -2081,6 +2088,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         }
       });
       renderer.dispose();
+      perf.dispose();
     },
   };
 };
