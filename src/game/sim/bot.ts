@@ -20,7 +20,7 @@ const VIEW = 26;
 const NEAR = 6;
 const deg = Math.PI / 180;
 /** Reaction time and aim error against a person, relative to against a bot. */
-export const VS_HUMAN = 1.3;
+export const VS_HUMAN = 1.45;
 
 /**
  * A battle-royale bot with a personality (rusher, camper, looter or tactical). It jumps over its
@@ -188,7 +188,7 @@ export const createBot = (id: number, seed: number) => {
       }
       if (mode !== 'retreat') {
         // Fresh off the parachute everyone grabs a gun first, unless someone starts it.
-        const landing = now - landedAt < 20 && !hurtRecently;
+        const landing = now - landedAt < 28 && !hurtRecently;
         const score = engageScore(p!, me, target, td, { endgame, hurtRecently, landing });
         const ambush = p!.name === 'camper' && armed && !landing && td < FIRE_RANGE[me.weapon] * 0.7;
         engaged = score >= ENGAGE_AT || ambush;
