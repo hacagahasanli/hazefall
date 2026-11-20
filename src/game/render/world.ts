@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
+import { assetUrl } from '../../lib/assets';
 import { BUILDINGS, fenceVertical, MAP, SIZE, TILE, tileHash, treeSpot, WORLD } from '../sim/constants';
 
 import { buildFurniture, buildRugs } from './furniture';
@@ -16,7 +17,7 @@ import type { GameState } from '../sim/types';
  */
 
 const loader = new GLTFLoader();
-const load = (name: string) => loader.loadAsync(`/assets/models/${name}.glb`).then((g) => g.scene);
+const load = (name: string) => loader.loadAsync(assetUrl(`models/${name}.glb`)).then((g) => g.scene);
 
 const TINTS = [0xffffff, 0xffc9b0, 0xc8dcff, 0xfff0b8, 0xe0ffd0, 0xffd6e8, 0xd8d0ff];
 /** Siding colours for the houses in first person, and their roofs. */

@@ -18,10 +18,12 @@ import { buildChute, HARNESS_BACK } from './chute';
 import { paintMapImage } from './mapImage';
 import { buildPlane } from './plane';
 import { buildProps, DECK_Y, WATER_Y } from './props';
+import { FpsGuard, lowerTier, TIERS } from './quality';
 import { buildWorld } from './world';
 
 import type { Rig } from './characters';
 import type { GunKind } from './guns';
+import type { Tier } from './quality';
 import type { NetStatus, Session } from '../net/session';
 import type { FighterId, GameEvent, GameState, Input, ItemKind, LootKind, Player, WeaponKind } from '../sim/types';
 
@@ -85,6 +87,8 @@ export interface HudState {
   /** First person on the ground (the crosshair shows), and whether the mouse is captured. */
   firstPerson: boolean;
   mouseLocked: boolean;
+  /** The quality tier being drawn. */
+  tier: Tier;
 }
 
 export type AimMode = 'auto' | 'mouse';
@@ -99,6 +103,11 @@ export interface MatchOptions {
   onHud: (hud: HudState) => void;
   /** An online round (host or guest). Without one, an offline round with bots. */
   session?: Session;
+  /** The quality tier to start with (default 'high'), and whether it was picked automatically (then a low frame rate steps it down once per step). */
+  tier?: Tier;
+  autoTier?: boolean;
+  /** Called when the frame-rate guard steps the tier down. */
+  onTier?: (tier: Tier) => void;
 }
 
 const GUN_MODEL: Record<Exclude<WeaponKind, 'fists'>, GunKind> = {
@@ -162,18 +171,21 @@ const at = <T extends THREE.Object3D>(o: T, x: number, y: number, z: number) => 
 // ---------------------------------------------------------------------------
 
 export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  /** Performance tier (see quality.ts): pixel ratio, shadows, antialiasing and view distance. */
+  let tier: Tier = opts.tier ?? 'high';
+  const fpsGuard = new FpsGuard();
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: TIERS[tier].antialias, powerPreference: 'high-performance' });
   /** Phones and tablets: touch controls, always auto-aim, a lighter pixel ratio. */
   const touch = window.matchMedia?.('(pointer: coarse)').matches || 'ontouchstart' in window;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, touch ? 1.5 : 2));
-  renderer.shadowMap.enabled = true;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, TIERS[tier].dprCap, touch ? 1.5 : 2));
+  renderer.shadowMap.enabled = TIERS[tier].shadows;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x9fd3f5);
-  scene.fog = new THREE.Fog(0x9fd3f5, 120, 300);
+  scene.fog = new THREE.Fog(0x9fd3f5, 120, TIERS[tier].fogFar);
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 600);
 
   // Offline the match runs here with bots; online the session is the host's or a guest's.
@@ -186,8 +198,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   // ---------- light
   scene.add(new THREE.HemisphereLight(0xcfeaff, 0x55703f, 1.5));
   const sun = new THREE.DirectionalLight(0xfff0d0, 2.4);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.castShadow = TIERS[tier].shadows;
+  sun.shadow.mapSize.set(TIERS[tier].shadowMap, TIERS[tier].shadowMap);
   Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40, near: 1, far: 160 });
   scene.add(sun, sun.target);
 
@@ -1658,7 +1670,32 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       scoped,
       sniper: self.weapon === 'sniper' && self.alive,
       mouseLocked: locked,
+      tier,
     });
+  };
+
+  /** Draw at another quality tier: pixel ratio, shadows and view distance change at once (antialiasing on the next load). */
+  const setTier = (next: Tier) => {
+    const spec = TIERS[next];
+    const hadShadows = renderer.shadowMap.enabled;
+    tier = next;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, spec.dprCap, touch ? 1.5 : 2));
+    renderer.shadowMap.enabled = spec.shadows;
+    sun.castShadow = spec.shadows;
+    if (sun.shadow.mapSize.x !== spec.shadowMap) {
+      sun.shadow.mapSize.set(spec.shadowMap, spec.shadowMap);
+      sun.shadow.map?.dispose();
+      sun.shadow.map = null as unknown as THREE.WebGLRenderTarget;
+    }
+    if (scene.fog instanceof THREE.Fog) scene.fog.far = spec.fogFar;
+    // Turning shadows on or off changes the shaders: every material must recompile once.
+    if (hadShadows !== spec.shadows)
+      scene.traverse((o) => {
+        const m = (o as THREE.Mesh).material;
+        if (m) for (const mm of Array.isArray(m) ? m : [m]) mm.needsUpdate = true;
+      });
+    resize();
+    emitHud();
   };
 
   // ---------- loop
@@ -1672,6 +1709,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     last = now;
     time += dt;
     if (dt > 0) fps += (1 / dt - fps) * 0.05;
+    // Auto quality: a frame rate that stays low during real play steps the tier down (never up, so the picture does not pump).
+    if (opts.autoTier && !paused && state.phase !== 'drop' && tier !== 'low' && fpsGuard.frame(dt)) {
+      setTier(lowerTier(tier));
+      opts.onTier?.(tier);
+    }
     // Paused (offline only): the world freezes, the camera and effects keep drawing.
     acc = paused && !session.online ? 0 : acc + dt;
     while (acc >= DT) {
@@ -1722,6 +1764,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       mouseDown = false;
       emitHud();
     },
+    setTier,
+    /** Silence everything for a reason ('ad' while a video ad plays, 'portal' for the portal's mute button). */
+    setMuted: (reason: string, on: boolean) => sfx.setMuted(reason, on),
     volumes: () => sfx.volumes,
     setVolume: (kind: VolumeKind, value: number) => sfx.setVolume(kind, value),
     setAimMode: (m: AimMode) => {

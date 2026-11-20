@@ -8,6 +8,7 @@
  * - rapid fire has a voice budget; mute is remembered.
  * No ambience bed: a noise loop read as old-TV static, so the room stays quiet between fights.
  */
+import { assetUrl } from '../lib/assets';
 
 export type Sfx = ReturnType<typeof createSfx>;
 
@@ -51,6 +52,9 @@ export const createSfx = () => {
   const buses: Partial<Record<Bus, GainNode>> = {};
   let noiseBuf: AudioBuffer | null = null;
   let muted = typeof window !== 'undefined' ? readMuted() : false;
+  /** Reasons the game is silenced on top of the player's own mute ('ad' while a video ad plays, 'portal' for the portal's mute). */
+  const silenced = new Set<string>();
+  const level = () => (muted || silenced.size ? 0 : MASTER * volumes.master);
   const volumes: Volumes = typeof window !== 'undefined' ? readVolumes() : { ...DEFAULT_VOLUMES };
   /** While a gun voice is being scheduled, everything it plays goes to the guns bus. */
   let busOverride: Bus | null = null;
@@ -63,7 +67,7 @@ export const createSfx = () => {
   ];
   const loadSamples = (c: AudioContext) => {
     for (const n of SAMPLE_NAMES) {
-      fetch(`/assets/sounds/${n}.m4a`)
+      fetch(assetUrl(`sounds/${n}.m4a`))
         .then((r) => r.arrayBuffer())
         .then((b) => c.decodeAudioData(b))
         .then((buf) => samples.set(n, buf))
@@ -99,7 +103,7 @@ export const createSfx = () => {
     comp.attack.value = 0.002;
     comp.release.value = 0.12;
     master = ctx.createGain();
-    master.gain.value = muted ? 0 : MASTER * volumes.master;
+    master.gain.value = level();
     comp.connect(master).connect(ctx.destination);
     const verb = ctx.createConvolver();
     verb.buffer = makeRoom(ctx);
@@ -395,7 +399,7 @@ export const createSfx = () => {
     /** Change a volume (0..1) now and remember it in this browser. */
     setVolume: (kind: VolumeKind, value: number) => {
       volumes[kind] = Math.max(0, Math.min(1, value));
-      if (master) master.gain.value = muted ? 0 : MASTER * volumes.master;
+      if (master) master.gain.value = level();
       if (buses.guns) buses.guns.gain.value = volumes.guns;
       try {
         window.localStorage.setItem(VOLUME_KEY, JSON.stringify(volumes));
@@ -404,12 +408,18 @@ export const createSfx = () => {
       }
     },
     unlock: () => ensure(),
+    /** Silence (or un-silence) everything for a reason, without touching the player's own mute or volumes. */
+    setMuted: (reason: string, on: boolean) => {
+      if (on) silenced.add(reason);
+      else silenced.delete(reason);
+      if (master) master.gain.value = level();
+    },
     get muted() {
       return muted;
     },
     toggleMute: () => {
       muted = !muted;
-      if (master) master.gain.value = muted ? 0 : MASTER * volumes.master;
+      if (master) master.gain.value = level();
       try {
         window.localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
       } catch {
