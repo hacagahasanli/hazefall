@@ -27,7 +27,7 @@ export const AimChoice = ({ value, onChange }: { value: AimMode; onChange: (m: A
           role="radio"
           aria-checked={value === id}
           onClick={() => onChange(id)}
-          className={`panel-cut flex flex-col gap-0.5 px-3 py-2 text-left ${value === id ? 'bg-gold text-ink-deep' : 'bg-cream/10 text-cream hover:bg-cream/15'}`}
+          className={`panel-cut flex flex-col gap-0.5 px-3 py-2 text-left ${value === id ? 'bg-green text-ink-deep' : 'bg-cream/10 text-cream hover:bg-cream/15'}`}
         >
           <span className="text-sm font-bold">{label}</span>
           <span className={`text-[10px] leading-tight ${value === id ? 'text-ink-deep/75' : 'text-cream/50'}`}>{hint}</span>

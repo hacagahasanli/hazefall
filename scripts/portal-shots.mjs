@@ -1,7 +1,7 @@
 /**
  * Portal capture tooling (not part of the game): the main menu, each Settings tab, and a round from drop to ad break, on
  * a desktop and a phone. Needs playwright-core@1.65.0 and its Chromium in a scratch folder; run from there with
- * `npm run dev:portal` up (port 3203): node portal-shots.mjs <docs/portal/screens>.
+ * `npm run dev:portal` up (port 3203): node portal-shots.mjs <docs/portal/screens> [menu].
  */
 import { chromium, devices } from 'playwright-core';
 const exe = process.env.HOME + '/Library/Caches/ms-playwright/chromium-1255/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
@@ -68,7 +68,11 @@ const run = async (dev, ctxOpts) => {
     await p.keyboard.press('Escape');
     await p.waitForTimeout(300);
   }
-  // A round.
+  // A round (skipped with a second argument 'menu': menu screens only).
+  if (process.argv[3] === 'menu') {
+    await ctx.close();
+    return;
+  }
   await menuItem(p, 'Play').click();
   await p.waitForFunction(() => !!window.__lcs, null, { timeout: 30000 });
   await p.waitForTimeout(2500);

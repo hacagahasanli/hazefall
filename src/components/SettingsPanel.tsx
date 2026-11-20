@@ -53,7 +53,7 @@ const Toggle = ({ on, onChange, label, disabled }: { on: boolean; onChange: (v: 
       uiTick();
       onChange(!on);
     }}
-    className={`relative h-7 w-12 rounded-full border transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold disabled:opacity-35 ${on ? 'border-gold bg-gold/80' : 'border-cream/25 bg-cream/10'}`}
+    className={`relative h-7 w-12 rounded-full border transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green disabled:opacity-35 ${on ? 'border-green bg-green/80' : 'border-cream/25 bg-cream/10'}`}
   >
     <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-cream shadow transition-all ${on ? 'left-6' : 'left-0.5'}`} />
   </button>
@@ -70,7 +70,7 @@ const Slider = ({ value, min, max, step, onChange, label, format, disabled }: { 
       disabled={disabled}
       aria-label={label}
       onChange={(e) => onChange(Number(e.target.value))}
-      className="h-1.5 w-32 cursor-pointer accent-[#ffd23f] disabled:opacity-35 sm:w-40"
+      className="h-1.5 w-32 cursor-pointer accent-[#3ddc84] disabled:opacity-35 sm:w-40"
     />
     <span className="w-12 text-right text-xs tabular-nums text-cream/60">{format(value)}</span>
   </>
@@ -88,7 +88,7 @@ const Choice = <T extends string>({ value, options, onChange, label }: { value: 
           uiTick();
           onChange(v);
         }}
-        className={`panel-cut px-3 py-1.5 text-xs font-bold uppercase tracking-wider focus-visible:outline-2 focus-visible:outline-gold ${value === v ? 'bg-gold text-ink-deep' : 'bg-cream/10 text-cream/75 hover:bg-cream/20'}`}
+        className={`panel-cut px-3 py-1.5 text-xs font-bold uppercase tracking-wider focus-visible:outline-2 focus-visible:outline-green ${value === v ? 'bg-green text-ink-deep' : 'bg-cream/10 text-cream/75 hover:bg-cream/20'}`}
       >
         {text}
       </button>
@@ -140,14 +140,14 @@ const KeyBindings = ({ s, set }: { s: Settings; set: (s: Settings) => void }) =>
                 setListening(a);
               }}
               aria-label={`${label}: ${keyLabel(s.keys[a])}. Press to change.`}
-              className={`min-w-20 rounded-sm border border-b-[3px] px-2 py-1 text-xs font-bold focus-visible:outline-2 focus-visible:outline-gold ${listening === a ? 'animate-pulse border-gold bg-gold/20 text-gold' : s.keys[a] !== DEFAULT_KEYS[a] ? 'border-blue/60 bg-blue/10 text-cream' : 'border-cream/30 bg-cream/10 text-cream'}`}
+              className={`min-w-20 rounded-sm border border-b-[3px] px-2 py-1 text-xs font-bold focus-visible:outline-2 focus-visible:outline-green ${listening === a ? 'animate-pulse border-green bg-green/20 text-green' : s.keys[a] !== DEFAULT_KEYS[a] ? 'border-blue/60 bg-blue/10 text-cream' : 'border-cream/30 bg-cream/10 text-cream'}`}
             >
               {listening === a ? 'Press a key…' : keyLabel(s.keys[a])}
             </button>
           </Row>
         ))}
       </div>
-      <p className="min-h-5 text-xs text-gold/90" role="status" aria-live="polite">
+      <p className="min-h-5 text-xs text-green/90" role="status" aria-live="polite">
         {note ?? 'Arrow keys always move too. Esc is kept for menus.'}
       </p>
       <div>
@@ -158,7 +158,7 @@ const KeyBindings = ({ s, set }: { s: Settings; set: (s: Settings) => void }) =>
             set({ ...s, keys: { ...DEFAULT_KEYS } });
             setNote('Keys reset to default.');
           }}
-          className="panel-cut bg-cream/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-cream/85 hover:bg-cream/20 focus-visible:outline-2 focus-visible:outline-gold"
+          className="panel-cut bg-cream/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-cream/85 hover:bg-cream/20 focus-visible:outline-2 focus-visible:outline-green"
         >
           Reset keys to default
         </button>
@@ -211,11 +211,11 @@ export const SettingsPanel = ({
         ref={panel}
         role="dialog"
         aria-label="Settings"
-        className="flex h-full w-full max-w-[640px] flex-col border-r border-cream/10 bg-[linear-gradient(100deg,rgba(10,13,24,0.98)_0%,rgba(20,26,43,0.96)_100%)] shadow-[20px_0_60px_rgba(0,0,0,0.5)] [animation:slideIn_0.25s_ease-out]"
+        className="flex h-full w-full max-w-[640px] flex-col border-r border-cream/10 bg-[linear-gradient(100deg,#0a0d18_0%,#121a22_100%)] shadow-[20px_0_60px_rgba(0,0,0,0.5)] [animation:slideIn_0.25s_ease-out]"
         style={{ paddingLeft: 'env(safe-area-inset-left)' }}
       >
         <header className="flex items-end justify-between gap-4 px-5 pb-3 pt-5 sm:px-7">
-          <h2 className="font-display text-3xl italic text-gold sm:text-4xl">Settings</h2>
+          <h2 className="font-display text-3xl italic text-green sm:text-4xl">Settings</h2>
           <span className="pb-1 text-[10px] tracking-widest text-cream/40">SAVED AS YOU GO</span>
         </header>
         <div
@@ -242,10 +242,10 @@ export const SettingsPanel = ({
                 uiTick();
                 setTab(t);
               }}
-              className={`relative shrink-0 px-3 py-2.5 text-xs font-bold uppercase tracking-widest focus-visible:outline-2 focus-visible:outline-gold ${tab === t ? 'text-gold' : 'text-cream/55 hover:text-cream'}`}
+              className={`relative shrink-0 px-3 py-2.5 text-xs font-bold uppercase tracking-widest focus-visible:outline-2 focus-visible:outline-green ${tab === t ? 'text-green' : 'text-cream/55 hover:text-cream'}`}
             >
               {label}
-              {tab === t && <span className="absolute inset-x-2 bottom-0 h-0.5 bg-gold" />}
+              {tab === t && <span className="absolute inset-x-2 bottom-0 h-0.5 bg-green" />}
             </button>
           ))}
         </div>
@@ -327,7 +327,7 @@ export const SettingsPanel = ({
 
           {tab === 'audio' && (
             <Section title="AUDIO">
-              {portalMuted && <p className="text-xs text-gold/90">The game is muted by the page you play it on.</p>}
+              {portalMuted && <p className="text-xs text-green/90">The game is muted by the page you play it on.</p>}
               <Row label="Master">
                 <Slider label="Master volume" value={s.master} min={0} max={1} step={0.01} onChange={(v) => patch({ master: v })} format={pct} />
               </Row>
@@ -365,7 +365,7 @@ export const SettingsPanel = ({
               uiTick();
               set({ ...DEFAULT_SETTINGS, keys: { ...DEFAULT_KEYS } });
             }}
-            className="panel-cut bg-cream/10 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-cream/80 hover:bg-cream/20 focus-visible:outline-2 focus-visible:outline-gold"
+            className="panel-cut bg-cream/10 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-cream/80 hover:bg-cream/20 focus-visible:outline-2 focus-visible:outline-green"
           >
             Reset all
           </button>
@@ -375,7 +375,7 @@ export const SettingsPanel = ({
               uiTick(true);
               onClose();
             }}
-            className="panel-cut bg-gold px-8 py-2.5 font-display text-base uppercase text-ink-deep hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream"
+            className="panel-cut bg-green px-8 py-2.5 font-display text-base uppercase text-ink-deep hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream"
           >
             Back
           </button>

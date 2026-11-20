@@ -71,10 +71,10 @@ const SidePanel = ({ title, onClose, children }: { title: string; onClose: () =>
       <div
         role="dialog"
         aria-label={title}
-        className="flex h-full w-full max-w-[880px] flex-col border-r border-cream/10 bg-[linear-gradient(100deg,rgba(10,13,24,0.98)_0%,rgba(20,26,43,0.95)_100%)] shadow-[20px_0_60px_rgba(0,0,0,0.5)] [animation:slideIn_0.25s_ease-out]"
+        className="flex h-full w-full max-w-[880px] flex-col border-r border-cream/10 bg-[linear-gradient(100deg,#0a0d18_0%,#121a22_100%)] shadow-[20px_0_60px_rgba(0,0,0,0.5)] [animation:slideIn_0.25s_ease-out]"
         style={{ paddingLeft: 'env(safe-area-inset-left)' }}
       >
-        <h2 className="px-5 pb-3 pt-5 font-display text-3xl italic text-gold sm:px-7 sm:text-4xl">{title}</h2>
+        <h2 className="px-5 pb-3 pt-5 font-display text-3xl italic text-green sm:px-7 sm:text-4xl">{title}</h2>
         <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 pb-5 sm:px-7">{children}</div>
         <footer className="flex justify-end border-t border-cream/10 px-5 py-4 sm:px-7" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
           <button
@@ -84,7 +84,7 @@ const SidePanel = ({ title, onClose, children }: { title: string; onClose: () =>
               uiTick(true);
               onClose();
             }}
-            className="panel-cut bg-gold px-8 py-2.5 font-display text-base uppercase text-ink-deep hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream"
+            className="panel-cut bg-green px-8 py-2.5 font-display text-base uppercase text-ink-deep hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream"
           >
             Back
           </button>
@@ -165,7 +165,8 @@ export const MainMenu = ({
       <div className="pointer-events-none fixed inset-0 shadow-[inset_0_0_180px_rgba(0,0,0,0.55)]" />
 
       <div
-        className="relative flex h-full w-full flex-col justify-between gap-4 px-6 py-6 sm:w-[min(440px,38vw)] sm:min-w-[340px] sm:px-10 sm:py-9 max-sm:justify-end"
+        className={`relative flex h-full w-full flex-col justify-between gap-4 px-6 py-6 sm:w-[min(440px,38vw)] sm:min-w-[340px] sm:px-10 sm:py-9 max-sm:justify-end ${panel ? 'invisible' : ''}`}
+        aria-hidden={!!panel}
         style={{ paddingLeft: 'max(1.5rem, env(safe-area-inset-left))', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
       >
         <div className="flex flex-col gap-1 [animation:slideIn_0.5s_ease-out] max-sm:mb-auto max-sm:mt-2 [@media(max-height:500px)]:gap-0">
@@ -202,12 +203,12 @@ export const MainMenu = ({
               }}
               onFocus={() => setFocus(i)}
               style={{ animationDelay: `${0.08 + i * 0.05}s` }}
-              className={`group relative flex items-baseline gap-3 overflow-hidden text-left outline-none [animation:slideIn_0.45s_ease-out_both] focus-visible:ring-1 focus-visible:ring-gold/35 max-sm:panel-cut max-sm:bg-ink/80 max-sm:px-4 max-sm:py-3 max-sm:backdrop-blur ${it.primary ? 'py-1 sm:py-2' : 'py-1'}`}
+              className={`group relative flex items-baseline gap-3 overflow-hidden text-left outline-none [animation:slideIn_0.45s_ease-out_both] focus-visible:ring-1 focus-visible:ring-green/35 max-sm:panel-cut max-sm:bg-ink/80 max-sm:px-4 max-sm:py-3 max-sm:backdrop-blur ${it.primary ? 'py-1 sm:py-2' : 'py-1'}`}
             >
               {/* The accent bar slides in from the left on hover and focus. */}
-              <span className={`absolute left-0 top-1/2 h-[70%] w-1.5 -translate-y-1/2 -skew-x-12 bg-gold transition-all duration-200 ${focus === i ? 'translate-x-0 opacity-100' : '-translate-x-3 opacity-0'}`} />
+              <span className={`absolute left-0 top-1/2 h-[70%] w-1.5 -translate-y-1/2 -skew-x-12 bg-green transition-all duration-200 ${focus === i ? 'translate-x-0 opacity-100' : '-translate-x-3 opacity-0'}`} />
               <span
-                className={`font-display uppercase italic leading-none transition-all duration-200 ${focus === i ? 'translate-x-5 text-gold' : 'text-cream/85'} ${it.primary ? 'text-5xl sm:text-6xl [@media(max-height:500px)]:text-4xl' : 'text-2xl sm:text-3xl [@media(max-height:500px)]:text-xl'}`}
+                className={`font-display uppercase italic leading-none transition-all duration-200 ${focus === i ? 'translate-x-5 text-green' : 'text-cream/85'} ${it.primary ? 'text-5xl sm:text-6xl [@media(max-height:500px)]:text-4xl' : 'text-2xl sm:text-3xl [@media(max-height:500px)]:text-xl'}`}
               >
                 {it.label}
               </span>
