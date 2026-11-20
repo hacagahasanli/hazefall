@@ -9,7 +9,10 @@
     "type-check": "tsc --pretty --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "server": "tsx server/index.ts"
+    "server": "tsx server/index.ts",
+    "dev:portal": "vite --config vite.portal.config.ts",
+    "build:portal": "vite build --config vite.portal.config.ts && node scripts/portal-report.mjs",
+    "phone:portal": "npm run build:portal && vite preview --config vite.portal.config.ts --host"
   },
   "dependencies": {
     "@colyseus/core": "^0.18.28",
@@ -32,6 +35,7 @@
     "tailwindcss": "^4.3.5",
     "tsx": "^4.23.15",
     "typescript": "~5.7.2",
+    "vite": "^7.3.8",
     "vitest": "^3.2.7"
   }
 }

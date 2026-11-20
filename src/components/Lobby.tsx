@@ -7,6 +7,7 @@ import { AimChoice, readAim, saveAim } from '~/components/AimChoice';
 import { FighterCard, FighterGrid, FIGHTER_IDS as IDS, HowTo, PICK_KEY, usePortraits } from '~/components/FighterSelect';
 import { Match } from '~/components/Match';
 import { OnlinePanel } from '~/components/OnlinePanel';
+import { SupportLink } from '~/components/SupportLink';
 import { createRoom, joinRoom } from '~/game/net/client';
 import { createGuestSession, createHostSession } from '~/game/net/session';
 import { COPY } from '~/game/copy/studio';
@@ -187,6 +188,7 @@ export const Lobby = () => {
   if (session) {
     return (
       <Match
+        support={SupportLink}
         key={`online${round}`}
         fighter={fighter}
         session={session}
@@ -198,6 +200,7 @@ export const Lobby = () => {
   if (playing && !room) {
     return (
       <Match
+        support={SupportLink}
         key={round}
         fighter={fighter}
         onExit={() => setPlaying(false)}

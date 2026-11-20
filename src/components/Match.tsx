@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import type { ComponentType } from 'react';
+
 import { COPY } from '~/game/copy/studio';
 import { startMatch } from '~/game/render/game';
 import { FIGHTERS } from '~/game/sim/constants';
@@ -11,7 +13,6 @@ import { useBreaks } from '~/components/useBreaks';
 import { deviceFacts } from '~/game/render/deviceFacts';
 import { parseSetting, resolveTier } from '~/game/render/quality';
 import { createWebPlatform } from '~/platform/web';
-import { SupportLink } from '~/components/SupportLink';
 import { TouchControls, useTouch } from '~/components/TouchControls';
 import type { Session } from '~/game/net/session';
 import type { HudState } from '~/game/render/game';
@@ -115,7 +116,7 @@ const Result = ({
   onPlayAgain,
   onExit,
   online,
-  links,
+  Support,
   exitLabel,
   busy,
 }: {
@@ -123,7 +124,7 @@ const Result = ({
   onPlayAgain: () => void;
   onExit: () => void;
   online: boolean;
-  links: boolean;
+  Support?: ComponentType;
   exitLabel: string;
   /** A midgame ad is playing: the buttons wait. */
   busy: boolean;
@@ -221,9 +222,9 @@ const Result = ({
             </button>
           )}
         </div>
-        {links && (
+        {Support && (
           <p className="flex flex-wrap items-center gap-x-2 text-sm text-cream/60">
-            Enjoyed it? <SupportLink />
+            Enjoyed it? <Support />
           </p>
         )}
       </div>
@@ -237,7 +238,7 @@ export const Match = ({
   onExit,
   onPlayAgain,
   platform: platformProp,
-  links = true,
+  support: Support,
   credit,
   exitLabel = 'Back to lobby',
 }: {
@@ -247,8 +248,8 @@ export const Match = ({
   onPlayAgain: () => void;
   /** The page's platform (a portal SDK); our own site gets the no-op web adapter. */
   platform?: Platform;
-  /** Outbound links (the support link). Off in the portal build: portals allow none. */
-  links?: boolean;
+  /** The site's support link (the only outbound link in a round). Left out in the portal build: portals allow none. */
+  support?: ComponentType;
   /** A studio credit line in the pause menu. */
   credit?: string;
   /** The report's second button. */
@@ -687,7 +688,7 @@ export const Match = ({
                   {online && hud.host ? 'End the round for everyone' : 'Leave match'}
                 </button>
                 {!touch && <p className="text-[10px] text-cream/40">Esc or P to resume</p>}
-                {links && <SupportLink />}
+                {Support && <Support />}
                 {credit && <p className="text-[10px] tracking-widest text-cream/40">A game by {credit}</p>}
               </div>
             </div>
@@ -700,7 +701,7 @@ export const Match = ({
               onPlayAgain={() => void breaks.next(onPlayAgain)}
               onExit={() => void breaks.next(onExit)}
               online={online}
-              links={links}
+              Support={Support}
               exitLabel={exitLabel}
               busy={breaks.inBreak}
             />

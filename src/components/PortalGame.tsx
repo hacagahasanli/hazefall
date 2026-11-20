@@ -35,7 +35,6 @@ export const PortalGame = ({ platform, credit }: { platform: Platform; credit: s
         key={round}
         fighter={fighter}
         platform={platform}
-        links={false}
         credit={credit}
         exitLabel="Change fighter"
         onPlayAgain={() => setRound((r) => r + 1)}
