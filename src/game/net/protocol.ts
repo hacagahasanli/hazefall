@@ -14,8 +14,14 @@ const LEAN_R = 1 << 7;
 const SNAP = 1 << 8;
 const SCOPE = 1 << 9;
 const THROW_AT = 1 << 10;
-/** Presses that must survive when inputs are folded together (everything but leaning). */
-export const PRESS_BITS = 0b111111;
+/** Gun slots and heals: draw slot 1 / slot 2, the other gun, heal, coffee. */
+const SLOT1 = 1 << 11;
+const SLOT2 = 1 << 12;
+const CYCLE = 1 << 13;
+const HEAL = 1 << 14;
+const COFFEE = 1 << 15;
+/** Presses that must survive when inputs are folded together (everything but leaning and the held aim keys). */
+export const PRESS_BITS = 0b111111 | SLOT1 | SLOT2 | CYCLE | HEAL | COFFEE;
 
 /** One tick of input: [clientTick, buttons, mx * 100, my * 100, aimX, aimY, pitch * 100]. */
 export type WireInput = [number, number, number, number, number, number, number];
@@ -33,6 +39,11 @@ export const encodeInput = (tick: number, i: Input): WireInput => {
   if (i.snap) bits |= SNAP;
   if (i.scope) bits |= SCOPE;
   if (i.throwAt) bits |= THROW_AT;
+  if (i.slot === 1) bits |= SLOT1;
+  if (i.slot === 2) bits |= SLOT2;
+  if (i.cycle) bits |= CYCLE;
+  if (i.heal) bits |= HEAL;
+  if (i.coffee) bits |= COFFEE;
   return [tick, bits, Math.round(i.mx * 100), Math.round(i.my * 100), r2(i.aimX), r2(i.aimY), Math.round((i.pitch ?? 0) * 100)];
 };
 
@@ -45,6 +56,10 @@ export const decodeInput = (w: WireInput): Input => {
   s.snap = (w[1] & SNAP) !== 0;
   s.scope = (w[1] & SCOPE) !== 0;
   s.throwAt = (w[1] & THROW_AT) !== 0;
+  s.slot = w[1] & SLOT1 ? 1 : w[1] & SLOT2 ? 2 : 0;
+  s.cycle = (w[1] & CYCLE) !== 0;
+  s.heal = (w[1] & HEAL) !== 0;
+  s.coffee = (w[1] & COFFEE) !== 0;
   s.pitch = (w[6] ?? 0) / 100;
   return s;
 };
@@ -99,6 +114,10 @@ export const createInputQueue = () => {
           reload: false,
           roll: false,
           jump: false,
+          slot: 0,
+          cycle: false,
+          heal: false,
+          coffee: false,
         };
       }
       return current;

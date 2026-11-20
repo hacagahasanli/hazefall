@@ -1,6 +1,6 @@
-import { aimError, bestLoot, campSpot, coverPoint, ENGAGE_AT, engageScore, fallbackPersona, FIRE_RANGE, isAutomatic, landingPlan, makePersona, mulberry32, PREFERRED, LANDING_GRACE, stagePace, tierOf } from './bot-params';
-import { DT, WEAPONS, WORLD } from './constants';
-import { canSee, lineOfSight, lootUnder } from './step';
+import { aimError, bestLoot, campSpot, CLOSE, coverPoint, ENGAGE_AT, engageScore, fallbackPersona, FIRE_RANGE, gunScore, isAutomatic, landingPlan, makePersona, mulberry32, PREFERRED, LANDING_GRACE, stagePace, tierOf } from './bot-params';
+import { DT, HEALS, magOf, WEAPONS, WORLD } from './constants';
+import { canSee, healChoice, lineOfSight, lootUnder } from './step';
 import { NO_INPUT } from './types';
 
 import type { Persona } from './bot-params';
@@ -14,6 +14,8 @@ export interface BotInfo {
   target: number;
   /** When the current target was first seen (match seconds). */
   seenAt: number;
+  /** What I am walking to pick up (loot mode). */
+  loot: Loot | null;
 }
 
 const VIEW = 26;
@@ -72,6 +74,7 @@ export const createBot = (id: number, seed: number) => {
   let lastY = 0;
   let detour = 0;
   let detourAngle = 0;
+  let swappedAt = -99;
 
   const init = (state: GameState) => {
     const mine = landingPlan(state).get(id);
@@ -252,7 +255,12 @@ export const createBot = (id: number, seed: number) => {
       wantX = loot.x;
       wantY = loot.y;
       const under = lootUnder(state, me);
-      out.use = under !== null && under.id === loot.id;
+      const there = under !== null && under.id === loot.id;
+      // Both slots full: a new gun replaces the one in my hands, so hold the worse one before picking it up.
+      const gunSwap = there && loot.kind in WEAPONS && me.holster !== null && me.weapon !== 'fists' && me.mag + me.ammo > 0 &&
+        gunScore({ weapon: me.weapon, rarity: me.rarity, mag: me.mag, ammo: me.ammo }) > gunScore(me.holster);
+      if (gunSwap && me.swapping <= 0) out.cycle = true;
+      else out.use = there;
     } else {
       roamTo(state, me, now, pace);
       wantX = wpX;
@@ -285,10 +293,49 @@ export const createBot = (id: number, seed: number) => {
     wobble = rand() * 2 - 1;
     if (target && engaged) {
       out.super = me.superCharge >= 1 && td < 9;
-      out.use = me.item === 'bomb' && td < 11 && td > 4;
-    } else if (me.item === 'medkit' && me.healLeft <= 0 && (mode === 'retreat' ? !target : me.hp < me.maxHp * 0.6)) out.use = true;
-    else if (!target && armed && me.reload <= 0 && me.ammo > 0 && me.mag < WEAPONS[me.weapon].mag * 0.4) out.reload = true;
+      out.use = me.bombs > 0 && td < 11 && td > 4;
+    } else if (!me.using && !target && !out.use && wantsHeal(me, mode)) out.heal = true;
+    else if (!me.using && !target && me.coffees > 0 && me.buzz <= 0 && (me.hp < me.maxHp * 0.85 || mustRun)) out.coffee = true;
+    else if (!target && armed && !me.using && me.reload <= 0 && me.ammo > 0 && me.mag < magOf(me.weapon, me.rarity) * 0.4) out.reload = true;
+    pickGun(me, now, out);
     return out;
+  };
+
+  /** Patch up when nobody is in sight: a bandage for small hurts, a med kit for big ones (the sim picks which). */
+  const wantsHeal = (me: Player, m: BotMode) => {
+    const kind = healChoice(me);
+    if (!kind || kind === 'coffee') return false;
+    if (kind === 'medkit') return me.hp < me.maxHp * (m === 'retreat' ? 0.75 : 0.6);
+    return me.hp < HEALS.bandage.upTo - 5 || m === 'retreat';
+  };
+
+  /**
+   * The gun for the distance: the close-range one (shotgun, SMG, pistol) up close, the long-range one (rifle, sniper) far
+   * out; with nobody about, the better of the two. Out of rounds in the magazine in a fight, draw the other gun rather than
+   * reload, if it is loaded.
+   */
+  const pickGun = (me: Player, now: number, out: Input) => {
+    const other = me.holster;
+    // Not while picking something up: the swap would happen first and the pickup would replace the wrong gun.
+    if (!other || me.swapping > 0 || me.using || now - swappedAt < 1.2 || out.cycle || out.use) return;
+    const mine = { weapon: me.weapon, rarity: me.rarity, mag: me.mag, ammo: me.ammo };
+    const otherOk = other.weapon !== 'fists' && other.mag + other.ammo > 0;
+    if (!otherOk) return;
+    const mineOk = me.weapon !== 'fists' && me.mag + me.ammo > 0;
+    let want = false;
+    if (!mineOk) want = true;
+    else if (target && engaged) {
+      if (me.mag <= 0 && other.mag > 0 && td < 15) want = true;
+      else if (CLOSE[me.weapon] !== CLOSE[other.weapon]) {
+        const closeIsOther = CLOSE[other.weapon];
+        if (closeIsOther && td < 8) want = true;
+        else if (!closeIsOther && td > 13 && td <= FIRE_RANGE[other.weapon]) want = true;
+      }
+    } else if (!target && gunScore(other) > gunScore(mine) + 0.2) want = true;
+    if (want) {
+      out.cycle = true;
+      swappedAt = now;
+    }
   };
 
   /** Every tick: track the target with an error that shrinks the longer I stay on it, and fire in bursts. */
@@ -296,7 +343,7 @@ export const createBot = (id: number, seed: number) => {
     out.fire = false;
     if (!target || !target.alive) return out;
     const shootBack = mode === 'retreat' && now - hitAt < 1 && td < 10;
-    if (!engaged && !shootBack) return out;
+    if ((!engaged && !shootBack) || me.swapping > 0) return out;
     const w = WEAPONS[me.weapon];
     const t = Math.min(1, td / w.speed) * lead;
     const lx = target.x + target.vx * t;
@@ -346,6 +393,9 @@ export const createBot = (id: number, seed: number) => {
       out.use = false;
       out.super = false;
       out.reload = false;
+      out.cycle = false;
+      out.heal = false;
+      out.coffee = false;
     }
     if (target) {
       td = Math.hypot(target.x - me.x, target.y - me.y);
@@ -354,6 +404,6 @@ export const createBot = (id: number, seed: number) => {
     return out;
   };
 
-  const info = (): BotInfo => ({ persona: p, mode, target: target?.id ?? -1, seenAt });
+  const info = (): BotInfo => ({ persona: p, mode, target: target?.id ?? -1, seenAt, loot: mode === 'loot' ? loot : null });
   return Object.assign(bot, { info });
 };

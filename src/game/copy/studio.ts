@@ -25,9 +25,10 @@ export const COPY: Copy = {
     line: 'Nobody agrees, the Deadline closes in, and only the last commit standing gets merged.',
     below: '>>>>>>> their-branch',
   },
+  items: { rarity: ['Common', 'Tuned', 'Prime'], bandage: 'Bandage', medkit: 'Med kit', coffee: 'Coffee' },
   howTo: [
     ['Drop', 'Jump from the plane when you like, free-fall, then steer the parachute down. You land with a pistol and one magazine.'],
-    ['Loot', 'Guns, armor, ammo, med kits and bombs lie in houses, barns and yards. Walk over them or press F.'],
+    ['Loot', 'Two gun slots (1 / 2 or X to swap), vests I to III, backpacks, heals and bombs. The busy places hide the best gear: blue and gold beams. Walk over loot or press F; C heals.'],
     ['Survive', 'Stay inside the Deadline. Space shoots, Q / E lean, Shift rolls, G is your super, hide in tall grass. Esc Esc pauses.'],
   ],
 };

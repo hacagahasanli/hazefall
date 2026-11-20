@@ -3,9 +3,13 @@
  * saved as JSON (through the platform's storage: localStorage on the web, the portal's data module on CrazyGames) and
  * applied live. Pure (no DOM): loading, clamping, rebinding and the key-to-action lookup are tested without a browser.
  */
+import { COPY } from './copy/studio';
+
 import type { QualitySetting } from './render/quality';
 
-export type Action = 'up' | 'down' | 'left' | 'right' | 'fire' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR' | 'scope' | 'aim' | 'mute' | 'pause';
+export type Action =
+  | 'up' | 'down' | 'left' | 'right' | 'fire' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR' | 'scope'
+  | 'slot1' | 'slot2' | 'swap' | 'heal' | 'coffee' | 'aim' | 'mute' | 'pause';
 
 /** In the order the Controls tab lists them, with the words it shows. */
 export const ACTIONS: [Action, string][] = [
@@ -21,6 +25,11 @@ export const ACTIONS: [Action, string][] = [
   ['leanL', 'Lean left'],
   ['leanR', 'Lean right'],
   ['scope', 'Scope'],
+  ['slot1', 'Gun slot 1'],
+  ['slot2', 'Gun slot 2'],
+  ['swap', 'Swap guns'],
+  ['heal', 'Heal'],
+  ['coffee', COPY.items.coffee],
   ['aim', 'Switch aim mode'],
   ['mute', 'Mute'],
   ['pause', 'Pause'],
@@ -39,6 +48,11 @@ export const DEFAULT_KEYS: Record<Action, string> = {
   leanL: 'KeyQ',
   leanR: 'KeyE',
   scope: 'KeyZ',
+  slot1: 'Digit1',
+  slot2: 'Digit2',
+  swap: 'KeyX',
+  heal: 'KeyC',
+  coffee: 'KeyV',
   aim: 'KeyT',
   mute: 'KeyM',
   pause: 'KeyP',

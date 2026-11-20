@@ -1,10 +1,10 @@
 // Bot tuning and the pure helpers behind it: personalities, where each bot lands, what loot is
 // worth, and where to hide. Everything is a function of the match and the bot's own seed, so a
 // host replays the same bots.
-import { ARMOR, BUILDINGS, DROP, MAP, TILE, WEAPONS, WORLD } from './constants';
-import { circleBlocked, inPlant, lineOfSight, solidAt } from './step';
+import { BUILDINGS, DROP, HEALS, magOf, MAP, TILE, WORLD } from './constants';
+import { carried, carryCap, circleBlocked, inPlant, lineOfSight, solidAt, spareCap, vestPoints } from './step';
 
-import type { Drone, GameState, Loot, LootKind, Player, WeaponKind } from './types';
+import type { Drone, GameState, Gun, HealKind, Loot, LootKind, Player, WeaponKind } from './types';
 
 export const mulberry32 = (seed: number) => () => {
   seed |= 0;
@@ -63,36 +63,85 @@ export const makePersona = (name: PersonaName, rand: () => number): Persona => {
 export const PREFERRED: Record<WeaponKind, number> = { fists: 1, pistol: 9, smg: 7, shotgun: 3.5, rifle: 12, sniper: 18, rockets: 10 };
 export const FIRE_RANGE: Record<WeaponKind, number> = { fists: 1.6, pistol: 17, smg: 14, shotgun: 9, rifle: 24, sniper: 30, rockets: 18 };
 const TIER: Record<WeaponKind, number> = { fists: 0, pistol: 1, smg: 2, shotgun: 2, rifle: 3, sniper: 3, rockets: 2.5 };
+/** Close-range guns (in your face to a few metres) against long-range ones: a good loadout has one of each. */
+export const CLOSE: Record<WeaponKind, boolean> = { fists: true, pistol: true, smg: true, shotgun: true, rifle: false, sniper: false, rockets: false };
 export const isAutomatic = (w: WeaponKind) => w === 'smg' || w === 'rifle';
+/** Each grade of rarity is worth about a third of a step up in gun. */
+const RARITY_WORTH = 0.35;
 
-export const tierOf = (me: Player) => (me.weapon === 'fists' || me.mag + me.ammo <= 0 ? 0 : TIER[me.weapon]);
+const usable = (g: Gun | null) => !!g && g.weapon !== 'fists' && g.mag + g.ammo > 0;
+/** What a gun is worth on its own: its tier plus its grade (0 when it is empty or fists). */
+export const gunScore = (g: Gun | null) => (g && usable(g) ? TIER[g.weapon] + RARITY_WORTH * g.rarity : 0);
+const hand = (me: Player): Gun => ({ weapon: me.weapon, rarity: me.rarity, mag: me.mag, ammo: me.ammo });
+
+/** My best gun's tier (0 = nothing that shoots), counting both slots. */
+export const tierOf = (me: Player) => Math.max(usable(hand(me)) ? TIER[me.weapon] : 0, usable(me.holster) ? TIER[me.holster!.weapon] : 0);
+
+/** A pair of guns: the better one counts in full, the other a good deal when it covers the other range, little when it does not. */
+export const loadoutScore = (a: Gun | null, b: Gun | null) => {
+  const [hi, lo] = gunScore(a) >= gunScore(b) ? [a, b] : [b, a];
+  if (!lo || gunScore(lo) === 0) return gunScore(hi);
+  return gunScore(hi) + gunScore(lo) * (CLOSE[hi!.weapon] !== CLOSE[lo.weapon] ? 0.4 : 0.1);
+};
 
 /** What a piece of loot is worth to me right now (0 = leave it). Never a downgrade. */
-export const lootValue = (kind: LootKind, me: Player) => {
-  if (kind in WEAPONS) {
-    const gain = TIER[kind as WeaponKind] - tierOf(me);
-    return gain > 0 ? gain : 0;
+export const lootValue = (k: Pick<Loot, 'kind' | 'ammo'> & { tier?: number }, me: Player) => {
+  const kind: LootKind = k.kind;
+  const tier = k.tier ?? 0;
+  if (kind in TIER) {
+    const gun: Gun = { weapon: kind as WeaponKind, rarity: tier, mag: 1, ammo: Math.max(0, k.ammo - 1) };
+    const now = loadoutScore(hand(me), me.holster);
+    const mine = hand(me);
+    // It goes into the empty slot, or (both full) replaces the worse of my two.
+    const after = !usable(mine)
+      ? loadoutScore(gun, me.holster)
+      : !me.holster || !usable(me.holster)
+        ? loadoutScore(mine, gun)
+        : Math.max(loadoutScore(mine, gun), loadoutScore(gun, me.holster));
+    const gain = after - now;
+    return gain > 0.05 ? gain : 0;
   }
   if (kind === 'ammo') {
-    if (me.weapon === 'fists') return 0;
-    const left = me.mag + me.ammo;
-    const mag = WEAPONS[me.weapon].mag;
-    return left < mag ? 1.5 : left < mag * 2 ? 0.4 : 0;
+    const low = (g: Gun | null) => {
+      if (!g || g.weapon === 'fists' || g.ammo >= spareCap(me, g)) return 0;
+      const left = g.mag + g.ammo;
+      const mag = magOf(g.weapon, g.rarity);
+      return left < mag ? 1.5 : left < mag * 2 ? 0.4 : 0;
+    };
+    return Math.max(low(hand(me)), low(me.holster));
   }
-  if (kind === 'armor') return me.armor < ARMOR.points * 0.7 ? (ARMOR.points - me.armor) / 40 : 0;
-  if (me.item !== null) return 0;
-  return kind === 'medkit' ? (me.hp < me.maxHp * 0.7 ? 1.6 : 1.2) : 0.8;
+  if (kind === 'armor') {
+    const pts = vestPoints({ ...k, tier: k.tier } as Loot);
+    return pts > me.armor + 10 ? (pts - me.armor) / 40 : 0;
+  }
+  if (kind === 'backpack') return tier > me.pack ? 0.45 * (tier - me.pack) : 0;
+  const item = kind as HealKind | 'bomb';
+  const have = carried(me, item);
+  const cap = carryCap(me, item);
+  if (have >= cap) return 0;
+  // Supplies are worth a short detour, not a trip: the first of each counts, more of them barely.
+  const hurt = me.hp < me.maxHp * 0.7;
+  if (item === 'medkit') return (have === 0 ? 0.6 : 0.15) + (hurt ? 0.5 : 0);
+  if (item === 'bandage') return (have === 0 ? 0.5 : 0.12) + (hurt && me.hp < HEALS.bandage.upTo ? 0.4 : 0);
+  if (item === 'coffee') return have === 0 ? 0.3 : 0;
+  return have === 0 ? 0.35 : 0;
 };
 
 /** The loot most worth walking to (none near the enemy I can see); the search shrinks after the first circle. */
 export const bestLoot = (state: GameState, me: Player, p: Persona, enemy: Player | null) => {
   const reach = (state.zone.phase === 0 || tierOf(me) === 0 ? 30 : 14) * p.loot;
-  let best = 0.15;
+  // After the first circle a bot wants a better reason to walk off.
+  let best = state.zone.phase === 0 ? 0.15 : 0.25;
   let pick: Loot | null = null;
   for (const k of state.loot) {
     const d = Math.hypot(k.x - me.x, k.y - me.y);
     if (!k.active || d > reach || (enemy && Math.hypot(k.x - enemy.x, k.y - enemy.y) < 8)) continue;
-    const score = (lootValue(k.kind, me) * p.loot) / (1 + d / 10);
+    const v = lootValue(k, me);
+    // Late on, only a real upgrade is worth the walk; after the first circle, supplies only close by.
+    if (state.zone.phase >= 3 && v < 1) continue;
+    if (state.zone.phase >= 1 && v < 0.6 && d > 8) continue;
+    if (state.zone.phase >= 1 && v < 1 && d > 12) continue;
+    const score = (v * p.loot) / (1 + d / 10);
     if (score > best) {
       best = score;
       pick = k;

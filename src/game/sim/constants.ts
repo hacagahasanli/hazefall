@@ -1,6 +1,6 @@
 import { COPY } from '../copy/studio';
 
-import type { FighterId, WeaponKind } from './types';
+import type { FighterId, LootKind, WeaponKind } from './types';
 
 export const DT = 1 / 60;
 
@@ -583,19 +583,89 @@ export const WEAPONS: Record<WeaponKind, WeaponStats> = {
   rockets: { name: 'Rockets', damage: 110, bullets: 1, spread: 0, speed: 16, range: 70, rate: 1.2, ammo: 4, mag: 1, reload: 2.4, lob: { radius: 3 }, falloff: { start: 999, end: 999, min: 1 } },
 };
 
-/** Loot weights inside buildings (one entry = one ticket). Rockets and snipers are rare. */
-export const LOOT_TABLE: string[] = [
-  'pistol', 'pistol', 'pistol', 'pistol',
-  'smg', 'smg', 'smg',
-  'shotgun', 'shotgun', 'shotgun',
-  'rifle', 'rifle',
-  'sniper',
-  'rockets',
-  'armor', 'armor', 'armor',
-  'medkit', 'medkit', 'medkit',
-  'bomb', 'bomb',
-  'ammo', 'ammo', 'ammo', 'ammo', 'ammo',
+/**
+ * Rarity: the same gun in three grades, shown by the colour of its loot beam and its name. A modest step, so a well-played
+ * common gun still wins against a badly played prime one: damage x1 / 1.06 / 1.12 (no gun needs a hit fewer on bare health
+ * except the rifle at prime, 4 to 3), magazine x1 / 1.25 / 1.5, reload time x1 / 0.93 / 0.86.
+ */
+export const RARITY = { damage: [1, 1.06, 1.12], mag: [1, 1.25, 1.5], reload: [1, 0.93, 0.86] };
+/** Magazine size of a gun at a rarity (Infinity for fists). */
+export const magOf = (w: WeaponKind, rarity = 0) => (w === 'fists' ? Infinity : Math.max(1, Math.round(WEAPONS[w].mag * (RARITY.mag[rarity] ?? 1))));
+/** Rounds a gun carries when found (its magazine plus two spare): bigger with its magazine. */
+export const foundRounds = (w: WeaponKind, rarity = 0) => (w === 'fists' ? 0 : Math.round(WEAPONS[w].ammo * (RARITY.mag[rarity] ?? 1)));
+
+/** Seconds to draw the other gun: no shooting meanwhile, and a reload in progress starts over. */
+export const SWAP_TIME = 0.4;
+
+/**
+ * Vests I / II / III: points of armor (a second health bar that takes hits first; the Deadline ignores it). III matches
+ * the one vest of before, so a fully geared fight lasts as long as it did; I and II make the climb to it.
+ */
+export const VEST = { points: [0, 50, 75, 100] };
+/**
+ * Backpacks I / II: how much you carry. Spare rounds per gun in magazines (an ammo box tops up to this), and heals and
+ * bombs by count. No backpack is index 0.
+ */
+export const PACK = {
+  spareMags: [3, 4, 6],
+  bandage: [4, 6, 8],
+  medkit: [1, 2, 3],
+  coffee: [1, 2, 3],
+  bomb: [1, 2, 3],
+};
+/**
+ * Heals. Using one takes `time` seconds: you walk at `walk` of your speed and cannot shoot, and firing, rolling or drawing
+ * the other gun cancels it (taking a hit does not). A bandage is quick and small and cannot take you past `upTo`; a med kit
+ * is slow and big; coffee heals over `buzz` seconds and puts a little spring in your step. Bandages lie in stacks of `stack`.
+ */
+export const HEALS = {
+  walk: 0.5,
+  bandage: { time: 1.2, heal: 15, upTo: 75, stack: 2 },
+  medkit: { time: 3.5, heal: 65 },
+  coffee: { time: 0.8, buzz: 20, perSecond: 1.5, speed: 1.06 },
+};
+
+type LootWeights = Partial<Record<LootKind, number>>;
+/**
+ * Loot by place. Tier 1 is the quiet outskirts (lone houses, the lake, the windmill camp, the forest): pistols, SMGs and
+ * shotguns, Vest I, bandages, mostly common. Tier 2 is the farms, the quarry and the truck stop. Tier 3 is the risky places,
+ * Old Town and the Container Yard: rifles and snipers, Vest II and III, more prime guns. Weights are tickets.
+ */
+export const LOOT_TABLES: { kinds: LootWeights; rarity: number[]; vest: number[]; pack: number[] }[] = [
+  // (unused: tiers start at 1)
+  { kinds: {}, rarity: [1, 0, 0], vest: [0, 1, 0, 0], pack: [0, 1, 0] },
+  {
+    kinds: { pistol: 4, smg: 3, shotgun: 3, rifle: 1, armor: 3, bandage: 5, medkit: 1, coffee: 1, bomb: 1, ammo: 5, backpack: 2 },
+    rarity: [0.85, 0.15, 0], vest: [0, 0.75, 0.25, 0], pack: [0, 0.85, 0.15],
+  },
+  {
+    kinds: { pistol: 2, smg: 3, shotgun: 3, rifle: 3, sniper: 1, armor: 3, bandage: 3, medkit: 2, coffee: 2, bomb: 2, ammo: 4, backpack: 2 },
+    rarity: [0.6, 0.32, 0.08], vest: [0, 0.35, 0.5, 0.15], pack: [0, 0.6, 0.4],
+  },
+  {
+    kinds: { pistol: 1, smg: 3, shotgun: 2, rifle: 4, sniper: 2, rockets: 1, armor: 4, bandage: 2, medkit: 3, coffee: 2, bomb: 2, ammo: 4, backpack: 2 },
+    rarity: [0.35, 0.45, 0.2], vest: [0, 0.1, 0.45, 0.45], pack: [0, 0.4, 0.6],
+  },
 ];
+/** Which loot tier each named place has (anywhere else is tier 1). */
+export const PLACE_TIER: Record<string, number> = {
+  'Old Town': 3,
+  'Container Yard': 3,
+  'North Farm': 2,
+  'East Farm': 2,
+  'South Farm': 2,
+  Quarry: 2,
+  'Truck Stop': 2,
+  Lakeside: 1,
+  'Windmill Hill': 1,
+  Deadwood: 1,
+};
+/** The loot tier at a point of the map: the riskiest place it lies in, or 1 out in the fields. */
+export const lootTierAt = (x: number, y: number) => {
+  let t = 1;
+  for (const d of DISTRICTS) if (x >= d.x0 && x < d.x1 && y >= d.y0 && y < d.y1) t = Math.max(t, PLACE_TIER[d.name] ?? 1);
+  return t;
+};
 
 /** Rockets and bombs: hold to throw farther, from `min` metres up to the weapon's range after `full` seconds. */
 export const THROW = { min: 4, full: 1.2 };
@@ -611,11 +681,10 @@ export const ROLL = { distance: 4, time: 0.5, iframes: 0.3, cooldown: 3 };
 /** Vaulting: how long you push into a fence or sill before you climb over, and how long the climb takes. */
 export const VAULT = { after: 0.15, time: 0.55, reach: 3.2 };
 
-/** Armor is a second health bar of up to 100 that takes hits first (the Deadline ignores it). */
+/** Armor is a second health bar of up to 100 (Vest III) that takes hits first (the Deadline ignores it). */
 export const ARMOR = { points: 100, absorb: 1 };
 export const ITEMS = {
   bomb: { damage: 80, radius: 2.6, range: 30 },
-  medkit: { heal: 50, over: 3 },
 };
 /** Everyone jumps with a pistol and one magazine, so you can fight under the parachute. */
 export const START_WEAPON = { kind: 'pistol' as const, mag: 12, spare: 0 };

@@ -125,9 +125,12 @@ const Pad = ({
   size = 68,
   ready = 1,
   accent = false,
+  sub,
 }: {
   b: TouchButton;
   label: string;
+  /** A small second line under the label (what the button will use or draw). */
+  sub?: string;
   press: Press;
   style: React.CSSProperties;
   size?: number;
@@ -185,7 +188,10 @@ const Pad = ({
           />
         </svg>
       )}
-      <span className="relative leading-none">{label}</span>
+      <span className="relative flex flex-col items-center leading-none">
+        {label}
+        {sub && <span className="mt-0.5 max-w-[48px] truncate font-sans text-[8px] normal-case opacity-80">{sub}</span>}
+      </span>
     </button>
   );
 };
@@ -193,8 +199,8 @@ const Pad = ({
 /**
  * Phone controls: the stick anywhere in the left half; on the right, FIRE under the thumb (it
  * aims by itself at whoever you can see; on the plane it is JUMP), ROLL beside it, USE above it
- * (pick up, med kit, hold to throw a bomb), then RELOAD, the SUPER with its charge ring, the two
- * lean buttons, and pause.
+ * (pick up, hold to throw a bomb), then RELOAD, the SUPER with its charge ring, the two lean
+ * buttons, SWAP (the other gun, when both slots are full), HEAL (named after what it will use), and pause.
  */
 export const TouchControls = ({
   press,
@@ -204,6 +210,9 @@ export const TouchControls = ({
   superReady,
   rollReady,
   sniper = false,
+  canSwap = false,
+  swapLabel = null,
+  heal = null,
   size = 1,
   opacity = 0.9,
   leftHanded = false,
@@ -216,6 +225,11 @@ export const TouchControls = ({
   rollReady: number;
   /** A sniper in hand: a SCOPE button to hold. */
   sniper?: boolean;
+  /** Both gun slots full: a SWAP button, named after the gun it draws. */
+  canSwap?: boolean;
+  swapLabel?: string | null;
+  /** What HEAL would use now (null: nothing to use, the button hides). */
+  heal?: string | null;
   /** Settings: the buttons' scale and opacity, and left-handed (stick on the right, buttons on the left). */
   size?: number;
   opacity?: number;
@@ -270,6 +284,8 @@ export const TouchControls = ({
             accent={superReady >= 1}
             style={{ right: 118, bottom: 176 }}
           />
+          {canSwap && <Pad b="swap" label="Swap" sub={swapLabel ?? undefined} press={press} size={54} style={{ right: 204, bottom: 30 }} />}
+          {heal && <Pad b="heal" label="Heal" sub={heal} press={press} size={54} accent style={{ right: 196, bottom: 220 }} />}
           <Pad b="leanL" label="◀ Q" press={press} size={46} style={{ right: 200, bottom: 160 }} />
           <Pad b="leanR" label="E ▶" press={press} size={46} style={{ right: 200, bottom: 104 }} />
         </>
