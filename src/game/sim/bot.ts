@@ -187,8 +187,9 @@ export const createBot = (id: number, seed: number) => {
         cover = null;
       }
       if (mode !== 'retreat') {
-        // Fresh off the parachute everyone grabs a gun first, unless someone starts it.
-        const landing = now - landedAt < 28 && !hurtRecently;
+        // Fresh off the parachute everyone grabs a gun first, unless someone starts it. A person gets a few seconds more
+        // than a bot before anyone picks a fight with them: the first minute is where new players decide to stay.
+        const landing = now - landedAt < (target.bot ? 20 : 28) && !hurtRecently;
         const score = engageScore(p!, me, target, td, { endgame, hurtRecently, landing });
         const ambush = p!.name === 'camper' && armed && !landing && td < FIRE_RANGE[me.weapon] * 0.7;
         engaged = score >= ENGAGE_AT || ambush;

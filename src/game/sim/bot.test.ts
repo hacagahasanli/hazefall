@@ -56,7 +56,7 @@ const duel = (seed: number, enemy: number, want: (b: Bot) => boolean) => {
     return want(bots[p.id]);
   });
   s.players.forEach((p) => Object.assign(p, { x: 6, y: 6 }));
-  s.tick += 60 * 25;
+  s.tick += 60 * 30;
   Object.assign(s.players[id], { x: OPEN.x, y: OPEN.y, heading: 0, vx: 0, vy: 0 });
   Object.assign(s.players[enemy], { x: OPEN.x + 8, y: OPEN.y, vx: 0, vy: 0 });
   return { s, bot: bots[id], me: s.players[id], them: s.players[enemy] };
