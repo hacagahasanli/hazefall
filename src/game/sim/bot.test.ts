@@ -43,9 +43,10 @@ const botMatch = (seed: number) => {
 
 /**
  * Everyone landed, loot gone, one bot (the first that `want` accepts) alone in open meadow
- * facing `enemy` 8 m ahead, its after-landing grace over.
+ * facing `enemy` 8 m ahead, its after-landing grace over, in the middle of the match (fourth
+ * circle: early on bots are meant to hold back, see the pacing tests).
  */
-const duel = (seed: number, enemy: number, want: (b: Bot) => boolean) => {
+const duel = (seed: number, enemy: number, want: (b: Bot) => boolean, phase = 3) => {
   const s = createGame('hotfix', seed);
   for (let i = 0; i < 60 * 60 && s.phase === 'drop'; i++) step(s, idle());
   s.loot = [];
@@ -56,7 +57,8 @@ const duel = (seed: number, enemy: number, want: (b: Bot) => boolean) => {
     return want(bots[p.id]);
   });
   s.players.forEach((p) => Object.assign(p, { x: 6, y: 6 }));
-  s.tick += 60 * 30;
+  s.tick += 60 * 40;
+  s.zone.phase = phase;
   Object.assign(s.players[id], { x: OPEN.x, y: OPEN.y, heading: 0, vx: 0, vy: 0 });
   Object.assign(s.players[enemy], { x: OPEN.x + 8, y: OPEN.y, vx: 0, vy: 0 });
   return { s, bot: bots[id], me: s.players[id], them: s.players[enemy] };
@@ -161,6 +163,30 @@ describe('bots behave like separate people', () => {
     expect(new Set(names)).toEqual(new Set(['rusher', 'camper', 'looter', 'tactical']));
     const rushers = bots.slice(1).filter((b) => b.info().persona!.name === 'rusher').map((b) => b.info().persona!.react);
     expect(new Set(rushers).size).toBe(rushers.length);
+  });
+
+  it('early on a rusher leaves gunfire 34 m away alone; from the fourth circle it goes to see', () => {
+    const closest = (phase: number, seed: number) => {
+      const { s, bot, me, them } = duel(seed, 2, (b) => b.info().persona!.name === 'rusher', phase);
+      // The shooter is out of sight (26 m) but within earshot, off to the side of the way to the next circle (so roaming
+      // there does not lead to it), firing away from the bot.
+      const k = 34 / Math.hypot(s.zone.toX - me.x, s.zone.toY - me.y);
+      Object.assign(them, { x: me.x - (s.zone.toY - me.y) * k, y: me.y + (s.zone.toX - me.x) * k });
+      let best = Infinity;
+      for (let i = 0; i < 60 * 8; i++) {
+        const inputs = idle();
+        inputs[me.id] = bot(s);
+        inputs[them.id] = { ...NO_INPUT, fire: i % 30 === 0, aimX: them.x + (them.x - me.x), aimY: them.y + (them.y - me.y) };
+        step(s, inputs);
+        best = Math.min(best, Math.hypot(me.x - them.x, me.y - them.y));
+        if (process.env.DBG && i % 60 === 0) console.log(phase, i, s.events.map((e) => e.type).join(), bot.info().mode, me.x.toFixed(1), me.y.toFixed(1), them.mag, s.zone.state, s.zone.timer.toFixed(1));
+      }
+      return best;
+    };
+    for (const seed of [3, 4, 5]) {
+      expect(closest(0, seed)).toBeGreaterThan(18);
+      expect(closest(3, seed)).toBeLessThan(18);
+    }
   });
 
   it('play exactly the same way twice from the same seeds', () => {

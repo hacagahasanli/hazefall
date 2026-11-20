@@ -105,13 +105,32 @@ export const bestLoot = (state: GameState, me: Player, p: Persona, enemy: Player
 export const aimError = (p: Persona, onTarget: number, targetSpeed: number) =>
   (p.aim0 * Math.exp(-onTarget / p.decay) + p.aimMin) * (targetSpeed > 4 ? 1.3 : 1);
 
-/** Should I take this fight? 0.85 and up: yes. */
+/**
+ * Pace by stage: how much readier to fight every bot is (added to the fight score), how far it walks towards gunfire
+ * (x its own chase distance) and how much sooner it breaks off when hurt, by Deadline phase. Early on bots gear up and
+ * leave distant fights alone, so the first circle is not a chain of third parties; from the fourth phase they press.
+ * It changes how often fights start and how often they end in a KO, never aim or reaction.
+ */
+export const STAGE_AGGRO = [-0.35, -0.25, -0.1, 0.1, 0.3, 0.3];
+export const STAGE_CHASE = [0.55, 0.8, 1, 1, 1, 1];
+/** Added to the personality's retreat threshold: early on a hurt bot breaks off sooner and heals instead of trading to the death. */
+export const STAGE_BACK = [0.3, 0.15, 0.05, 0, 0, 0];
+/** With this many or fewer alive, everyone hunts: full aggression and chase, and roaming heads for the middle of the circle. */
+export const HUNT_ALIVE = 3;
+/** Seconds after landing before a bot picks a fight: with another bot, and with a person. */
+export const LANDING_GRACE = { bot: 30, human: 34 };
+export const stagePace = (phase: number, alive: number) => {
+  const k = Math.min(phase, STAGE_AGGRO.length - 1);
+  return alive <= HUNT_ALIVE ? { aggro: 0.3, chase: 1, back: 0, hunt: true } : { aggro: STAGE_AGGRO[k], chase: STAGE_CHASE[k], back: STAGE_BACK[k], hunt: false };
+};
+
+/** Should I take this fight? 0.85 and up: yes. `stage` is the pace bonus from `stagePace`. */
 export const engageScore = (
   p: Persona,
   me: Player,
   enemy: Player,
   d: number,
-  why: { endgame: boolean; hurtRecently: boolean; landing: boolean },
+  why: { stage: number; hurtRecently: boolean; landing: boolean },
 ) => {
   const weak = (enemy.hp + enemy.armor) / enemy.maxHp < 0.4;
   // Someone already busy with somebody else is an opportunity (rushers don't wait for one).
@@ -120,7 +139,7 @@ export const engageScore = (
   return (
     p.aggro +
     (why.landing ? -0.6 : 0) +
-    (why.endgame ? 0.3 : 0) +
+    why.stage +
     (why.hurtRecently ? 0.6 : 0) +
     (d < 10 ? 0.4 : 0) +
     (weak ? 0.3 : 0) +
@@ -144,6 +163,9 @@ const overCampus = (p: { x: number; y: number }) => p.x > 4 && p.y > 4 && p.x < 
 export const LAST_JUMP = DROP.forceJump - 0.03;
 /** How far a bot can steer on the way down (free fall plus parachute, with some margin). */
 const REACH = 68;
+
+/** How far from the middle of the route the player's two or three neighbours land (m): far enough to loot in peace first. */
+export const NEAR_BAND = { min: 32, max: 62 };
 
 export interface Landing {
   x: number;
@@ -179,7 +201,7 @@ export const landingPlan = (state: GameState): Map<number, Landing> => {
   const mid = droneAt(d, tOf(WORLD / 2, WORLD / 2));
   // Neighbours for the player: near the route's middle, but not on top of it.
   const fromMid = (c: { x: number; y: number }) => Math.hypot(c.x - mid.x, c.y - mid.y);
-  const near = cands.filter((c) => fromMid(c) > 22 && fromMid(c) < 50).sort((a, b) => fromMid(a) - fromMid(b));
+  const near = cands.filter((c) => fromMid(c) > NEAR_BAND.min && fromMid(c) < NEAR_BAND.max).sort((a, b) => fromMid(a) - fromMid(b));
   const nNear = 2 + (hash & 1);
   const chosen: { x: number; y: number }[] = [];
   const plan = new Map<number, Landing>();

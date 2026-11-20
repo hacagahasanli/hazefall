@@ -33,6 +33,7 @@ import {
   WEAPONS,
   WORLD,
   ZONE_PHASES,
+  ZONE_RULES,
   ZONE_START_RADIUS,
 } from './constants';
 import { NO_INPUT } from './types';
@@ -341,6 +342,7 @@ export const createMatch = (seats: Seat[], seed = 1): GameState => {
     zone: {
       phase: 0, state: 'wait', timer: ZONE_PHASES[0].wait, cx: CENTER, cy: CENTER, r: ZONE_START_RADIUS,
       fromX: CENTER, fromY: CENTER, fromR: ZONE_START_RADIUS, toX: CENTER, toY: CENTER, toR: ZONE_PHASES[0].radius, dps: 0,
+      calm: 0, halved: false,
     },
     winner: null,
     events: [],
@@ -496,6 +498,19 @@ const updateZone = (state: GameState) => {
   const z = state.zone;
   const def = ZONE_PHASES[Math.min(z.phase, ZONE_PHASES.length - 1)];
   z.timer -= DT;
+  z.calm += DT;
+  if (z.state === 'wait') {
+    // A quiet stretch brings the next squeeze forward (never in the first phase, which is for landing and gearing up).
+    if (z.phase >= 1 && z.calm >= ZONE_RULES.lull && z.timer > ZONE_RULES.lullWait) {
+      z.timer = ZONE_RULES.lullWait;
+      state.events.push({ type: 'zone', phase: z.phase, state: 'wait' });
+    }
+    // The last few: every wait from here on is half as long.
+    if (!z.halved && alivePlayers(state).length <= ZONE_RULES.squeezeAlive) {
+      z.halved = true;
+      z.timer /= 2;
+    }
+  }
   if (z.state === 'wait' && z.timer <= 0) {
     Object.assign(z, { state: 'shrink', timer: def.shrink, fromX: z.cx, fromY: z.cy, fromR: z.r, dps: def.dps });
     state.events.push({ type: 'zone', phase: z.phase, state: 'shrink' });
@@ -510,6 +525,7 @@ const updateZone = (state: GameState) => {
       else {
         z.state = 'wait';
         z.timer = ZONE_PHASES[z.phase].wait;
+        z.halved = false;
         pickNextCircle(state);
       }
       state.events.push({ type: 'zone', phase: z.phase, state: z.state });
@@ -558,6 +574,7 @@ const hurt = (state: GameState, target: Player, amount: number, by: number | nul
     a.sinceCombat = 0;
     a.superCharge = Math.min(1, a.superCharge + amount / FIGHTERS[a.fighter].superCost);
     target.lastHitBy = by;
+    state.zone.calm = 0;
   }
   if (!quiet) state.events.push({ type: 'hit', target: target.id, by, x: target.x, y: target.y, damage: amount, armor: soaked > 0, ko: target.hp <= 0 });
   if (target.hp <= 0) knockOut(state, target);

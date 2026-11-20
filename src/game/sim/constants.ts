@@ -666,19 +666,34 @@ export const SWIM = { speed: 0.42 };
 /** Movement feel: about 0.16 s to top speed and 0.15 s to a stop (m/s^2), and the body's turn rate (rad/s). */
 export const MOVE = { accel: 40, friction: 45, turn: 12 };
 
-/** The Deadline: wait, then shrink, phase after phase, until nothing is left. */
 /**
- * About 3 min 30 s in all (212 s; the first wait was cut from 42 s to 30 s so the first squeeze comes sooner). Outside the Deadline you lose this much a second, armor first, then
- * health (out of up to 200): 12 in the first phase, rising to 45 in the last, so even the first
- * circle kills a fully armored player in about 17 s.
+ * The Deadline: wait, then shrink, phase after phase, until nothing is left. Six phases, at most 6 min 5 s of ground play
+ * (365 s) on the 176 m map; players dying, not the table, should set the real length. The radii are the 288 m plan's
+ * (110, 70, 42, 24, 12) scaled to this map and then widened by about a third (0.61x gives 67, 43, 26, 15, 7): on a map this
+ * small the plain scale packed ten players so tightly by the second circle that matches ended sooner, and bot-sim
+ * preferred the wider circles. Rules the sim tests hold it to:
+ *  - the edge never moves faster than half the slowest running speed, nor faster than swimming once the circle is inside
+ *    the map;
+ *  - from anywhere inside the current circle, the next one is never more than a third of that phase's wait + shrink away
+ *    at running speed;
+ *  - the damage ramps from a choice (3 a second in the first phase, armor first) to fatal (35 a second at the end).
+ * `ZONE_RULES` can cut a wait short, never the first one: see there.
  */
 export const ZONE_PHASES = [
-  { wait: 30, shrink: 32, radius: 60, dps: 12 },
-  { wait: 30, shrink: 25, radius: 32, dps: 16 },
-  { wait: 22, shrink: 17, radius: 13, dps: 22 },
-  { wait: 16, shrink: 15, radius: 4, dps: 30 },
-  { wait: 10, shrink: 15, radius: 0, dps: 45 },
+  { wait: 60, shrink: 40, radius: 80, dps: 3 },
+  { wait: 40, shrink: 35, radius: 55, dps: 5 },
+  { wait: 30, shrink: 30, radius: 34, dps: 8 },
+  { wait: 25, shrink: 25, radius: 20, dps: 13 },
+  { wait: 20, shrink: 20, radius: 9, dps: 20 },
+  { wait: 15, shrink: 25, radius: 0, dps: 35 },
 ];
+/**
+ * Waits that react to the match (decided in the sim, so online stays in sync):
+ *  - lull breaker: from the second phase on, once nobody has damaged anybody for `lull` seconds, the current wait drops
+ *    to at most `lullWait` seconds;
+ *  - endgame squeeze: with `squeezeAlive` or fewer left alive, every remaining wait is halved.
+ */
+export const ZONE_RULES = { lull: 35, lullWait: 10, squeezeAlive: 3 };
 export const ZONE_START_RADIUS = WORLD * 0.72;
 
 export const BOT_NAMES = COPY.botNames;

@@ -1,5 +1,5 @@
 import { createBot } from './bot';
-import { BUILDINGS, DROP, DT, FIGHTERS, ITEMS, MAP, PLAYER_RADIUS, RIVER, riverCentre, SHAPES, SIZE, TILE, treeSpot, WEAPONS, WORLD, ZONE_PHASES } from './constants';
+import { BUILDINGS, DROP, DT, FIGHTERS, ITEMS, MAP, PLAYER_RADIUS, RIVER, riverCentre, SHAPES, SIZE, SWIM, TILE, treeSpot, WEAPONS, WORLD, ZONE_PHASES, ZONE_RULES, ZONE_START_RADIUS } from './constants';
 import { canSee, circleBlocked, createGame, falloffDamage, hitPoint, inPlant, inWater, lootUnder, solidAt, step } from './step';
 import { NO_INPUT } from './types';
 
@@ -471,6 +471,74 @@ describe('the Deadline', () => {
     expect(hurtOutside).toBe(true);
     expect(s.phase).toBe('over');
     expect(s.winner).not.toBeNull();
+  });
+
+  const run = Math.min(...Object.values(FIGHTERS).map((f) => f.speed));
+
+  it('the edge never moves faster than half running speed, nor faster than swimming after the first circle', () => {
+    let r = ZONE_START_RADIUS;
+    ZONE_PHASES.forEach((def, i) => {
+      // The next centre is picked up to 0.6 x the radius change away, so the far edge can move by up to 1.6 x that.
+      const edge = ((r - def.radius) * 1.6) / def.shrink;
+      expect(edge).toBeLessThanOrEqual(run / 2);
+      if (i > 0) expect(edge).toBeLessThanOrEqual(run * SWIM.speed);
+      r = def.radius;
+    });
+  });
+
+  it('from anywhere in the circle the next one is at most a third of the time away, even with waits cut short', () => {
+    let r = Math.min(ZONE_START_RADIUS, Math.hypot(WORLD / 2, WORLD / 2));
+    ZONE_PHASES.forEach((def, i) => {
+      const worstRun = r + (r - def.radius) * 0.6 - def.radius;
+      // Worst case: the lull breaker (not in the first phase) and then the endgame squeeze both cut this wait.
+      const wait = (i > 0 ? Math.min(def.wait, ZONE_RULES.lullWait) : def.wait) / 2;
+      expect(worstRun / run).toBeLessThanOrEqual((wait + def.shrink) / 3);
+      r = def.radius;
+    });
+  });
+
+  it('hurts gently at first and fatally at the end: never less from one phase to the next', () => {
+    const full = 100 + 100;
+    expect(full / ZONE_PHASES[0].dps).toBeGreaterThan(45);
+    expect(full / ZONE_PHASES[ZONE_PHASES.length - 1].dps).toBeLessThanOrEqual(6);
+    ZONE_PHASES.slice(1).forEach((def, i) => expect(def.dps).toBeGreaterThan(ZONE_PHASES[i].dps));
+  });
+
+  it('a quiet stretch never shortens the first wait, but cuts a later wait to 10 s; a hit ends the quiet', () => {
+    const s = landed();
+    const start = s.tick;
+    while (s.zone.state === 'wait') step(s, idle());
+    // Nobody has fought for the whole first wait, and it still ran its full length.
+    expect((s.tick - start) * DT).toBeCloseTo(ZONE_PHASES[0].wait, 0);
+    while (s.zone.phase === 0) step(s, idle());
+    expect(s.zone.state).toBe('wait');
+    step(s, idle());
+    expect(s.zone.timer).toBeLessThanOrEqual(ZONE_RULES.lullWait);
+
+    const t = landed(2);
+    clearAround(t);
+    place(t, 0, OPEN.x, OPEN.y);
+    place(t, 1, OPEN.x + 3, OPEN.y);
+    expect(t.zone.calm).toBeGreaterThan(0);
+    for (let i = 0; i < 60 && !t.events.some((e) => e.type === 'hit'); i++) {
+      const inputs = idle();
+      inputs[0] = { ...NO_INPUT, fire: true, aimX: OPEN.x + 3, aimY: OPEN.y };
+      step(t, inputs);
+    }
+    expect(t.zone.calm).toBeLessThan(DT * 1.5);
+  });
+
+  it('with three left, every wait from then on is half as long', () => {
+    const s = landed();
+    step(s, idle());
+    const before = s.zone.timer;
+    s.players.slice(3).forEach((p) => (p.alive = false));
+    step(s, idle());
+    expect(s.zone.timer).toBeCloseTo((before - DT) / 2, 3);
+    while (s.zone.phase === 0) step(s, idle());
+    step(s, idle());
+    // The next wait starts halved (and the quiet since landing has cut it to 10 s first).
+    expect(s.zone.timer).toBeLessThanOrEqual(ZONE_RULES.lullWait / 2);
   });
 });
 

@@ -178,6 +178,10 @@ export interface Zone {
   toY: number;
   toR: number;
   dps: number;
+  /** Seconds since anybody last damaged another player (drives the lull breaker). */
+  calm: number;
+  /** This wait was already halved by the endgame squeeze. */
+  halved: boolean;
 }
 
 export interface Drone {
