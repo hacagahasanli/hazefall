@@ -173,10 +173,6 @@ export const Home = () => {
 
         <section className="grid items-center gap-10 lg:grid-cols-[1fr_auto]">
           <div className="flex max-w-xl flex-col gap-6">
-            <div className="flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-widest">
-              <span className="panel-cut bg-orange/90 px-3 py-1 text-ink-deep">Season 1 · The Deadline</span>
-              <span className="panel-cut bg-cream/10 px-3 py-1 text-cream/80">Free · in your browser</span>
-            </div>
             <h1 className="font-display text-6xl leading-[0.95] drop-shadow-[0_4px_24px_rgba(0,0,0,0.6)] sm:text-8xl">
               LAST COMMIT
               <br />
