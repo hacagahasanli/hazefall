@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-/** Merge Conflict palette: night office, git-diff accents (HEAD green, incoming red, conflict yellow). */
+/** Studio palette: night office, git-diff accents (HEAD green, incoming red, conflict yellow). */
 export const PALETTE = {
   ink: 0x1b1f2e,
   inkSoft: 0x2b3045,

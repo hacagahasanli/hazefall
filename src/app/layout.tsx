@@ -9,7 +9,7 @@ const display = Bungee({ weight: '400', subsets: ['latin'], variable: '--font-bu
 const ui = Chakra_Petch({ weight: ['400', '500', '600', '700'], subsets: ['latin'], variable: '--font-chakra' });
 
 export const metadata: Metadata = {
-  title: { default: 'Last Commit Standing · Merge Conflict', template: '%s · Last Commit Standing' },
+  title: { default: 'Last Commit Standing · Nalbaki Games', template: '%s · Last Commit Standing' },
   description: 'Ten developers, one countryside, and the Deadline closing in. The last commit standing ships.',
   // Added to the iPhone home screen it opens full screen, with no browser bars.
   appleWebApp: { capable: true, title: 'Last Commit', statusBarStyle: 'black-translucent' },

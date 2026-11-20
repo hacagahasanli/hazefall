@@ -4,9 +4,9 @@
 
 ### Ten developers. One merge.
 
-A game by **[Merge Conflict](https://merge-conflict-drab.vercel.app)**, the studio where coworkers settle their conflicts.
+A game by **[Nalbaki Games](https://nalbakigames.com)**.
 
-### [▶ Play with friends](https://last-commit-standing.vercel.app/play) · [Studio](https://merge-conflict-drab.vercel.app) · [Floor 42](https://floor-42.vercel.app)
+### [▶ Play with friends](https://last-commit-standing.vercel.app/play) · [Studio](https://nalbakigames.com) · [Floor 42](https://floor-42.vercel.app)
 
 </div>
 
@@ -46,7 +46,7 @@ vests, ammo boxes and med kits. Loot glows by rarity.
 
 ## Support
 
-Last Commit Standing is free. If you enjoyed it, you can [☕ support the studio](https://merge-conflict-drab.vercel.app/donate.html).
+Last Commit Standing is free. If you enjoyed it, you can [☕ support the studio](https://nalbakigames.com/support).
 
 ## Run it
 

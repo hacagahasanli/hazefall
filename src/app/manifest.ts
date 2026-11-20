@@ -5,7 +5,7 @@ import type { MetadataRoute } from 'next';
  * Share -> Add to Home Screen, then open Last Commit Standing from the home screen.
  */
 const manifest = (): MetadataRoute.Manifest => ({
-  name: 'Last Commit Standing · Merge Conflict',
+  name: 'Last Commit Standing · Nalbaki Games',
   short_name: 'Last Commit',
   description: 'A battle royale for developers who never agree. The last one standing gets to merge.',
   start_url: '/',
