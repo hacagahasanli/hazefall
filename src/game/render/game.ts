@@ -2,8 +2,10 @@ import * as THREE from 'three';
 
 import { COPY } from '../copy/studio';
 import { createSfx } from '../sfx';
+import { actionFor, DEFAULT_SETTINGS, keyMap } from '../settings';
 
 import type { VolumeKind } from '../sfx';
+import type { Action, Settings } from '../settings';
 import { ARMOR, ROLL, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, ITEMS, MAP, SIZE, SUPERS, TILE, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
 import { canSee, inPlant, inWater, lineOfSight, lootUnder, solidAt, throwDistance } from '../sim/step';
 import { createOfflineSession } from '../net/session';
@@ -108,6 +110,10 @@ export interface MatchOptions {
   autoTier?: boolean;
   /** Called when the frame-rate guard steps the tier down. */
   onTier?: (tier: Tier) => void;
+  /** The player's settings (keys, camera, graphics, audio, accessibility); change them live with `applySettings`. */
+  settings?: Settings;
+  /** The mute key was pressed: the owner of the settings flips `muted` (without it the game mutes by itself). */
+  onMuteKey?: () => void;
 }
 
 const GUN_MODEL: Record<Exclude<WeaponKind, 'fists'>, GunKind> = {
@@ -173,12 +179,16 @@ const at = <T extends THREE.Object3D>(o: T, x: number, y: number, z: number) => 
 export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** Performance tier (see quality.ts): pixel ratio, shadows, antialiasing and view distance. */
   let tier: Tier = opts.tier ?? 'high';
+  let settings: Settings = opts.settings ?? DEFAULT_SETTINGS;
+  let bound = keyMap(settings.keys);
+  const pixelRatio = () => Math.min(window.devicePixelRatio, TIERS[tier].dprCap, touch ? 1.5 : 2) * settings.resolution;
+  const shadowsOn = () => TIERS[tier].shadows && settings.shadows;
   const fpsGuard = new FpsGuard();
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: TIERS[tier].antialias, powerPreference: 'high-performance' });
   /** Phones and tablets: touch controls, always auto-aim, a lighter pixel ratio. */
   const touch = window.matchMedia?.('(pointer: coarse)').matches || 'ontouchstart' in window;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, TIERS[tier].dprCap, touch ? 1.5 : 2));
-  renderer.shadowMap.enabled = TIERS[tier].shadows;
+  renderer.setPixelRatio(pixelRatio());
+  renderer.shadowMap.enabled = shadowsOn();
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -193,12 +203,20 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   let state: GameState = session.state;
   const me = session.me;
   const sfx = createSfx();
+  if (opts.settings) {
+    // The settings own the sound levels and the mute (the old per-sound mute key is cleared once).
+    if (sfx.muted) sfx.toggleMute();
+    sfx.setVolume('master', settings.master);
+    sfx.setVolume('guns', settings.guns);
+    sfx.setVolume('steps', settings.steps);
+    sfx.setMuted('player', settings.muted);
+  }
   const vfx = createVfx(scene);
 
   // ---------- light
   scene.add(new THREE.HemisphereLight(0xcfeaff, 0x55703f, 1.5));
   const sun = new THREE.DirectionalLight(0xfff0d0, 2.4);
-  sun.castShadow = TIERS[tier].shadows;
+  sun.castShadow = shadowsOn();
   sun.shadow.mapSize.set(TIERS[tier].shadowMap, TIERS[tier].shadowMap);
   Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40, near: 1, far: 160 });
   scene.add(sun, sun.target);
@@ -532,9 +550,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   let muted = sfx.muted;
   const onDown = (e: KeyboardEvent) => {
     sfx.unlock();
-    if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyZ', 'Space', 'KeyQ', 'KeyE', 'KeyF', 'KeyG', 'ShiftLeft', 'ShiftRight', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
-    if (e.code === 'KeyM') muted = sfx.toggleMute();
-    if (e.code === 'KeyT' && !e.repeat) aimMode = aimMode === 'auto' ? 'mouse' : 'auto';
+    const action = actionFor(settings.keys, e.code);
+    if (action && action !== 'pause' && action !== 'mute' && action !== 'aim') e.preventDefault();
+    if (action === 'mute' && !e.repeat) {
+      if (opts.onMuteKey) opts.onMuteKey();
+      else muted = sfx.toggleMute();
+    }
+    if (action === 'aim' && !e.repeat) aimMode = aimMode === 'auto' ? 'mouse' : 'auto';
     keys.add(e.code);
   };
   const onUp = (e: KeyboardEvent) => keys.delete(e.code);
@@ -546,7 +568,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   // ---------- first person (prototype: ?view=fpp). On the ground the camera is your eyes, the
   // mouse is your neck (pointer lock), WASD walks the way you look, and you see your own arms
   // and gun. The drop (plane, free fall, parachute) stays in third person.
-  const fpp = new URLSearchParams(window.location.search).get('view') === 'fpp';
+  // First person is a setting (mouse and keyboard only: on a touch screen the camera stays above); ?view=fpp still forces it.
+  const fppParam = new URLSearchParams(window.location.search).get('view') === 'fpp';
+  let fpp = !touch && (fppParam || settings.camera === 'first');
   let viewYaw = 0;
   let viewPitch = -0.04;
   let viewInit = false;
@@ -561,9 +585,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const onLook = (e: MouseEvent) => {
     if (!locked) return;
     // Through the scope the view moves as much less as it is zoomed, so aiming stays steady.
-    const sens = 0.0022 * (scoped ? 0.25 : 1);
+    const sens = 0.0022 * settings.sensitivity * (scoped ? 0.25 : 1);
     viewYaw += e.movementX * sens;
-    viewPitch = Math.max(-1.1, Math.min(1.1, viewPitch - e.movementY * sens));
+    viewPitch = Math.max(-1.1, Math.min(1.1, viewPitch - e.movementY * sens * (settings.invertY ? -1 : 1)));
   };
   const onLockClick = () => {
     if (fpp && !locked && firstPerson()) void canvas.requestPointerLock();
@@ -737,6 +761,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const touchLatched = new Set<TouchButton>();
   const btn = (b: TouchButton) => touchHeld.has(b) || touchLatched.has(b);
   let lastMove = { x: 1, y: 0 };
+  /** Is any key bound to this action held? */
+  const held = (a: Action) => bound[a].some((k) => keys.has(k));
   const readInput = (): Input => {
     const p = state.players[me];
     if (firstPerson()) {
@@ -746,8 +772,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         viewPitch = p.stage === 'falling' ? -0.75 : -0.04;
         viewInit = true;
       }
-      const fwd = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - stick.y;
-      const side = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0) + stick.x;
+      const fwd = (held('up') ? 1 : 0) - (held('down') ? 1 : 0) - stick.y;
+      const side = (held('right') ? 1 : 0) - (held('left') ? 1 : 0) + stick.x;
       const c = Math.cos(viewYaw);
       const sn = Math.sin(viewYaw);
       let mx = fwd * c - side * sn;
@@ -759,13 +785,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       }
       const input: Input = {
         mx, my,
-        fire: keys.has('Space') || mouseDown || btn('fire'),
-        jump: keys.has('Space') || btn('fire'),
-        super: keys.has('KeyG') || btn('super'),
-        use: keys.has('KeyF') || btn('use'),
-        lean: (keys.has('KeyE') || btn('leanR') ? 1 : 0) - (keys.has('KeyQ') || btn('leanL') ? 1 : 0),
-        roll: keys.has('ShiftLeft') || keys.has('ShiftRight') || btn('roll'),
-        reload: keys.has('KeyR') || btn('reload'),
+        fire: held('fire') || mouseDown || btn('fire'),
+        jump: held('fire') || btn('fire'),
+        super: held('super') || btn('super'),
+        use: held('use') || btn('use'),
+        lean: (held('leanR') || btn('leanR') ? 1 : 0) - (held('leanL') || btn('leanL') ? 1 : 0),
+        roll: held('roll') || btn('roll'),
+        reload: held('reload') || btn('reload'),
         snap: true,
         scope: scopeHeld(p),
         pitch: viewPitch,
@@ -778,8 +804,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     }
     if (fpp) viewInit = false;
     const clamp = (v: number) => Math.max(-1, Math.min(1, v));
-    const mx = clamp((keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0) + stick.x);
-    const my = clamp((keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) + stick.y);
+    const mx = clamp((held('right') ? 1 : 0) - (held('left') ? 1 : 0) + stick.x);
+    const my = clamp((held('down') ? 1 : 0) - (held('up') ? 1 : 0) + stick.y);
     // Facing with no target: the direction you're actually moving (the velocity turns smoothly);
     // standing still, a tapped key turns you; after stopping you keep facing where you went.
     const sp = Math.hypot(p.vx, p.vy);
@@ -792,14 +818,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const aim = pointed ?? (target ? { x: target.x, y: target.y } : { x: p.x + lastMove.x * 6, y: p.y + lastMove.y * 6 });
     const input = {
       mx, my,
-      fire: keys.has('Space') || (aimMode === 'mouse' && mouseDown) || btn('fire'),
-      jump: keys.has('Space') || btn('fire'),
+      fire: held('fire') || (aimMode === 'mouse' && mouseDown) || btn('fire'),
+      jump: held('fire') || btn('fire'),
       // Battle-royale keys: Q / E lean, F picks up or uses, G is the super.
-      super: keys.has('KeyG') || btn('super'),
-      use: keys.has('KeyF') || btn('use'),
-      lean: clamp((keys.has('KeyE') || btn('leanR') ? 1 : 0) - (keys.has('KeyQ') || btn('leanL') ? 1 : 0)),
-      roll: keys.has('ShiftLeft') || keys.has('ShiftRight') || btn('roll'),
-      reload: keys.has('KeyR') || btn('reload'),
+      super: held('super') || btn('super'),
+      use: held('use') || btn('use'),
+      lean: clamp((held('leanR') || btn('leanR') ? 1 : 0) - (held('leanL') || btn('leanL') ? 1 : 0)),
+      roll: held('roll') || btn('roll'),
+      reload: held('reload') || btn('reload'),
       scope: scopeHeld(p),
       // Mouse aim: a bomb lands under the cursor.
       throwAt: !!pointed,
@@ -812,7 +838,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   };
   /** Looking through the scope: a sniper in hand, on your feet, right mouse / Z / the touch button held. */
   const scopeHeld = (p: Player) =>
-    p.weapon === 'sniper' && p.alive && p.stage === 'ground' && !inWater(p.x, p.y) && (rightDown || keys.has('KeyZ') || btn('scope'));
+    p.weapon === 'sniper' && p.alive && p.stage === 'ground' && !inWater(p.x, p.y) && (rightDown || held('scope') || btn('scope'));
 
   // ---------- events -> effects and sound
   const feed: { id: number; text: string; at: number }[] = [];
@@ -1432,7 +1458,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
     // Camera: chase the plane from behind, follow the fall from above, and on the ground sit
     // high and far so the fighters read small and you see what's coming.
-    const shake = trauma * trauma;
+    const shake = settings.reducedMotion ? 0 : trauma * trauma;
     const n = (f: number, ph: number) => Math.sin(time * f + ph) * 0.6 + Math.sin(time * f * 2.3 + ph) * 0.4;
     const kf = 1 - Math.exp(-3 * dt);
     let want: THREE.Vector3;
@@ -1482,7 +1508,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // Wider lens and see-through clouds while you pick your spot from the plane.
     const overview = self.stage === 'drone' && state.phase === 'drop';
     const fp = firstPerson();
-    const fov = fp ? THREE.MathUtils.damp(camera.fov, scoped ? 16 : 74, 18, dt) : THREE.MathUtils.damp(camera.fov, overview ? 52 : 42, 3, dt);
+    const fov = fp ? THREE.MathUtils.damp(camera.fov, scoped ? 16 : settings.fov, 18, dt) : THREE.MathUtils.damp(camera.fov, overview ? 52 : 42, 3, dt);
     // Far away above the map, a nearer near-plane wastes depth precision and the ground and the
     // roads fight (flicker); push it out while in the overview.
     const near = overview ? 4 : camNear < 1 || fp ? 0.05 : 0.5;
@@ -1659,7 +1685,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       won: state.winner === me,
       fps: Math.round(fps),
       zoneHits,
-      muted,
+      muted: muted || settings.muted,
       aimMode,
       paused,
       net: session.net,
@@ -1679,9 +1705,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const spec = TIERS[next];
     const hadShadows = renderer.shadowMap.enabled;
     tier = next;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, spec.dprCap, touch ? 1.5 : 2));
-    renderer.shadowMap.enabled = spec.shadows;
-    sun.castShadow = spec.shadows;
+    renderer.setPixelRatio(pixelRatio());
+    renderer.shadowMap.enabled = shadowsOn();
+    sun.castShadow = shadowsOn();
     if (sun.shadow.mapSize.x !== spec.shadowMap) {
       sun.shadow.mapSize.set(spec.shadowMap, spec.shadowMap);
       sun.shadow.map?.dispose();
@@ -1689,7 +1715,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     }
     if (scene.fog instanceof THREE.Fog) scene.fog.far = spec.fogFar;
     // Turning shadows on or off changes the shaders: every material must recompile once.
-    if (hadShadows !== spec.shadows)
+    if (hadShadows !== shadowsOn())
       scene.traverse((o) => {
         const m = (o as THREE.Mesh).material;
         if (m) for (const mm of Array.isArray(m) ? m : [m]) mm.needsUpdate = true;
@@ -1765,6 +1791,24 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       emitHud();
     },
     setTier,
+    /** New settings, applied at once: keys, mouse, camera, picture, sound. */
+    applySettings: (next: Settings) => {
+      const prev = settings;
+      settings = next;
+      bound = keyMap(next.keys);
+      const wantFpp = !touch && (fppParam || next.camera === 'first');
+      if (wantFpp !== fpp) {
+        fpp = wantFpp;
+        viewInit = false;
+        if (!fpp && document.pointerLockElement === canvas) document.exitPointerLock();
+      }
+      sfx.setVolume('master', next.master);
+      sfx.setVolume('guns', next.guns);
+      sfx.setVolume('steps', next.steps);
+      sfx.setMuted('player', next.muted);
+      if (prev.resolution !== next.resolution || prev.shadows !== next.shadows) setTier(tier);
+      emitHud();
+    },
     /** Silence everything for a reason ('ad' while a video ad plays, 'portal' for the portal's mute button). */
     setMuted: (reason: string, on: boolean) => sfx.setMuted(reason, on),
     volumes: () => sfx.volumes,
