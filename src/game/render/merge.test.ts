@@ -109,3 +109,24 @@ describe('skinned fighters', () => {
     expect(v.distanceTo(expected)).toBeLessThan(1e-4);
   });
 });
+
+describe('the merged parachute', () => {
+  it('keeps the canopy above the harness, centred over it, inside the part that unfolds', async () => {
+    const { buildChute, CHUTE_UP } = await import('./chute');
+    const g = buildChute('#ff3d6e');
+    const deploy = g.userData.deploy as THREE.Group;
+    // Panels in two colours and the lines: a handful of meshes, not 18.
+    expect(meshes(g).length).toBeLessThanOrEqual(5);
+    const canopy = worldBox(deploy);
+    expect(canopy.max.y).toBeGreaterThan(CHUTE_UP + 0.5);
+    expect(canopy.min.y).toBeGreaterThan(0.5);
+    const c = canopy.getCenter(new THREE.Vector3());
+    expect(Math.abs(c.x)).toBeLessThan(0.1);
+    expect(Math.abs(c.z)).toBeLessThan(0.1);
+    // Folding the deploy group (as it opens out of the pack) shrinks it towards the harness, not somewhere else.
+    deploy.scale.setScalar(0.1);
+    const folded = worldBox(deploy);
+    expect(folded.max.y).toBeLessThan(1);
+    expect(folded.getCenter(new THREE.Vector3()).length()).toBeLessThan(0.6);
+  });
+});

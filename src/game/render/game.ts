@@ -1273,7 +1273,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** When each player touched down (for the landing roll), and the canopies left on the ground. */
   const landAt: number[] = [];
   const ROLL_TIME = 0.75;
-  const groundChutes: { g: THREE.Group; t: number; dir: number }[] = [];
+  const groundChutes: { g: THREE.Group; t: number; dir: number; q0: THREE.Quaternion }[] = [];
+  const foldTo = new THREE.Quaternion();
+  const foldEuler = new THREE.Euler();
   const dropChute = (i: number, x: number, y: number) => {
     const p = state.players[i];
     const g = chutes[i].clone(true);
@@ -1285,7 +1287,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     g.position.set(x, 1, y);
     g.userData.from = { x, y };
     scene.add(g);
-    groundChutes.push({ g, t: 0, dir: Math.hypot(p.vx, p.vy) > 0.3 ? Math.atan2(p.vy, p.vx) : p.heading + Math.PI });
+    // It starts exactly as it hung in the air (same turn and tilt) and settles from there: no snap on touchdown.
+    groundChutes.push({ g, t: 0, dir: Math.hypot(p.vx, p.vy) > 0.3 ? Math.atan2(p.vy, p.vx) : p.heading + Math.PI, q0: chutes[i].quaternion.clone() });
   };
   /** The canopy settles down behind you, lies there a while, then fades. */
   const updateGroundChutes = (dt: number) => {
@@ -1299,7 +1302,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // It drifts on a couple of metres and folds into a long, narrow strip of fabric lying behind
       // you (about 3 x 1.3 m, the long side along the way you came), not a big round sheet.
       c.g.position.set(from.x + Math.cos(c.dir) * 2.2 * e, 1 - e, from.y + Math.sin(c.dir) * 2.2 * e);
-      c.g.rotation.set(0, -c.dir, (1 - e) * 0.3);
+      c.g.quaternion.slerpQuaternions(c.q0, foldTo.setFromEuler(foldEuler.set(0, -c.dir, 0)), e);
       c.g.scale.set(1 - e * 0.42, 1 - e * 0.95, 1 - e * 0.75);
       const fade = c.t > 8 ? 1 - (c.t - 8) / 2 : 1;
       c.g.traverse((o) => {
@@ -1455,6 +1458,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
   const prev = state.players.map((p) => ({ x: p.x, y: p.y, fall: p.fall }));
   let fallTime = 0;
+  /** 0 in free fall, eases to 1 once the canopy is open: the camera backs off and tilts up to keep the canopy in view. */
+  let chuteCam = 0;
   /** The high camera leans ahead: a few metres the way you move and aim, eased (half-life ~0.35 s). */
   const ahead = new THREE.Vector2();
   let shadowHalf = 0;
@@ -1820,9 +1825,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // first frame, falling through the clouds, then the canopy opening below them.
       const hh = selfH;
       const chute = self.fall <= DROP.chute;
+      chuteCam += ((chute ? 1 : 0) - chuteCam) * (1 - Math.exp(-5 * dt));
+      // Under the canopy the camera backs off and looks at a point above the jumper, so the canopy sits in the
+      // picture (not under the top of the HUD); a phone held upright backs off further. Eased, so opening never jumps.
+      const back = camera.aspect < 1.3 ? Math.min(1.5, 1.3 / camera.aspect) : 1;
+      const c = chuteCam;
       // Looking steeply down past the jumper: you see yourself in the middle and the ground below.
-      want = new THREE.Vector3(selfX, hh + (chute ? 17 : 12), selfY + (chute ? 13 : 7));
-      look = new THREE.Vector3(selfX, hh - (chute ? 1 : 4), selfY);
+      want = new THREE.Vector3(selfX, hh + 12 + (17 * back - 12) * c, selfY + 7 + (15 * back - 7) * c);
+      look = new THREE.Vector3(selfX, hh - 4 + 5.5 * c, selfY);
       if (camNear < 1) {
         // Dev close-up: beside and a little below the jumper, looking up at body, risers and canopy.
         want = new THREE.Vector3(selfX + camOrbit.x, hh + camOrbit.y, selfY + camOrbit.z);
@@ -1857,6 +1867,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // Falling: blend in from the plane view for a moment, then stay locked to the jumper (no lag,
     // no wobble). Ground: a soft follow.
     fallTime = self.stage === 'falling' ? fallTime + dt : 0;
+    if (self.stage !== 'falling') chuteCam = 0;
     const follow =
       self.stage === 'ground' ? 1 - Math.exp(-6 * dt) : self.stage === 'falling' ? (fallTime > 0.9 ? 1 : 1 - Math.exp(-6 * dt)) : kf;
     camPos.lerp(want, follow);
