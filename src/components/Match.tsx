@@ -37,6 +37,9 @@ const Key = ({ k }: { k: string }) => (
   </kbd>
 );
 
+/** Seconds the "who took you out" card shows before the round report. */
+const DEATH_CARD = 2.2;
+
 const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
 /**
@@ -254,9 +257,12 @@ export const Match = ({
 
   const f = FIGHTERS[fighter];
   const over = hud && (hud.dead || hud.phase === 'over');
-  // Let the fall play out first (or the win sink in) before the report comes up.
+  // Let the fall play out first (or the win sink in) before the report comes up: going down,
+  // a short card says who took you out and with what, then the report follows.
   const showResult =
-    !!hud && ((hud.dead && hud.deadFor > 1.6) || (hud.won && hud.phase === 'over'));
+    !!hud && ((hud.dead && hud.deadFor > DEATH_CARD) || (hud.won && hud.phase === 'over'));
+  /** Kill colour (the banner, the death card): red, or orange in colour-blind mode. */
+  const killColor = settings.colorBlind ? '#ff9f1c' : '#ff3d6e';
 
   const breaks = useBreaks(platform, game, {
     loaded: !!hud,
@@ -453,6 +459,15 @@ export const Match = ({
             <div className="panel-cut flex items-center gap-3 bg-ink-deep/85 px-3 py-1 sm:gap-4 sm:px-4 sm:py-1.5" style={{ zoom: hudZoom }}>
               <span className="font-display text-xl text-cream">{hud.alive}</span>
               <span className="text-[10px] font-semibold tracking-widest text-cream/50">LEFT</span>
+              <span className="h-4 w-px bg-cream/20" />
+              {/* Your kills; the number jumps each time it goes up. */}
+              <span
+                key={hud.kills}
+                className={`inline-block font-display text-xl text-cream ${hud.kills > 0 && !settings.reducedMotion ? 'animate-[killPulse_0.5s_ease-out] motion-reduce:animate-none' : ''}`}
+              >
+                {hud.kills}
+              </span>
+              <span className="text-[10px] font-semibold tracking-widest text-cream/50">{hud.kills === 1 ? 'KILL' : 'KILLS'}</span>
               <span
                 className={`text-sm ${hud.zone.outside ? 'font-bold text-orange' : 'text-cream/80'}`}
               >
@@ -499,6 +514,60 @@ export const Match = ({
                 </div>
               )}
             </>
+          )}
+
+          {/* You took someone out: a big centred banner for a moment, and the kill sound. */}
+          {hud.elim && !over && (
+            <div
+              className="pointer-events-none absolute inset-x-0 top-[13%] z-[5] flex justify-center px-4"
+              role="status"
+              aria-live="polite"
+            >
+              <div
+                key={hud.elim.id}
+                className={`flex flex-col items-center gap-1.5 text-center ${settings.reducedMotion ? 'animate-[elimFade_1.4s_ease-out_forwards]' : 'animate-[elimIn_1.4s_ease-out_forwards]'} motion-reduce:animate-none`}
+                style={{ zoom: hudZoom }}
+              >
+                <div className="panel-cut flex items-baseline gap-3 bg-ink-deep/80 px-5 py-2 font-display text-2xl leading-none drop-shadow-[0_4px_18px_rgba(0,0,0,0.7)] sm:px-6 sm:py-2.5 sm:text-4xl">
+                  <span style={{ color: killColor }}>ELIMINATED</span>
+                  <span className="text-cream">{hud.elim.name}</span>
+                </div>
+                <div className="rounded bg-ink-deep/70 px-3 py-0.5 text-sm font-bold tracking-widest text-cream/90 sm:text-base">
+                  <span className="font-display text-gold">{hud.elim.left}</span> LEFT
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* You went down: who took you out and with what, before the round report comes up. */}
+          {hud.dead && !hud.won && !showResult && (
+            <div
+              className="pointer-events-none absolute inset-0 z-[5] flex items-start justify-center bg-[radial-gradient(ellipse_at_center,rgba(10,13,24,0.15)_30%,rgba(10,13,24,0.7))] px-4 pt-[11vh] animate-[fadeIn_0.3s_ease-out]"
+              role="status"
+              aria-live="assertive"
+            >
+              <div className="flex flex-col items-center gap-2 text-center animate-[riseIn_0.35s_ease-out_both]" style={{ zoom: hudZoom }}>
+                <div className="font-display text-4xl leading-none drop-shadow-[0_4px_18px_rgba(0,0,0,0.8)] sm:text-6xl" style={{ color: killColor }}>
+                  {COPY.result.lost}
+                </div>
+                <div className="panel-cut bg-ink-deep/85 px-5 py-2 text-lg text-cream sm:text-2xl">
+                  {hud.killedBy ? (
+                    <>
+                      by{' '}
+                      <b className="font-display" style={{ color: hud.killerFighter ? FIGHTERS[hud.killerFighter].color : '#6fb6ff' }}>
+                        {hud.killedBy}
+                      </b>{' '}
+                      with {hud.killedWith}
+                    </>
+                  ) : (
+                    <>Caught outside by {hud.killedWith ?? COPY.zone.name}</>
+                  )}
+                </div>
+                <div className="text-sm font-bold tracking-widest text-cream/75">
+                  <span className="font-display text-gold">#{hud.placement}</span> OF {hud.total}
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Online: how the line is doing. */}

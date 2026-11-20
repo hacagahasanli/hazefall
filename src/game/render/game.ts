@@ -15,6 +15,7 @@ import { buildRig, fighterLook, poseChute, poseDeath, poseFreefall, poseRig, pos
 import { buildGun } from './guns';
 import { mat, mesh, PALETTE } from './palette';
 import { createVfx } from './vfx';
+import { createHitOverlay } from './feedback';
 import { setPeople } from './nature';
 import { buildChute, HARNESS_BACK } from './chute';
 import { paintMapImage } from './mapImage';
@@ -91,6 +92,8 @@ export interface HudState {
   mouseLocked: boolean;
   /** The quality tier being drawn. */
   tier: Tier;
+  /** Your latest elimination, while its banner shows (about 1.4 s): who, and how many are left. */
+  elim: { id: number; name: string; left: number } | null;
 }
 
 export type AimMode = 'auto' | 'mouse';
@@ -212,6 +215,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     sfx.setMuted('player', settings.muted);
   }
   const vfx = createVfx(scene);
+  /** The hitmarker and the damage-direction arcs, on a DOM layer over the canvas. */
+  const hitFx = canvas.parentElement ? createHitOverlay(canvas.parentElement) : null;
 
   // ---------- light
   scene.add(new THREE.HemisphereLight(0xcfeaff, 0x55703f, 1.5));
@@ -844,6 +849,24 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const feed: { id: number; text: string; at: number }[] = [];
   let feedId = 0;
   let trauma = 0;
+  /**
+   * Hitstop, render only: for this long (real seconds) poses and particles hold still, the person
+   * hit shudders. The sim, your input and the camera never stop.
+   */
+  let hitstop = 0;
+  let hitstopVictim = -1;
+  const stopFor = (s: number, victim: number) => {
+    if (s >= hitstop) hitstopVictim = victim;
+    hitstop = Math.max(hitstop, s);
+  };
+  /** The strongest hit-confirm tick of this tick's hits (played once, after the events). */
+  const TICK_RANK = { body: 0, armor: 1, break: 2 } as const;
+  let pendingTick: keyof typeof TICK_RANK | null = null;
+  let killedThisTick = false;
+  /** Your eliminations, for the banner. */
+  let elim: { id: number; name: string; left: number; at: number } | null = null;
+  let elimId = 0;
+  let hudNow = false;
   const camX = () => camera.position.x;
   const handle = (e: GameEvent) => {
     switch (e.type) {
@@ -877,6 +900,20 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         if (e.target === me) trauma = Math.min(1, trauma + 0.25);
         sfx.hit(Math.min(20, e.damage / 30), e.x - camX());
         hitFlash[e.target] = 0.08;
+        if (e.by === me && e.target !== me) {
+          // A hit you landed: a small nudge, the 2D tick, the hitmarker, and a short freeze on a heavy gun.
+          trauma = Math.min(1, trauma + 0.05);
+          const broke = e.armor && state.players[e.target].armor <= 0;
+          const tick = broke ? 'break' : e.armor ? 'armor' : 'body';
+          if (!e.ko && (pendingTick === null || TICK_RANK[tick] > TICK_RANK[pendingTick])) pendingTick = tick;
+          hitFx?.hit(e.ko ? 'kill' : e.armor ? 'armor' : 'hit', e.target);
+          const w = state.players[me].weapon;
+          if (w === 'shotgun' || w === 'sniper' || w === 'rockets') stopFor(0.05, e.target);
+        }
+        if (e.target === me && e.by !== null && e.by !== me) {
+          const from = state.players[e.by];
+          hitFx?.hurt(e.by, from.x, from.y);
+        }
         break;
       case 'impact':
         vfx.burst(e.x, 1, 3, 'dust', { z: e.y,  speed: 2, up: 1, gravity: 6, life: 0.25, size: 0.7 });
@@ -932,7 +969,19 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         feed.push({ id: feedId++, text: by ? `${by.name} ⟶ ${v.name}` : COPY.zone.caught(v.name), at: time });
         vfx.burst(e.x, 1, 30, 'ko', { z: e.y,  speed: 7, up: 4, life: 0.8 });
         sfx.ko(e.x - camX());
-        if (e.victim === me || e.by === me) trauma = 1;
+        if (e.victim === me) {
+          trauma = 1;
+          hudNow = true;
+        } else if (e.by === me) {
+          // Your elimination: a solid jolt (not the full one you get going down), a 90 ms freeze,
+          // the kill sound and the banner, at once.
+          trauma = Math.min(1, Math.max(trauma, 0.6));
+          stopFor(0.09, e.victim);
+          killedThisTick = true;
+          sfx.elim();
+          elim = { id: elimId++, name: v.name, left: state.players.filter((p) => p.alive).length, at: time };
+          hudNow = true;
+        }
         break;
       }
       case 'zone':
@@ -1076,7 +1125,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const m = n.sprite.material as THREE.SpriteMaterial;
       m.opacity = Math.min(1, n.life / 0.3);
       // A quick pop when it appears or grows.
-      const hgt = (n.sprite.userData.base as number) * (1 + Math.max(0, 0.12 - n.age) * 3);
+      let hgt = (n.sprite.userData.base as number) * (1 + Math.max(0, 0.12 - n.age) * 3);
+      // Sized for the high camera (~40 m away); up close in first person the same number would
+      // fill the screen, so there it keeps about the same size on screen at any distance.
+      if (firstPerson()) hgt *= Math.min(1, camera.position.distanceTo(n.sprite.position) / 34);
       n.sprite.scale.set(hgt * (n.sprite.userData.aspect as number), hgt, 1);
       n.sprite.position.set(n.x, n.h, n.y);
       if (n.life <= 0) n.sprite.visible = false;
@@ -1170,9 +1222,37 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       }
     });
 
+  /** The hitmarker and damage arcs follow you (and the one you hit) on the screen. */
+  const fxAt = new THREE.Vector3();
+  const toScreen = (x: number, h: number, y: number) => {
+    fxAt.set(x, h, y).project(camera);
+    if (fxAt.z > 1) return null;
+    return { x: (fxAt.x * 0.5 + 0.5) * canvas.clientWidth, y: (0.5 - fxAt.y * 0.5) * canvas.clientHeight };
+  };
+  const updateHitFx = (dt: number, selfX: number, selfH: number, selfY: number) => {
+    if (!hitFx) return;
+    const fp = firstPerson();
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    const centre = { x: w / 2, y: h / 2 };
+    const me2 = fp ? centre : toScreen(selfX, selfH + 1, selfY) ?? centre;
+    hitFx.update(dt, settings, {
+      self: { x: state.players[me].x, y: state.players[me].y, sx: me2.x, sy: me2.y },
+      yaw: fp ? viewYaw : null,
+      // First person on the crosshair; from above on the body of the one you hit.
+      markAt: (t) => {
+        if (fp) return centre;
+        const r = rigs[t]?.root;
+        return r ? toScreen(r.position.x, r.position.y + 1.2, r.position.z) : null;
+      },
+    });
+  };
+
   const renderFrame = (dt: number, alpha: number) => {
     resize();
     const self = state.players[me];
+    const frozen = hitstop > 0;
+    hitstop = Math.max(0, hitstop - dt);
     scoped = !paused && scopeHeld(self);
     const droneX = state.drone.x0 + (state.drone.x1 - state.drone.x0) * state.drone.t;
     const droneY = state.drone.y0 + (state.drone.y1 - state.drone.y0) * state.drone.t;
@@ -1218,6 +1298,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         }
       }
       rig.root.position.set(x, h, y);
+      // Hitstop: the one who was hit shudders while everything else holds still.
+      if (frozen && i === hitstopVictim && !settings.reducedMotion) rig.root.position.x += Math.sin(time * 120) * 0.07;
       if (i === me) {
         selfX = x;
         selfY = y;
@@ -1226,7 +1308,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // The body turns on a critically damped spring towards the sim heading: it starts and
       // settles smoothly instead of rotating at a constant rate and stopping dead.
       const yw = yaw[i];
-      if (p.stage === 'drone') {
+      if (frozen) {
+        // Hitstop: the body holds its turn too.
+      } else if (p.stage === 'drone') {
         yw.a = p.heading;
         yw.v = 0;
       } else {
@@ -1240,7 +1324,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       }
       const sinceShot = lastShot[i] === undefined ? 9 : time - lastShot[i];
       const sinceLand = landAt[i] === undefined ? 9 : time - landAt[i];
-      if (fallen) {
+      if (frozen) {
+        // Hitstop: every pose holds for a beat.
+      } else if (fallen) {
         poseDeath(rig, time - deadAt[i], i);
       } else if (p.stage === 'ground' && p.vault <= 0 && inWater(p.x, p.y)) {
         const before = Math.floor(rig.phase / Math.PI);
@@ -1538,7 +1624,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const sn = Math.sin(viewYaw);
       // Leaning (Q/E) puts your head out past the corner and tilts the world, like a real lean.
       const lean = self.lean * 0.72;
-      camera.position.set(selfX - sn * lean + n(23, 1) * 0.08 * shake, eyeY, selfY + c * lean + n(19, 4) * 0.08 * shake);
+      camera.position.set(selfX - sn * lean, eyeY, selfY + c * lean);
       if (air) {
         // Falling or under the canopy: your eyes are wherever your head is (lying flat in free
         // fall, hanging from the harness under the canopy), with the wind's flutter.
@@ -1548,6 +1634,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       tmpV.set(camera.position.x + c * Math.cos(viewPitch), camera.position.y + Math.sin(viewPitch), camera.position.z + sn * Math.cos(viewPitch));
       camera.lookAt(tmpV);
       camera.rotateZ(-self.lean * 0.3);
+      // The shake in first person turns the view a little (about a degree at most) instead of
+      // moving your eyes: a jolt, not a slide. Only the view: where you aim does not move.
+      camera.rotateY(n(13, 5) * 0.02 * shake);
+      camera.rotateX(n(17, 2) * 0.015 * shake);
+      camera.rotateZ(n(19, 4) * 0.012 * shake);
       camPos.copy(camera.position);
       camLook.copy(tmpV);
       camFocus.set(selfX, 0, selfY);
@@ -1600,8 +1691,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     sun.position.set(fxs - 20, wide ? 160 : 60, fzs + 14);
     sun.target.position.set(fxs, 0, fzs);
 
-    vfx.update(dt);
+    vfx.update(frozen ? 0 : dt);
     updateDamage(dt);
+    updateHitFx(dt, selfX, selfH, selfY);
     updateGroundChutes(dt);
     props.update(time, dt);
     renderer.render(scene, camera);
@@ -1617,7 +1709,12 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     if (w === 'explosion') return 'an explosion';
     if (w === 'super' && p.killedBy !== null) return FIGHTERS[state.players[p.killedBy].fighter].superName;
     if (w === 'fists') return 'bare hands';
-    if (w && w in WEAPONS) return `a ${WEAPONS[w as WeaponKind].name.toLowerCase()}`;
+    if (w === 'rockets') return 'a rocket';
+    if (w && w in WEAPONS) {
+      // "an SMG", "a shotgun".
+      const n = WEAPONS[w as WeaponKind].name;
+      return n === n.toUpperCase() ? `an ${n}` : `a ${n.toLowerCase()}`;
+    }
     return 'something';
   };
   const emitHud = () => {
@@ -1697,6 +1794,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       sniper: self.weapon === 'sniper' && self.alive,
       mouseLocked: locked,
       tier,
+      elim: elim && time - elim.at < 1.4 ? { id: elim.id, name: elim.name, left: elim.left } : null,
     });
   };
 
@@ -1748,11 +1846,17 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // A guest's state is replaced by the host's on every correction: always read it back.
       state = session.state;
       events.forEach(handle);
+      // One hit-confirm tick per tick, the strongest; a kill has its own sound instead.
+      if (pendingTick && !killedThisTick) sfx.hitTick(pendingTick);
+      pendingTick = null;
+      killedThisTick = false;
       acc -= DT;
     }
     renderFrame(dt, acc / DT);
     hudTimer -= dt;
-    if (hudTimer <= 0) {
+    // An elimination shows on the HUD at once, not at the next 10 Hz update.
+    if (hudTimer <= 0 || hudNow) {
+      hudNow = false;
       hudTimer = 0.1;
       emitHud();
     }
@@ -1819,6 +1923,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     },
     dispose: () => {
       cancelAnimationFrame(raf);
+      hitFx?.dispose();
       document.removeEventListener('pointerlockchange', onLockChange);
       document.removeEventListener('mousemove', onLook);
       canvas.removeEventListener('click', onLockClick);
