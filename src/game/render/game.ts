@@ -1833,7 +1833,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const zone =
       state.phase === 'drop'
         ? self.stage === 'drone'
-          ? { label: touch ? 'Tap JUMP to jump' : 'Jump with Space', seconds: Math.ceil((1 - state.drone.t) * DROP.flight), outside: false }
+          ? { label: touch ? 'Tap JUMP to jump' : 'Jump with Space', seconds: Math.ceil(Math.max(0, DROP.forceJump - state.drone.t) * DROP.flight), outside: false }
           : { label: 'Everyone is landing', seconds: 0, outside: false }
         : z.state === 'wait'
           ? { label: COPY.zone.waiting, seconds: Math.ceil(z.timer), outside }
