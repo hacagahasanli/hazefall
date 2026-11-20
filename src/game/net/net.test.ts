@@ -11,6 +11,7 @@ import {
   encodeInput,
   encodeSnapshot,
 } from './protocol';
+import { MATCH_SEATS } from './lobby';
 import { createGuestSession, createHostSession } from './session';
 
 import type { Addressed, StartMessage } from './lobby';
@@ -139,6 +140,10 @@ describe('online play', () => {
     const n = q.next();
     expect(n.heal).toBe(true);
     expect(n.slot).toBe(2);
+  });
+
+  it('an online round with bots has as many fighters as an offline one', () => {
+    expect(MATCH_SEATS).toBe(PLAYERS);
   });
 
   it('a snapshot of a full match is small and comes back the same', () => {

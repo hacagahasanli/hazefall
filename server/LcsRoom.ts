@@ -1,6 +1,6 @@
 import { Room } from '@colyseus/core';
 
-import { cleanName, isFighter, MAX_PLAYERS } from '../src/game/net/lobby';
+import { cleanName, isFighter, MATCH_SEATS, MAX_PEOPLE } from '../src/game/net/lobby';
 
 import type {
   Addressed,
@@ -12,6 +12,7 @@ import type {
 } from '../src/game/net/lobby';
 import type { Client } from '@colyseus/core';
 
+/** The studio copy's bot names (src/game/copy/studio.ts): the server image carries no game code, so they are repeated here. */
 const BOT_NAMES = [
   'merge_bot',
   'lint_fail',
@@ -22,6 +23,16 @@ const BOT_NAMES = [
   'yolo_push',
   'flaky_test',
   'tech_debt',
+  'seg_fault',
+  'stack_ovf',
+  'cache_miss',
+  'dead_lock',
+  'wip_final',
+  'todo_later',
+  'dep_hell',
+  '404_bot',
+  'prod_fire',
+  'git_blame',
 ];
 
 interface Member extends LobbyMember {
@@ -33,12 +44,12 @@ interface Member extends LobbyMember {
 /**
  * One group of friends: a lobby, then rounds. The server does not run the match: the host's
  * browser (seat 0) does, and the others connect to it directly over WebRTC. This room gathers
- * the players (up to ten), lets the host switch bots on or off and start when everyone is
+ * the players (up to ten people), lets the host switch bots on or off (they fill the round to twenty) and start when everyone is
  * ready, passes the WebRTC handshake between host and guests, relays game messages for anyone
  * whose direct line won't open, and brings everyone back to the lobby after the round.
  */
 export class LcsRoom extends Room {
-  maxClients = MAX_PLAYERS;
+  maxClients = MAX_PEOPLE;
   private members: Member[] = [];
   private bots = true;
   private inMatch = false;
@@ -103,7 +114,7 @@ export class LcsRoom extends Room {
       host: this.members.length === 0,
       slot: -1,
     });
-    if (this.members.length >= MAX_PLAYERS) void this.lock();
+    if (this.members.length >= MAX_PEOPLE) void this.lock();
     this.sync();
   }
 
@@ -126,7 +137,7 @@ export class LcsRoom extends Room {
       // The host hands their player to a bot.
       this.broadcast('left', { slot: gone.slot });
     }
-    if (!this.inMatch && this.members.length < MAX_PLAYERS) void this.unlock();
+    if (!this.inMatch && this.members.length < MAX_PEOPLE) void this.unlock();
     this.sync();
   }
 
@@ -148,7 +159,7 @@ export class LcsRoom extends Room {
       bot: false,
     }));
     if (this.bots)
-      for (let i = 0; seats.length < MAX_PLAYERS; i++)
+      for (let i = 0; seats.length < MATCH_SEATS; i++)
         seats.push({ name: BOT_NAMES[i % BOT_NAMES.length], fighter: null, bot: true });
     const seed = (Math.random() * 1e9) | 0;
     this.members.forEach((m, slot) => {
@@ -165,7 +176,7 @@ export class LcsRoom extends Room {
       m.slot = -1;
       m.ready = false;
     }
-    if (this.members.length < MAX_PLAYERS) void this.unlock();
+    if (this.members.length < MAX_PEOPLE) void this.unlock();
     this.broadcast('ended', {});
     this.sync();
   }
