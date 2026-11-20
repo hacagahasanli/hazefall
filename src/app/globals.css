@@ -89,3 +89,25 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* The pre-match 3-2-1: each number punches in big, settles, then fades as the next one comes. */
+@keyframes countPop {
+  0% {
+    opacity: 0;
+    transform: scale(1.8);
+  }
+  18% {
+    opacity: 1;
+    transform: scale(0.94);
+  }
+  30% {
+    transform: scale(1);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}

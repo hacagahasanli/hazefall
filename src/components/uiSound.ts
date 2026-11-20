@@ -33,3 +33,80 @@ export const uiTick = (strong = false) => {
     /* no audio: the menu works silently */
   }
 };
+
+/**
+ * The pre-match bed: wind over the airstrip and the cargo plane's engines idling, both synthesised. Returns a function
+ * that fades it out. `rev()` spools the engines up for the launch. Silent under the same rules as the ticks.
+ */
+export const startHum = (): { stop: () => void; rev: () => void } => {
+  const none = { stop: () => {}, rev: () => {} };
+  if (silent || level <= 0 || typeof window === 'undefined') return none;
+  try {
+    ctx ??= new AudioContext();
+    if (ctx.state === 'suspended') void ctx.resume();
+    const c = ctx;
+    const t = c.currentTime;
+    const out = c.createGain();
+    out.gain.setValueAtTime(0, t);
+    out.gain.linearRampToValueAtTime(0.5 * level, t + 1.2);
+    out.connect(c.destination);
+    // Wind: brown noise through a slowly wandering low-pass.
+    const len = c.sampleRate * 2;
+    const buf = c.createBuffer(1, len, c.sampleRate);
+    const d = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < len; i++) {
+      last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+      d[i] = last * 3.2;
+    }
+    const noise = c.createBufferSource();
+    noise.buffer = buf;
+    noise.loop = true;
+    const lp = c.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 420;
+    const lfo = c.createOscillator();
+    const lfoGain = c.createGain();
+    lfo.frequency.value = 0.13;
+    lfoGain.gain.value = 180;
+    lfo.connect(lfoGain).connect(lp.frequency);
+    const windGain = c.createGain();
+    windGain.gain.value = 0.12;
+    noise.connect(lp).connect(windGain).connect(out);
+    // Engines: two detuned saws, filtered to a distant drone with a slow beat.
+    const engGain = c.createGain();
+    engGain.gain.value = 0.035;
+    const engLp = c.createBiquadFilter();
+    engLp.type = 'lowpass';
+    engLp.frequency.value = 260;
+    const oscs = [62, 63.3].map((f) => {
+      const o = c.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = f;
+      o.connect(engLp);
+      return o;
+    });
+    engLp.connect(engGain).connect(out);
+    [noise, lfo, ...oscs].forEach((n) => n.start(t));
+    let stopped = false;
+    return {
+      rev: () => {
+        const n = c.currentTime;
+        oscs.forEach((o, i) => o.frequency.linearRampToValueAtTime(i ? 118 : 116, n + 2.6));
+        engLp.frequency.linearRampToValueAtTime(900, n + 2.6);
+        engGain.gain.linearRampToValueAtTime(0.07, n + 2.6);
+      },
+      stop: () => {
+        if (stopped) return;
+        stopped = true;
+        const n = c.currentTime;
+        out.gain.cancelScheduledValues(n);
+        out.gain.setValueAtTime(out.gain.value, n);
+        out.gain.linearRampToValueAtTime(0, n + 0.5);
+        [noise, lfo, ...oscs].forEach((s) => s.stop(n + 0.6));
+      },
+    };
+  } catch {
+    return none;
+  }
+};

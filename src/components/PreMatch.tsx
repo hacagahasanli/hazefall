@@ -1,0 +1,304 @@
+'use client';
+
+/**
+ * The minutes before a round, squeezed into ten seconds: Play leads here, not straight into the match. Behind the UI the
+ * squad waits on the airstrip by the idling cargo plane (render/staging). You can still change your fighter, the lobby
+ * fills with the other nine, and a countdown runs; Ready (Space) cuts it to the last three seconds. Those last seconds
+ * are the launch: the camera cranes over the squad to the battleground, the engines spool up, a big 3-2-1, a fade to
+ * black, and the match takes over. Esc goes back to the menu. Play again runs a shorter version.
+ */
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+import { usePortraits } from '~/components/FighterSelect';
+import { setUiSound, startHum, uiTick } from '~/components/uiSound';
+import { COPY } from '~/game/copy/studio';
+import { deviceFacts } from '~/game/render/deviceFacts';
+import { resolveTier } from '~/game/render/quality';
+import { FIGHTERS } from '~/game/sim/constants';
+
+import type { Staging } from '~/game/render/staging';
+import type { Settings } from '~/game/settings';
+import type { FighterId } from '~/game/sim/types';
+import type { Platform } from '~/platform/types';
+
+const IDS = Object.keys(FIGHTERS) as FighterId[];
+/** The launch: camera move, 3-2-1 and the fade all live in this window. */
+const LAUNCH = 3.2;
+const FADE = 0.45;
+
+export const PreMatch = ({
+  platform,
+  settings,
+  fighter,
+  onFighter,
+  onLaunch,
+  onBack,
+  quick = false,
+  touch,
+}: {
+  platform: Platform;
+  settings: Settings;
+  fighter: FighterId;
+  onFighter: (id: FighterId) => void;
+  onLaunch: () => void;
+  onBack: () => void;
+  /** Play again: a shorter wait, the lobby already full. */
+  quick?: boolean;
+  touch: boolean;
+}) => {
+  const total = quick ? 6.5 : 11;
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const staging = useRef<Staging | null>(null);
+  const [live, setLive] = useState(false);
+  const [t, setT] = useState(0);
+  const end = useRef(total);
+  const [readied, setReadied] = useState(false);
+  const portraits = usePortraits();
+  const f = FIGHTERS[fighter];
+  const tier = resolveTier(settings.quality, deviceFacts(platform.deviceType()));
+  const hum = useRef<ReturnType<typeof startHum> | null>(null);
+  const launched = useRef(false);
+  const launchRef = useRef(onLaunch);
+  const mountedAt = useRef(performance.now());
+  launchRef.current = onLaunch;
+  const done = useRef(false);
+
+  useEffect(() => setUiSound(settings.master, settings.muted || platform.muted()), [settings.master, settings.muted, platform]);
+
+  // The staging scene, once; fighter changes swap the squad in place.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    let cancelled = false;
+    void import('~/game/render/staging').then(({ startStaging }) => {
+      if (cancelled) return;
+      staging.current = startStaging(canvas, fighter, () => setLive(true), { tier, still: settings.reducedMotion });
+    });
+    return () => {
+      cancelled = true;
+      staging.current?.dispose();
+      staging.current = null;
+    };
+    // The scene is built once per visit; the fighter is applied below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tier, settings.reducedMotion]);
+  useEffect(() => staging.current?.setFighter(fighter), [fighter]);
+
+  useEffect(() => {
+    hum.current = startHum();
+    return () => hum.current?.stop();
+  }, []);
+
+  // The clock: rAF-driven so the countdown and the camera move stay in step. It starts once the scene is on screen, so
+  // a slow device building the airstrip never eats the countdown.
+  useEffect(() => {
+    if (!live) return;
+    let raf = 0;
+    const start = performance.now();
+    let lastWhole = Math.ceil(end.current);
+    const tick = (now: number) => {
+      const s = (now - start) / 1000;
+      setT(s);
+      const left = end.current - s;
+      if (left <= LAUNCH && !launched.current) {
+        launched.current = true;
+        staging.current?.launch(LAUNCH - FADE + 0.2);
+        hum.current?.rev();
+      }
+      const whole = Math.ceil(left);
+      if (whole !== lastWhole && whole >= 1 && whole <= 3) uiTick(false);
+      if (whole !== lastWhole && whole === 0) uiTick(true);
+      lastWhole = whole;
+      if (left <= 0 && !done.current) {
+        done.current = true;
+        hum.current?.stop();
+        launchRef.current();
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [live]);
+
+  const ready = useCallback(() => {
+    if (readied) return;
+    uiTick(true);
+    setReadied(true);
+    end.current = Math.min(end.current, t + LAUNCH + 0.05);
+  }, [readied, t]);
+
+  const left = Math.max(0, end.current - t);
+  const launching = left <= LAUNCH;
+  const pick = useCallback(
+    (id: FighterId) => {
+      if (launching || id === fighter) return;
+      uiTick(false);
+      onFighter(id);
+    },
+    [launching, fighter, onFighter],
+  );
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // The key that pressed Play (or a held one) must not also ready up on arrival.
+      if (e.repeat || performance.now() - mountedAt.current < 600) return;
+      if (e.code === 'Escape' && !launching) {
+        e.preventDefault();
+        uiTick(true);
+        onBack();
+      } else if (e.code === 'Space' || e.code === 'Enter') {
+        e.preventDefault();
+        ready();
+      } else if (e.code === 'ArrowLeft' || e.code === 'ArrowRight' || e.code === 'KeyA' || e.code === 'KeyD') {
+        const i = IDS.indexOf(fighter);
+        const dir = e.code === 'ArrowLeft' || e.code === 'KeyA' ? -1 : 1;
+        pick(IDS[(i + dir + IDS.length) % IDS.length]);
+      } else if (/^Digit[1-4]$/.test(e.code)) pick(IDS[Number(e.code.slice(5)) - 1]);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [ready, pick, onBack, fighter, launching]);
+
+  // The lobby: you first, then the nine joining over the first few seconds (already there on Play again).
+  const names = COPY.botNames.slice(0, 9);
+  const joinEvery = quick ? 0 : 0.32;
+  const joined = quick ? names.length : Math.min(names.length, Math.floor(Math.max(0, t - 0.6) / joinEvery));
+  const full = joined >= names.length;
+  const count = Math.ceil(left - 0.001);
+  const big = launching && count >= 1 && count <= 3 ? count : null;
+  const fade = Math.min(1, Math.max(0, (FADE - left) / FADE));
+  const status = !full ? 'Players joining' : launching ? 'Launching' : readied ? 'Ready' : 'Lobby full';
+
+  return (
+    <main className="relative h-[100dvh] w-screen select-none overflow-hidden bg-ink-deep text-cream">
+      <canvas ref={canvasRef} aria-hidden className={`fixed inset-0 h-full w-full transition-opacity duration-700 ${live ? 'opacity-100' : 'opacity-0'}`} />
+      {/* Letterbox bars slide in for the launch: the cinema cue that the match is about to start. */}
+      <div className="pointer-events-none fixed inset-x-0 top-0 bg-black transition-[height] duration-700 ease-out" style={{ height: launching ? '9vh' : 0 }} />
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 bg-black transition-[height] duration-700 ease-out" style={{ height: launching ? '9vh' : 0 }} />
+      <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(270deg,rgba(10,13,24,0.88)_0%,rgba(10,13,24,0.55)_24%,rgba(10,13,24,0)_46%)] max-sm:bg-[linear-gradient(0deg,rgba(10,13,24,0.95)_0%,rgba(10,13,24,0.6)_40%,rgba(10,13,24,0)_65%)]" />
+      <div className="pointer-events-none fixed inset-0 shadow-[inset_0_0_200px_rgba(0,0,0,0.6)]" />
+
+      {/* Top: the status and the clock. */}
+      <header
+        className={`fixed inset-x-0 top-0 flex items-start justify-between gap-4 px-5 pt-4 transition-opacity duration-500 sm:px-8 sm:pt-6 ${launching ? 'opacity-0' : 'opacity-100'}`}
+        style={{ paddingLeft: 'max(1.25rem, env(safe-area-inset-left))', paddingRight: 'max(1.25rem, env(safe-area-inset-right))' }}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            uiTick(true);
+            onBack();
+          }}
+          className="panel-cut bg-ink-deep/70 px-4 py-2 text-sm font-semibold text-cream/80 backdrop-blur hover:text-cream focus-visible:outline-2 focus-visible:outline-green"
+        >
+          ← Menu{!touch && <span className="ml-2 text-cream/45">Esc</span>}
+        </button>
+        <div className="flex flex-col items-end gap-0.5 text-right" aria-live="polite">
+          <span className="text-sm font-semibold text-cream/70">{status}</span>
+          <span className="font-display text-4xl leading-none tabular-nums text-gold drop-shadow-[0_2px_12px_rgba(0,0,0,0.7)] sm:text-5xl">
+            0:{String(Math.max(0, count)).padStart(2, '0')}
+          </span>
+        </div>
+      </header>
+
+      {/* Left (bottom on phones): who you are. */}
+      <section
+        className={`fixed bottom-0 left-0 flex max-w-[min(560px,58vw)] flex-col gap-3 px-5 pb-6 transition-all duration-500 sm:px-8 sm:pb-9 max-sm:max-w-none max-sm:right-0 ${launching ? 'translate-y-6 opacity-0' : 'opacity-100'}`}
+        style={{ paddingLeft: 'max(1.25rem, env(safe-area-inset-left))', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
+      >
+        <span className="text-sm font-semibold text-cream/70">You drop as</span>
+        <h1
+          key={fighter}
+          className="font-display text-5xl leading-[0.9] drop-shadow-[0_4px_20px_rgba(0,0,0,0.7)] [animation:riseIn_0.35s_ease-out] sm:text-7xl [@media(max-height:500px)]:text-4xl"
+          style={{ color: f.color }}
+        >
+          {f.name.toUpperCase()}
+        </h1>
+        <p className="max-w-md text-sm text-cream/85 sm:text-base [@media(max-height:500px)]:hidden">
+          {f.role} · <b className="text-gold">{f.superName}</b>: {f.superText}
+        </p>
+        <div className="mt-1 flex gap-2" role="radiogroup" aria-label="Fighter">
+          {IDS.map((id, i) => {
+            const on = id === fighter;
+            const c = FIGHTERS[id];
+            return (
+              <button
+                key={id}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                aria-label={c.name}
+                onClick={() => pick(id)}
+                className={`panel-cut relative h-20 w-16 overflow-hidden border-2 bg-ink/80 transition sm:h-24 sm:w-20 [@media(max-height:500px)]:h-16 [@media(max-height:500px)]:w-14 ${on ? '-translate-y-1' : 'opacity-75 hover:opacity-100'}`}
+                style={{ borderColor: on ? c.color : 'rgba(230,235,245,0.12)' }}
+              >
+                <span className="absolute inset-0 opacity-40" style={{ background: `radial-gradient(circle at 50% 80%, ${c.color}, transparent 70%)` }} />
+                {portraits && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={portraits[id]} alt="" className="absolute inset-x-0 bottom-0 h-full w-full object-cover object-top" />
+                )}
+                {!touch && <span className="absolute left-1 top-0.5 text-[10px] font-bold text-cream/70">{i + 1}</span>}
+              </button>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          onClick={ready}
+          disabled={readied}
+          className={`panel-cut mt-2 w-fit px-8 py-3 font-display text-xl uppercase transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream sm:text-2xl ${readied ? 'bg-cream/15 text-cream/60' : 'bg-green text-ink-deep hover:brightness-110'}`}
+        >
+          {readied ? 'Ready' : 'Ready up'}
+          {!touch && !readied && <span className="ml-3 text-sm opacity-70">Space</span>}
+        </button>
+      </section>
+
+      {/* Right: the lobby filling (hidden on short phones, where the clock already says it). */}
+      <aside
+        className={`fixed right-0 top-1/2 flex w-[min(300px,30vw)] -translate-y-1/2 flex-col gap-2 pr-5 transition-all duration-500 sm:pr-8 max-sm:hidden [@media(max-height:500px)]:hidden ${launching ? 'translate-x-8 opacity-0' : 'opacity-100'}`}
+        style={{ paddingRight: 'max(1.25rem, env(safe-area-inset-right))' }}
+        aria-label="Players in this match"
+      >
+        <div className="flex items-baseline justify-between">
+          <h2 className="font-display text-lg">Match lobby</h2>
+          <span className="font-display text-lg tabular-nums text-gold">{joined + 1}/10</span>
+        </div>
+        <div className="h-1 overflow-hidden bg-cream/10">
+          <div className="h-full bg-gold transition-[width] duration-300" style={{ width: `${((joined + 1) / 10) * 100}%` }} />
+        </div>
+        <ol className="flex flex-col gap-1">
+          <li className="panel-cut flex items-center gap-2 bg-ink/80 px-3 py-1.5 text-sm">
+            <span className="h-2 w-2 rounded-full" style={{ background: f.color }} />
+            <b className="flex-1">You</b>
+            <span className="text-xs text-cream/50">{f.name}</span>
+          </li>
+          {names.map((n, i) => (
+            <li
+              key={n}
+              className={`panel-cut flex items-center gap-2 bg-ink/60 px-3 py-1.5 text-sm transition-all duration-300 ${i < joined ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0'}`}
+            >
+              <span className="h-2 w-2 rounded-full bg-cream/40" />
+              <span className="flex-1 text-cream/85">{n}</span>
+              <span className="text-xs text-cream/40">{i < joined ? 'ready' : ''}</span>
+            </li>
+          ))}
+        </ol>
+      </aside>
+
+      {/* The launch: 3-2-1 and the fade. */}
+      {big !== null && (
+        <div className="pointer-events-none fixed inset-0 flex flex-col items-center justify-center gap-2" aria-live="assertive">
+          <span
+            key={big}
+            className={`font-display text-[9rem] leading-none text-cream drop-shadow-[0_6px_40px_rgba(0,0,0,0.8)] sm:text-[13rem] ${settings.reducedMotion ? '' : '[animation:countPop_1s_ease-out_both]'}`}
+          >
+            {big}
+          </span>
+          <span className="text-base font-semibold text-cream/85 drop-shadow sm:text-lg">{COPY.intro.title(10).join(' · ')}</span>
+        </div>
+      )}
+      <div className="pointer-events-none fixed inset-0 bg-black" style={{ opacity: fade }} />
+    </main>
+  );
+};
