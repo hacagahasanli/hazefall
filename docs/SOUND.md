@@ -9,7 +9,7 @@ menu ticks and the pre-match bed are in `src/components/uiSound.ts`. The limits 
 ```
 voices ─> sfx (1) / ui (0.7) / amb (0.5, ducked) / guns (Guns slider) ─┬─> compressor ─> master (Master slider, mutes) ─> limiter ─> out
                                                 └─ room reverb send ───┘
-menu ticks, pre-match bed ─> their own gain (Master level, mute) ─> out
+menu ticks, wipes, impacts, pre-match bed ─> their own gain (Master level, mute) ─> out
 ```
 
 - Compressor: threshold -14 dB, ratio 5. Limiter: threshold -3 dB, ratio 20, 1 ms attack.
@@ -39,6 +39,8 @@ menu ticks, pre-match bed ─> their own gain (Master level, mute) ─> out
 | explosion | 90 ms | 2 | ducks the bed 12 dB |
 | glass / push / KO | 150 / 120 / 150 ms | 1 / 2 / 2 | |
 | menu tick | 45 ms | 2 | a select always ticks |
+| screen wipe whoosh | 250 ms | 1 | filtered noise, ~300 ms, menu / lobby / report wipes |
+| countdown / report impact | 120 ms | 2 | low thump and click: 3-2-1, the drop, the placement landing |
 
 ## Adding a sound
 

@@ -29,6 +29,10 @@ export const BUDGET = {
   ko: { cooldownMs: 150, maxVoices: 2, lengthMs: 700 },
   // Menu ticks: holding an arrow key repeats ~30 times a second; a tick every 45 ms at most.
   uiTick: { cooldownMs: 45, maxVoices: 2, lengthMs: 120 },
+  // Screen wipes: one at a time; a burst of transitions (skipping through) makes one whoosh, not a roar.
+  uiWhoosh: { cooldownMs: 250, maxVoices: 1, lengthMs: 340 },
+  // Countdown and round-report hits: a second apart in practice; never more than two ringing.
+  uiImpact: { cooldownMs: 120, maxVoices: 2, lengthMs: 340 },
 } as const satisfies Record<string, Budget>;
 
 export type SoundName = keyof typeof BUDGET;

@@ -17,6 +17,9 @@ import { SettingsPanel } from '~/components/SettingsPanel';
 import { useSettings } from '~/components/useSettings';
 import { createWebPlatform } from '~/platform/web';
 import { TouchControls, useTouch } from '~/components/TouchControls';
+import { ShockRing, Streaks } from '~/components/Transitions';
+import { uiImpact } from '~/components/uiSound';
+import { loadCount, onLoadCount } from '~/lib/loading';
 import type { Session } from '~/game/net/session';
 import type { HudState } from '~/game/render/game';
 import type { FighterId } from '~/game/sim/types';
@@ -50,6 +53,103 @@ const DEATH_CARD = 2.2;
 const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
 /**
+ * The placement on the round report: counts down from the last place to yours, then lands with a hit and a ring (a win
+ * lands gold, with slow rays behind). Without motion it is simply there.
+ */
+const Placement = ({ place, total, won, fx }: { place: number; total: number; won: boolean; fx: boolean }) => {
+  const [n, setN] = useState(fx ? total : place);
+  const [landed, setLanded] = useState(!fx);
+  useEffect(() => {
+    if (!fx) return;
+    let raf = 0;
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const k = Math.min(1, (now - t0) / 520);
+      setN(Math.round(total + (place - total) * (1 - Math.pow(1 - k, 3))));
+      if (k < 1) raf = requestAnimationFrame(step);
+      else {
+        setLanded(true);
+        uiImpact(won ? 1 : 0.55);
+      }
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="relative flex items-baseline font-display leading-none">
+      {won && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[30rem] w-[30rem] -translate-x-1/2 -translate-y-1/2 opacity-60"
+          style={{
+            background: 'repeating-conic-gradient(from 0deg, rgba(255,210,63,0.32) 0deg 7deg, transparent 7deg 22deg)',
+            maskImage: 'radial-gradient(circle, #000 15%, transparent 68%)',
+            WebkitMaskImage: 'radial-gradient(circle, #000 15%, transparent 68%)',
+            animation: fx ? 'lcsRays 24s linear infinite' : undefined,
+          }}
+        />
+      )}
+      {landed && fx && <ShockRing color={won ? '#ffd23f' : '#ff3d6e'} size="16rem" duration={0.7} />}
+      <span
+        key={landed ? 'landed' : 'counting'}
+        className={`relative text-[7rem] sm:text-[11rem] [@media(max-height:520px)]:text-[5.5rem] ${won ? 'text-gold' : 'text-cream'} ${landed ? '' : 'opacity-70'}`}
+        style={{
+          textShadow: landed ? '-4px 0 rgba(255,61,110,0.55), 4px 0 rgba(62,197,255,0.55), 0 8px 40px rgba(0,0,0,0.6)' : undefined,
+          animation: landed && fx ? 'lcsLand 0.45s cubic-bezier(0.2,0.8,0.2,1) both' : undefined,
+        }}
+      >
+        #{n}
+      </span>
+      <span className="relative text-4xl text-cream/40">/{total}</span>
+    </div>
+  );
+};
+
+/**
+ * The loading screen of a round that is not built behind the lobby (the site's rounds): a holo panel with the real
+ * progress (the model files asked for and arrived since it opened), the plane crossing, and a rotating tip.
+ */
+const MatchLoading = ({ fx }: { fx: boolean }) => {
+  const [c, setC] = useState({ done: 0, total: 0 });
+  const [tip, setTip] = useState(() => Math.floor(Math.random() * COPY.tips.length));
+  useEffect(() => {
+    const base = loadCount();
+    const off = onLoadCount((n) => setC({ done: n.done - base.done, total: n.total - base.total }));
+    const t = setInterval(() => setTip((i) => i + 1), 3600);
+    return () => {
+      off();
+      clearInterval(t);
+    };
+  }, []);
+  // Building the map comes first (no files yet), then the models arrive one by one.
+  const share = c.total > 0 ? 0.2 + (0.75 * c.done) / c.total : 0.05;
+  return (
+    <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-6 overflow-hidden bg-[radial-gradient(ellipse_at_50%_40%,#13213a,#0a0d18_60%,#05070e)] px-6" role="status" aria-live="polite">
+      <div aria-hidden className="grid-bg absolute inset-0 opacity-60" />
+      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[repeating-linear-gradient(0deg,rgba(0,0,0,0.25)_0_1px,transparent_1px_3px)]" />
+      {fx && <Streaks color="#3ec5ff" count={4} seed={7} />}
+      <div className="relative flex w-full max-w-md flex-col gap-3">
+        <div className="lcs-glitch-in font-display text-3xl leading-none text-gold sm:text-4xl" style={{ textShadow: '-3px 0 rgba(255,61,110,0.6), 3px 0 rgba(62,197,255,0.6)' }}>
+          Loading the map
+        </div>
+        <div className="flex items-baseline justify-between text-sm text-cream/70">
+          <span>{c.total > 0 ? `Models ${c.done} / ${c.total}` : 'Building the battleground'}</span>
+          <span className="font-display text-xl tabular-nums text-cream">{Math.floor(share * 100)}%</span>
+        </div>
+        <div className="panel-cut relative h-3 overflow-hidden bg-cream/10">
+          <div className="h-full origin-left bg-[linear-gradient(90deg,#3ddc84,#ffd23f)] transition-transform duration-300" style={{ transform: `scaleX(${share})` }} />
+          <div aria-hidden className="absolute inset-0 bg-[repeating-linear-gradient(90deg,transparent_0_9px,#0a0d18_9px_12px)]" />
+        </div>
+        <p key={tip} className="min-h-10 text-sm text-cream/80 [animation:riseIn_0.4s_ease-out]">
+          <span className="mr-2 font-display text-gold">›</span>
+          {COPY.tips[tip % COPY.tips.length]}
+        </p>
+      </div>
+    </div>
+  );
+};
+
+/**
  * The round report: where you placed, who took you out and with what, and how your round went,
  * then straight into the next match or back to the lobby.
  */
@@ -61,13 +161,16 @@ const Result = ({
   Support,
   exitLabel,
   busy,
+  fx,
 }: {
   hud: HudState;
   onPlayAgain: () => void;
   onExit: () => void;
   online: boolean;
-  Support?: ComponentType;
+  Support?: ComponentType<{ variant?: 'pill' | 'card' }>;
   exitLabel: string;
+  /** Motion on (the game's reduced-motion setting off). */
+  fx: boolean;
   /** A midgame ad is playing: the buttons wait. */
   busy: boolean;
 }) => {
@@ -82,24 +185,31 @@ const Result = ({
   ];
   const killerColor = hud.killerFighter ? FIGHTERS[hud.killerFighter].color : '#6fb6ff';
   return (
-    <div className="absolute inset-0 z-30 flex animate-[fadeIn_0.6s_ease-out] items-center justify-center overflow-y-auto bg-[radial-gradient(ellipse_at_center,rgba(10,13,24,0.72),rgba(10,13,24,0.95))] px-6 py-4 backdrop-blur-sm">
-      <div className="flex w-full max-w-4xl flex-col gap-8 [@media(max-height:520px)]:gap-3">
+    <div className="absolute inset-0 z-30 flex animate-[fadeIn_0.35s_ease-out] overflow-y-auto overflow-x-hidden bg-[radial-gradient(ellipse_at_center,rgba(10,13,24,0.72),rgba(10,13,24,0.95))] px-6 py-4 backdrop-blur-sm">
+      {/* The report comes in on a slash of light, gold for a win and red for a loss, and a few streaks. */}
+      {fx && (
+        <>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-[-20%] left-0 w-[45vw]"
+            style={{ background: `linear-gradient(90deg, transparent, ${hud.won ? 'rgba(255,210,63,0.35)' : 'rgba(255,61,110,0.3)'}, transparent)`, animation: 'lcsSweep 0.7s cubic-bezier(0.6,0,0.3,1) both' }}
+          />
+          <Streaks color={hud.won ? '#ffd23f' : '#ff3d6e'} count={6} seed={hud.placement} />
+        </>
+      )}
+      <div className="relative m-auto flex w-full max-w-4xl flex-col gap-8 [@media(max-height:520px)]:gap-3">
         <div className="flex flex-wrap items-end gap-8 [@media(max-height:520px)]:gap-4">
-          <div className="flex items-baseline font-display leading-none">
-            <span
-              className={`text-[7rem] sm:text-[11rem] [@media(max-height:520px)]:text-[5.5rem] ${hud.won ? 'text-gold' : 'text-cream'}`}
-            >
-              #{hud.won ? 1 : hud.placement}
-            </span>
-            <span className="text-4xl text-cream/40">/{hud.total}</span>
-          </div>
+          <Placement place={hud.won ? 1 : hud.placement} total={hud.total} won={hud.won} fx={fx} />
           <div className="flex flex-col gap-2 pb-6 [@media(max-height:520px)]:pb-2">
             <span
               className={`text-base font-bold ${hud.won ? 'text-green' : 'text-orange'}`}
             >
               {hud.won ? 'Round won' : 'Eliminated'}
             </span>
-            <h2 className="font-display text-3xl leading-none sm:text-5xl [@media(max-height:520px)]:text-3xl">
+            <h2
+              className={`font-display text-3xl leading-none sm:text-5xl [@media(max-height:520px)]:text-3xl ${fx ? 'lcs-glitch-in' : ''}`}
+              style={fx ? { animationDelay: '0.45s' } : undefined}
+            >
               {hud.won ? COPY.result.won : COPY.result.lost}
             </h2>
             <p className="text-lg text-cream/80">
@@ -125,7 +235,7 @@ const Result = ({
             <div
               key={label}
               className="panel-cut flex animate-[riseIn_0.5s_ease-out_both] flex-col gap-1 bg-ink/90 p-4 [@media(max-height:520px)]:p-2.5"
-              style={{ animationDelay: `${0.25 + i * 0.08}s` }}
+              style={{ animationDelay: `${0.5 + i * 0.07}s` }}
             >
               <span className="font-display text-3xl text-cream [@media(max-height:520px)]:text-2xl">
                 {value}
@@ -143,7 +253,7 @@ const Result = ({
             there is a winner. {hud.alive} still standing.
           </p>
         )}
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-3 [animation:riseIn_0.4s_ease-out_0.75s_both]">
           <button
             type="button"
             autoFocus
@@ -165,9 +275,9 @@ const Result = ({
           )}
         </div>
         {Support && (
-          <p className="flex flex-wrap items-center gap-x-2 text-sm text-cream/60">
-            Enjoyed it? <Support />
-          </p>
+          <div className="[animation:riseIn_0.45s_ease-out_1s_both]">
+            <Support variant="card" />
+          </div>
         )}
       </div>
     </div>
@@ -193,7 +303,7 @@ export const Match = ({
   /** The page's platform (a portal SDK); our own site gets the no-op web adapter. */
   platform?: Platform;
   /** The site's support link (the only outbound link in a round). Left out in the portal build: portals allow none. */
-  support?: ComponentType;
+  support?: ComponentType<{ variant?: 'pill' | 'card' }>;
   /** A studio credit line in the pause menu. */
   credit?: string;
   /** The report's second button, and the pause menu's way out. */
@@ -332,18 +442,18 @@ export const Match = ({
 
   return (
     <main className="relative h-[100dvh] w-screen touch-none select-none overflow-hidden bg-ink-deep">
-      {!held && hud && <div className="pointer-events-none absolute inset-0 z-[60] bg-black [animation:fadeOut_0.8s_ease-out_forwards]" />}
-      {!hud && !held && (
-        <div
-          className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-ink-deep"
-          role="status"
-          aria-live="polite"
-        >
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-cream/15 border-t-gold" />
-          <div className="font-display text-2xl text-gold">Loading the map</div>
-          <p className="text-sm text-cream/60">Boarding the plane with nine others…</p>
-        </div>
-      )}
+      {/* The picture opens out of the launch's black: two shutters part from a bright seam (a plain fade without motion). */}
+      {!held && hud &&
+        (settings.reducedMotion ? (
+          <div className="pointer-events-none absolute inset-0 z-[60] bg-black [animation:fadeOut_0.5s_ease-out_forwards]" />
+        ) : (
+          <div aria-hidden className="pointer-events-none absolute inset-0 z-[60] overflow-hidden [animation:fadeOut_0.1s_linear_0.6s_forwards]">
+            <div className="absolute inset-x-0 top-0 h-1/2 bg-black [animation:lcsShutterUp_0.55s_cubic-bezier(0.7,0,0.2,1)_both]" />
+            <div className="absolute inset-x-0 bottom-0 h-1/2 bg-black [animation:lcsShutterDown_0.55s_cubic-bezier(0.7,0,0.2,1)_both]" />
+            <div className="absolute inset-x-0 top-1/2 -mt-px h-[2px] bg-white shadow-[0_0_30px_8px_rgba(255,210,63,0.8)] [animation:lcsSeam_0.5s_ease-out_both]" />
+          </div>
+        ))}
+      {!hud && !held && <MatchLoading fx={!settings.reducedMotion} />}
       {/* Outside the Deadline: the screen turns blue, and the edges flash red with every bite. */}
       {hud?.zone.outside && !hud.dead && hud.phase !== 'over' && (
         <>
@@ -484,7 +594,10 @@ export const Match = ({
               {COPY.intro.above && (
                 <div className="font-mono text-xs tracking-[0.3em] text-green/90 [animation:fadeIn_0.4s_ease-out]">{COPY.intro.above}</div>
               )}
-              <div className="font-display text-4xl leading-none text-gold drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)] [animation:riseIn_0.5s_ease-out] sm:text-7xl">
+              <div
+                className={`font-display text-4xl leading-none text-gold drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)] sm:text-7xl ${settings.reducedMotion ? '' : 'lcs-glitch-in'}`}
+                style={settings.reducedMotion ? undefined : { animationDelay: '0.35s' }}
+              >
                 {COPY.intro.title(hud.total)[0]}
                 <br />
                 {COPY.intro.title(hud.total)[1]}
@@ -590,8 +703,17 @@ export const Match = ({
               role="status"
               aria-live="assertive"
             >
-              <div className="flex flex-col items-center gap-2 text-center animate-[riseIn_0.35s_ease-out_both]" style={{ zoom: hudZoom }}>
-                <div className="font-display text-4xl leading-none drop-shadow-[0_4px_18px_rgba(0,0,0,0.8)] sm:text-6xl" style={{ color: killColor }}>
+              {!settings.reducedMotion && (
+                <>
+                  <div className="absolute inset-0" style={{ boxShadow: `inset 0 0 160px 50px ${killColor}`, animation: 'lcsFlash 0.7s ease-out both' }} />
+                  <Streaks color={killColor} count={5} seed={3} />
+                </>
+              )}
+              <div className="relative flex flex-col items-center gap-2 text-center animate-[riseIn_0.35s_ease-out_both]" style={{ zoom: hudZoom }}>
+                <div
+                  className={`font-display text-4xl leading-none drop-shadow-[0_4px_18px_rgba(0,0,0,0.8)] sm:text-6xl ${settings.reducedMotion ? '' : 'lcs-glitch-in'}`}
+                  style={{ color: killColor }}
+                >
                   {COPY.result.lost}
                 </div>
                 <div className="panel-cut bg-ink-deep/85 px-5 py-2 text-lg text-cream sm:text-2xl">
@@ -806,6 +928,7 @@ export const Match = ({
               Support={Support}
               exitLabel={exitLabel}
               busy={breaks.inBreak}
+              fx={!settings.reducedMotion}
             />
           )}
         </>

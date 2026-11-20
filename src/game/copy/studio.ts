@@ -31,4 +31,15 @@ export const COPY: Copy = {
     ['Loot', 'Two gun slots (1 / 2 or X to swap), vests I to III, backpacks, heals and bombs. The busy places hide the best gear: blue and gold beams. Walk over loot or press F; C heals.'],
     ['Survive', 'Stay inside the Deadline. Space shoots, Q / E lean, Shift rolls, G is your super, hide in tall grass. Esc Esc pauses.'],
   ],
+  tips: [
+    'Jump from the plane whenever you like, then steer your parachute down.',
+    'You land with a pistol and one magazine: grab a better gun fast.',
+    'Blue and gold beams mark the best gear.',
+    'Tall grass hides you.',
+    'Lean round corners and roll out of trouble.',
+    'Two gun slots: keep a close-range gun and a long one.',
+    'Vests I to III soak up hits; a bigger backpack carries more heals.',
+    'Stay inside the Deadline: it closes phase by phase and hurts more each time.',
+    'Your super is ready when its bar turns gold.',
+  ],
 };

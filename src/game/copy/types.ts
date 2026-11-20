@@ -35,4 +35,6 @@ export interface Copy {
   items: { rarity: [string, string, string]; bandage: string; medkit: string; coffee: string };
   /** The lobby's three how-to cards. */
   howTo: [string, string][];
+  /** Loading-screen tips: only things the game really does, no keys (they differ by device and can be rebound). */
+  tips: string[];
 }

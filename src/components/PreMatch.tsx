@@ -12,11 +12,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { usePortraits } from '~/components/FighterSelect';
-import { setUiSound, startHum, uiTick } from '~/components/uiSound';
+import { ShockRing, Streaks } from '~/components/Transitions';
+import { setUiSound, startHum, uiImpact, uiTick } from '~/components/uiSound';
 import { COPY } from '~/game/copy/studio';
 import { deviceFacts } from '~/game/render/deviceFacts';
 import { resolveTier } from '~/game/render/quality';
 import { FIGHTERS } from '~/game/sim/constants';
+import { loadCount, onLoadCount } from '~/lib/loading';
 
 import type { Staging } from '~/game/render/staging';
 import type { Settings } from '~/game/settings';
@@ -122,8 +124,9 @@ export const PreMatch = ({
         hum.current?.rev();
       }
       const whole = Number.isFinite(left) ? Math.ceil(left) : 99;
-      if (whole !== lastWhole && whole >= 1 && whole <= 3) uiTick(false);
-      if (whole !== lastWhole && whole === 0) uiTick(true);
+      // 3, 2, 1 land as hits that climb; the drop itself hits hardest.
+      if (whole !== lastWhole && whole >= 1 && whole <= 3) uiImpact(0.25 + (3 - whole) * 0.25);
+      if (whole !== lastWhole && whole === 0) uiImpact(1);
       lastWhole = whole;
       if (left <= 0 && !done.current) {
         done.current = true;
@@ -137,9 +140,18 @@ export const PreMatch = ({
     return () => cancelAnimationFrame(raf);
   }, [live]);
 
+  // The real loading of the match behind the lobby: model files asked for and arrived since Ready.
+  const [models, setModels] = useState<{ done: number; total: number } | null>(null);
+  useEffect(() => {
+    if (!readied) return;
+    const base = loadCount();
+    return onLoadCount((c) => setModels({ done: c.done - base.done, total: c.total - base.total }));
+  }, [readied]);
+
   const ready = useCallback(() => {
     if (readied || !live) return;
     uiTick(true);
+    uiImpact(0.15);
     setReadied(true);
     setReadyAt(t);
     end.current = t + count;
@@ -191,6 +203,9 @@ export const PreMatch = ({
   /** After Ready: 0..1 through the countdown, for the strip. */
   const progress = readied ? Math.min(1, (t - readyAt) / Math.max(0.1, end.current - readyAt)) : 0;
   const joining = readied && !loaded && left <= LAUNCH + 0.7;
+  /** How much of the match is loaded (real: model files in), for the strip while it waits. */
+  const mapShare = loaded ? 1 : models && models.total > 0 ? 0.15 + (0.8 * models.done) / models.total : 0.1;
+  const fx = !settings.reducedMotion;
 
   return (
     <main className="relative h-[100dvh] w-screen select-none overflow-hidden bg-ink-deep text-cream">
@@ -272,7 +287,7 @@ export const PreMatch = ({
           disabled={readied || !live}
           className={`panel-cut relative mt-2 w-fit px-8 py-3 font-display text-xl uppercase transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream sm:text-2xl ${readied ? 'bg-cream/15 text-cream/70' : 'bg-green text-ink-deep hover:brightness-110'} ${!readied && live && !settings.reducedMotion ? '[animation:readyPulse_1.6s_ease-in-out_infinite]' : ''}`}
         >
-          {readied ? 'Ready ✓' : 'Ready'}
+          {readied ? <span className={fx ? 'lcs-glitch-in inline-block' : ''}>Ready ✓</span> : 'Ready'}
           {!touch && !readied && <span className="ml-3 text-sm opacity-70">Space</span>}
         </button>
         {!readied && live && full && <span className="text-xs text-cream/60">The match starts when you are ready.</span>}
@@ -325,26 +340,53 @@ export const PreMatch = ({
             </div>
             <div className="h-1.5 overflow-hidden bg-cream/10">
               <div
-                className={`h-full bg-gold ${joining && !settings.reducedMotion ? 'animate-pulse' : ''}`}
-                style={{ width: `${(joining ? 1 : progress) * 100}%` }}
+                className={`h-full ${joining ? 'bg-green' : 'bg-gold'}`}
+                style={{ width: `${(joining ? mapShare : progress) * 100}%` }}
               />
             </div>
-            <span className="text-xs text-cream/60">10/10 ready · {loaded ? 'map ready' : 'loading the map'}</span>
+            <span className="text-xs tabular-nums text-cream/60">
+              10/10 ready · {loaded ? 'map ready' : models && models.total > 0 ? `loading the map · ${models.done}/${models.total} models` : 'building the map'}
+            </span>
           </div>
         </div>
       )}
 
-      {/* The launch: 3-2-1 and the fade. */}
+      {/* Ready: a green pulse round the screen's edge, once. */}
+      {readied && fx && (
+        <div className="pointer-events-none fixed inset-0" style={{ boxShadow: 'inset 0 0 140px 30px rgba(61,220,132,0.55)', animation: 'lcsFlash 0.6s ease-out both' }} />
+      )}
+
+      {/* The launch: 3-2-1 slam in with a ring, light streaks and a jolt; then the drop and the fade. */}
       {big !== null && (
-        <div className="pointer-events-none fixed inset-0 flex flex-col items-center justify-center gap-2" aria-live="assertive">
+        <div
+          key={big}
+          className="pointer-events-none fixed inset-0 flex flex-col items-center justify-center gap-2"
+          style={fx ? { animation: 'lcsShake 0.28s ease-out both' } : undefined}
+          aria-live="assertive"
+        >
+          {fx && (
+            <>
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,210,63,0.28),transparent_55%)]" style={{ ['--lcs-flash' as string]: 1, animation: 'lcsFlash 0.5s ease-out both' }} />
+              <Streaks color={big === 1 ? '#ffd23f' : '#e6ebf5'} count={big === 1 ? 9 : 5} seed={big} />
+              <ShockRing color={big === 1 ? '#ffd23f' : '#3ddc84'} size="min(70vw, 26rem)" />
+            </>
+          )}
           <span
-            key={big}
-            className={`font-display text-[9rem] leading-none text-cream drop-shadow-[0_6px_40px_rgba(0,0,0,0.8)] sm:text-[13rem] ${settings.reducedMotion ? '' : '[animation:countPop_1s_ease-out_both]'}`}
+            className="relative font-display text-[9rem] leading-none text-cream sm:text-[13rem]"
+            style={{
+              textShadow: '-5px 0 rgba(255,61,110,0.8), 5px 0 rgba(62,197,255,0.8), 0 6px 40px rgba(0,0,0,0.8)',
+              animation: fx ? 'lcsSlam 1s cubic-bezier(0.2, 0.8, 0.2, 1) both' : undefined,
+              color: big === 1 ? 'var(--color-gold)' : undefined,
+            }}
           >
             {big}
           </span>
-          <span className="text-base font-semibold text-cream/85 drop-shadow sm:text-lg">{COPY.intro.title(10).join(' · ')}</span>
+          <span className="relative text-base font-semibold text-cream/85 drop-shadow sm:text-lg">{COPY.intro.title(10).join(' · ')}</span>
         </div>
+      )}
+      {/* The last half second: a hot white streak across the middle as the screen goes to black. */}
+      {fade > 0 && fx && (
+        <div className="pointer-events-none fixed inset-x-0 top-1/2 h-[3px] -translate-y-1/2 bg-white shadow-[0_0_40px_10px_rgba(255,210,63,0.8)]" style={{ opacity: 1 - fade * 0.6 }} />
       )}
       <div className="pointer-events-none fixed inset-0 bg-black" style={{ opacity: fade }} />
     </main>

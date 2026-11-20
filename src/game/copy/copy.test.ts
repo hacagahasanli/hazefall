@@ -24,6 +24,7 @@ const strings = (c: Copy): string[] => [
   c.intro.line,
   ...(c.intro.below ? [c.intro.below] : []),
   ...c.howTo.flat(),
+  ...c.tips,
   ...c.items.rarity,
   c.items.bandage,
   c.items.medkit,
@@ -38,6 +39,7 @@ describe('portal copy', () => {
     expect(Object.keys(NEUTRAL.fighters).sort()).toEqual(Object.keys(STUDIO.fighters).sort());
     expect(NEUTRAL.botNames).toHaveLength(STUDIO.botNames.length);
     expect(NEUTRAL.howTo.map(([t]) => t)).toEqual(STUDIO.howTo.map(([t]) => t));
+    expect(NEUTRAL.tips).toHaveLength(STUDIO.tips.length);
   });
 
   it('carries none of the developer jokes', () => {

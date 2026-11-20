@@ -12,6 +12,7 @@ import { FIGHTER_IDS, PICK_KEY } from '~/components/FighterSelect';
 import { MainMenu } from '~/components/MainMenu';
 import { Match } from '~/components/Match';
 import { PreMatch } from '~/components/PreMatch';
+import { useWipe } from '~/components/Transitions';
 import { useTouch } from '~/components/TouchControls';
 import { useSettings } from '~/components/useSettings';
 
@@ -35,24 +36,33 @@ export const PortalGame = ({ platform, credit }: { platform: Platform; credit: s
   const [aim, setAim] = useState<AimMode>(() => readAim());
   const [settings, setSettings] = useSettings(platform.storage);
   const touch = useTouch();
+  // Every change of screen goes through a quick wipe (see Transitions): the next screen is built while it covers.
+  const wipe = useWipe(settings.reducedMotion);
 
   const pickFighter = (id: FighterId) => {
     setFighter(id);
     platform.storage.setItem(PICK_KEY, id);
   };
-  const toLobby = (again: boolean) => {
-    setQuick(again);
-    setLoaded(false);
-    setStage('lobby');
-  };
-  const toMenu = () => {
-    setAim(readAim());
-    setStage('menu');
-  };
+  const toLobby = (again: boolean) =>
+    wipe.run(again ? 'Rematch' : 'Lobby', () => {
+      setQuick(again);
+      setLoaded(false);
+      setStage('lobby');
+    });
+  const toMenu = () =>
+    wipe.run(
+      'Menu',
+      () => {
+        setAim(readAim());
+        setStage('menu');
+      },
+      '#3ec5ff',
+    );
 
   if (stage !== 'menu') {
     return (
       <>
+        {wipe.node}
         {/* The match: built underneath the lobby once you are ready, released at the end of the launch. */}
         {(stage === 'readying' || stage === 'match') && (
           <Match
@@ -91,7 +101,9 @@ export const PortalGame = ({ platform, credit }: { platform: Platform; credit: s
   }
 
   return (
-    <MainMenu
+    <>
+      {wipe.node}
+      <MainMenu
       platform={platform}
       settings={settings}
       onSettings={setSettings}
@@ -106,5 +118,6 @@ export const PortalGame = ({ platform, credit }: { platform: Platform; credit: s
       credit={credit}
       touch={touch}
     />
+    </>
   );
 };
