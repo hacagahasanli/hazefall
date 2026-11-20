@@ -331,3 +331,37 @@ Changing anything under `sim/` changes the rules for everyone; run `npm run test
 - **No path-finding** for bots (detours only).
 - **`window.__lcs` and `?cam=near`** exist only in development builds.
 - **Not run for this guide**: a production build (`npm run build`) and an in-browser play-through.
+
+## 10. Portal build (CrazyGames)
+
+`npm run build:portal` writes one static folder, `dist/portal/`, ready to zip and upload; `npm run dev:portal` serves it
+with hot reload on port 3203, and `npm run phone:portal` builds it and serves the build on port 3204 to the local network
+(open the "Network" URL it prints on a phone on the same Wi-Fi).
+
+- **Entry** (`portal/index.html`, `portal/main.tsx`, `vite.portal.config.ts`): the CrazyGames SDK v3 script, self-hosted OFL
+  fonts, favicons and manifest from `portal/static/`, the game's models and sounds copied into `assets/`, every path relative
+  (`base: './'`, `__LCS_ASSET_BASE__`). No lobby server, no Next.js, no outbound link.
+- **What players see**: `PortalGame` = the main menu (`MainMenu`) over the live battleground, then solo rounds against nine
+  bots (`Match`). Online play, the support card and every studio link exist only on the site.
+- **Neutral copy**: `src/game/copy/studio.ts` (the developer jokes) is swapped for `neutral.ts` at build time by an alias.
+  The game keeps its name; fighters, bots, the zone ("the Storm"), the result and intro lines change.
+- **Platform adapter** (`src/platform/`): `detectPlatform` picks the CrazyGames adapter when the SDK inits, else a no-op web
+  adapter. `useBreaks` reports loading stop (menu shown), gameplay start/stop (a round on screen, not paused, not on the
+  report), asks for a midgame ad only as the player leaves the round report (`BreakScheduler`: after one round and 90 s of
+  play, at most every 180 s), mutes and freezes only once the ad starts, and follows the portal's mute button.
+- **Performance tiers** (`src/game/render/quality.ts`): auto by device (phones, tablets and 4 GB Chromebooks get low),
+  a frame-rate guard steps down once if it stays under 40 fps; Settings > Graphics overrides it, plus shadows, resolution
+  scale and an FPS counter. The menu backdrop is cheaper on low and holds still with reduced motion.
+- **Settings** (`src/game/settings.ts`, `SettingsPanel`): key rebinding (conflicts swap, Esc/Tab/arrows reserved),
+  sensitivity, invert Y, touch size/opacity/left-handed, third/first person and FOV, graphics, audio, accessibility
+  (reduced motion, colour-blind colours, larger HUD). Saved as JSON through the platform storage, applied live; the pause
+  menu opens the same panel.
+- **Checks**: `scripts/portal-report.mjs` runs after every build and fails it on too many files, absolute paths, any URL but
+  the SDK, the lobby server in the bundle, or a studio joke in the shipped text, and prints the size.
+- **Captures** (`scripts/portal-*.mjs`, need playwright-core in a scratch folder): covers into `docs/portal/covers`
+  (1920x1080, 800x1200, 800x800, three variants), screens into `docs/portal/screens`, load times (`portal-serve.mjs` +
+  `portal-load.mjs`). `?testBreaks` on the dev server makes an ad due after every round (the SDK's demo ad on localhost).
+
+Measured 2026-11-20 (`portal-load.mjs`, build served with gzip under a sub-path, cache off, three runs): fast 4G (9 Mbps,
+85 ms) menu usable in 0.9 s and the first frame of a round 1.4 s after Play; slow 4G (1.6 Mbps, 150 ms, 4x CPU, Pixel 7)
+2.6 s and 2.7 s. Build: 69 files, about 2.4 MB on disk, 1.6 MB over the wire, code 322 KB gzip.
