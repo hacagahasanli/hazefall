@@ -182,3 +182,20 @@
     filter: brightness(1.18);
   }
 }
+
+/* Home page support: the coffee crate sways under its parachute, the corner cup gives a little wiggle now and then. */
+@keyframes lcsSway {
+  0%, 100% { transform: rotate(-5deg) translateY(0); }
+  50% { transform: rotate(5deg) translateY(2px); }
+}
+@keyframes lcsWiggle {
+  0%, 84%, 100% { transform: rotate(0); }
+  88% { transform: rotate(-16deg); }
+  92% { transform: rotate(14deg); }
+  96% { transform: rotate(-8deg); }
+}
+.lcs-drop { transform-origin: 50% 10%; animation: lcsSway 3.2s ease-in-out infinite; }
+.lcs-cup { animation: lcsWiggle 4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .lcs-drop, .lcs-cup { animation: none; }
+}

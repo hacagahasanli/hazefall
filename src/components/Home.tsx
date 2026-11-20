@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { DISTRICTS, FIGHTERS, WORLD } from '~/game/sim/constants';
 
-import { SupportCard } from '~/components/SupportLink';
+import { SupportCard, SupportCorner } from '~/components/SupportLink';
 
 import type { FighterId } from '~/game/sim/types';
 
@@ -166,6 +166,8 @@ export const Home = () => {
       <div className="pointer-events-none fixed inset-x-0 bottom-0 h-72 bg-gradient-to-t from-ink-deep via-ink-deep/80 to-transparent" />
       {/* Narrow screens: the text runs the full width, so darken the whole backdrop a little. */}
       <div className="pointer-events-none fixed inset-0 bg-ink-deep/55 lg:hidden" />
+
+      <SupportCorner />
 
       <div className="relative mx-auto flex min-h-[100dvh] max-w-7xl flex-col justify-between gap-10 px-5 pb-8 pt-8 sm:px-8">
 
