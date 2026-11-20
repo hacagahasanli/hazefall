@@ -3,7 +3,10 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 import { BUILDINGS, MAP, SIZE, TILE, tileHash, WORLD } from '../sim/constants';
 
+import { chunkedInstances } from './chunks';
 import { routeDistance } from './roads';
+
+import type { ChunkedKind, ChunkView, InstanceData } from './chunks';
 
 /**
  * Procedural nature, built in code (no asset pack): a painted terrain with soft transitions,
@@ -173,17 +176,27 @@ export const natureUniforms = {
   uTime: { value: 0 },
   uFocus: { value: new THREE.Vector3() },
   uFade: { value: 0 },
+  /** The view's reach scale (per quality tier): grass and tall grass shrink away at `reach x uReach` metres. */
+  uReach: { value: 1 },
 };
+
+/** How far (m, at reach scale 1) the lawn's tufts and the tall grass are drawn. */
+export const GRASS_REACH = 70;
+export const TALL_GRASS_REACH = 150;
 
 /**
  * Adds wind sway (bigger the higher above `pivot` a vertex is) and, for canopies, a dithered
  * cut-out within `uFade` metres of the player above 2.2 m, so you can always see your fighter.
  */
-const windy = (m: THREE.MeshStandardMaterial, amount: number, pivot: number, cutout: boolean, bend = 0) => {
+const windy = (m: THREE.MeshStandardMaterial, amount: number, pivot: number, cutout: boolean, bend = 0, reach = 0) => {
+  // Blades (reach > 0: the grasses) are single triangles drawn from both sides, lit from above on either side.
+  const blades = reach > 0;
+  if (blades) m.side = THREE.DoubleSide;
   m.onBeforeCompile = (sh) => {
+    if (blades) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', ''));
     Object.assign(sh.uniforms, natureUniforms);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', `#include <common>\nuniform float uTime;\nuniform vec3 uPeople[${PEOPLE}];\nvarying vec3 vWorld;`)
+      .replace('#include <common>', `#include <common>\nuniform float uTime;\nuniform float uReach;\nuniform vec3 uPeople[${PEOPLE}];\nvarying vec3 vWorld;`)
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
@@ -191,6 +204,9 @@ const windy = (m: THREE.MeshStandardMaterial, amount: number, pivot: number, cut
         #ifdef USE_INSTANCING
           base = instanceMatrix[3].xyz;
         #endif
+        ${reach > 0 ? `// Small things shrink into the ground towards the edge of their reach (the chunks beyond it are not drawn).
+        float reach = ${reach.toFixed(1)} * uReach;
+        transformed *= smoothstep(reach, reach * 0.7, distance(base, cameraPosition));` : ''}
         float bend = max(0.0, transformed.y - ${pivot.toFixed(2)});
         float ph = base.x * 0.37 + base.z * 0.29;
         float gust = 0.6 + 0.4 * sin(uTime * 0.7 + base.x * 0.05);
@@ -234,7 +250,7 @@ const windy = (m: THREE.MeshStandardMaterial, amount: number, pivot: number, cut
           : '#include <clipping_planes_fragment>',
       );
   };
-  m.customProgramCacheKey = () => `windy-${amount}-${pivot}-${cutout}`;
+  m.customProgramCacheKey = () => `windy-${amount}-${pivot}-${cutout}-${reach}`;
   return m;
 };
 
@@ -280,8 +296,9 @@ const merge = (parts: THREE.BufferGeometry[]) => {
 const hsl = (h: number, s: number, l: number) => new THREE.Color().setHSL(h, s, Math.max(0, Math.min(1, l)), THREE.SRGBColorSpace);
 
 /** A lumpy blob: an icosphere pushed in and out, slightly flattened. */
-const blob = (r: number, seed: number, rough: number, flat = 0.85) => {
-  const g = new THREE.IcosahedronGeometry(r, 1);
+const blob = (r: number, seed: number, rough: number, flat = 0.85, detail = 1) => {
+  // Detail 0 keeps the corners of detail 1 (which get the same jitter), so the far version has the same silhouette.
+  const g = new THREE.IcosahedronGeometry(r, detail);
   return { g, displace: (v: THREE.Vector3) => {
     const k = 1 + jitter3(v.x, v.y, v.z, seed) * rough;
     v.multiplyScalar(k);
@@ -295,17 +312,19 @@ const blob = (r: number, seed: number, rough: number, flat = 0.85) => {
 
 interface TreeKind {
   geo: THREE.BufferGeometry;
+  /** The same tree with fewer faces, for far away and the view from the plane. */
+  far: THREE.BufferGeometry;
   /** Kinds a tile can pick from, by weight. */
   weight: number;
 }
 
-const broadleaf = (seed: number, hue: number, birch: boolean): THREE.BufferGeometry => {
+const broadleaf = (seed: number, hue: number, birch: boolean, far = false): THREE.BufferGeometry => {
   const r = rng(seed);
   const parts: THREE.BufferGeometry[] = [];
   const trunkH = 2.4 + r() * 1.2;
   const bark = birch ? (y: number) => hsl(0.1, 0.06, 0.82 - (Math.sin(y * 9) > 0.7 ? 0.55 : 0)) : () => hsl(0.07, 0.35, 0.22 + r() * 0.06);
   const lean = (r() - 0.5) * 0.25;
-  const trunk = new THREE.CylinderGeometry(birch ? 0.14 : 0.2, birch ? 0.22 : 0.34, trunkH + 1, 6, 3);
+  const trunk = new THREE.CylinderGeometry(birch ? 0.14 : 0.2, birch ? 0.22 : 0.34, trunkH + 1, far ? 5 : 6, far ? 2 : 3);
   trunk.translate(0, (trunkH + 1) / 2, 0);
   parts.push(piece(trunk, (_x, y) => bark(y), (v) => {
     v.x += lean * v.y * v.y * 0.12;
@@ -318,7 +337,9 @@ const broadleaf = (seed: number, hue: number, birch: boolean): THREE.BufferGeome
     br.rotateZ(0.8);
     br.rotateY(a);
     br.translate(lean * 0.4, trunkH - 0.2, 0);
-    parts.push(piece(br, (_x, y) => bark(y)));
+    // From afar the branches are lost in the crown.
+    if (far) br.dispose();
+    else parts.push(piece(br, (_x, y) => bark(y)));
   }
   // The crown: several lumpy blobs, darker underneath and inside, sunlit on top.
   const crownY = trunkH + 1.3;
@@ -327,7 +348,7 @@ const broadleaf = (seed: number, hue: number, birch: boolean): THREE.BufferGeome
     const rr = (birch ? 0.9 : 1.15) + r() * 0.7;
     const a = (i / n) * Math.PI * 2 + r();
     const d = i === 0 ? 0 : 0.7 + r() * 0.6;
-    const { g, displace } = blob(rr, seed * 7 + i, 0.38, 0.78);
+    const { g, displace } = blob(rr, seed * 7 + i, 0.38, 0.78, far ? 0 : 1);
     g.translate(Math.cos(a) * d + lean * 0.8, crownY + (i === 0 ? 0.6 : (r() - 0.3) * 0.9), Math.sin(a) * d);
     const top = crownY + 1.6;
     parts.push(
@@ -340,7 +361,7 @@ const broadleaf = (seed: number, hue: number, birch: boolean): THREE.BufferGeome
   return merge(parts);
 };
 
-const conifer = (seed: number): THREE.BufferGeometry => {
+const conifer = (seed: number, far = false): THREE.BufferGeometry => {
   const r = rng(seed);
   const parts: THREE.BufferGeometry[] = [];
   const trunk = new THREE.CylinderGeometry(0.14, 0.26, 2.2, 6);
@@ -351,7 +372,7 @@ const conifer = (seed: number): THREE.BufferGeometry => {
   let rad = 2.0 + r() * 0.5;
   for (let i = 0; i < tiers; i++) {
     const h = 2.1 - i * 0.18;
-    const cone = new THREE.ConeGeometry(rad, h, 8, 2);
+    const cone = new THREE.ConeGeometry(rad, h, 8, far ? 1 : 2);
     cone.translate(0, y + h / 2, 0);
     const s = seed * 13 + i;
     parts.push(
@@ -372,12 +393,12 @@ const conifer = (seed: number): THREE.BufferGeometry => {
 };
 
 const TREE_KINDS = (): TreeKind[] => [
-  { geo: broadleaf(11, 0.27, false), weight: 3 },
-  { geo: broadleaf(23, 0.24, false), weight: 3 },
-  { geo: broadleaf(37, 0.3, false), weight: 2 },
-  { geo: broadleaf(41, 0.2, true), weight: 1 },
-  { geo: conifer(53), weight: 2 },
-  { geo: conifer(67), weight: 2 },
+  { geo: broadleaf(11, 0.27, false), far: broadleaf(11, 0.27, false, true), weight: 3 },
+  { geo: broadleaf(23, 0.24, false), far: broadleaf(23, 0.24, false, true), weight: 3 },
+  { geo: broadleaf(37, 0.3, false), far: broadleaf(37, 0.3, false, true), weight: 2 },
+  { geo: broadleaf(41, 0.2, true), far: broadleaf(41, 0.2, true, true), weight: 1 },
+  { geo: conifer(53), far: conifer(53, true), weight: 2 },
+  { geo: conifer(67), far: conifer(67, true), weight: 2 },
 ];
 
 const leafMaterial = () => windy(new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 }), 0.035, 2.4, true);
@@ -389,15 +410,20 @@ export interface Placement {
   seed: number;
 }
 
-const instanced = (geo: THREE.BufferGeometry, m: THREE.Material, mats: THREE.Matrix4[], shadow = true) => {
-  const im = new THREE.InstancedMesh(geo, m, Math.max(1, mats.length));
-  mats.forEach((mm, i) => im.setMatrixAt(i, mm));
-  im.count = mats.length;
-  im.castShadow = shadow;
-  im.receiveShadow = true;
-  im.frustumCulled = false;
-  return im;
+/**
+ * A set of chunked kinds (see chunks.ts) as one group: `update(view)` picks the chunks to draw for this frame's camera.
+ */
+export interface NatureSet {
+  group: THREE.Group;
+  kinds: ChunkedKind[];
+  update: (v: ChunkView) => void;
+}
+const natureSet = (kinds: ChunkedKind[]): NatureSet => {
+  const group = new THREE.Group();
+  kinds.forEach((k) => group.add(...k.meshes));
+  return { group, kinds, update: (v) => kinds.forEach((k) => k.update(v)) };
 };
+const item = (m: THREE.Matrix4, color?: THREE.Color): InstanceData => ({ x: m.elements[12], z: m.elements[14], matrix: m, color });
 
 const placeMatrix = (x: number, y: number, s: number, rot: number, sy = s) =>
   new THREE.Matrix4().compose(new THREE.Vector3(x, 0, y), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rot, 0)), new THREE.Vector3(s, sy, s));
@@ -413,24 +439,22 @@ export const buildTrees = (spots: Placement[]) => {
     const s = 0.85 + tileHash(Math.round(p.x * 10), Math.round(p.y * 10), 4) * 0.4;
     lists[i].push(placeMatrix(p.x, p.y, s, p.seed * 40, s * (0.9 + p.seed * 0.25)));
   }
-  const g = new THREE.Group();
   const m = leafMaterial();
-  kinds.forEach((k, i) => g.add(instanced(k.geo, m, lists[i])));
-  return g;
+  return natureSet(kinds.map((k, i) => chunkedInstances(k.geo, m, lists[i].map((mm) => item(mm)), { height: 12, radius: 4, farGeo: k.far })));
 };
 
 // ---------------------------------------------------------------------------
 // Bushes and rocks
 // ---------------------------------------------------------------------------
 
-const bushGeo = (seed: number) => {
+const bushGeo = (seed: number, far = false) => {
   const r = rng(seed);
   const parts: THREE.BufferGeometry[] = [];
   for (let i = 0; i < 5; i++) {
     const rr = 0.55 + r() * 0.45;
     const a = r() * Math.PI * 2;
     const d = i === 0 ? 0 : 0.45 + r() * 0.35;
-    const { g, displace } = blob(rr, seed + i, 0.4, 0.75);
+    const { g, displace } = blob(rr, seed + i, 0.4, 0.75, far ? 0 : 1);
     g.translate(Math.cos(a) * d, rr * 0.55, Math.sin(a) * d);
     parts.push(piece(g, (_x, y, _z, f) => hsl(0.28 + (tileHash(f, seed, 1) - 0.5) * 0.04, 0.45, 0.16 + y * 0.12 + tileHash(f, i, seed) * 0.05), displace));
   }
@@ -438,13 +462,11 @@ const bushGeo = (seed: number) => {
 };
 
 export const buildBushes = (spots: Placement[]) => {
-  const kinds = [bushGeo(5), bushGeo(19), bushGeo(31)];
-  const lists = kinds.map(() => [] as THREE.Matrix4[]);
-  for (const p of spots) lists[Math.floor(p.seed * kinds.length)].push(placeMatrix(p.x, p.y, 1.05 + p.seed * 0.3, p.seed * 50));
-  const g = new THREE.Group();
+  const seeds = [5, 19, 31];
+  const lists = seeds.map(() => [] as THREE.Matrix4[]);
+  for (const p of spots) lists[Math.floor(p.seed * seeds.length)].push(placeMatrix(p.x, p.y, 1.05 + p.seed * 0.3, p.seed * 50));
   const m = windy(new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 }), 0.03, 0.2, false, 0.35);
-  kinds.forEach((k, i) => g.add(instanced(k, m, lists[i])));
-  return g;
+  return natureSet(seeds.map((sd, i) => chunkedInstances(bushGeo(sd), m, lists[i].map((mm) => item(mm)), { height: 2.5, radius: 2, farGeo: bushGeo(sd, true) })));
 };
 
 const rockGeo = (seed: number) => {
@@ -475,10 +497,8 @@ export const buildRocks = (spots: Placement[]) => {
   const kinds = [rockGeo(3), rockGeo(17), rockGeo(29)];
   const lists = kinds.map(() => [] as THREE.Matrix4[]);
   for (const p of spots) lists[Math.floor(p.seed * kinds.length)].push(placeMatrix(p.x, p.y, 1.05 + p.seed * 0.2, p.seed * 60));
-  const g = new THREE.Group();
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 });
-  kinds.forEach((k, i) => g.add(instanced(k, m, lists[i])));
-  return g;
+  return natureSet(kinds.map((k, i) => chunkedInstances(k, m, lists[i].map((mm) => item(mm)), { height: 1.5, radius: 2 })));
 };
 
 // ---------------------------------------------------------------------------
@@ -494,14 +514,14 @@ const tuftGeo = () => {
     const g = new THREE.BufferGeometry();
     const tx = (r() - 0.5) * 0.12;
     const tz = (r() - 0.5) * 0.12;
-    // Both windings, so each side is a front face lit from above (no DoubleSide normal flip).
-    g.setAttribute('position', new THREE.Float32BufferAttribute([-w, 0, 0, w, 0, 0, tx, h, tz, w, 0, 0, -w, 0, 0, tx, h, tz], 3));
+    // One triangle per blade, drawn from both sides; the material keeps the normal pointing up on the back face too.
+    g.setAttribute('position', new THREE.Float32BufferAttribute([-w, 0, 0, w, 0, 0, tx, h, tz], 3));
     g.rotateY(r() * Math.PI);
     g.translate((r() - 0.5) * 0.28, 0, (r() - 0.5) * 0.28);
-    const col = new Float32Array(18);
+    const col = new Float32Array(9);
     const base = hsl(0.26, 0.45, 0.27);
     const tip = hsl(0.22 + r() * 0.04, 0.55, 0.45 + r() * 0.08);
-    col.set([base.r, base.g, base.b, base.r, base.g, base.b, tip.r, tip.g, tip.b, base.r, base.g, base.b, base.r, base.g, base.b, tip.r, tip.g, tip.b]);
+    col.set([base.r, base.g, base.b, base.r, base.g, base.b, tip.r, tip.g, tip.b]);
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     parts.push(g);
   }
@@ -535,10 +555,8 @@ export const buildGrass = () => {
       }
     }
   }
-  const m = windy(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }), 0.25, 0, false, 0.9);
-  const im = instanced(tuftGeo(), m, mats, false);
-  colors.forEach((c, i) => im.setColorAt(i, c));
-  return im;
+  const m = windy(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }), 0.25, 0, false, 0.9, GRASS_REACH);
+  return natureSet([chunkedInstances(tuftGeo(), m, mats.map((mm, i) => item(mm, colors[i])), { height: 1, radius: 1, reach: GRASS_REACH, castShadow: false, colors: true })]);
 };
 
 /**
@@ -562,10 +580,8 @@ export const buildTallGrass = () => {
       }
     }
   }
-  const m = windy(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }), 0.12, 0, false, 1.1);
-  const im = instanced(tuftGeo(), m, mats, true);
-  colors.forEach((c, i) => im.setColorAt(i, c));
-  return im;
+  const m = windy(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }), 0.12, 0, false, 1.1, TALL_GRASS_REACH);
+  return natureSet([chunkedInstances(tuftGeo(), m, mats.map((mm, i) => item(mm, colors[i])), { height: 2, radius: 1, reach: TALL_GRASS_REACH, colors: true })]);
 };
 
 /** A forest beyond the edge of the map, so the world doesn't end in a flat green plane. */

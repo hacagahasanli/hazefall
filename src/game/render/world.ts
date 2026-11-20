@@ -5,8 +5,13 @@ import { assetUrl } from '../../lib/assets';
 import { BUILDINGS, fenceVertical, MAP, SIZE, TILE, tileHash, treeSpot, WORLD } from '../sim/constants';
 
 import { buildFurniture, buildRugs } from './furniture';
+import { cloneMaterial, collectParts, mergeParts, mergeRigid, mergeStatic } from './merge';
 import { buildRoads } from './roads';
-import { buildBushes, buildGrass, buildRocks, buildTallGrass, buildTrees, outerForest, paintTerrain, updateNature } from './nature';
+import { buildBushes, buildGrass, buildRocks, buildTallGrass, buildTrees, natureUniforms, outerForest, paintTerrain, updateNature } from './nature';
+
+import { chunkedInstances } from './chunks';
+
+import type { ChunkView } from './chunks';
 
 import type { GameState } from '../sim/types';
 
@@ -29,6 +34,21 @@ const ROOFS = [0x7a3a2e, 0x4a5560, 0x5a6b45, 0x6b4a32, 0x3f4650];
  * side, eaves at the wall tops with a little overhang, gable ends in the wall colour, and a flat
  * ceiling under it so a room reads as a room from inside.
  */
+/** A flat colour on every vertex (the roofs share materials and carry their colour per vertex, so all of them merge). */
+const paint = (g: THREE.BufferGeometry, hex: number) => {
+  const c = new THREE.Color(hex);
+  const n = g.getAttribute('position').count;
+  const col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) col.set([c.r, c.g, c.b], i * 3);
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return g;
+};
+const roofMats = {
+  roof: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide, flatShading: true }),
+  gable: new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, flatShading: true }),
+  ceiling: new THREE.MeshBasicMaterial({ color: 0xa8a092 }),
+};
+
 const buildRoof = (x0: number, z0: number, w: number, d: number, barn: boolean, i: number) => {
   const g = new THREE.Group();
   const H = 2.6;
@@ -51,8 +71,7 @@ const buildRoof = (x0: number, z0: number, w: number, d: number, barn: boolean, 
     ),
   );
   slopes.computeVertexNormals();
-  const roofMat = new THREE.MeshStandardMaterial({ color: barn ? 0x5b2a24 : ROOFS[i % ROOFS.length], roughness: 0.9, side: THREE.DoubleSide, flatShading: true });
-  const roof = new THREE.Mesh(slopes, roofMat);
+  const roof = new THREE.Mesh(paint(slopes, barn ? 0x5b2a24 : ROOFS[i % ROOFS.length]), roofMats.roof);
   roof.castShadow = true;
   roof.receiveShadow = true;
   // The gables: triangles closing the ends between the wall tops and the ridge.
@@ -62,10 +81,10 @@ const buildRoof = (x0: number, z0: number, w: number, d: number, barn: boolean, 
     new THREE.Float32BufferAttribute([...pos(o, o, H), ...pos(o, S - o, H), ...pos(o, S / 2, H + rise - 0.1), ...pos(L - o, o, H), ...pos(L - o, S / 2, H + rise - 0.1), ...pos(L - o, S - o, H)], 3),
   );
   gables.computeVertexNormals();
-  const gable = new THREE.Mesh(gables, new THREE.MeshStandardMaterial({ color: barn ? 0x9b3b30 : FACADES[i % FACADES.length], side: THREE.DoubleSide, flatShading: true }));
+  const gable = new THREE.Mesh(paint(gables, barn ? 0x9b3b30 : FACADES[i % FACADES.length]), roofMats.gable);
   gable.castShadow = true;
   // Unlit: facing down, a lit ceiling would take the hemisphere light's grass-green ground colour.
-  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xa8a092 }));
+  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(Math.PI / 2), roofMats.ceiling);
   ceiling.position.set(x0 + w / 2, H - 0.02, z0 + d / 2);
   g.add(roof, gable, ceiling);
   return g;
@@ -102,6 +121,24 @@ const instance = (model: THREE.Object3D, placements: THREE.Matrix4[]) => {
   return group;
 };
 
+/** The same, chunked (see chunks.ts): only the placements near what the camera sees are drawn. */
+const instanceChunked = (source: THREE.Object3D, placements: THREE.Matrix4[], height: number) => {
+  // One mesh per model (its plain colours baked into the vertices), so one draw call per kind.
+  const model = source.clone(true);
+  mergeRigid(model);
+  model.updateMatrixWorld(true);
+  const kinds: ReturnType<typeof chunkedInstances>[] = [];
+  model.traverse((o) => {
+    if (!(o instanceof THREE.Mesh) || !placements.length) return;
+    const local = o.matrixWorld.clone();
+    const items = placements.map((m) => ({ x: m.elements[12], z: m.elements[14], matrix: new THREE.Matrix4().multiplyMatrices(m, local) }));
+    kinds.push(chunkedInstances(o.geometry, o.material as THREE.Material, items, { height, radius: 2 }));
+  });
+  const group = new THREE.Group();
+  kinds.forEach((k) => group.add(...k.meshes));
+  return { group, kinds, update: (v: ChunkView) => kinds.forEach((k) => k.update(v)) };
+};
+
 const place = (x: number, y: number, scale: number, rotY = 0, h = 0) =>
   new THREE.Matrix4().compose(new THREE.Vector3(x, h, y), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rotY, 0)), new THREE.Vector3(scale, scale, scale));
 
@@ -134,10 +171,34 @@ const buildBarn = (w: number, d: number) => {
   roofMesh.rotation.y = Math.PI / 2;
   roofMesh.position.y = 4.2;
   g.add(roofMesh);
+  // Its colours baked into the vertices: one or two draw calls instead of one per board.
+  g.traverse((o) => o instanceof THREE.Mesh && (o.castShadow = true));
+  mergeRigid(g);
   return g;
 };
 
+/** Gives every mesh under `g` its own copy of its material, made transparent so the building can fade out. */
+const ownFadingMaterials = (g: THREE.Object3D) =>
+  g.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    o.material = cloneMaterial(o.material as THREE.Material);
+    (o.material as THREE.Material).transparent = true;
+  });
+
+/** What the camera sees, for `World.cull`: where the sun's shadow box is, the tier's view-distance scale, and where the far trees start. */
+export interface CullOptions {
+  shadow: { x: number; z: number; half: number } | null;
+  reach: number;
+  lodNear: number;
+  /** Ground distance (m) past which nothing is drawn (beyond the fog). */
+  far: number;
+}
+
 export interface World {
+  /** Before each render: draw only the chunks of trees, bushes, rocks and grass this camera can see. */
+  cull: (camera: THREE.Camera, o: CullOptions) => void;
+  /** Another chunked set (the clouds) to cull with the rest. */
+  track: (set: { update: (v: ChunkView) => void }) => void;
   /** Hide the house you're standing in, swap crates for broken ones. */
   /** `firstPerson`: walls stay full height inside and the tree canopies are never cut away. */
   update: (state: GameState, selfX: number, selfY: number, firstPerson?: boolean) => void;
@@ -212,14 +273,22 @@ export const buildWorld = (scene: THREE.Scene): World => {
 
   // ---------- nature built in code: trees, bushes, rocks, grass (see nature.ts)
   const spot = (t: { tx: number; ty: number; x: number; y: number }) => ({ x: t.x, y: t.y, seed: tileHash(t.tx, t.ty, 1) });
-  scene.add(buildTrees([...tilesOf('t').map((t) => ({ ...treeSpot(t.tx, t.ty), seed: tileHash(t.tx, t.ty, 1) })), ...outerForest()]));
-  scene.add(buildBushes(tilesOf('b').map(spot)));
-  scene.add(buildRocks(tilesOf('k').map(spot)));
-  scene.add(buildGrass(), buildTallGrass());
-  scene.add(buildRoads());
+  const nature: { group: THREE.Object3D; update: (v: ChunkView) => void }[] = [
+    buildTrees([...tilesOf('t').map((t) => ({ ...treeSpot(t.tx, t.ty), seed: tileHash(t.tx, t.ty, 1) })), ...outerForest()]),
+    buildBushes(tilesOf('b').map(spot)),
+    buildRocks(tilesOf('k').map(spot)),
+    buildGrass(),
+    buildTallGrass(),
+  ];
+  ['trees', 'bushes', 'rocks', 'grass', 'tall grass'].forEach((name, i) => (nature[i].group.name = name));
+  nature.forEach((n) => scene.add(n.group));
+  scene.add(mergeStatic(buildRoads()));
 
-  // ---------- furniture and rugs (hidden under the roofs until you walk in)
-  scene.add(buildFurniture(), buildRugs());
+  // ---------- furniture and rugs: under the house shells from above, so drawn only once a house opens up (you walk in)
+  // or at eye level
+  const furniture = buildFurniture();
+  const rugs = mergeStatic(buildRugs(), { bake: true });
+  scene.add(furniture, rugs);
 
   // ---------- doorways: a frame, a dark opening and a doormat where the real doors are, so you
   // can see from outside where to walk in (the house models' own doors are only decoration)
@@ -230,7 +299,6 @@ export const buildWorld = (scene: THREE.Scene): World => {
    * colour, self-lit so roof and eave shadows cannot darken it, and both cameras share a warm pool of light on the
    * threshold. All of it is unlit or emissive, so it reads the same on every quality tier (no point lights needed).
    */
-  const openings: THREE.Mesh[][] = BUILDINGS.map(() => []);
   const poolTex = (() => {
     const c = document.createElement('canvas');
     c.width = c.height = 64;
@@ -245,11 +313,13 @@ export const buildWorld = (scene: THREE.Scene): World => {
   })();
   const poolMat = new THREE.MeshBasicMaterial({ map: poolTex, color: 0xffcf8a, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, fog: true });
   const poolGeo = new THREE.PlaneGeometry(4.6, 3.4).rotateX(-Math.PI / 2);
-  const doorFrames = BUILDINGS.map((b, bi) => {
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0xf4f0e6, roughness: 0.7 });
+  const roomMat = new THREE.MeshStandardMaterial({ color: 0xead8b4, emissive: 0x6b4c26, emissiveIntensity: 0.9, roughness: 1 });
+  const matMat = new THREE.MeshStandardMaterial({ color: 0x6a4a2a, roughness: 1 });
+  // Built per building, then merged per material over the whole map (frames, doormats, openings, light pools: four
+  // draw calls); a building's doors are hidden by collapsing its triangles in those batches.
+  const doorParts = BUILDINGS.flatMap((b, bi) => {
     const g = new THREE.Group();
-    const frameMat = new THREE.MeshStandardMaterial({ color: 0xf4f0e6, roughness: 0.7 });
-    const roomMat = new THREE.MeshStandardMaterial({ color: 0xead8b4, emissive: 0x6b4c26, emissiveIntensity: 0.9, roughness: 1 });
-    const matMat = new THREE.MeshStandardMaterial({ color: 0x6a4a2a, roughness: 1 });
     const ring = (x: number, y: number) => x === b.x0 || y === b.y0 || x === b.x0 + b.w - 1 || y === b.y0 + b.h - 1;
     const seen = new Set<string>();
     for (let ty = b.y0; ty < b.y0 + b.h; ty++) {
@@ -284,28 +354,24 @@ export const buildWorld = (scene: THREE.Scene): World => {
         pool.position.set(0, 0.04, sgn * 0.5);
         pool.renderOrder = 2;
         holder.add(opening, lintel, postL, postR, mat);
-        openings[bi].push(opening);
         holder.traverse((o) => o instanceof THREE.Mesh && (o.castShadow = true));
         holder.add(pool);
         g.add(holder);
       }
     }
-    scene.add(g);
-    return g;
+    return collectParts(g, bi);
   });
+  const doorBatches = mergeParts(doorParts);
+  doorBatches.forEach((d) => scene.add(d.mesh));
+  const openingBatch = doorBatches.find((d) => d.mesh.material === roomMat);
 
   // ---------- building interiors: walls and windows, shown only when you're inside
   const wallMat = new THREE.MeshStandardMaterial({ color: 0xece4d4, flatShading: true });
   const sillMat = new THREE.MeshStandardMaterial({ color: 0x8a6a4a, flatShading: true });
   const glassMat = new THREE.MeshStandardMaterial({ color: 0x9fd0ff, transparent: true, opacity: 0.35, roughness: 0.1 });
-  const facades: THREE.MeshStandardMaterial[] = [];
-  const interiors = BUILDINGS.map((b, bi) => {
+  // From above, only the house you're in opens up, its walls in the room colour (at eye level see allInteriors below).
+  const interiors = BUILDINGS.map((b) => {
     const g = new THREE.Group();
-    // In first person these walls are the house, inside and out: each house gets its own colour.
-    const facade = wallMat.clone();
-    facade.userData.inside = wallMat.color.clone();
-    facade.userData.outside = new THREE.Color(b.barn ? 0x9b3b30 : FACADES[bi % FACADES.length]);
-    facades.push(facade);
     const walls: THREE.Matrix4[] = [];
     const windows: THREE.Matrix4[] = [];
     for (let ty = b.y0; ty < b.y0 + b.h; ty++) {
@@ -316,7 +382,7 @@ export const buildWorld = (scene: THREE.Scene): World => {
         if (t === 'w') windows.push(m);
       }
     }
-    const wi = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE, 2.6, TILE), facade, walls.length);
+    const wi = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE, 2.6, TILE), wallMat, walls.length);
     walls.forEach((m, i) => wi.setMatrixAt(i, m));
     wi.castShadow = true;
     g.add(wi);
@@ -334,13 +400,56 @@ export const buildWorld = (scene: THREE.Scene): World => {
     return g;
   });
 
-  // ---------- first-person roofs: a gabled roof on the real walls, a ceiling under it
-  const roofs = BUILDINGS.map((b, i) => {
-    const g = buildRoof(b.x0 * TILE, b.y0 * TILE, b.w * TILE, b.h * TILE, b.barn, i);
+  // In first person (and over the shoulder) every house shows its real walls at once, in its own colour: one instanced
+  // wall, sill and glass mesh for the whole map (the per-building ones above stay for the view from above, where only
+  // the house you're in opens up).
+  const allInteriors = (() => {
+    const g = new THREE.Group();
+    const walls: { m: THREE.Matrix4; c: THREE.Color }[] = [];
+    const windows: THREE.Matrix4[] = [];
+    BUILDINGS.forEach((b, bi) => {
+      const c = new THREE.Color(b.barn ? 0x9b3b30 : FACADES[bi % FACADES.length]);
+      for (let ty = b.y0; ty < b.y0 + b.h; ty++) {
+        for (let tx = b.x0; tx < b.x0 + b.w; tx++) {
+          const t = MAP[ty][tx];
+          const m = new THREE.Matrix4().makeTranslation(tx * TILE + TILE / 2, 1.3, ty * TILE + TILE / 2);
+          if (t === '#') walls.push({ m, c });
+          if (t === 'w') windows.push(m);
+        }
+      }
+    });
+    const wallAll = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true });
+    const wi = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE, 2.6, TILE), wallAll, walls.length);
+    walls.forEach((w, i) => {
+      wi.setMatrixAt(i, w.m);
+      wi.setColorAt(i, w.c);
+    });
+    wi.castShadow = true;
+    g.add(wi);
+    const sill = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE, 0.9, TILE), sillMat, Math.max(1, windows.length));
+    const glass = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE * 0.9, 1.5, TILE * 0.25), glassMat, Math.max(1, windows.length));
+    windows.forEach((m, i) => {
+      sill.setMatrixAt(i, new THREE.Matrix4().makeTranslation(0, -0.85, 0).premultiply(m));
+      glass.setMatrixAt(i, new THREE.Matrix4().makeTranslation(0, 0.35, 0).premultiply(m));
+    });
+    sill.count = glass.count = windows.length;
+    g.add(sill, glass);
     g.visible = false;
     scene.add(g);
     return g;
-  });
+  })();
+
+  // ---------- first-person roofs: a gabled roof on the real walls, a ceiling under it (all of them merged: three draw calls)
+  const roofs = mergeStatic(
+    (() => {
+      const g = new THREE.Group();
+      BUILDINGS.forEach((b, i) => g.add(buildRoof(b.x0 * TILE, b.y0 * TILE, b.w * TILE, b.h * TILE, b.barn, i)));
+      return g;
+    })(),
+    { bake: true },
+  );
+  roofs.visible = false;
+  scene.add(roofs);
 
   // ---------- exteriors: a suburban house per building, a red barn for barns
   const exteriors: (THREE.Object3D | null)[] = BUILDINGS.map(() => null);
@@ -370,12 +479,15 @@ export const buildWorld = (scene: THREE.Scene): World => {
         o.castShadow = true;
         o.receiveShadow = true;
         o.material = (o.material as THREE.Material).clone();
-        (o.material as THREE.Material).transparent = true;
         // A tint per house so the rooftops don't all read the same from above.
         const m = o.material as THREE.MeshStandardMaterial;
         if (m.color) m.color.multiply(new THREE.Color(TINTS[i % TINTS.length]));
       }
     });
+    // The model's colours go into its vertices: one draw call per house. Its material is its own, so it can fade.
+    mergeRigid(wrap);
+    ownFadingMaterials(wrap);
+    wrap.name = 'house';
     scene.add(wrap);
     exteriors[i] = wrap;
   };
@@ -383,12 +495,8 @@ export const buildWorld = (scene: THREE.Scene): World => {
     if (!b.barn) return;
     const barn = buildBarn(b.w * TILE, b.h * TILE);
     barn.position.set(b.x0 * TILE + (b.w * TILE) / 2, 0, b.y0 * TILE + (b.h * TILE) / 2);
-    barn.traverse((o) => {
-      if (o instanceof THREE.Mesh) {
-        o.castShadow = true;
-        (o.material as THREE.Material).transparent = true;
-      }
-    });
+    ownFadingMaterials(barn);
+    barn.name = 'barn';
     scene.add(barn);
     exteriors[i] = barn;
   });
@@ -403,13 +511,19 @@ export const buildWorld = (scene: THREE.Scene): World => {
     const names = [...new Set(['box-large', 'fence_simple', 'crops_cornStageD', 'flower_redA', 'flower_yellowB', 'stump_round', 'log_stack', ...Array.from({ length: 21 }, (_, i) => `house_type${String(i + 1).padStart(2, '0')}`)])];
     const models = Object.fromEntries(await Promise.all(names.map(async (n) => [n, await load(n)] as const)));
 
-    scene.add(instance(models.crops_cornStageD, tilesOf('c').map((t) => place(t.x, t.y, 2.6, (hash(t.tx, t.ty) - 0.5) * 0.3))));
+    const chunked = (set: ReturnType<typeof instanceChunked>) => {
+      set.group.name = 'field dressing';
+      scene.add(set.group);
+      nature.push(set);
+      // Until the next cull, draw them all.
+    };
+    chunked(instanceChunked(models.crops_cornStageD, tilesOf('c').map((t) => place(t.x, t.y, 2.6, (hash(t.tx, t.ty) - 0.5) * 0.3)), 3));
 
     // Fences turn to follow their neighbours.
     // The Kenney rail sits on the edge of its tile; shift it to the middle, where the simulation's rail is.
     const centre = new THREE.Matrix4().makeTranslation(0, 0, 0.465);
     const fences = tilesOf('f').map((t) => place(t.x, t.y, 2, fenceVertical(t.tx, t.ty) ? Math.PI / 2 : 0).multiply(centre));
-    scene.add(instance(models.fence_simple, fences));
+    chunked(instanceChunked(models.fence_simple, fences, 2));
 
     const crateGroup = instance(models['box-large'], crateMatrices);
     crateMeshes = crateGroup.children as THREE.InstancedMesh[];
@@ -417,10 +531,10 @@ export const buildWorld = (scene: THREE.Scene): World => {
 
     // Colour in the fields: flowers, tall grass, stumps and log piles.
     const fields = tilesOf('g').filter((t) => hash(t.tx, t.ty, 7) < 0.12);
-    scene.add(instance(models.flower_redA, fields.filter((_, i) => i % 4 === 0).map((t) => place(t.x, t.y, 2.4, hash(t.tx, t.ty) * 6))));
-    scene.add(instance(models.flower_yellowB, fields.filter((_, i) => i % 4 === 1).map((t) => place(t.x, t.y, 2.4, hash(t.tx, t.ty) * 6))));
-    scene.add(instance(models.stump_round, fields.filter((_, i) => i % 16 === 3).map((t) => place(t.x, t.y, 2.4, hash(t.tx, t.ty) * 6))));
-    scene.add(instance(models.log_stack, fields.filter((_, i) => i % 16 === 7).map((t) => place(t.x, t.y, 2.4, hash(t.tx, t.ty) * 6))));
+    chunked(instanceChunked(models.flower_redA, fields.filter((_, i) => i % 4 === 0).map((t) => place(t.x, t.y, 2.4, hash(t.tx, t.ty) * 6)), 1.5));
+    chunked(instanceChunked(models.flower_yellowB, fields.filter((_, i) => i % 4 === 1).map((t) => place(t.x, t.y, 2.4, hash(t.tx, t.ty) * 6)), 1.5));
+    chunked(instanceChunked(models.stump_round, fields.filter((_, i) => i % 16 === 3).map((t) => place(t.x, t.y, 2.4, hash(t.tx, t.ty) * 6)), 1.5));
+    chunked(instanceChunked(models.log_stack, fields.filter((_, i) => i % 16 === 7).map((t) => place(t.x, t.y, 2.4, hash(t.tx, t.ty) * 6)), 2));
 
     BUILDINGS.forEach((b, i) => {
       if (!b.barn) dressHouse(i, models[`house_type${String(b.model + 1).padStart(2, '0')}`]);
@@ -431,23 +545,43 @@ export const buildWorld = (scene: THREE.Scene): World => {
     BUILDINGS.findIndex((b) => x >= b.x0 * TILE && y >= b.y0 * TILE && x < (b.x0 + b.w) * TILE && y < (b.y0 + b.h) * TILE);
 
   const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  const view: ChunkView = { frustum: new THREE.Frustum(), x: 0, y: 0, z: 0, shadow: null, reach: 1, far: Infinity, lodNear: Infinity, frame: 0 };
+  const projView = new THREE.Matrix4();
+  const camAt = new THREE.Vector3();
   return {
+    track: (set) => nature.push(set as (typeof nature)[number]),
+    cull: (camera, o) => {
+      camera.updateMatrixWorld();
+      projView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+      view.frustum.setFromProjectionMatrix(projView);
+      const p = camera.getWorldPosition(camAt);
+      view.x = p.x;
+      view.y = p.y;
+      view.z = p.z;
+      view.shadow = o.shadow;
+      view.reach = o.reach;
+      view.lodNear = o.lodNear;
+      view.far = o.far;
+      view.frame++;
+      natureUniforms.uReach.value = o.reach;
+      nature.forEach((n) => n.update(view));
+    },
     update: (state, selfX, selfY, firstPerson = false) => {
       // Wind, and the canopy cut-out around you (4.5 m) so trees never hide your fighter.
       updateNature(performance.now() / 1000, selfX, selfY, firstPerson ? 0 : 4.5);
       const inside = inBuilding(selfX, selfY);
+      furniture.visible = rugs.visible = firstPerson || fade.some((f) => f < 0.98) || inside >= 0;
+      roofs.visible = firstPerson;
+      allInteriors.visible = firstPerson;
+      if (openingBatch) openingBatch.mesh.visible = !firstPerson;
       BUILDINGS.forEach((_, i) => {
-        roofs[i].visible = firstPerson;
-        openings[i].forEach((o) => (o.visible = !firstPerson));
-        facades[i].color.copy(firstPerson ? facades[i].userData.outside : facades[i].userData.inside);
         if (firstPerson) {
           // At eye level the house is its real walls, doors, windows and a roof: the shell
           // models (built to be seen from above) would be walls you walk through.
           const ext = exteriors[i];
           if (ext) ext.visible = false;
-          interiors[i].visible = true;
-          interiors[i].scale.y = 1;
-          doorFrames[i].visible = true;
+          interiors[i].visible = false;
+          doorBatches.forEach((d) => d.setHidden(i, false));
           fade[i] = 1;
           return;
         }
@@ -463,7 +597,7 @@ export const buildWorld = (scene: THREE.Scene): World => {
         interiors[i].visible = fade[i] < 0.98;
         // Inside, the walls are cut down to waist height so the whole room reads from above.
         interiors[i].scale.y = firstPerson ? 1 : 0.4 + 0.6 * fade[i];
-        doorFrames[i].visible = fade[i] > 0.5;
+        doorBatches.forEach((d) => d.setHidden(i, !(fade[i] > 0.5)));
       });
       crates.forEach((t, k) => {
         const alive = state.racks[t.ty * SIZE + t.tx] > 0;

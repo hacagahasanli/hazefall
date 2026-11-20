@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 
+import { skinRig } from './merge';
+
 import { riserGrip } from './chute';
 import { mat, mesh, PALETTE } from './palette';
 
@@ -406,6 +408,8 @@ export const buildRig = (id: CharacterId): Rig => {
   weapon.add(hand);
   body.add(weapon);
 
+  // Drawn as a skinned mesh (the groups above are its bones): a fighter is two or three draw calls instead of ~40.
+  skinRig(root, new Set([weapon]), [vest]);
   return {
     root, body, armL, armR, foreL: left.fore, foreR: right.fore, armLen: s.armLen,
     shinL: ll.shin, shinR: lr.shin, legLen: s.legLen,
