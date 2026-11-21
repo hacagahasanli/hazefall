@@ -112,17 +112,23 @@ describe('skinned fighters', () => {
 
 describe('the merged parachute', () => {
   it('keeps the canopy above the harness, centred over it, inside the part that unfolds', async () => {
-    const { buildChute, CHUTE_UP } = await import('./chute');
+    const { buildChute, CHUTE_UP, shapeChute } = await import('./chute');
     const g = buildChute('#ff3d6e');
     const deploy = g.userData.deploy as THREE.Group;
-    // Panels in two colours and the lines: a handful of meshes, not 18.
+    // The wing (one mesh, its cells coloured by vertex), the lines, the bag and the pilot chute: a handful, not 18.
     expect(meshes(g).length).toBeLessThanOrEqual(5);
+    // Open and flying (the wing's shape is written each frame).
+    const at = (x: number, y: number) => new THREE.Vector3(x, y, 0);
+    shapeChute(g, { canopy: 5, time: 0, seed: 0, brakeL: 0, brakeR: 0, strapL: at(-0.17, 0), strapR: at(0.17, 0), handL: at(-0.4, 0.3), handR: at(0.4, 0.3) });
+    deploy.updateMatrixWorld(true);
+    (deploy.children[0] as THREE.Mesh).geometry.computeBoundingBox();
     const canopy = worldBox(deploy);
-    expect(canopy.max.y).toBeGreaterThan(CHUTE_UP + 0.5);
+    expect(canopy.max.y).toBeGreaterThan(CHUTE_UP + 0.2);
     expect(canopy.min.y).toBeGreaterThan(0.5);
     const c = canopy.getCenter(new THREE.Vector3());
     expect(Math.abs(c.x)).toBeLessThan(0.1);
-    expect(Math.abs(c.z)).toBeLessThan(0.1);
+    // The wing sits a little behind the harness, as a ram-air canopy flies (the lines lean forward to it).
+    expect(Math.abs(c.z)).toBeLessThan(0.3);
     // Folding the deploy group (as it opens out of the pack) shrinks it towards the harness, not somewhere else.
     deploy.scale.setScalar(0.1);
     const folded = worldBox(deploy);

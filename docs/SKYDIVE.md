@@ -70,3 +70,21 @@ visuals in `src/game/render`). Bots and the player use the same drop.
 Sim unit tests; bot-sim 40 matches before/after; `?perf` draw calls, triangles and frame cost in free fall, deployment
 and canopy, before/after; Playwright frame sequences (desktop and phone, default and close camera), contact sheets and
 mp4 in `~/.agents-know/personal/feedback4/shots/lcs-skydive-*`.
+
+## Results (Nov 2026)
+
+Implemented as planned. Numbers:
+
+- **Drop physics** (`src/game/sim/drop.test.ts`): door to ground 8.15 s with the automatic pull (was 8.2 s); free fall to
+  the pull at 40 m in ~3.1 s at up to 20 m/s; the opening peaks at ~2.5 g inside the inflation with no tick-to-tick
+  jerk; the canopy flies at 5.7 m/s and flares to ~3.5 m/s at touchdown. Same inputs give the same drop to the bit.
+- **bot-sim, 40 matches, seeds 1-40**: match length median 3:50 -> 3:49 (avg 242.4 -> 240.0 s), dead air 15.8 % -> 15.5 %,
+  Deadline starts 24.6 -> 24.5 s after Play, bots in distinct buildings 19/19 both. Within noise.
+- **`?perf`** (M-series Mac, Playwright Chromium, machine under load, 20 jumpers, 3 runs): draw calls in the air
+  168-229 before, 190-219 after (desktop); triangles 0.29-0.49M before, 0.40-0.53M after (the closer free-fall camera and
+  the canopy camera see a little more); GPU-synced render 4-6 ms before, 4.8-8 ms after (desktop), 3.2-4.5 ms before,
+  3.5-5.4 ms after (phone viewport). Inside the render-perf pass envelope (<= 242 calls, 0.3-0.7M triangles, ~8 ms).
+- Frames, contact sheets and mp4s: `~/.agents-know/personal/feedback4/shots/lcs-skydive-*`.
+
+Not done: the canopy has no cloth simulation (its deformation is procedural), lines are 1-pixel GL lines, and the
+landing still uses the existing forward roll.
