@@ -32,7 +32,7 @@ export const useTelemetry = (hud: HudState | null, o: { held: boolean; showResul
       mode: r.mode,
       result,
       dur_s: h ? Math.max(0, Math.round(h.survived)) : 0,
-      ...(result !== 'quit' && h ? { placement: h.won ? 1 : h.placement, of: h.total } : {}),
+      ...(result !== 'quit' && h ? { placement: h.won ? 1 : h.placement, of: h.total, kos: h.kills } : {}),
       max_level: 0,
     });
   };
