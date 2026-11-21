@@ -1,5 +1,5 @@
 import { createBot } from './bot';
-import { BUILDINGS, DROP, DT, FIGHTERS, ITEMS, MAP, PLAYER_RADIUS, RIVER, riverCentre, SHAPES, SIZE, SWIM, TILE, treeSpot, WEAPONS, WORLD, ZONE_PHASES, ZONE_RULES, ZONE_START_RADIUS } from './constants';
+import { BUILDINGS, DROP, DT, FIGHTERS, HOP, ITEMS, MAP, PLAYER_RADIUS, RIVER, riverCentre, SHAPES, SIZE, SWIM, TILE, treeSpot, WEAPONS, WORLD, ZONE_PHASES, ZONE_RULES, ZONE_START_RADIUS } from './constants';
 import { canSee, circleBlocked, createGame, falloffDamage, hitPoint, inPlant, inWater, lootUnder, solidAt, step } from './step';
 import { NO_INPUT } from './types';
 
@@ -234,6 +234,26 @@ describe('loot and fighting', () => {
     const pr = s.projectiles.find((q) => q.kind === 'lob')!;
     expect(Math.hypot(pr.tx - pr.sx, pr.ty - pr.sy)).toBeCloseTo(25, 0);
     expect(ITEMS.bomb.range).toBeGreaterThanOrEqual(30);
+  });
+
+  it('jump on the ground is a short hop that ends by itself, and a held key does not hop again', () => {
+    const s = landed();
+    clearAround(s);
+    const p = s.players[0];
+    Object.assign(p, { x: OPEN.x, y: OPEN.y, vx: 0, vy: 0 });
+    const jump = idle();
+    jump[0] = { ...NO_INPUT, jump: true, aimX: p.x + 5, aimY: p.y };
+    step(s, jump);
+    expect(p.hop).toBeCloseTo(HOP.time, 5);
+    expect(s.events.some((e) => e.type === 'hop' && e.player === 0)).toBe(true);
+    const shots = p.shots;
+    for (let i = 0; i < Math.ceil(HOP.time / DT) + 5; i++) step(s, jump);
+    expect(p.hop).toBe(0); // held: no second hop
+    expect(p.shots).toBe(shots); // jumping never fires
+    const fire = idle();
+    fire[0] = { ...NO_INPUT, fire: true, aimX: p.x + 5, aimY: p.y };
+    step(s, fire);
+    expect(p.hop).toBe(0); // and firing never hops
   });
 
   it('tall grass hides you like a bush', () => {
