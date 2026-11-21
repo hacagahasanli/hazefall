@@ -18,7 +18,7 @@ describe('settings store', () => {
 
   it('saves and loads back the same settings', () => {
     const st = mem();
-    const s = { ...DEFAULT_SETTINGS, fov: 90, camera: 'first' as const, quality: 'low' as const, muted: true, keys: { ...DEFAULT_KEYS, fire: 'KeyJ' } };
+    const s = { ...DEFAULT_SETTINGS, fov: 90, camera: 'first' as const, quality: 'low' as const, muted: true, keys: { ...DEFAULT_KEYS, fire: 'KeyK' } };
     saveSettings(st, s);
     expect(loadSettings(st)).toEqual(s);
   });
@@ -51,6 +51,22 @@ describe('settings store', () => {
     expect(new Set(Object.values(keys)).size).toBe(ACTIONS.length);
   });
 
+  it('moves a save from before layout 2 once: Space from shoot to jump, J shoots', () => {
+    const old = { keys: { ...DEFAULT_KEYS, fire: 'Space', jump: 'KeyB' } };
+    const keys = normalize(old).keys;
+    expect(keys.fire).toBe('KeyJ');
+    expect(keys.jump).toBe('Space');
+    expect(new Set(Object.values(keys)).size).toBe(ACTIONS.length);
+    // J taken by another action: shoot takes the old jump key instead.
+    const jTaken = normalize({ keys: { ...DEFAULT_KEYS, fire: 'Space', jump: 'KeyB', reload: 'KeyJ' } }).keys;
+    expect(jTaken).toMatchObject({ fire: 'KeyB', jump: 'Space', reload: 'KeyJ' });
+    // Only once: a layout-2 save that puts shoot on Space again keeps it.
+    const again = normalize({ ...normalize(old), keys: { ...keys, fire: 'Space', jump: 'KeyJ' } }).keys;
+    expect(again).toMatchObject({ fire: 'Space', jump: 'KeyJ' });
+    // A custom shoot key is left alone.
+    expect(normalize({ keys: { ...DEFAULT_KEYS, fire: 'KeyK', jump: 'KeyB' } }).keys).toMatchObject({ fire: 'KeyK', jump: 'KeyB' });
+  });
+
   it('never throws when storage does', () => {
     const bad = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('full'); } };
     expect(loadSettings(bad)).toEqual(DEFAULT_SETTINGS);
@@ -60,8 +76,8 @@ describe('settings store', () => {
 
 describe('rebinding keys', () => {
   it('binds a free key', () => {
-    const r = rebind(DEFAULT_SETTINGS, 'fire', 'KeyJ');
-    expect(r.ok && r.settings.keys.fire).toBe('KeyJ');
+    const r = rebind(DEFAULT_SETTINGS, 'fire', 'KeyK');
+    expect(r.ok && r.settings.keys.fire).toBe('KeyK');
     expect(r.ok && r.swapped).toBeNull();
   });
 
@@ -70,7 +86,7 @@ describe('rebinding keys', () => {
     if (!r.ok) throw new Error('refused');
     expect(r.swapped).toBe('use');
     expect(r.settings.keys.fire).toBe('KeyF');
-    expect(r.settings.keys.use).toBe('Space');
+    expect(r.settings.keys.use).toBe('KeyJ');
     expect(new Set(Object.values(r.settings.keys)).size).toBe(ACTIONS.length);
   });
 
@@ -92,7 +108,8 @@ describe('applying key bindings', () => {
     expect(actionFor(keys, 'ArrowUp')).toBe('up');
     expect(actionFor(keys, 'ShiftRight')).toBe('roll');
     expect(keyMap(keys).up).toEqual(['KeyI', 'ArrowUp']);
-    expect(keyMap(keys).fire).toEqual(['Space']);
+    expect(keyMap(keys).fire).toEqual(['KeyJ']);
+    expect(keyMap(keys).jump).toEqual(['Space']);
   });
 
   it('labels keys the way players know them', () => {

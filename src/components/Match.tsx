@@ -820,7 +820,10 @@ export const Match = ({
                 <Key k={keyLabel(settings.keys.right)} /> move
               </span>
               <span className="flex items-center gap-1">
-                <Key k={keyLabel(settings.keys.fire)} /> shoot / jump
+                <Key k={keyLabel(settings.keys.fire)} /> shoot
+              </span>
+              <span className="flex items-center gap-1">
+                <Key k={keyLabel(settings.keys.jump)} /> jump
               </span>
               <span className="flex items-center gap-1">
                 <Key k={keyLabel(settings.keys.leanL)} />

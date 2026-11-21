@@ -17,8 +17,8 @@ export const ACTIONS: [Action, string][] = [
   ['down', 'Move back'],
   ['left', 'Move left'],
   ['right', 'Move right'],
-  ['fire', 'Shoot / jump'],
-  ['jump', 'Jump (on foot)'],
+  ['fire', 'Shoot'],
+  ['jump', 'Jump / parachute'],
   ['use', 'Pick up / use'],
   ['super', 'Super'],
   ['roll', 'Roll'],
@@ -41,8 +41,8 @@ export const DEFAULT_KEYS: Record<Action, string> = {
   down: 'KeyS',
   left: 'KeyA',
   right: 'KeyD',
-  fire: 'Space',
-  jump: 'KeyB',
+  fire: 'KeyJ',
+  jump: 'Space',
   use: 'KeyF',
   super: 'KeyG',
   roll: 'ShiftLeft',
@@ -105,6 +105,8 @@ export interface Settings {
   /** Blue and orange in place of green and red on the health bar and the danger edge. */
   colorBlind: boolean;
   largeHud: boolean;
+  /** Which default layout the key bindings were saved under (see normalize: older saves move once). */
+  keysVersion: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -127,6 +129,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reducedMotion: false,
   colorBlind: false,
   largeHud: false,
+  keysVersion: 2,
 };
 
 export const SETTINGS_KEY = 'lcs:settings';
@@ -139,7 +142,13 @@ export const normalize = (raw: unknown): Settings => {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Partial<Record<keyof Settings, unknown>>;
   const d = DEFAULT_SETTINGS;
   const keys = { ...DEFAULT_KEYS };
-  const rk = (r.keys && typeof r.keys === 'object' ? r.keys : {}) as Record<string, unknown>;
+  let rk = (r.keys && typeof r.keys === 'object' ? r.keys : {}) as Record<string, unknown>;
+  // Layout 2: Space jumps in every view and J shoots (Space used to be the trigger with auto-aim). A save from before
+  // with Space on "shoot" moves once: Space to jump, J (or, if J is taken, the old jump key) to shoot.
+  if (r.keysVersion !== DEFAULT_SETTINGS.keysVersion && rk.fire === 'Space') {
+    const taken = new Set(Object.entries(rk).filter(([a]) => a !== 'fire' && a !== 'jump').map(([, k]) => k));
+    rk = { ...rk, fire: !taken.has('KeyJ') ? 'KeyJ' : typeof rk.jump === 'string' && rk.jump !== 'Space' ? rk.jump : 'KeyJ', jump: 'Space' };
+  }
   const used = new Set<string>();
   const saved = (a: Action) => {
     const k = rk[a];
@@ -181,6 +190,7 @@ export const normalize = (raw: unknown): Settings => {
     reducedMotion: bool(r.reducedMotion, d.reducedMotion),
     colorBlind: bool(r.colorBlind, d.colorBlind),
     largeHud: bool(r.largeHud, d.largeHud),
+    keysVersion: d.keysVersion,
   };
 };
 

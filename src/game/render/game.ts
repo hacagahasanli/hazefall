@@ -133,7 +133,7 @@ export interface MatchOptions {
    */
   held?: boolean;
   name: string;
-  /** Auto-aim (Space shoots the nearest visible enemy) or mouse aim (point and click). */
+  /** Auto-aim (the shoot key fires at the nearest visible enemy) or mouse aim (point and click). */
   aimMode: AimMode;
   minimap: HTMLCanvasElement;
   onHud: (hud: HudState) => void;
@@ -1156,10 +1156,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         mx /= len;
         my /= len;
       }
-      // The mouse shoots here, so the shoot / jump key (Space) only jumps: the hop on the ground, the canopy in the air.
       const input: Input = {
         mx, my,
-        ...shootJump({ mouseShoots: true, ground: p.stage === 'ground', key: held('fire'), mouse: mouseDown, touchFire: btn('fire'), jumpKey: jumpKey() }),
+        ...shootJump({ ground: p.stage === 'ground', key: held('fire'), mouse: mouseDown, touchFire: btn('fire'), jumpKey: jumpKey() }),
         super: held('super') || btn('super'),
         use: held('use') || btn('use'),
         lean: (held('leanR') || btn('leanR') ? 1 : 0) - (held('leanL') || btn('leanL') ? 1 : 0),
@@ -1193,11 +1192,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const pointed = aimMode === 'mouse' && !touch && canAim ? mouseAim() : null;
     const target = canAim && !pointed ? autoAim(p) : null;
     const aim = pointed ?? (target ? { x: target.x, y: target.y } : { x: p.x + lastMove.x * 6, y: p.y + lastMove.y * 6 });
-    // With mouse aim the mouse shoots, so on the ground the shoot / jump key (Space) hops, as in first person. With auto-aim
-    // it is the only trigger (the mouse does not shoot), so it keeps shooting and jumps only from the plane and the canopy.
+    // The same keys in every view: the shoot key (J) and the left button shoot, the jump key (Space) jumps. On touch a tap's
+    // emulated mouse press never shoots (FIRE does).
     const input = {
       mx, my,
-      ...shootJump({ mouseShoots: aimMode === 'mouse' && !touch, ground: p.stage === 'ground', key: held('fire'), mouse: mouseDown, touchFire: btn('fire'), jumpKey: jumpKey() }),
+      ...shootJump({ ground: p.stage === 'ground', key: held('fire'), mouse: mouseDown && !touch, touchFire: btn('fire'), jumpKey: jumpKey() }),
       // Battle-royale keys: Q / E lean, F picks up or uses, G is the super.
       super: held('super') || btn('super'),
       use: held('use') || btn('use'),
@@ -2586,7 +2585,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const zone =
       state.phase === 'drop'
         ? self.stage === 'drone'
-          ? { label: touch ? 'Tap JUMP to jump' : 'Jump with Space', seconds: Math.ceil(Math.max(0, DROP.forceJump - state.drone.t) * DROP.flight), outside: false }
+          ? { label: touch ? 'Tap JUMP to jump' : `Jump with ${keyLabel(settings.keys.jump)}`, seconds: Math.ceil(Math.max(0, DROP.forceJump - state.drone.t) * DROP.flight), outside: false }
           : { label: 'Everyone is landing', seconds: 0, outside: false }
         : z.state === 'wait'
           ? { label: COPY.zone.waiting, seconds: Math.ceil(z.timer), outside }
@@ -2600,9 +2599,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const prompt = !self.alive
       ? null
       : self.stage === 'drone'
-        ? (touch ? 'Tap JUMP' : 'Space · jump')
+        ? (touch ? 'Tap JUMP' : `${keyLabel(settings.keys.jump)} · jump`)
         : self.stage === 'falling' && self.canopy < 0 && DROP.height - self.alt >= DROP.minFreefallDrop
-          ? (touch ? 'Tap FIRE · open the parachute' : `${keyLabel(settings.keys.fire)} · open the parachute`)
+          ? (touch ? 'Tap FIRE · open the parachute' : `${keyLabel(settings.keys.jump)} · open the parachute`)
         : self.stage === 'falling' && self.canopy >= DROP.deployTime && self.alt > DROP.flareAlt + 4
           ? (touch ? 'Hold DIVE · dive to go farther, faster' : `Hold ${keyLabel(settings.keys.roll)} · dive to go farther, faster`)
         : self.stage === 'ground' && inWater(self.x, self.y)

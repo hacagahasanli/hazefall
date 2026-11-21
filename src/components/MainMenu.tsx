@@ -330,7 +330,8 @@ export const MainMenu = ({
             {(
               [
                 ['up', 'Move'],
-                ['fire', 'Shoot / jump'],
+                ['fire', 'Shoot'],
+                ['jump', 'Jump'],
                 ['use', 'Pick up / use'],
                 ['reload', 'Reload'],
                 ['roll', 'Roll'],

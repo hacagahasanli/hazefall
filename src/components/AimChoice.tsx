@@ -17,8 +17,8 @@ export const AimChoice = ({ value, onChange }: { value: AimMode; onChange: (m: A
     <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Aim and shoot">
       {(
         [
-          ['auto', 'Auto-aim', 'Space shoots the nearest enemy you can see'],
-          ['mouse', 'Mouse', 'Point to aim, left click to shoot, Space jumps'],
+          ['auto', 'Auto-aim', 'J shoots the nearest enemy you can see'],
+          ['mouse', 'Mouse', 'Point to aim, left click to shoot'],
         ] as const
       ).map(([id, label, hint]) => (
         <button
