@@ -24,4 +24,12 @@ describe('the shoot / jump key (Space)', () => {
   it('touch FIRE shoots on the ground, with no hop', () => {
     expect(shootJump({ ...base, mouseShoots: false, touchFire: true })).toEqual({ fire: true, jump: false });
   });
+
+  it('the jump key (B, or JUMP on touch) jumps in every view, on foot and in the air, and never fires', () => {
+    for (const mouseShoots of [true, false]) {
+      for (const ground of [true, false]) expect(shootJump({ ...base, mouseShoots, ground, jumpKey: true })).toEqual({ fire: false, jump: true });
+    }
+    // With auto-aim, Space still fires while B jumps.
+    expect(shootJump({ ...base, mouseShoots: false, key: true, jumpKey: true })).toEqual({ fire: true, jump: true });
+  });
 });

@@ -2,9 +2,17 @@
 // worth, and where to hide. Everything is a function of the match and the bot's own seed, so a
 // host replays the same bots.
 import { BUILDINGS, DROP, HEALS, magOf, MAP, PLAYERS, TILE, WORLD } from './constants';
-import { carried, carryCap, circleBlocked, inPlant, lineOfSight, solidAt, spareCap, vestPoints } from './step';
+import { carried, carryCap, chestHeight, circleBlocked, inPlant, lineOfSight, solidAt, spareCap, vestPoints } from './step';
 
 import type { Drone, GameState, Gun, HealKind, Loot, LootKind, Player, WeaponKind } from './types';
+
+/**
+ * The one line-of-sight check every bot decision goes through: a clear straight 3D line (walls, trunks and roofs block
+ * it, doorways and windows do not) from one point to another at the given heights, chest height on the ground by default.
+ */
+export const botSight = (state: GameState, ax: number, ay: number, bx: number, by: number, ah = 1.1, bh = 1.1) => lineOfSight(state, ax, ay, bx, by, ah, bh);
+/** Can bot `a` see fighter `b`: chest to chest, through the same check. */
+export const botSees = (state: GameState, a: Player, b: Player) => botSight(state, a.x, a.y, b.x, b.y, chestHeight(a), chestHeight(b));
 
 export const mulberry32 = (seed: number) => () => {
   seed |= 0;
@@ -316,7 +324,7 @@ export const coverPoint = (state: GameState, me: Player, tx: number, ty: number,
     const y = me.y + Math.sin(a) * r;
     if (circleBlocked(state, x, y, 0.7) || solidAt(state, x, y)) continue;
     if (Math.hypot(x - z.toX, y - z.toY) > Math.max(z.toR, 6) && Math.hypot(x - z.cx, y - z.cy) > z.r) continue;
-    const hidden = !lineOfSight(state, tx, ty, x, y) || (plants && inPlant(x, y) && Math.hypot(x - tx, y - ty) > 4);
+    const hidden = !botSight(state, tx, ty, x, y) || (plants && inPlant(x, y) && Math.hypot(x - tx, y - ty) > 4);
     if (!hidden) continue;
     const score = -r + 0.5 * Math.hypot(x - tx, y - ty);
     if (score > bestScore) {

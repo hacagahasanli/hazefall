@@ -211,7 +211,7 @@ const Pad = ({
  * Phone controls: the stick anywhere in the left half; on the right, FIRE under the thumb (it
  * aims by itself at whoever you can see; on the plane it is JUMP), ROLL beside it, a small pick-up
  * icon above it (pick up, hold to throw a bomb), then RELOAD, the SUPER with its charge ring, the two lean
- * buttons, a small swap icon (the other gun, when both slots are full), HEAL (named after what it will use), and pause.
+ * buttons, a small swap icon (the other gun, when both slots are full), HEAL (named after what it will use), JUMP, and pause.
  */
 export const TouchControls = ({
   press,
@@ -298,6 +298,7 @@ export const TouchControls = ({
           />
           {canSwap && <Pad b="swap" label={swapLabel ? `Swap to ${swapLabel}` : 'Swap guns'} icon={SWAP_ICON} press={press} size={46} style={{ right: 208, bottom: 36 }} />}
           {heal && <Pad b="heal" label="Heal" sub={heal} press={press} size={54} accent style={{ right: 196, bottom: 220 }} />}
+          <Pad b="jump" label="Jump" press={press} size={50} style={{ right: 140, bottom: 246 }} />
           <Pad b="leanL" label="◀ Q" press={press} size={46} style={{ right: 200, bottom: 160 }} />
           <Pad b="leanR" label="E ▶" press={press} size={46} style={{ right: 200, bottom: 104 }} />
         </>
