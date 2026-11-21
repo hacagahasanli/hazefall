@@ -7,6 +7,7 @@ import { cpSync, readFileSync } from 'fs';
 import path from 'path';
 import { defineConfig, transformWithEsbuild } from 'vite';
 
+import { bootMapPng } from './portal/bootMap';
 import { GAME_TITLE, STUDIO_NAME } from './src/lib/studio';
 
 const out = path.resolve(__dirname, 'dist/portal');
@@ -47,7 +48,8 @@ export default defineConfig({
     },
     {
       // The boot screen's progress model (src/lib/bootProgress.ts, unit-tested) inlined into the page as a plain script,
-      // window.LcsBootProgress, so the screen runs it from the first paint, before any game code has arrived.
+      // window.LcsBootProgress, so the screen runs it from the first paint, before any game code has arrived; and its
+      // picture of the battleground, the real map drawn as a small PNG (portal/bootMap.ts), inlined the same way.
       name: 'boot-progress',
       transformIndexHtml: {
         order: 'pre',
@@ -55,7 +57,7 @@ export default defineConfig({
           const file = path.resolve(__dirname, 'src/lib/bootProgress.ts');
           const { code } = await transformWithEsbuild(readFileSync(file, 'utf8'), file, { format: 'iife', globalName: 'LcsBootProgress', target: 'es2015', minify: true });
           if (!html.includes('<!--boot-progress-->')) throw new Error('boot-progress: placeholder not found');
-          return html.replace('<!--boot-progress-->', `<script>${code.trim()}</script>`);
+          return html.replace('<!--boot-progress-->', `<script>${code.trim()}</script>`).replace('%BOOT_MAP%', bootMapPng());
         },
       },
     },
