@@ -37,3 +37,9 @@ Format: `## R-001 — title` then Context, Expected deliverable, Priority (P0-P3
 - Expected deliverable: CREATIVE/specifications/basic-launch-kpi.md — at most 8 ranked changes, each tied to one KPI, impact, effort, exact spec; top 3 doable in 1-2 days.
 - Priority: P0
 - Status: done (CD 2026-11-22): spec ready. Top 3: safe first drop (no firing in the air, 24 spare pistol rounds, gentler bots for the first 3 rounds), career level with canopy unlocks saved via platform.storage, new covers + recut preview video.
+
+## R-007 — Cover key art at CrazyGames-homepage level
+- Context: Reis showed the CrazyGames homepage covers that win (_studio/refs/crazygames-top-covers-1.png, -2.png) and wants ours at that level. Constraint from engineering: no image generation, so covers are rendered in three.js from the game's own models, with a code/SVG title.
+- Expected deliverable: one studio-wide spec, a section per game with 2 concepts (A primary, B alternative): staging, camera, 16:9/2:3/1:1 grids, CrazyGames badge zone, lighting and palette, effects, title, a 240 px thumbnail test, plus rules for every cover.
+- Priority: P0
+- Status: done (CD 2026-11-22): ~/Desktop/projects/games-studio/_studio/creative-collab/covers-keyart-spec.md, section 2. A "Hot drop": Blaze huge under the cropped orange/cream canopy, banking, pistol out with a muzzle flash, on a blue sky with the hazy valley low; title low-left. B "Outrun the Deadline": Rookie vaults a farm fence toward the camera with the blue zone wall behind. This replaces the cover part of CREATIVE/specifications/basic-launch-kpi.md (the preview-video part stands). After rendering, file a review R-item with covers-small-card-check.png.
