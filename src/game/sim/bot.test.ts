@@ -1,4 +1,5 @@
 import { createBot, VS_HUMAN } from './bot';
+import { CROWD, LANDING_GRACE, stagePace } from './bot-params';
 import { BUILDINGS, DT, MAP, PLAYERS, TILE } from './constants';
 import { createGame, lineOfSight, step } from './step';
 import { NO_INPUT } from './types';
@@ -42,7 +43,7 @@ const botMatch = (seed: number) => {
 };
 
 /**
- * Everyone landed, loot gone, one bot (the first that `want` accepts) alone in open meadow
+ * Everyone landed, loot gone, eight left, one bot (the first that `want` accepts) alone in open meadow
  * facing `enemy` 8 m ahead, its after-landing grace over, in the middle of the match (fourth
  * circle: early on bots are meant to hold back, see the pacing tests).
  */
@@ -57,7 +58,9 @@ const duel = (seed: number, enemy: number, want: (b: Bot) => boolean, phase = 3)
     return want(bots[p.id]);
   });
   s.players.forEach((p) => Object.assign(p, { x: 6, y: 6 }));
-  s.tick += 60 * 40;
+  // Mid-match: eight still standing (bots hold back in a crowd, see CROWD), the rest out of the round.
+  s.players.filter((p) => p.id !== id && p.id !== enemy).slice(6).forEach((p) => (p.alive = false));
+  s.tick += 60 * (LANDING_GRACE.human + 6);
   s.zone.phase = phase;
   Object.assign(s.players[id], { x: OPEN.x, y: OPEN.y, heading: 0, vx: 0, vy: 0 });
   Object.assign(s.players[enemy], { x: OPEN.x + 8, y: OPEN.y, vx: 0, vy: 0 });
@@ -191,6 +194,16 @@ describe('bots behave like separate people', () => {
       expect(closest(0, seed)).toBeGreaterThan(18);
       expect(closest(3, seed)).toBeLessThan(18);
     }
+  });
+
+  it('hold back in a crowd, easing off smoothly as the field thins', () => {
+    const full = stagePace(0, PLAYERS);
+    const thin = stagePace(0, CROWD.from);
+    expect(full.aggro).toBeCloseTo(thin.aggro + CROWD.aggro, 5);
+    expect(full.back).toBeGreaterThan(thin.back);
+    expect(full.chase).toBeLessThan(thin.chase);
+    // No jump anywhere between a full match and `from` alive.
+    for (let n = CROWD.from; n < PLAYERS; n++) expect(Math.abs(stagePace(0, n + 1).aggro - stagePace(0, n).aggro)).toBeLessThan(0.05);
   });
 
   it('play exactly the same way twice from the same seeds', () => {

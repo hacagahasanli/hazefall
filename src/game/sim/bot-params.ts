@@ -1,7 +1,7 @@
 // Bot tuning and the pure helpers behind it: personalities, where each bot lands, what loot is
 // worth, and where to hide. Everything is a function of the match and the bot's own seed, so a
 // host replays the same bots.
-import { BUILDINGS, DROP, HEALS, magOf, MAP, TILE, WORLD } from './constants';
+import { BUILDINGS, DROP, HEALS, magOf, MAP, PLAYERS, TILE, WORLD } from './constants';
 import { carried, carryCap, circleBlocked, inPlant, lineOfSight, solidAt, spareCap, vestPoints } from './step';
 
 import type { Drone, GameState, Gun, HealKind, Loot, LootKind, Player, WeaponKind } from './types';
@@ -46,9 +46,10 @@ const BASE: Record<PersonaName, Omit<Persona, 'name'>> = {
 };
 
 /**
- * Nine bots: three rushers, three looters, two campers and one tactical player, shuffled per
- * match. The first three take the spots near the middle of the route, the player's likely
- * neighbours, so they are the ones who loot before they fight.
+ * The bots' personalities, nine at a time (three rushers, three looters, two campers and one tactical player), repeated
+ * for more bots (nineteen: seven looters, six rushers, four campers, two tactical) and shuffled per match. The first three
+ * take the spots near the middle of the route, the player's likely neighbours, so they are the ones who loot before they
+ * fight.
  */
 const ROSTER: PersonaName[] = ['looter', 'camper', 'looter', 'rusher', 'tactical', 'rusher', 'camper', 'rusher', 'looter'];
 
@@ -165,12 +166,26 @@ export const STAGE_CHASE = [0.55, 0.8, 1, 1, 1, 1];
 /** Added to the personality's retreat threshold: early on a hurt bot breaks off sooner and heals instead of trading to the death. */
 export const STAGE_BACK = [0.3, 0.15, 0.05, 0, 0, 0];
 /** With this many or fewer alive, everyone hunts: full aggression and chase, and roaming heads for the middle of the circle. */
-export const HUNT_ALIVE = 3;
+export const HUNT_ALIVE = 4;
 /** Seconds after landing before a bot picks a fight: with another bot, and with a person. */
-export const LANDING_GRACE = { bot: 30, human: 34 };
+export const LANDING_GRACE = { bot: 40, human: 44 };
+/**
+ * A crowd holds back: with more than `from` alive, every bot is less ready to fight, walks less far towards gunfire and
+ * breaks off sooner, by up to these amounts with a full match (PLAYERS alive), easing off as the field thins (never a
+ * switch, which turns into a bloodbath the moment it flips). Twenty fighters on this map meet each other twice as often
+ * as ten, so without it a quarter of them are gone a minute in.
+ */
+export const CROWD = { from: 8, aggro: -0.3, chase: 0.6, back: 0.2 };
 export const stagePace = (phase: number, alive: number) => {
   const k = Math.min(phase, STAGE_AGGRO.length - 1);
-  return alive <= HUNT_ALIVE ? { aggro: 0.3, chase: 1, back: 0, hunt: true } : { aggro: STAGE_AGGRO[k], chase: STAGE_CHASE[k], back: STAGE_BACK[k], hunt: false };
+  if (alive <= HUNT_ALIVE) return { aggro: 0.3, chase: 1, back: 0, hunt: true };
+  const c = Math.min(1, Math.max(0, (alive - CROWD.from) / Math.max(1, PLAYERS - CROWD.from)));
+  return {
+    aggro: STAGE_AGGRO[k] + CROWD.aggro * c,
+    chase: STAGE_CHASE[k] * (1 - (1 - CROWD.chase) * c),
+    back: STAGE_BACK[k] + CROWD.back * c,
+    hunt: false,
+  };
 };
 
 /** Should I take this fight? 0.85 and up: yes. `stage` is the pace bonus from `stagePace`. */

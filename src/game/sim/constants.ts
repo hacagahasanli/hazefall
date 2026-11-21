@@ -745,11 +745,12 @@ export const SWIM = { speed: 0.42 };
 export const MOVE = { accel: 40, friction: 45, turn: 12 };
 
 /**
- * The Deadline: wait, then shrink, phase after phase, until nothing is left. Six phases, at most 6 min 5 s of ground play
- * (365 s) on the 176 m map; players dying, not the table, should set the real length. The radii are the 288 m plan's
- * (110, 70, 42, 24, 12) scaled to this map and then widened by about a third (0.61x gives 67, 43, 26, 15, 7): on a map this
- * small the plain scale packed ten players so tightly by the second circle that matches ended sooner, and bot-sim
- * preferred the wider circles. Rules the sim tests hold it to:
+ * The Deadline: wait, then shrink, phase after phase, until nothing is left. Six phases, at most 7 min 48 s of ground
+ * play (468 s) on the 176 m map; players dying, not the table, should set the real length. The radii are the 288 m plan's
+ * (110, 70, 42, 24, 12) scaled to this map and then widened (0.61x gives 67, 43, 26, 15, 7). For twenty fighters the first
+ * three circles wait and shrink longer and the second and third are wider again (62 and 40 m, from 55 and 34): with the
+ * ten-player table twenty bots packed into the second circle and the round was over in about 3:40 (bot-sim median); with
+ * this one it is about 4:10 and the waits the lull breaker cuts keep the dead air down. Rules the sim tests hold it to:
  *  - the edge never moves faster than half the slowest running speed, nor faster than swimming once the circle is inside
  *    the map;
  *  - from anywhere inside the current circle, the next one is never more than a third of that phase's wait + shrink away
@@ -758,10 +759,10 @@ export const MOVE = { accel: 40, friction: 45, turn: 12 };
  * `ZONE_RULES` can cut a wait short, never the first one: see there.
  */
 export const ZONE_PHASES = [
-  { wait: 60, shrink: 40, radius: 80, dps: 3 },
-  { wait: 40, shrink: 35, radius: 55, dps: 5 },
-  { wait: 30, shrink: 30, radius: 34, dps: 8 },
-  { wait: 25, shrink: 25, radius: 20, dps: 13 },
+  { wait: 90, shrink: 45, radius: 80, dps: 3 },
+  { wait: 70, shrink: 45, radius: 62, dps: 5 },
+  { wait: 45, shrink: 35, radius: 40, dps: 8 },
+  { wait: 30, shrink: 28, radius: 22, dps: 13 },
   { wait: 20, shrink: 20, radius: 9, dps: 20 },
   { wait: 15, shrink: 25, radius: 0, dps: 35 },
 ];
@@ -771,7 +772,7 @@ export const ZONE_PHASES = [
  *    to at most `lullWait` seconds;
  *  - endgame squeeze: with `squeezeAlive` or fewer left alive, every remaining wait is halved.
  */
-export const ZONE_RULES = { lull: 35, lullWait: 10, squeezeAlive: 3 };
+export const ZONE_RULES = { lull: 20, lullWait: 6, squeezeAlive: 5 };
 export const ZONE_START_RADIUS = WORLD * 0.72;
 
 export const BOT_NAMES = COPY.botNames;
