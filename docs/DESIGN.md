@@ -1,6 +1,6 @@
 # Last Commit Standing: design
 
-A Nalbaki Games game. **Top-down battle royale for 10 players in short rounds (~4 minutes: the Deadline takes about 3 min 45 s from landing to the last circle).**
+A Nalbaki Games game. **Top-down battle royale for 20 players in short rounds (~4 minutes: the Deadline takes about 3 min 45 s from landing to the last circle).**
 The Deadline closes in, the office shrinks, and the last developer standing ships.
 
 Everything here is original: names, characters, abilities, items, art and rules. The genre (a
@@ -13,7 +13,7 @@ one of them is copied.
 Title ──▶ Pick a fighter ──▶ Lobby (online: invite / quick match · offline: vs bots)
                                    │
                                    ▼
-              Drop-in: 10 fighters spawn around the edge of the campus
+              Drop-in: 20 fighters spawn around the edge of the campus
                                    │
         ┌──────────────────────────┴──────────────────────────┐
         │  Loot: smash server racks for Power Cells,          │
@@ -81,12 +81,12 @@ and the same movement. They differ in how they fight.
 
 Same architecture as Floor 42: one deterministic simulation shared by the browser and a
 Colyseus server that decides every hit; clients predict their own movement and reconcile.
-Rooms of 10, bots fill empty seats so a match always starts. Invite links for private matches.
+Rooms of up to 10 people, bots fill the other seats up to 20 so a match always starts. Invite links for private matches.
 
 ## Milestones
 
-1. **Prototype (now):** offline vs 9 bots, the campus, 4 fighters, the Deadline, minimap, items,
+1. **Prototype (now):** offline vs 19 bots, the campus, 4 fighters, the Deadline, minimap, items,
    results. Reis plays and picks what stays.
 2. Game feel and sound pass (our `web-game-feel` and `web-game-audio` skills).
-3. Online rooms of 10 with bot fill (our `web-multiplayer-netcode` skill).
-4. Duos (5 teams of 2), more maps, cosmetics.
+3. Online rooms of up to 10 people, bots filling the round to 20, (our `web-multiplayer-netcode` skill).
+4. Duos (10 teams of 2), more maps, cosmetics.

@@ -10,10 +10,10 @@ A game by **[Nalbaki Games](https://nalbakigames.com)**.
 
 </div>
 
-A battle royale in the browser for developers who never agree: up to ten of you parachute into the
-same countryside with a pistol each, the Deadline closes in, and only the last one standing gets
-to merge. Play with friends by link (bots fill the empty places, or switch them off), or solo
-against nine bots. Works on phones.
+A 20-player battle royale in the browser for developers who never agree: twenty fighters parachute
+into the same countryside with a pistol each, the Deadline closes in, and only the last one standing
+gets to merge. Play solo against nineteen bots; rooms with friends by link (up to ten people, bots fill
+the round to twenty) are coming soon. Works on phones.
 
 ## How a round goes
 

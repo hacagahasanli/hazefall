@@ -543,7 +543,7 @@ describe('the Deadline', () => {
 });
 
 describe('bots', () => {
-  it('ten bots play a full round to a single winner', () => {
+  it('twenty bots play a full round to a single winner', () => {
     const s = createGame('hotfix', 11);
     const bots = s.players.map((p) => createBot(p.id, 100 + p.id));
     let shots = 0;

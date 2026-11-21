@@ -5,7 +5,7 @@ Goal: after reading this you can find any rule in the code, change a number safe
 
 Everything here was read from the source at commit `efd3251`; `file:line` points at the lines as of that commit. For the game design (what the game is meant to be) read `docs/DESIGN.md`; this guide describes what the code does today. Where the two differ, see "Known gaps" at the end.
 
-Status: a single-player prototype, you against 9 bots, in the browser. There is no networking code.
+Status (as of `efd3251`): a single-player prototype in the browser with no networking code. Today a round has 20 players: you against 19 bots offline (`PLAYERS` in `constants.ts`).
 
 ---
 
@@ -62,7 +62,7 @@ src/
 public/assets/            Kenney CC0 models, recorded gunshots (see ASSETS.md)
 ```
 
-The one rule that shapes everything: **`src/game/sim` knows nothing about the screen.** `step()` takes a state and the ten players' inputs and changes the state. Rendering reads the state; it never writes rules back. Why a web developer should care:
+The one rule that shapes everything: **`src/game/sim` knows nothing about the screen.** `step()` takes a state and the twenty players' inputs and changes the state. Rendering reads the state; it never writes rules back. Why a web developer should care:
 
 - It is like a reducer: `state = step(state, inputs)`, but it mutates in place for speed.
 - It runs headless, so the tests play whole rounds in about a second.
@@ -221,7 +221,7 @@ Aim has a per-bot random error (0.6 to 1.4 m) so they can be beaten. There is no
 
 ### 4.11 Tests (`sim.test.ts`)
 
-17 tests, run in Node with no browser: map shape, windows and fences vs bullets, trunk and rock shapes, furniture reachability, doors opening on open ground, edge of the world, the drop, loot swap, armor, magazines and ammo boxes, sliding, vaulting, the Deadline and a full round of 10 bots ending in one winner. The sim has no tests for rendering, input, audio or React.
+17 tests, run in Node with no browser: map shape, windows and fences vs bullets, trunk and rock shapes, furniture reachability, doors opening on open ground, edge of the world, the drop, loot swap, armor, magazines and ammo boxes, sliding, vaulting, the Deadline and a full round of 20 bots ending in one winner. The sim has no tests for rendering, input, audio or React.
 
 ---
 
@@ -326,7 +326,7 @@ Changing anything under `sim/` changes the rules for everyone; run `npm run test
 
 ## 9. Known gaps (read from the code, not guessed)
 
-- **`docs/DESIGN.md` is out of date against the code.** It describes a 64 x 64 m "campus" with racks and water coolers; the code builds a 128 x 128 m countryside (64 x 64 tiles of 2 m) with houses, farms, a forest and a quarry. It also lists no rifle, sniper, rockets or magazines. `README.md` says the game is offline against 9 bots, which matches the code. Not changed here.
+- **`docs/DESIGN.md` is out of date against the code.** It describes a 64 x 64 m "campus" with racks and water coolers; the code builds a 128 x 128 m countryside (64 x 64 tiles of 2 m) with houses, farms, a forest and a quarry. It also lists no rifle, sniper, rockets or magazines. `README.md` says the game is offline against 19 bots, which matches the code. Not changed here.
 - **The `sfx.ts` header comment is stale**: it says "no audio files", but gunshots are recorded samples (section 6, `ASSETS.md`).
 - **No networking**: no server, no room code, no prediction. The sim is built to allow it.
 - **Tests** cover only `sim`. Rendering, input, audio and the React shell have none.
