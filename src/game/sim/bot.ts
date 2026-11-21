@@ -1,12 +1,24 @@
-import { aimError, bestLoot, campSpot, CLOSE, coverPoint, ENGAGE_AT, engageScore, fallbackPersona, FIRE_RANGE, gunScore, isAutomatic, landingPlan, makePersona, mulberry32, PREFERRED, LANDING_GRACE, stagePace, tierOf } from './bot-params';
-import { DROP, DT, HEALS, magOf, WEAPONS, WORLD } from './constants';
-import { canSee, healChoice, lineOfSight, lootUnder } from './step';
+import {
+  aimError, bestLoot, campSpot, CLOSE, coverPoint, EARSHOT, ENGAGE_AT, engageScore, fallbackPersona, fightCover, FIRE_RANGE, guessFromSound, gunScore,
+  isAutomatic, landingPlan, lightAt, makePersona, mulberry32, NEAR, PREFERRED, LANDING_GRACE, reactionDelay, spotTime, stagePace, tierOf, VIEW,
+} from './bot-params';
+import { DROP, DT, FIGHTERS, HEALS, magOf, WEAPONS, WORLD } from './constants';
+import { canSee, healChoice, hitPoint, inPlant, lineOfSight, lootUnder, targetable } from './step';
 import { NO_INPUT } from './types';
 
 import type { Persona } from './bot-params';
 import type { GameState, Input, Loot, Player } from './types';
 
-export type BotMode = 'drop' | 'loot' | 'roam' | 'engage' | 'retreat';
+/**
+ * What a bot is doing. The five ways of playing: attack (`engage`), defend (`cover`: fight from cover and peek),
+ * explore (`roam`, `loot`), under pressure (`pressure`: shot at by someone it cannot see) and heal (`retreat` to break
+ * off, then `heal` out of sight).
+ */
+export type BotMode = 'drop' | 'loot' | 'roam' | 'engage' | 'cover' | 'pressure' | 'retreat' | 'heal';
+
+/** A human slip a bot makes now and then, at most one per fight. */
+export type Slip = 'hesitate' | 'open' | 'reload' | 'spray' | 'tunnel';
+const SLIPS: Slip[] = ['hesitate', 'open', 'reload', 'spray', 'tunnel'];
 
 export interface BotInfo {
   persona: Persona | null;
@@ -14,22 +26,45 @@ export interface BotInfo {
   target: number;
   /** When the current target was first seen (match seconds). */
   seenAt: number;
+  /** Seconds from spotting the current target to the first shot it is allowed (drawn per target). */
+  react: number;
   /** What I am walking to pick up (loot mode). */
   loot: Loot | null;
+  /** Where I think the last gunfire I heard came from (a guess, not the shooter's position). */
+  heard: { x: number; y: number; t: number } | null;
+  /** Fighting from cover: hiding behind it or peeking out. */
+  peek: 'hide' | 'peek' | null;
+  /** The cover I fight from, and the spot beside it I peek from. */
+  post: { x: number; y: number; peek: { x: number; y: number; side: number } } | null;
+  slip: Slip | null;
 }
 
-const VIEW = 26;
-const NEAR = 6;
 const deg = Math.PI / 180;
+const THINK_DT = 8 * DT;
+
+/**
+ * Can this bot see (and so shoot at) that player? The one question every bot decision about seeing or shooting someone
+ * goes through: they must be up to be seen, not hidden in a bush, and in a clear line from the bot's eyes (leaning out
+ * moves the eyes and the exposed shoulder). Line of sight through roofs and floors will be swapped in here.
+ */
+export const botCanSee = (state: GameState, viewer: Player, target: Player) => {
+  if (!targetable(target) || !canSee(state, viewer, target)) return false;
+  const eye = hitPoint(viewer);
+  const body = hitPoint(target);
+  return lineOfSight(state, eye.x, eye.y, body.x, body.y) || (Math.abs(target.lean) > 0.05 && lineOfSight(state, eye.x, eye.y, target.x, target.y));
+};
 /** Reaction time and aim error against a person, relative to against a bot. */
 export const VS_HUMAN = 1.45;
 
+
 /**
- * A battle-royale bot with a personality (rusher, camper, looter or tactical). It jumps over its
- * own landing spot, loots, roams its own way through the next circle, only sees what is in front
- * of it (unless shot at or hearing shots), takes a moment to react and settles its aim over time,
- * picks its fights, falls back to cover to heal, and runs from the Deadline. Thinks every 8 ticks;
- * aims and fires every tick. Uses only its own seeded random numbers, so a host replay matches.
+ * A battle-royale bot with a personality (rusher, camper, looter or tactical). It jumps over its own landing spot, loots,
+ * roams its own way through the next circle, and fights like a person: it only notices what it can really see (in front
+ * of it, in the light, sooner when you move or shoot, never through walls) or roughly where it hears gunfire, takes a
+ * varying moment to react, settles its aim over time and shoots in bursts. It attacks, or fights from cover and peeks,
+ * gets out of the open when shot by someone it cannot see, breaks off when hurt and heals out of sight with what it
+ * carries, and runs from the Deadline. Now and then it slips up. Thinks every 8 ticks; aims and fires every tick. Uses
+ * only its own seeded random numbers, so a host replay matches.
  */
 export const createBot = (id: number, seed: number) => {
   const rand = mulberry32(seed);
@@ -49,8 +84,13 @@ export const createBot = (id: number, seed: number) => {
   let lastTY = 0;
   let hitAt = -99;
   let hitBy = -1;
-  let heard: { x: number; y: number; t: number } | null = null;
+  /** Gunfire I heard: where I guess it came from, and how far off it sounded (by how loud it was). */
+  let heard: { x: number; y: number; t: number; from: number; far: number } | null = null;
   let chased = -99;
+  /** How close I am to noticing each player (1 = noticed). */
+  const aware = new Map<number, number>();
+  /** Something half-noticed out of the corner of my eye: I turn to look at it. */
+  let glance: { x: number; y: number } | null = null;
   // Where I'm going.
   let wpX = -1;
   let wpY = -1;
@@ -61,55 +101,132 @@ export const createBot = (id: number, seed: number) => {
   let landedAt = -99;
   let noRetreatUntil = 0;
   let loot: Loot | null = null;
+  // Fighting from cover.
+  let post: ReturnType<typeof fightCover> = null;
+  let peek: 'hide' | 'peek' = 'hide';
+  let peekUntil = 0;
+  let peeks = 0;
+  let peekMax = 3;
+  let ducked = -99;
   // How I fight.
   let strafe = 1;
   let strafeUntil = 0;
+  let planted = false;
   let burstOn = true;
   let burstUntil = 0;
   let wobble = 0;
   let lead = 0.75;
   let engaged = false;
+  let reactFor = 0;
+  let aimSince = 0;
+  let wantsCover = false;
+  let slip: Slip | null = null;
+  let slipReloaded = false;
+  let dodgeSeen = -99;
+  let healTo = 0.8;
   // Stuck on a wall? Walk round it for a bit.
   let lastX = 0;
   let lastY = 0;
   let detour = 0;
   let detourAngle = 0;
+  let wasPushing = false;
   let swappedAt = -99;
 
   const init = (state: GameState) => {
     const mine = landingPlan(state).get(id);
     p = makePersona(mine?.persona ?? fallbackPersona(id), rand);
     if (mine) spot = { x: mine.x, y: mine.y, t: mine.t };
+    // The unsure heal up fuller before they go back out.
+    healTo = 0.55 + 0.2 * (1 - p.confidence);
   };
 
-  /** Hits and shots from the last tick: being shot or hearing a gun wakes me up. */
+  /** Hits and shots from the last tick: being shot wakes me up; gunfire tells me roughly which way to look. */
   const listen = (state: GameState, me: Player, now: number) => {
     for (const e of state.events) {
       if (e.type === 'hit' && e.target === id && e.by !== null && e.by !== id) {
         hitAt = now;
         hitBy = e.by;
-      } else if (e.type === 'shot' && e.owner !== id && Math.hypot(e.x - me.x, e.y - me.y) < 45) {
-        heard = { x: e.x, y: e.y, t: now };
+      } else if (e.type === 'shot' && e.owner !== id && Math.hypot(e.x - me.x, e.y - me.y) < EARSHOT) {
+        // A new guess for a new shooter or every half second, not one per bullet.
+        if (heard && heard.from === e.owner && now - heard.t < 0.5) continue;
+        const g = guessFromSound(me.x, me.y, e.x, e.y, rand);
+        heard = { x: g.x, y: g.y, t: now, from: e.owner, far: Math.hypot(e.x - me.x, e.y - me.y) };
       }
     }
   };
 
+  /** A new fight: how long before I shoot, whether I want cover for it, and whether I slip up in it. */
+  const meet = (state: GameState, me: Player, o: Player, now: number) => {
+    targetId = o.id;
+    seenAt = now;
+    aimSince = now;
+    lead = between(0.5, 1);
+    slip = rand() < p!.mistake ? SLIPS[Math.floor(rand() * SLIPS.length)] : null;
+    slipReloaded = false;
+    reactFor = reactionDelay(p!, rand, o.bot ? 1 : VS_HUMAN, slip === 'hesitate');
+    const pace = stagePace(state.zone.phase, state.players.filter((q) => q.alive).length);
+    const ratio = (me.hp + me.armor) / me.maxHp;
+    const bias = 1 - p!.confidence + (CLOSE[me.weapon] ? -0.2 : 0.15) + (me.weapon === 'shotgun' ? -0.3 : 0) - pace.aggro * 0.5 + (ratio < 0.6 ? 0.25 : 0) + between(-0.2, 0.2);
+    wantsCover = bias > 0.7 && slip !== 'open';
+    post = null;
+    peek = 'hide';
+    peeks = 0;
+    peekMax = 2 + Math.floor(rand() * 2);
+  };
+
   const perceive = (state: GameState, me: Player, now: number) => {
-    const alert = now - hitAt < 1.5 || (heard !== null && now - heard.t < 1.5);
+    const shot = now - hitAt < 1.5;
+    const listening = heard !== null && now - heard.t < 1.5;
+    const fighting = targetId >= 0 && now - lastSeen < 3;
     let best: Player | null = null;
     let bestD = Infinity;
+    let glanceA = 0.1;
+    glance = null;
     for (const o of state.players) {
-      if (o.id === id || !canSee(state, me, o)) continue;
-      const d = Math.hypot(o.x - me.x, o.y - me.y);
-      if (d > (o.id === hitBy && now - hitAt < 3 ? VIEW + 8 : VIEW)) continue;
-      if (d > NEAR && !alert && !(o.id === targetId && now - lastSeen < 1.5)) {
-        let off = Math.atan2(o.y - me.y, o.x - me.x) - me.heading;
-        off = Math.atan2(Math.sin(off), Math.cos(off));
-        if (Math.abs(off) > (p!.fov / 2) * deg) continue;
+      if (o.id === id) continue;
+      if (!o.alive) {
+        aware.delete(o.id);
+        continue;
       }
+      const d = Math.hypot(o.x - me.x, o.y - me.y);
+      let a = aware.get(o.id) ?? 0;
+      const tracking = o.id === targetId && now - lastSeen < 1.5;
+      let seen = false;
+      if (d <= (o.id === hitBy && now - hitAt < 3 ? VIEW + 8 : VIEW)) {
+        let edge = 0;
+        let inView = true;
+        if (d > NEAR && !shot && !tracking) {
+          let off = Math.atan2(o.y - me.y, o.x - me.x) - me.heading;
+          off = Math.atan2(Math.sin(off), Math.cos(off));
+          // Gunfire turns my head; tunnel vision in a fight narrows what I notice off to the side.
+          const half = (p!.fov / 2 + (listening ? 30 : 0)) * (slip === 'tunnel' && fighting && o.id !== targetId ? 0.55 : 1) * deg;
+          if (Math.abs(off) > half) inView = false;
+          else edge = Math.abs(off) / half;
+        }
+        if (inView && botCanSee(state, me, o)) {
+          seen = true;
+          if (a < 1) {
+            const t = spotTime(p!, {
+              d, edge, moving: Math.hypot(o.vx, o.vy) > 1.5, firing: o.revealed > 0, light: lightAt(o.x, o.y),
+              plant: o.stage === 'ground' && inPlant(o.x, o.y), alert: shot || listening,
+            });
+            a = Math.min(1, a + THINK_DT / t);
+          }
+        }
+      }
+      // Out of sight, what I noticed fades over a few seconds.
+      if (!seen) a = Math.max(0, a - THINK_DT * 0.35);
+      aware.set(o.id, a);
+      if (seen && a < 1 && a > glanceA) {
+        glanceA = a;
+        glance = { x: o.x, y: o.y };
+      }
+      // Someone I was just fighting I pick up again at once; anyone else I have to notice first.
+      const known = a >= 1 || (o.id === targetId && now - lastSeen < 3 && a > 0);
+      if (!seen || !known) continue;
       // Stick with whoever I'm fighting, and answer whoever is shooting me.
       const rank = d - (o.id === targetId ? 6 : 0) - (o.id === hitBy && now - hitAt < 3 ? 8 : 0);
-      if (rank < bestD && lineOfSight(state, me.x, me.y, o.x, o.y)) {
+      if (rank < bestD) {
         best = o;
         bestD = rank;
       }
@@ -120,17 +237,11 @@ export const createBot = (id: number, seed: number) => {
       return;
     }
     td = Math.hypot(best.x - me.x, best.y - me.y);
-    if (best.id !== targetId || now - lastSeen > 2) {
-      // Someone new: a moment to react, and the aim starts loose again.
-      targetId = best.id;
-      seenAt = now;
-      lead = between(0.5, 1);
-    }
+    if (best.id !== targetId || now - lastSeen > 2) meet(state, me, best, now);
     lastSeen = now;
     lastTX = best.x;
     lastTY = best.y;
   };
-
   /** A waypoint of my own inside the next circle; campers pick a wall or bush and sit there. */
   const roamTo = (state: GameState, me: Player, now: number, pace: ReturnType<typeof stagePace>) => {
     const z = state.zone;
@@ -143,7 +254,7 @@ export const createBot = (id: number, seed: number) => {
       wpKey = '';
       return;
     }
-    if (p!.chase > 0 && heard && now - heard.t < 2 && heard.t > chased && Math.hypot(heard.x - me.x, heard.y - me.y) < p!.chase * pace.chase) {
+    if (p!.chase > 0 && heard && now - heard.t < 2 && heard.t > chased && heard.far < p!.chase * pace.chase) {
       // Gunfire: rushers and tactical players go and see.
       chased = heard.t;
       wpX = heard.x;
@@ -182,6 +293,12 @@ export const createBot = (id: number, seed: number) => {
     } else holdUntil = 0;
   };
 
+  /** A heal worth starting now: a med kit or bandage that would actually help (coffee is not a heal). */
+  const canHeal = (me: Player) => {
+    const kind = healChoice(me);
+    return (kind === 'medkit' || kind === 'bandage') && me.hp < me.maxHp * 0.97;
+  };
+
   const think = (state: GameState, me: Player, now: number): Input => {
     const z = state.zone;
     const out: Input = { ...NO_INPUT };
@@ -189,32 +306,56 @@ export const createBot = (id: number, seed: number) => {
     const ratio = (me.hp + me.armor) / me.maxHp;
     const pace = stagePace(z.phase, state.players.filter((o) => o.alive).length);
     const hurtRecently = now - hitAt < 2;
+    const underFire = now - hitAt < 1.2;
     const armed = tierOf(me) > 0;
 
-    // Fight, fall back, or leave them be?
+    // Fight, fall back, patch up, or leave them be?
     engaged = false;
     if (mode === 'retreat' && (ratio > 0.8 || now - retreatAt > 10)) {
       mode = 'roam';
       noRetreatUntil = now + 5;
     }
+    if (mode === 'heal' && !me.using && (!canHeal(me) || me.hp >= me.maxHp * healTo)) {
+      mode = 'roam';
+      noRetreatUntil = now + 5;
+    }
+    // Broken off and out of their sight for a moment: now heal, with what I carry and at its own pace.
+    if (mode === 'retreat' && !target && canHeal(me) && now - hitAt > 0.6 && now - lastSeen > 0.6) mode = 'heal';
     if (target) {
       const tRatio = (target.hp + target.armor) / target.maxHp;
       const finish = p!.name === 'rusher' && tRatio < 0.3;
-      if (mode !== 'retreat' && ratio < p!.back + pace.back && now > noRetreatUntil && !finish) {
+      if (mode !== 'retreat' && mode !== 'heal' && ratio < p!.back + pace.back && now > noRetreatUntil && !finish) {
         mode = 'retreat';
         retreatAt = now;
         cover = null;
       }
-      if (mode !== 'retreat') {
+      // Found while healing: unless the heal is nearly done, get moving again.
+      if (mode === 'heal' && (underFire || td < 8) && !(me.using && me.useLeft < 0.7)) {
+        mode = 'retreat';
+        retreatAt = now;
+        cover = null;
+      }
+      if (mode !== 'retreat' && mode !== 'heal') {
         // Fresh off the parachute everyone grabs a gun first, unless someone starts it. A person gets a few seconds more
         // than a bot before anyone picks a fight with them: the first minute is where new players decide to stay.
         const landing = now - landedAt < (target.bot ? LANDING_GRACE.bot : LANDING_GRACE.human) && !hurtRecently;
         const score = engageScore(p!, me, target, td, { stage: pace.aggro, hurtRecently, landing });
         const ambush = p!.name === 'camper' && armed && !landing && td < FIRE_RANGE[me.weapon] * 0.7;
         engaged = score >= ENGAGE_AT || ambush;
-        mode = engaged ? 'engage' : 'roam';
+        if (!engaged) mode = 'roam';
+        else {
+          // Fight from cover when that suits me and there is some (and they are not already on top of me).
+          if (wantsCover && td > 6 && (!post || lineOfSight(state, target.x, target.y, post.x, post.y))) post = fightCover(state, me, target.x, target.y, post);
+          mode = wantsCover && td > 6 && post ? 'cover' : 'engage';
+        }
       }
-    } else if (mode !== 'retreat') mode = 'roam';
+    } else if (mode === 'cover' && now - lastSeen < 6) {
+      // Holding my cover: they ducked out of sight, they will be back.
+    } else if (mode !== 'retreat' && mode !== 'heal') {
+      // Shot by someone I cannot see: get out of the open.
+      mode = underFire || (mode === 'pressure' && now - hitAt < 2.5) ? 'pressure' : 'roam';
+      if (mode !== 'pressure') post = null;
+    }
     if (mode === 'roam') {
       loot = bestLoot(state, me, p!, target);
       if (loot) mode = 'loot';
@@ -223,34 +364,104 @@ export const createBot = (id: number, seed: number) => {
     // Where do I want to be?
     const zoneD = Math.hypot(me.x - z.toX, me.y - z.toY);
     const mustRun = zoneD > z.toR * 0.85 && (z.state === 'shrink' || z.timer < 12 || Math.hypot(me.x - z.cx, me.y - z.cy) > z.r);
+    const threat = target ? { x: target.x, y: target.y } : { x: lastTX, y: lastTY };
     let wantX = me.x;
     let wantY = me.y;
+    let lookAt: { x: number; y: number } | null = null;
     if (mustRun) {
       wantX = z.toX;
       wantY = z.toY;
-    } else if (mode === 'retreat') {
+    } else if (mode === 'retreat' || mode === 'heal') {
       if (!cover || (target && lineOfSight(state, target.x, target.y, cover.x, cover.y))) cover = coverPoint(state, me, lastTX, lastTY, p!.name === 'camper');
       if (cover) {
         wantX = cover.x;
         wantY = cover.y;
-      } else {
+      } else if (mode === 'retreat') {
         const d = Math.max(0.1, Math.hypot(me.x - lastTX, me.y - lastTY));
         wantX = me.x + ((me.x - lastTX) / d) * 5;
         wantY = me.y + ((me.y - lastTY) / d) * 5;
       }
+      if (mode === 'heal') {
+        // Heal facing the way they were: whoever comes round that corner gets seen first.
+        lookAt = threat;
+        if (!me.using && canHeal(me)) out.heal = true;
+      }
+    } else if (mode === 'cover' && post) {
+      lookAt = threat;
+      const atPost = Math.hypot(me.x - post.x, me.y - post.y) < 0.45;
+      if (peek === 'peek') {
+        wantX = post.peek.x;
+        wantY = post.peek.y;
+        out.lean = post.peek.side;
+        // The look starts once I am out there.
+        if (Math.hypot(me.x - post.peek.x, me.y - post.peek.y) > 0.4) peekUntil = Math.max(peekUntil, now + 0.5);
+        // Done looking, or hit while out there: back behind it (the bold stay out to trade).
+        const flinch = hitAt > ducked && underFire && rand() > p!.confidence * 0.6;
+        if (now > peekUntil || flinch) {
+          ducked = now;
+          peek = 'hide';
+          peekUntil = now + between(0.6, 1.6);
+          peeks += 1;
+        }
+      } else {
+        wantX = post.x;
+        wantY = post.y;
+        if (atPost) {
+          if (armed && me.reload <= 0 && me.ammo > 0 && me.mag < magOf(me.weapon, me.rarity) * 0.7) out.reload = true;
+          if (now > peekUntil && me.reload <= 0) {
+            peek = 'peek';
+            peekUntil = now + between(0.9, 1.9);
+          }
+        } else peekUntil = Math.max(peekUntil, now + 0.3);
+      }
+      // Moved on after a few looks, or they have gone quiet: find another angle, or go and find them.
+      if (peeks >= peekMax || now - lastSeen > 4) {
+        const fresh = now - lastSeen < 4 && p!.confidence < 0.6 ? fightCover(state, me, threat.x, threat.y, post) : null;
+        post = fresh;
+        peeks = 0;
+        peekMax = 2 + Math.floor(rand() * 2);
+        peek = 'hide';
+        if (!fresh) mode = 'roam';
+      }
     } else if (mode === 'engage' && target) {
       if (now > strafeUntil) {
+        // Sidestep this way or that, and now and then plant my feet for a steadier shot (not while being hit).
+        planted = !planted && rand() < 0.35 && !underFire;
         strafe = rand() < 0.5 ? 1 : -1;
-        strafeUntil = now + between(0.6, 1.4);
+        strafeUntil = now + (planted ? between(0.3, 0.6) : p!.strafeT * between(0.7, 1.4));
       }
       const pref = PREFERRED[me.weapon] * (p!.name === 'rusher' ? 0.75 : 1);
       const push = p!.name === 'tactical' && target.reload > 0;
       const away = push ? 1 : td < pref * 0.7 ? -1 : td > pref * 1.2 && p!.name !== 'camper' ? 1 : 0;
-      const side = p!.name === 'camper' ? 0.5 : 2;
+      const side = planted ? 0 : p!.strafeW;
       const ax = (target.x - me.x) / td;
       const ay = (target.y - me.y) / td;
       wantX = me.x + ax * away * 4 - ay * strafe * side;
       wantY = me.y + ay * away * 4 + ax * strafe * side;
+      // A slip: reloading in the open in the middle of it.
+      if (slip === 'reload' && !slipReloaded && me.reload <= 0 && me.ammo > 0 && me.mag < magOf(me.weapon, me.rarity) * 0.6) {
+        out.reload = true;
+        slipReloaded = true;
+      }
+    } else if (mode === 'pressure') {
+      // Off the line of fire: behind something between me and where the shots came from, or zigzag away.
+      const from = heard && now - heard.t < 3 ? heard : { x: me.x + Math.cos(me.heading) * 10, y: me.y + Math.sin(me.heading) * 10 };
+      lookAt = from;
+      if (!cover || lineOfSight(state, from.x, from.y, cover.x, cover.y)) cover = coverPoint(state, me, from.x, from.y, p!.name === 'camper');
+      if (cover) {
+        wantX = cover.x;
+        wantY = cover.y;
+      } else {
+        if (now > strafeUntil) {
+          strafe = -strafe;
+          strafeUntil = now + between(0.4, 0.8);
+        }
+        const d = Math.max(0.1, Math.hypot(me.x - from.x, me.y - from.y));
+        const ax = (me.x - from.x) / d;
+        const ay = (me.y - from.y) / d;
+        wantX = me.x + ax * 3 - ay * strafe * 3;
+        wantY = me.y + ay * 3 + ax * strafe * 3;
+      }
     } else if (mode === 'loot' && loot) {
       wantX = loot.x;
       wantY = loot.y;
@@ -267,10 +478,29 @@ export const createBot = (id: number, seed: number) => {
       wantY = wpY;
     }
 
+    // Never stand still while being hit: sidestep across the line of fire.
+    if (now - hitAt < 0.8 && Math.hypot(wantX - me.x, wantY - me.y) < 0.6) {
+      const from = target ?? heard ?? { x: me.x + Math.cos(me.heading), y: me.y + Math.sin(me.heading) };
+      const d = Math.max(0.1, Math.hypot(from.x - me.x, from.y - me.y));
+      wantX = me.x - ((from.y - me.y) / d) * strafe * 2;
+      wantY = me.y + ((from.x - me.x) / d) * strafe * 2;
+      // Standing behind cover and still getting hit: that cover is no good.
+      if (mode === 'cover' && peek === 'hide') post = null;
+    }
+    // Some throw themselves out of the way when a bullet lands.
+    if (hitAt > dodgeSeen) {
+      dodgeSeen = hitAt;
+      if (rand() < p!.dodge && me.rollCooldown <= 0 && !me.using && mode !== 'cover') out.roll = true;
+    }
+
     const moved = Math.hypot(me.x - lastX, me.y - lastY);
     lastX = me.x;
     lastY = me.y;
-    if (moved < 0.15 && Math.hypot(wantX - me.x, wantY - me.y) > 1.5 && detour <= 0) {
+    // Stuck only if I was trying to walk last time too (not standing behind cover on purpose).
+    const pushing = Math.hypot(wantX - me.x, wantY - me.y) > 1.5;
+    const stuck = moved < 0.15 && pushing && wasPushing;
+    wasPushing = pushing;
+    if (stuck && detour <= 0) {
       detour = 25 + Math.floor(rand() * 30);
       detourAngle = Math.atan2(wantY - me.y, wantX - me.x) + (rand() < 0.5 ? 1 : -1) * (Math.PI / 2 + rand() * 0.6);
     }
@@ -281,20 +511,22 @@ export const createBot = (id: number, seed: number) => {
       dy = Math.sin(detourAngle);
     }
     const len = Math.hypot(dx, dy);
-    if (len > 0.4) {
-      out.mx = dx / len;
-      out.my = dy / len;
+    if (len > (mode === 'cover' ? 0.15 : 0.4)) {
+      // Ease into a spot instead of running past it (peeking is a step, not a sprint).
+      const k = len < 0.8 && (mode === 'cover' || mode === 'heal') ? Math.max(0.5, len / 0.8) : 1;
+      out.mx = (dx / len) * k;
+      out.my = (dy / len) * k;
     }
 
-    // Look where I'm going, or towards the shots I heard; one-shot buttons.
-    const look = heard && now - heard.t < 1.5 && !target ? heard : { x: me.x + out.mx * 5, y: me.y + out.my * 5 };
+    // Look where I'm going, at the threat, or towards the shots I heard; one-shot buttons.
+    const look = lookAt ?? (glance && !target && !mustRun ? glance : null) ?? (heard && now - heard.t < 1.5 && !target ? heard : { x: me.x + out.mx * 5, y: me.y + out.my * 5 });
     out.aimX = look.x;
     out.aimY = look.y;
     wobble = rand() * 2 - 1;
     if (target && engaged) {
       out.super = me.superCharge >= 1 && td < 9;
       out.use = me.bombs > 0 && td < 11 && td > 4;
-    } else if (!me.using && !target && !out.use && wantsHeal(me, mode)) out.heal = true;
+    } else if (mode !== 'heal' && !me.using && !target && !out.use && wantsHeal(me, mode)) out.heal = true;
     else if (!me.using && !target && me.coffees > 0 && me.buzz <= 0 && (me.hp < me.maxHp * 0.85 || mustRun)) out.coffee = true;
     else if (!target && armed && !me.using && me.reload <= 0 && me.ammo > 0 && me.mag < magOf(me.weapon, me.rarity) * 0.4) out.reload = true;
     pickGun(me, now, out);
@@ -308,7 +540,6 @@ export const createBot = (id: number, seed: number) => {
     if (kind === 'medkit') return me.hp < me.maxHp * (m === 'retreat' ? 0.75 : 0.6);
     return me.hp < HEALS.bandage.upTo - 5 || m === 'retreat';
   };
-
   /**
    * The gun for the distance: the close-range one (shotgun, SMG, pistol) up close, the long-range one (rifle, sniper) far
    * out; with nobody about, the better of the two. Out of rounds in the magazine in a fight, draw the other gun rather than
@@ -338,29 +569,45 @@ export const createBot = (id: number, seed: number) => {
     }
   };
 
-  /** Every tick: track the target with an error that shrinks the longer I stay on it, and fire in bursts. */
-  const aimAndFire = (me: Player, now: number, out: Input) => {
+  /**
+   * Every tick: track the target with an error that shrinks the longer I stay on it (worse while I move, while I am hit
+   * and far out), and fire in bursts once I have reacted. Only at someone I can see this tick.
+   */
+  const aimAndFire = (state: GameState, me: Player, now: number, out: Input) => {
     out.fire = false;
     if (!target || !target.alive) return out;
-    const shootBack = mode === 'retreat' && now - hitAt < 1 && td < 10;
+    const shootBack = (mode === 'retreat' || (mode === 'heal' && !me.using)) && now - hitAt < 1 && td < 10;
     if ((!engaged && !shootBack) || me.swapping > 0) return out;
+    if (!botCanSee(state, me, target)) {
+      // Gone behind something: keep the gun on where they were.
+      out.aimX = lastTX;
+      out.aimY = lastTY;
+      return out;
+    }
+    lastSeen = now;
+    lastTX = target.x;
+    lastTY = target.y;
     const w = WEAPONS[me.weapon];
     const t = Math.min(1, td / w.speed) * lead;
     const lx = target.x + target.vx * t;
     const ly = target.y + target.vy * t;
     // A little kinder to people than to other bots (as PUBG and Fortnite bots are): slower and looser.
     const human = target.bot ? 1 : VS_HUMAN;
-    const err = aimError(p!, now - seenAt, Math.hypot(target.vx, target.vy)) * human * deg;
+    const moving = Math.hypot(me.vx, me.vy) / FIGHTERS[me.fighter].speed;
+    const how = { moving, underFire: now - hitAt < 0.6, range: td / FIRE_RANGE[me.weapon] };
+    const err = aimError(p!, now - aimSince, Math.hypot(target.vx, target.vy), how) * human * (slip === 'spray' ? 1.6 : 1) * deg;
     const a = Math.atan2(ly - me.y, lx - me.x) + err * wobble;
     const d = Math.hypot(lx - me.x, ly - me.y);
     out.aimX = me.x + Math.cos(a) * d;
     out.aimY = me.y + Math.sin(a) * d;
-    if (isAutomatic(me.weapon) && now > burstUntil) {
+    // Bursts, not a hose: a few rounds (a couple of shots with a semi-automatic), a breath to re-aim, again.
+    const auto = isAutomatic(me.weapon);
+    if (now > burstUntil) {
       burstOn = !burstOn;
-      burstUntil = now + (burstOn ? w.rate * between(3, 6) : between(0.25, 0.5));
+      burstUntil = now + (burstOn ? w.rate * (auto ? between(3, 6) : between(2, 4)) * (slip === 'spray' ? 1.8 : 1) : auto ? between(0.25, 0.5) : between(0.1, 0.22));
     }
-    const ready = now - seenAt >= p!.react * human;
-    out.fire = ready && td <= FIRE_RANGE[me.weapon] && (burstOn || !isAutomatic(me.weapon)) && !(me.weapon === 'rockets' && td < 4);
+    const ready = now - seenAt >= reactFor;
+    out.fire = ready && td <= FIRE_RANGE[me.weapon] && burstOn && !(me.weapon === 'rockets' && td < 4);
     return out;
   };
 
@@ -404,14 +651,18 @@ export const createBot = (id: number, seed: number) => {
       out.cycle = false;
       out.heal = false;
       out.coffee = false;
+      out.roll = false;
     }
     if (target) {
       td = Math.hypot(target.x - me.x, target.y - me.y);
-      aimAndFire(me, now, out);
+      aimAndFire(state, me, now, out);
     }
     return out;
   };
 
-  const info = (): BotInfo => ({ persona: p, mode, target: target?.id ?? -1, seenAt, loot: mode === 'loot' ? loot : null });
+  const info = (): BotInfo => ({
+    persona: p, mode, target: target?.id ?? -1, seenAt, react: reactFor, loot: mode === 'loot' ? loot : null,
+    heard: heard && { x: heard.x, y: heard.y, t: heard.t }, peek: mode === 'cover' && post ? peek : null, post: mode === 'cover' ? post : null, slip,
+  });
   return Object.assign(bot, { info });
 };

@@ -36,13 +36,23 @@ export interface Persona {
   hot: number;
   /** Walks towards gunfire heard within this many metres (0 = never). */
   chase: number;
+  /** 0..1: sure of itself. High: pushes and fights in the open; low: holds cover and peeks, heals sooner and fuller. */
+  confidence: number;
+  /** How quickly it notices someone (x the base spotting speed): the watchful ones see you sooner. */
+  eyes: number;
+  /** Chance per fight of a human slip: a late reaction, staying in the open, a reload mid-fight, a long loose burst. */
+  mistake: number;
+  /** Movement style: how far (m) and how often (s) it sidesteps in a fight, and the chance it rolls away when hit. */
+  strafeW: number;
+  strafeT: number;
+  dodge: number;
 }
 
 const BASE: Record<PersonaName, Omit<Persona, 'name'>> = {
-  rusher: { react: 0.32, aim0: 12, aimMin: 3.5, decay: 0.6, fov: 150, aggro: 0.8, back: 0.25, loot: 0.6, hot: 0.8, chase: 45 },
-  camper: { react: 0.45, aim0: 9, aimMin: 2.5, decay: 0.8, fov: 120, aggro: 0.3, back: 0.45, loot: 1.0, hot: 0.2, chase: 0 },
-  looter: { react: 0.55, aim0: 14, aimMin: 4, decay: 1, fov: 130, aggro: 0.4, back: 0.55, loot: 1.4, hot: 0.1, chase: 0 },
-  tactical: { react: 0.3, aim0: 10, aimMin: 2.5, decay: 0.5, fov: 150, aggro: 0.6, back: 0.35, loot: 0.9, hot: 0.5, chase: 35 },
+  rusher: { react: 0.32, aim0: 12, aimMin: 3.5, decay: 0.6, fov: 150, aggro: 0.8, back: 0.25, loot: 0.6, hot: 0.8, chase: 45, confidence: 0.85, eyes: 0.95, mistake: 0.14, strafeW: 2.4, strafeT: 0.8, dodge: 0.3 },
+  camper: { react: 0.45, aim0: 9, aimMin: 2.5, decay: 0.8, fov: 120, aggro: 0.3, back: 0.45, loot: 1.0, hot: 0.2, chase: 0, confidence: 0.35, eyes: 1.15, mistake: 0.07, strafeW: 0.8, strafeT: 1.4, dodge: 0.1 },
+  looter: { react: 0.55, aim0: 14, aimMin: 4, decay: 1, fov: 130, aggro: 0.4, back: 0.55, loot: 1.4, hot: 0.1, chase: 0, confidence: 0.4, eyes: 0.85, mistake: 0.16, strafeW: 1.6, strafeT: 1.1, dodge: 0.15 },
+  tactical: { react: 0.3, aim0: 10, aimMin: 2.5, decay: 0.5, fov: 150, aggro: 0.6, back: 0.35, loot: 0.9, hot: 0.5, chase: 35, confidence: 0.55, eyes: 1.1, mistake: 0.05, strafeW: 2, strafeT: 1, dodge: 0.25 },
 };
 
 /**
@@ -53,11 +63,25 @@ const BASE: Record<PersonaName, Omit<Persona, 'name'>> = {
  */
 const ROSTER: PersonaName[] = ['looter', 'camper', 'looter', 'rusher', 'tactical', 'rusher', 'camper', 'rusher', 'looter'];
 
-/** A personality with +-15% per-bot jitter, so two rushers differ. */
+/** A personality with +-15% per-bot jitter (+-30% for how sure of itself and how slip-prone it is), so two rushers differ. */
 export const makePersona = (name: PersonaName, rand: () => number): Persona => {
   const out = { name } as Persona;
-  for (const [k, v] of Object.entries(BASE[name])) (out as unknown as Record<string, number>)[k] = v * (0.85 + rand() * 0.3);
+  for (const [k, v] of Object.entries(BASE[name])) {
+    const wide = k === 'confidence' || k === 'mistake';
+    (out as unknown as Record<string, number>)[k] = v * (wide ? 0.7 + rand() * 0.6 : 0.85 + rand() * 0.3);
+  }
+  out.confidence = Math.min(1, out.confidence);
   return out;
+};
+
+/**
+ * Seconds from spotting someone to the first shot: the personality's reaction time with a spread round it (people are
+ * not metronomes: mostly near their own speed, now and then slow), longer against a person (`human`), and a slip adds a
+ * proper hesitation.
+ */
+export const reactionDelay = (p: Persona, rand: () => number, human: number, slip: boolean) => {
+  const spread = 0.75 + rand() * 0.35 + (rand() < 0.2 ? rand() * 0.45 : 0);
+  return p.react * spread * human + (slip ? 0.3 + rand() * 0.35 : 0);
 };
 
 /** How far each weapon likes to fight from, and the farthest it opens fire. */
@@ -151,9 +175,62 @@ export const bestLoot = (state: GameState, me: Player, p: Persona, enemy: Player
   return pick;
 };
 
-/** Angular aim error in degrees: loose on a new target, settling the longer I stay on it; worse at a runner. */
-export const aimError = (p: Persona, onTarget: number, targetSpeed: number) =>
-  (p.aim0 * Math.exp(-onTarget / p.decay) + p.aimMin) * (targetSpeed > 4 ? 1.3 : 1);
+/**
+ * Angular aim error in degrees: loose on a new target, settling the longer I stay on it; worse at a runner, while I am
+ * moving myself (0..1 of my top speed), while I am being hit, and out near the end of my gun's range (0..1 of it).
+ */
+export const aimError = (p: Persona, onTarget: number, targetSpeed: number, how: { moving?: number; underFire?: boolean; range?: number } = {}) =>
+  (p.aim0 * Math.exp(-onTarget / p.decay) + p.aimMin) *
+  (targetSpeed > 4 ? 1.3 : 1) *
+  (1 + AIM_PENALTY.moving * Math.min(1, how.moving ?? 0)) *
+  (how.underFire ? AIM_PENALTY.underFire : 1) *
+  (1 + AIM_PENALTY.range * Math.max(0, ((how.range ?? 0) - 0.6) / 0.4));
+/** How much worse the aim gets: at full own speed (+), when being hit (x), at the very end of the gun's range (+). */
+export const AIM_PENALTY = { moving: 0.2, underFire: 1.2, range: 0.3 };
+
+// ---------- perception
+
+/** How far a bot can make someone out at all (m), and the distance inside which it notices anyone, whichever way it faces. */
+export const VIEW = 26;
+export const NEAR = 6;
+
+/**
+ * Seconds of looking before a bot notices someone it has a clear line to: quick up close, slow far out; sooner when the
+ * other one moves or shoots, later at the edge of its view, in the dark, or half hidden in a bush. A bot that has just
+ * been shot at is on edge and quicker. Pure, so tests can check each factor.
+ */
+export const spotTime = (
+  p: Persona,
+  c: { d: number; edge: number; moving: boolean; firing: boolean; light: number; plant: boolean; alert: boolean },
+) => {
+  const k = Math.min(1, c.d / VIEW);
+  let t = 0.06 + 0.9 * k * k;
+  if (c.moving) t *= 0.6;
+  if (c.firing) t *= 0.3;
+  if (c.plant) t *= 2;
+  if (c.alert) t *= 0.6;
+  t *= 1 + 0.6 * Math.max(0, c.edge - 0.5) * 2;
+  t /= Math.max(0.25, c.light);
+  return t / p.eyes;
+};
+
+/** Gunfire heard this far away (m) tells a bot where to look; the farther it is, the vaguer the guess. */
+export const EARSHOT = 45;
+/** Where a heard shot seems to come from: the true bearing off by up to `bearing` degrees and the distance by up to `range`. */
+export const HEARING = { bearing: 14, range: 0.3 };
+export const guessFromSound = (mx: number, my: number, sx: number, sy: number, rand: () => number) => {
+  const d = Math.hypot(sx - mx, sy - my);
+  const a = Math.atan2(sy - my, sx - mx) + (rand() * 2 - 1) * HEARING.bearing * (0.5 + d / EARSHOT) * (Math.PI / 180);
+  const r = d * (1 + (rand() * 2 - 1) * HEARING.range);
+  return { x: mx + Math.cos(a) * r, y: my + Math.sin(a) * r };
+};
+
+const INDOORS = BUILDINGS.map((b) => ({ x0: b.x0 * TILE, y0: b.y0 * TILE, x1: (b.x0 + b.w) * TILE, y1: (b.y0 + b.h) * TILE }));
+/**
+ * How well lit a spot is for spotting someone there, 0..1: daylight outside, dimmer under a roof. The lighting work will
+ * replace this with the real light level; the bots only read it here.
+ */
+export const lightAt = (x: number, y: number) => (INDOORS.some((b) => x > b.x0 && x < b.x1 && y > b.y0 && y < b.y1) ? 0.6 : 1);
 
 /**
  * Pace by stage: how much readier to fight every bot is (added to the fight score), how far it walks towards gunfire
@@ -200,8 +277,11 @@ export const engageScore = (
   // Someone already busy with somebody else is an opportunity (rushers don't wait for one).
   const busy = enemy.sinceCombat < 2 && enemy.lastHitBy !== me.id && p.name !== 'rusher';
   const armed = tierOf(me) > 0;
+  // Badly hurt, a bot does not go looking for a fight (it still answers one that finds it).
+  const low = (me.hp + me.armor) / me.maxHp < LOW_HP && !why.hurtRecently;
   return (
     p.aggro +
+    (low ? -0.35 : 0) +
     (why.landing ? -0.6 : 0) +
     why.stage +
     (why.hurtRecently ? 0.6 : 0) +
@@ -212,6 +292,8 @@ export const engageScore = (
   );
 };
 export const ENGAGE_AT = 0.85;
+/** Below this share of health plus armor a bot would rather patch up than start something. */
+export const LOW_HP = 0.45;
 
 // ---------- landing spots
 
@@ -340,4 +422,58 @@ export const campSpot = (state: GameState, x: number, y: number) => {
     }
   }
   return { x, y };
+};
+
+/**
+ * Where to stand to look round cover at a threat: a step or two to one side of `(x, y)`, across the line to the threat,
+ * that is open to stand on and has a clear line to it. `side` is which way to lean there (+1 or -1, the sign the lean
+ * input uses when facing the threat).
+ */
+export const peekFrom = (state: GameState, x: number, y: number, tx: number, ty: number) => {
+  const d = Math.max(0.1, Math.hypot(tx - x, ty - y));
+  const px = -(ty - y) / d;
+  const py = (tx - x) / d;
+  for (const s of [0.8, -0.8, 1.4, -1.4, 2.1, -2.1]) {
+    const qx = x + px * s;
+    const qy = y + py * s;
+    if (circleBlocked(state, qx, qy, 0.45)) continue;
+    if (!lineOfSight(state, x, y, qx, qy)) continue;
+    if (lineOfSight(state, qx, qy, tx, ty)) return { x: qx, y: qy, side: Math.sign(s) };
+  }
+  return null;
+};
+
+/**
+ * Cover to fight from: a spot a few metres off, inside the Deadline, that the threat cannot see (a house wall, a rock,
+ * a tree trunk) but with a spot beside it to peek from. Prefers close ones and ones not at `avoid` (the last cover, so a
+ * bot that moves on really moves).
+ */
+export const fightCover = (state: GameState, me: Player, tx: number, ty: number, avoid: { x: number; y: number } | null = null) => {
+  const z = state.zone;
+  let best: { x: number; y: number; peek: { x: number; y: number; side: number } } | null = null;
+  let bestScore = -Infinity;
+  const td = Math.hypot(tx - me.x, ty - me.y);
+  for (let i = 0; i < 20; i++) {
+    const r = i < 8 ? 2.5 : i < 16 ? 5 : 8;
+    const a = i < 8 ? (i / 8) * Math.PI * 2 : i < 16 ? ((i - 8) / 8) * Math.PI * 2 + Math.PI / 8 : ((i - 16) / 4) * Math.PI * 2 + Math.PI / 4;
+    const x = me.x + Math.cos(a) * r;
+    const y = me.y + Math.sin(a) * r;
+    if (circleBlocked(state, x, y, 0.6) || solidAt(state, x, y)) continue;
+    if (Math.hypot(x - z.toX, y - z.toY) > Math.max(z.toR, 6) && Math.hypot(x - z.cx, y - z.cy) > z.r) continue;
+    const dt = Math.hypot(x - tx, y - ty);
+    // Not right next to them, and not running past them to get there.
+    if (dt < 4 || dt < td - 4) continue;
+    // Hidden with a body's width to spare on either side, not just its middle.
+    const px = -(ty - y) / dt;
+    const py = (tx - x) / dt;
+    if ([0, 0.45, -0.45].some((k) => lineOfSight(state, tx, ty, x + px * k, y + py * k))) continue;
+    const peek = peekFrom(state, x, y, tx, ty);
+    if (!peek) continue;
+    const score = -r - (avoid && Math.hypot(x - avoid.x, y - avoid.y) < 2 ? 6 : 0);
+    if (score > bestScore) {
+      bestScore = score;
+      best = { x, y, peek };
+    }
+  }
+  return best;
 };
