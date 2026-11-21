@@ -354,11 +354,16 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   });
   const guns: (THREE.Group | null)[] = state.players.map(() => null);
   const gunKinds: (WeaponKind | null)[] = state.players.map(() => null);
+  /**
+   * Health bars. Yours is drawn over everything; everyone else's is hidden by whatever hides them (walls, roofs, a
+   * canopy), so a bar never gives away someone you could not see, and it fades out with distance.
+   */
   const bars = state.players.map((p) => {
     const g = new THREE.Group();
-    const bg = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.18), new THREE.MeshBasicMaterial({ color: 0x0a0d18, depthTest: false, transparent: true }));
-    const fill = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.18), new THREE.MeshBasicMaterial({ color: p.id === me ? 0x3ddc84 : 0xff3d6e, depthTest: false }));
-    const armor = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.08), new THREE.MeshBasicMaterial({ color: 0x3ec5ff, depthTest: false }));
+    const own = p.id === me;
+    const bg = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.18), new THREE.MeshBasicMaterial({ color: 0x0a0d18, depthTest: !own, transparent: true, depthWrite: false }));
+    const fill = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.18), new THREE.MeshBasicMaterial({ color: own ? 0x3ddc84 : 0xff3d6e, depthTest: !own, transparent: true, depthWrite: false }));
+    const armor = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.08), new THREE.MeshBasicMaterial({ color: 0x3ec5ff, depthTest: !own, transparent: true, depthWrite: false }));
     armor.position.y = -0.14;
     bg.renderOrder = 20;
     fill.renderOrder = 21;
@@ -366,7 +371,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     g.add(bg, fill, armor);
     g.name = 'bar';
     scene.add(g);
-    return { g, fill, armor };
+    return { g, bg, fill, armor };
   });
 
   // ---------- loot, projectiles, temp walls and fields (pooled / keyed)
@@ -1895,8 +1900,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
       // Health bar over the head, facing the camera.
       const bar = bars[i];
-      bar.g.visible = visible && p.alive && p.stage === 'ground' && !(i === me && mouseLook());
-      bar.g.position.set(x, 2.7, y);
+      // Others' bars fade out between 38 and 55 m from you (yours never does).
+      const far = i === me ? 0 : THREE.MathUtils.smoothstep(Math.hypot(x - self.x, y - self.y), 38, 55);
+      bar.g.visible = visible && p.alive && p.stage === 'ground' && !(i === me && mouseLook()) && far < 1;
+      (bar.bg.material as THREE.MeshBasicMaterial).opacity = 1 - far;
+      (bar.fill.material as THREE.MeshBasicMaterial).opacity = 1 - far;
+      (bar.armor.material as THREE.MeshBasicMaterial).opacity = 1 - far;
+      // At eye level just under the 2.6 m ceiling, so a bar in the same room is not hidden by it.
+      bar.g.position.set(x, firstPerson() || shoulderView() ? 2.45 : 2.7, y);
       bar.g.quaternion.copy(camera.quaternion);
       const k = Math.max(0.001, p.hp / p.maxHp);
       bar.fill.scale.x = k;
@@ -1918,7 +1929,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       reticle.rotation.y = time * 1.5;
       reticle.scale.setScalar(1 + Math.sin(time * 8) * 0.05);
     }
-    setPeople(state.players.filter((q) => q.alive && q.stage === 'ground').map((q) => ({ x: q.x, y: q.y })));
+    // Grass and bushes part only round the people you can see (the nearest first): a bush moving round someone hidden in it
+    // would give them away.
+    setPeople(
+      state.players
+        .filter((q) => q.alive && q.stage === 'ground' && (q.id === me || canSee(state, self, q)))
+        .sort((a, b) => Math.hypot(a.x - self.x, a.y - self.y) - Math.hypot(b.x - self.x, b.y - self.y))
+        .map((q) => ({ x: q.x, y: q.y })),
+    );
 
     // Loot: every item floats and turns; all items of a kind are drawn together (see lootDraw).
     for (const l of state.loot) {
