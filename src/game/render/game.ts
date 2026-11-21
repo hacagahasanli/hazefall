@@ -2308,6 +2308,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       lodNear: overview ? 0 : eye ? eye.lodNear : fp || sv || self.stage === 'falling' ? spec.lodNear : Infinity,
       // Fog is by depth, not distance: a little past its end so nothing at the edge of the screen pops.
       far: (scene.fog instanceof THREE.Fog ? scene.fog.far : spec.fogFar) * 1.3,
+      // Door halos, light cones and the warm fill in rooms: dropped on low (the lamps themselves stay lit).
+      glow: tier !== 'low',
     });
     lootFrustum.setFromProjectionMatrix(tmpM4.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
     renderer.render(scene, camera);
