@@ -247,8 +247,10 @@ const StatSticker = ({ stat, index, fx }: { stat: Stat; index: number; fx: boole
             animation: fx ? `lcsBandIn 0.26s cubic-bezier(0.2,0.8,0.2,1) ${d}s both` : undefined,
           }}
         />
+        {/* The final value, invisible, sets the band width so it never grows while the number counts up. */}
+        <span className="invisible relative block font-display tabular-nums leading-none text-[1.9rem] sm:text-5xl [@media(max-height:520px)]:text-[1.75rem]">{stat.value}</span>
         <span
-          className={`relative block font-display tabular-nums leading-none text-[1.9rem] sm:text-5xl [@media(max-height:520px)]:text-[1.75rem] ${zero ? 'text-cream/55' : 'text-cream'}`}
+          className={`absolute bottom-0 left-0 block font-display tabular-nums leading-none text-[1.9rem] sm:text-5xl [@media(max-height:520px)]:text-[1.75rem] ${zero ? 'text-cream/55' : 'text-cream'}`}
           style={{
             textShadow: '0 0.06em 0 #0a0d18, 0 0.12em 0 rgba(10,13,24,0.55), 0 0.25em 0.5em rgba(0,0,0,0.4)',
             transformOrigin: 'left bottom',
@@ -361,7 +363,7 @@ const Result = ({
         </div>
 
         <div className="flex flex-col gap-2">
-          <div className="grid grid-cols-3 items-end justify-items-start gap-x-5 gap-y-2 pl-2 sm:gap-x-10">
+          <div className="grid grid-cols-[auto_auto_auto] items-end justify-between justify-items-start gap-x-4 gap-y-2 pl-2 sm:grid-cols-3 sm:justify-normal sm:gap-x-10">
             {stats.map((st, i) => (
               <StatSticker key={st.key} stat={st} index={i} fx={fx} />
             ))}

@@ -11,7 +11,7 @@ Drop the boxes. Each stat becomes a smaller sibling of the placement numeral: th
 Why this one: the report already has one strong idea (the sticker numeral on a slanted band, the trophy landing, the sweep of light). Reusing it at a smaller scale makes the stats belong to that screen and to the game's loud display type, instead of adding a second visual system. No panel, no border, no stripe, no eyebrow label.
 
 ## Layout
-- Grid stays `grid grid-cols-3`, but `items-end justify-items-start`, gap `gap-x-5 gap-y-2 sm:gap-x-10`. Add `pl-2` to the grid so the band's left bleed is never clipped.
+- Grid: `grid grid-cols-[auto_auto_auto] justify-between items-end justify-items-start gap-x-4 gap-y-2 pl-2 sm:grid-cols-3 sm:justify-normal sm:gap-x-10`. Below sm the columns hug the stickers and spread evenly (equal columns made Damage overflow into Survived at 360 px, F-003); sm and up keep equal columns. `pl-2` keeps the band's left bleed from being clipped.
 - Each cell: `relative flex flex-col items-start`. No background, no padding, no `panel-cut`, no `boxShadow`, no `bg-ink/90`.
 - Order inside a cell: numeral block (number + band), then the label row under it.
 
@@ -24,7 +24,7 @@ Why this one: the report already has one strong idea (the sticker numeral on a s
   - Survived: `background: linear-gradient(90deg,#3ec5ff,#1f8fcf)`
   - `opacity: 0.92`. Units are `em` so the band scales with the number size on every breakpoint.
 - Number (second child): `relative font-display tabular-nums leading-none text-cream`
-  - Size: `text-[2.5rem] sm:text-5xl`, at `[@media(max-height:520px)]:text-[1.75rem]`.
+  - Size: `text-[1.9rem] sm:text-5xl` (2.5rem collided at 360/390, accepted in R-005), at `[@media(max-height:520px)]:text-[1.75rem]`.
   - `text-shadow: 0 0.06em 0 #0a0d18, 0 0.12em 0 rgba(10,13,24,0.55), 0 0.25em 0.5em rgba(0,0,0,0.4)` (the placement's drop, a touch heavier so cream digits stay readable where they overlap the gold band).
   - Survived keeps the `0:59` format; the colon is part of the sticker.
 
@@ -44,7 +44,7 @@ A zero is honest, not celebrated:
 Replaces the single `riseIn` on the card. Per cell, start delay `d = 0.55s + i * 0.09s` (after the placement has landed and the headline glitched in):
 1. Band wipes in: new keyframe `lcsBandIn { from { transform: skewX(-12deg) scaleX(0) } to { transform: skewX(-12deg) scaleX(1) } }`, `transform-origin: left`, `0.26s cubic-bezier(0.2,0.8,0.2,1) d both`.
 2. Number lands: new keyframe `lcsStatLand { 0% {opacity:0; transform:scale(1.6)} 35% {opacity:1; transform:scale(0.92)} 60% {transform:scale(1.04)} 100% {opacity:1; transform:scale(1)} }`, `0.38s cubic-bezier(0.2,0.8,0.2,1) (d + 0.08s) both`, `transform-origin: left bottom`.
-3. Kills and Damage count up from 0 to the value over 0.5 s with ease-out cubic (same curve as `Placement`), starting with step 2; `tabular-nums` keeps the width still. Survived does not count, it lands.
+3. Kills and Damage count up from 0 to the value over 0.5 s with ease-out cubic (same curve as `Placement`), starting with step 2. The numeral block is sized by an invisible copy of the final value and the counting digits sit over it (`absolute left-0 bottom-0`), so the band is its final width from the first frame; `tabular-nums` alone does not hold the width when the digit count changes (F-002). Survived does not count, it lands.
 4. Label row: `riseIn 0.35s ease-out (d + 0.16s) both`.
 No sound, no shake, no glow: the placement already spent the impact.
 

@@ -30,4 +30,4 @@ Format: `## R-001 — title` then Context, Expected deliverable, Priority (P0-P3
 - Context: R-004 implemented in 9bc1550; deviation in LOG.md (phone number size). Shots: ~/.agents-know/personal/feedback4/shots/lcs-results-stats/ (win-desktop, win-phone 390, win-phone360, win-landscape 640x360; *-mid = mid-animation). Zero state not captured.
 - Expected deliverable: accept, or F-xxx items.
 - Priority: P0
-- Status: open
+- Status: done (reviewed 2026-11-21: direction and finals accepted; phone 1.9rem deviation accepted; F-002 band stretch during count-up, F-003 phone gaps, both P1. Zero state still unverified: capture one 0-kill/0-damage frame with the F-002/F-003 fix.)
