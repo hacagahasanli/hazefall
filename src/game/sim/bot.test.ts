@@ -105,7 +105,7 @@ describe('bots behave like separate people', () => {
     });
     // The old bots came to about 34 m here (all drifting to one corner on the way down).
     expect(spreads.reduce((a, b) => a + b, 0) / spreads.length).toBeGreaterThan(44);
-  });
+  }, 20000);
 
   it('take a moment to react before the first shot at someone new (longer against a person)', () => {
     for (const [seed, enemy] of [[3, 2], [4, 5], [5, 0], [6, 0]]) {

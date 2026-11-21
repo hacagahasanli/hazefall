@@ -2,7 +2,7 @@ import {
   aimError, bestLoot, botSight, campSpot, CLOSE, coverPoint, EARSHOT, ENGAGE_AT, engageScore, fallbackPersona, fightCover, FIRE_RANGE, guessFromSound,
   gunScore, isAutomatic, landingPlan, lightAt, LOW_HP, lootValue, GRACE_BY_PERSONA, makePersona, mulberry32, NEAR, PREFERRED, LANDING_GRACE, reactionDelay, spotTime, stagePace, tierOf, VIEW,
 } from './bot-params';
-import { DROP, DT, FIGHTERS, HEALS, magOf, SUPERS, WEAPONS, WORLD } from './constants';
+import { DROP, DT, FIGHTERS, HEALS, magOf, NEWBIE, SUPERS, WEAPONS, WORLD } from './constants';
 import { buildingAt, doorstep, ROOF_LAYER } from './roofs';
 import { canSee, chestHeight, healChoice, hitPoint, inPlant, lootUnder, targetable } from './step';
 import { NO_INPUT } from './types';
@@ -58,6 +58,10 @@ export const botCanSee = (state: GameState, viewer: Player, target: Player) => {
 };
 /** Reaction time and aim error against a person, relative to against a bot: a little kinder, never a free pass. */
 export const VS_HUMAN = 1.3;
+
+/** A new player (round 1-3) in the air or in their first seconds on the ground: no bot picks them as a target. */
+export const sparedRookie = (state: GameState, o: Player) =>
+  !!state.rookie && !o.bot && (o.stage !== 'ground' || state.tick - (o.landedTick ?? 0) < NEWBIE.spareSeconds / DT);
 /** After breaking off to heal, a bot goes back to where it last saw its enemy for this long (s). */
 export const COMEBACK = 15;
 /** How far below the fight threshold a bot still takes shots at someone `POKE_FROM` m or more off, without pushing in. */
@@ -225,7 +229,7 @@ export const createBot = (id: number, seed: number) => {
     glance = null;
     for (const o of state.players) {
       if (o.id === id) continue;
-      if (!o.alive) {
+      if (!o.alive || sparedRookie(state, o)) {
         aware.delete(o.id);
         continue;
       }
@@ -391,7 +395,7 @@ export const createBot = (id: number, seed: number) => {
       if (mode !== 'retreat' && mode !== 'heal') {
         // Fresh off the parachute everyone grabs a gun first, unless someone starts it. A person gets a few seconds more
         // than a bot before anyone picks a fight with them: the first minute is where new players decide to stay.
-        const landing = now - landedAt < (target.bot ? botGrace : LANDING_GRACE.human) && !hurtRecently;
+        const landing = now - landedAt < (target.bot ? botGrace : state.rookie ? NEWBIE.human : LANDING_GRACE.human) && !hurtRecently;
         const score = engageScore(p!, me, target, td, { stage: target.bot ? pace.aggro : pace.aggro - pace.crowd, hurtRecently, landing });
         // Shots from range are not held back by the crowd: trading from afar is how a busy field fights without emptying.
         const far = td >= POKE_FROM ? engageScore(p!, me, target, td, { stage: pace.aggro - pace.crowd, hurtRecently, landing }) : -Infinity;
@@ -693,7 +697,7 @@ export const createBot = (id: number, seed: number) => {
     const lx = target.x + target.vx * t;
     const ly = target.y + target.vy * t;
     // A little kinder to people than to other bots (as PUBG and Fortnite bots are): slower and looser.
-    const human = target.bot ? 1 : VS_HUMAN;
+    const human = target.bot ? 1 : VS_HUMAN * (state.rookie ? NEWBIE.aimError : 1);
     const moving = Math.hypot(me.vx, me.vy) / FIGHTERS[me.fighter].speed;
     const how = { moving, underFire: now - hitAt < 0.6, range: td / FIRE_RANGE[me.weapon] };
     const err = aimError(p!, now - aimSince, Math.hypot(target.vx, target.vy), how) * human * (slip === 'spray' ? 1.6 : 1) * deg;

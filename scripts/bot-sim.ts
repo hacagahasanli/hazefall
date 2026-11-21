@@ -3,7 +3,7 @@
  * and prints how the bots spread, when the first fights happen, how long rounds last and who
  * wins, plus the pacing numbers: match length percentiles, how many are alive each minute, fights per minute in each
  * stage, dead air (20 s stretches after the first minute of ground play in which nobody damages anybody) and Deadline
- * deaths. Run: npx tsx scripts/bot-sim.ts [matches=20] [firstSeed=1]
+ * deaths. Run: npx tsx scripts/bot-sim.ts [matches=20] [firstSeed=1] (ROOKIE=1: a new player's first rounds, see NEWBIE)
  *
  * Definitions: times "from Play" count from the moment the match starts (the drone takes off); "ground time" counts from
  * the moment the last player lands (when the Deadline starts). A fight is a run of hits between the same two players with
@@ -137,7 +137,7 @@ const rows: Row[] = [];
 const modeTime: Record<string, number> = {};
 for (let m = 0; m < matches; m++) {
   const seed = firstSeed + m * 7919;
-  const s = createGame('hotfix', seed);
+  const s = createGame('hotfix', seed, 'you', [], process.env.ROOKIE === '1');
   const bots = s.players.map((p) => (p.id === 0 ? null : createBot(p.id, seed * 31 + p.id)));
   const personaOf = (id: number) => (bots[id] as unknown as { info?: () => { persona: { name: string } | null } }).info?.().persona?.name ?? 'bot';
   const lands: { x: number; y: number }[] = [];

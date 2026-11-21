@@ -422,13 +422,15 @@ export interface Seat {
 }
 
 /** Offline: you and nineteen bots (PLAYERS - 1). */
-export const createGame = (you: FighterId, seed = 1, youName = 'you', others: FighterId[] = []): GameState =>
-  createMatch(
+export const createGame = (you: FighterId, seed = 1, youName = 'you', others: FighterId[] = [], rookie = false): GameState => {
+  const state = createMatch(
     Array.from({ length: PLAYERS }, (_, i) => (i === 0 ? { name: youName, fighter: you, bot: false } : { name: BOT_NAMES[i - 1], fighter: others[i - 1] ?? null, bot: true })),
     seed,
   );
+  if (rookie) state.rookie = true;
+  return state;
+};
 
-/** Any match: up to PLAYERS seats in the given order (player i is seat i), everyone on one plane. */
 /** Crate health on a fresh map. */
 export const initialRacks = () => {
   const racks = new Array(SIZE * SIZE).fill(0);
@@ -436,6 +438,7 @@ export const initialRacks = () => {
   return racks;
 };
 
+/** Any match: up to PLAYERS seats in the given order (player i is seat i), everyone on one plane. */
 export const createMatch = (seats: Seat[], seed = 1): GameState => {
   const racks = initialRacks();
   const state: GameState = {
@@ -580,6 +583,8 @@ export const windOf = (state: GameState) => {
 export const updateFall = (state: GameState, p: Player, input: Input) => {
   const out = DROP.height - p.alt;
   const pressed = input.jump && !p.prev.jump;
+  // No firing in the air (the first magazine used to be gone before landing): a fresh press tells the player why.
+  if (input.fire && !p.prev.fire && !p.bot) state.events.push({ type: 'fireBlocked', player: p.id });
   if (p.canopy < 0 && (p.alt <= DROP.deployAlt || (pressed && out >= DROP.minFreefallDrop))) p.canopy = 0;
   else if (p.canopy >= 0) p.canopy += DT;
   // How far the canopy has inflated (its numbers blend in), and its speed through the air (relative to the wind).
@@ -617,11 +622,10 @@ export const updateFall = (state: GameState, p: Player, input: Input) => {
   p.x = Math.min(WORLD - 4, Math.max(4, p.x + p.vx * DT));
   p.y = Math.min(WORLD - 4, Math.max(4, p.y + p.vy * DT));
   if (p.canopy >= DROP.deployTime) {
-    // Under the open canopy you can aim and shoot at whoever is in the air or below.
+    // Under the open canopy you can look where you aim, but nothing fires: the pistol's rounds are there on the ground.
     p.cooldown = Math.max(0, p.cooldown - DT);
     updateReload(p);
     if (Math.hypot(input.aimX - p.x, input.aimY - p.y) > 0.05) p.heading = Math.atan2(input.aimY - p.y, input.aimX - p.x);
-    if (input.fire && p.cooldown <= 0) shoot(state, p, input);
   } else if (Math.hypot(p.vx, p.vy) > 1) {
     // Falling, you face the way you are going (the body turns to track).
     p.heading = Math.atan2(p.vy, p.vx);
@@ -694,6 +698,7 @@ const land = (state: GameState, p: Player, z: number) => {
   p.vy = 0;
   p.canopy = -1;
   p.stage = 'ground';
+  p.landedTick = state.tick;
   state.events.push(z > 0 ? { type: 'land', player: p.id, x: p.x, y: p.y, z } : { type: 'land', player: p.id, x: p.x, y: p.y });
 };
 

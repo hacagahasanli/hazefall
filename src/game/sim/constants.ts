@@ -697,8 +697,18 @@ export const ARMOR = { points: 100, absorb: 1 };
 export const ITEMS = {
   bomb: { damage: 80, radius: 2.6, range: 30 },
 };
-/** Everyone jumps with a pistol and one magazine, so you can fight under the parachute. */
-export const START_WEAPON = { kind: 'pistol' as const, mag: 12, spare: 0 };
+/**
+ * Everyone jumps with a pistol, one magazine in it and two more spare: nobody lands empty-handed. Nobody can fire in the
+ * plane, in free fall or under the canopy (see `updateFall`), so all of it is there on the ground.
+ */
+export const START_WEAPON = { kind: 'pistol' as const, mag: 12, spare: 24 };
+/**
+ * A new player's first rounds (`NEWBIE_ROUNDS`) are softer: the bots wait longer before they pick a fight with the person
+ * (`LANDING_GRACE.human` becomes `human`), aim `aimError` times looser at them, and never target them in the first
+ * `spareSeconds` after they touch down. From the next round on, the usual numbers.
+ */
+export const NEWBIE_ROUNDS = 3;
+export const NEWBIE = { human: 35, aimError: 1.35, spareSeconds: 8 };
 export const PLANT_REVEAL = 2.4;
 export const AUTO_AIM_RANGE = 28;
 export const REGEN = { after: 6, perSecond: 2.5 };

@@ -146,6 +146,8 @@ export interface Player {
   hits: number;
   distance: number;
   prev: Input;
+  /** The tick this fighter touched down (absent until they do). */
+  landedTick?: number;
 }
 
 export interface Projectile {
@@ -267,6 +269,8 @@ export type GameEvent =
   /** The slow-field canister burst: the burst radius and the field's. */
   | { type: 'slowBurst'; owner: number; x: number; y: number; burst: number; radius: number; z?: number }
   | { type: 'jump'; player: number }
+  /** The trigger was pulled in the plane, in free fall or under the canopy (nothing fires there): the hint "Land first, then shoot". */
+  | { type: 'fireBlocked'; player: number }
   | { type: 'land'; player: number; x: number; y: number; z?: number }
   /** Feet coming down hard on foot (off a roof's edge, from a ladder's top): a thump, not a parachute landing. */
   | { type: 'thud'; player: number; x: number; y: number; z?: number }
@@ -290,4 +294,6 @@ export interface GameState {
   zone: Zone;
   winner: number | null;
   events: GameEvent[];
+  /** A new player's first rounds: the bots go easy on the person (see `NEWBIE`). Part of the match setup, so the sim stays deterministic. */
+  rookie?: boolean;
 }

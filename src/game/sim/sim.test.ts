@@ -164,12 +164,12 @@ describe('the drop', () => {
 });
 
 describe('loot and fighting', () => {
-  it('you jump with a pistol and one magazine; with it empty, walking over a gun picks it up', () => {
+  it('you jump with a pistol, a magazine and two spare; with it empty, walking over a gun picks it up', () => {
     const s = landed();
     clearAround(s);
     const p = s.players[0];
     expect(p.weapon).toBe('pistol');
-    expect(p.mag + p.ammo).toBe(12);
+    expect(p.mag + p.ammo).toBe(36);
     Object.assign(p, { mag: 0, ammo: 0 });
     s.loot.push({ id: 999, kind: 'rifle', x: p.x + 0.3, y: p.y, ammo: WEAPONS.rifle.ammo, active: true });
     step(s, idle());
@@ -439,15 +439,26 @@ describe('the drop', () => {
     expect(canSee(s, a, b)).toBe(true);
   });
 
-  it('under the parachute you can shoot and be shot', () => {
+  it('under the parachute you cannot shoot, but someone on the ground can shoot you', () => {
     const s = createGame('hotfix', 1);
     const [a, b] = s.players;
     for (const p of [a, b]) Object.assign(p, { stage: 'falling', alt: 15, canopy: 2 });
-    // Over the open river, so nothing stands between them.
+    // Two in the air: the trigger does nothing and spends nothing.
     Object.assign(a, { x: 40, y: 89, cooldown: 0 });
     Object.assign(b, { x: 46, y: 89 });
     s.players.slice(2).forEach((p) => Object.assign(p, { stage: 'falling', alt: 60, canopy: -1, x: 10, y: 10 }));
     s.drone.t = 1;
+    const air = idle();
+    air[0] = { ...NO_INPUT, fire: true, aimX: b.x, aimY: b.y };
+    for (let i = 0; i < 30; i++) step(s, air);
+    expect(b.hp).toBe(b.maxHp);
+    expect(a.mag).toBe(12);
+    // Now the shooter is down on the ground.
+    // Over the open river, so nothing stands between them.
+    const ty = MAP.findIndex((row) => row.includes('....'));
+    const tx = MAP[ty].indexOf('....');
+    Object.assign(a, { stage: 'ground', alt: 0, canopy: -1, x: tx * TILE + 1, y: ty * TILE + 1, cooldown: 0 });
+    Object.assign(b, { alt: 1, x: tx * TILE + 6, y: ty * TILE + 1 });
     const inputs = idle();
     inputs[0] = { ...NO_INPUT, fire: true, aimX: b.x, aimY: b.y };
     const hp = b.hp;
