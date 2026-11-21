@@ -6,6 +6,8 @@ import type { ComponentType } from 'react';
 
 import { COPY } from '~/game/copy/studio';
 import { GRADE_CSS, startMatch } from '~/game/render/game';
+import { canopyById, canopySwatch } from '~/game/canopies';
+import { xpToNext } from '~/game/progress';
 import { FIGHTERS } from '~/game/sim/constants';
 
 import { AimChoice, readAim, saveAim } from '~/components/AimChoice';
@@ -27,6 +29,7 @@ import type { Session } from '~/game/net/session';
 import type { HudState } from '~/game/render/game';
 import type { FighterId } from '~/game/sim/types';
 import type { Platform } from '~/platform/types';
+import type { RoundSummary } from '~/game/progress';
 
 /** What the career adds to a round report. */
 export interface RoundReport {
@@ -34,6 +37,8 @@ export interface RoundReport {
   line: string | null;
   /** After three rounds with one fighter: another to try (their name). */
   nudge?: string | null;
+  /** XP, level and goals for the round: the lines count up, the bar fills, a new canopy shows. */
+  summary?: RoundSummary;
 }
 
 const Key = ({ k }: { k: string }) => (
@@ -288,6 +293,54 @@ const STAT_ICON = {
 };
 
 /**
+ * What the round earned: one line per source of XP counting in (0.15 s apart), the level's bar filling, and a new canopy
+ * showing when a level or a streak unlocks one. A finished daily goal is gold. Without motion it is all simply there.
+ */
+const XpPanel = ({ summary, fx }: { summary: RoundSummary; fx: boolean }) => {
+  const { lines, before, after, levelUps, newCanopies } = summary;
+  const [fill, setFill] = useState(fx ? (levelUps.length > 0 ? 0 : before.xp / xpToNext(before.level)) : after.xp / xpToNext(after.level));
+  useEffect(() => {
+    if (!fx) return;
+    const t = window.setTimeout(() => setFill(after.xp / xpToNext(after.level)), 150 * lines.length + 900);
+    return () => window.clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const at = (i: number) => (fx ? { animation: `riseIn 0.3s ease-out ${0.85 + i * 0.15}s both` } : undefined);
+  return (
+    <div className="flex max-w-sm flex-col gap-1 pl-2" aria-label="Experience earned">
+      <ul className="flex flex-col gap-0.5 text-sm">
+        {lines.map((l, i) => (
+          <li key={l.label} className={`flex items-baseline justify-between gap-6 ${l.goal ? 'font-semibold text-gold' : 'text-cream/75'}`} style={at(i)}>
+            <span>{l.label}</span>
+            <span className="font-display tabular-nums">+{l.xp}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-1 flex items-center gap-3 text-sm text-cream/80" style={at(lines.length)}>
+        <span className="whitespace-nowrap font-display">Level {after.level}</span>
+        <div className="h-2 flex-1 overflow-hidden bg-cream/10">
+          <div className="h-full bg-gold transition-[width] duration-700 ease-out" style={{ width: `${Math.round(fill * 100)}%` }} />
+        </div>
+        <span className="whitespace-nowrap tabular-nums text-cream/60">{after.xp}/{xpToNext(after.level)} XP</span>
+      </div>
+      {levelUps.length > 0 && (
+        <p className="font-display text-lg text-gold" style={at(lines.length + 1)}>
+          Level up!
+        </p>
+      )}
+      {newCanopies.map((id) => {
+        const c = canopyById(id);
+        return (
+          <div key={id} className="flex items-center gap-3 text-sm font-semibold text-cream" style={at(lines.length + 2)}>
+            <span aria-hidden className="h-5 w-9 -skew-x-12" style={{ background: canopySwatch(c) }} />
+            New canopy: {c.name}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+/**
  * The round report: where you placed, who took you out and with what, and how your round went,
  * then straight into the next match or back to the lobby.
  */
@@ -379,6 +432,7 @@ const Result = ({
               <StatSticker key={st.key} stat={st} index={i} fx={fx} />
             ))}
           </div>
+          {report?.summary && <XpPanel summary={report.summary} fx={fx} />}
           {report?.line && <p className="animate-[riseIn_0.5s_ease-out_0.7s_both] pl-2 text-lg font-semibold text-gold">{report.line}</p>}
           {report?.nudge && <p className="animate-[riseIn_0.5s_ease-out_0.72s_both] pl-2 text-sm text-cream/75">{report.nudge}</p>}
           <p className="animate-[riseIn_0.5s_ease-out_0.75s_both] text-sm text-cream/55">
@@ -437,6 +491,7 @@ export const Match = ({
   onLoaded,
   rookie = false,
   firstRound = false,
+  canopy,
   onRoundEnd,
 }: {
   fighter: FighterId;
@@ -459,6 +514,8 @@ export const Match = ({
   rookie?: boolean;
   /** The very first round: no sentence on the plane's title card, no key legend (the keys show up when they matter). */
   firstRound?: boolean;
+  /** The canopy colours picked in the lobby (an id from canopies.ts). */
+  canopy?: string;
   /** Called once when the round report comes up (offline rounds); what it returns is shown on the report. */
   onRoundEnd?: (hud: HudState) => RoundReport | null;
 }) => {
@@ -499,6 +556,7 @@ export const Match = ({
           fighter,
           rookie,
           firstRound,
+          canopy,
           held: heldRef.current,
           name: 'you',
           aimMode: readAim(),
@@ -559,8 +617,10 @@ export const Match = ({
   useEffect(() => {
     if (!showResult || !hud || online || reported.current) return;
     reported.current = true;
-    setReport(onRoundEndRef.current?.(hud) ?? null);
-  }, [showResult, hud, online]);
+    const r = onRoundEndRef.current?.(hud) ?? null;
+    if (r?.summary && r.summary.levelUps.length > 0) platform.happytime();
+    setReport(r);
+  }, [showResult, hud, online, platform]);
 
   // Anonymous usage events: a no-op unless the site started counting (never on a portal build).
   useTelemetry(hud, { held, showResult, online });

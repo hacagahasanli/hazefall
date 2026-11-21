@@ -11,7 +11,8 @@ import { readAim, saveAim } from '~/components/AimChoice';
 import { FIGHTER_IDS, PICK_KEY } from '~/components/FighterSelect';
 import { MainMenu } from '~/components/MainMenu';
 import { Match } from '~/components/Match';
-import { contextLine, isRookie, loadCareer, nudgeFighter, recordRound, saveCareer } from '~/game/career';
+import { contextLine, isRookie, loadCareer, nudgeFighter, saveCareer } from '~/game/career';
+import { applyRound } from '~/game/progress';
 import { PreMatch } from '~/components/PreMatch';
 import { FIGHTERS } from '~/game/sim/constants';
 import { useWipe } from '~/components/Transitions';
@@ -47,13 +48,19 @@ export const PortalGame = ({
     return saved && FIGHTER_IDS.includes(saved) ? saved : 'hotfix';
   });
   const [round, setRound] = useState(0);
-  // What the game remembers (rounds played, bests): loaded once, saved after every round. The round that is about to start
-  // reads it when Ready is pressed, so a new player's first rounds get the gentle bots and the light first-round screen.
-  const career = useRef<Career>(null as unknown as Career);
-  if (career.current === null) career.current = loadCareer(platform.storage);
-  const [roundKind, setRoundKind] = useState({ rookie: false, first: false });
+  // What the game remembers (rounds played, level, canopies, goals): loaded once, saved after every round. The round that is
+  // about to start reads it when Ready is pressed, so a new player's first rounds get the gentle bots and the light first-round
+  // screen. `careerRef` is what the next round reads, the state is what the menu and the lobby show.
+  const [career, setCareer] = useState<Career>(() => loadCareer(platform.storage));
+  const careerRef = useRef(career);
+  const [roundKind, setRoundKind] = useState({ rookie: false, first: false, canopy: 'classic' });
+  const keepCareer = (c: Career) => {
+    careerRef.current = c;
+    saveCareer(platform.storage, c);
+    setCareer(c);
+  };
   const finishRound = (hud: HudState): RoundReport | null => {
-    const before = career.current;
+    const before = careerRef.current;
     const result: RoundResult = {
       fighter,
       place: hud.won ? 1 : hud.placement,
@@ -63,11 +70,13 @@ export const PortalGame = ({
       damage: hud.damage,
       survived: hud.survived,
     };
-    career.current = recordRound(before, result);
-    saveCareer(platform.storage, career.current);
-    const next = nudgeFighter(career.current) as FighterId | null;
-    return { line: contextLine(before, result), nudge: next ? `Try ${FIGHTERS[next].name} next` : null };
+    const { career: played, summary } = applyRound(before, result, hud.facts, new Date());
+    // A canopy just unlocked goes on for the next drop (change it in the lobby).
+    keepCareer(summary.newCanopies.length > 0 ? { ...played, canopy: summary.newCanopies[summary.newCanopies.length - 1] } : played);
+    const next = nudgeFighter(played) as FighterId | null;
+    return { line: contextLine(before, result), nudge: next ? `Try ${FIGHTERS[next].name} next` : null, summary };
   };
+  const pickCanopy = (id: string) => keepCareer({ ...careerRef.current, canopy: id });
   /**
    * menu → lobby (fighter, lobby filling, wait for Ready) → readying (the match loads underneath, held, while the
    * countdown runs) → match. Play again goes back to the lobby with everyone already there.
@@ -117,6 +126,7 @@ export const PortalGame = ({
             held={stage !== 'match'}
             rookie={roundKind.rookie}
             firstRound={roundKind.first}
+            canopy={roundKind.canopy}
             onRoundEnd={finishRound}
             onLoaded={() => setLoaded(true)}
             onPlayAgain={() => toLobby(true)}
@@ -134,10 +144,12 @@ export const PortalGame = ({
               touch={touch}
               loaded={loaded}
               onReady={() => {
-                setRoundKind({ rookie: isRookie(career.current), first: career.current.roundsPlayed === 0 });
+                setRoundKind({ rookie: isRookie(careerRef.current), first: careerRef.current.roundsPlayed === 0, canopy: careerRef.current.canopy });
                 setRound((r) => r + 1);
                 setStage('readying');
               }}
+              career={career}
+              onCanopy={pickCanopy}
               onBack={toMenu}
               onLaunch={() => setStage('match')}
             />
@@ -166,6 +178,7 @@ export const PortalGame = ({
       touch={touch}
       support={support}
       onlineInterest={onlineInterest}
+      career={career}
     />
     </>
   );

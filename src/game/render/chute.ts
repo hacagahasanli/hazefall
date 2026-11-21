@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 
+import { cellColor, CLASSIC } from '../canopies';
 import { DROP } from '../sim/constants';
+
+import type { Canopy } from '../canopies';
 
 /**
  * The parachute: an original ram-air canopy (a wing of cells, in the jumper's colour and white) on suspension lines,
@@ -65,30 +68,34 @@ export interface ChuteParts {
  * A parachute for one jumper. `userData.deploy` holds the canopy (the part the touchdown collapse deflates);
  * everything tagged `line` (lines, bag, pilot) hides when the canopy is let go.
  */
-export const buildChute = (color: string) => {
+export const buildChute = (color: string, canopyStyle?: Canopy) => {
   const g = new THREE.Group();
   const deploy = new THREE.Group();
   g.add(deploy);
   g.userData.deploy = deploy;
 
   // The wing's triangles, unindexed so every cell has its own flat colour: top, bottom, and the two closed tips.
-  const quads: [number, number, number, number, number][] = []; // four point indices and a colour key
+  const quads: [number, number, number, number, THREE.Color][] = []; // four point indices and the cell's colour
+  const main = new THREE.Color(canopyStyle && canopyStyle.id !== CLASSIC ? canopyStyle.a : color);
+  const tones = [main, new THREE.Color(0xf4f2ea), main.clone().multiplyScalar(0.62), new THREE.Color(0xb9b6ad), main.clone().multiplyScalar(0.8)];
+  // An unlocked canopy paints each cell by its own rule (the underside and the tips are shaded from the top); the classic
+  // one is the fighter's colour in stripes with white.
+  const styled = !!canopyStyle && canopyStyle.id !== CLASSIC;
+  const top = (i: number, j: number) => (styled ? new THREE.Color(cellColor(canopyStyle!, i, j, NS, NC, 0)) : tones[i % 2]);
+  const under = (i: number, j: number) => (styled ? top(i, j).multiplyScalar(0.66) : tones[2 + (i % 2)]);
   for (let i = 0; i < NS; i++)
     for (let j = 0; j < NC; j++) {
-      const stripe = i % 2;
-      quads.push([at(i, j, 0), at(i + 1, j, 0), at(i + 1, j + 1, 0), at(i, j + 1, 0), stripe]);
-      quads.push([at(i, j, 1), at(i, j + 1, 1), at(i + 1, j + 1, 1), at(i + 1, j, 1), 2 + stripe]);
+      quads.push([at(i, j, 0), at(i + 1, j, 0), at(i + 1, j + 1, 0), at(i, j + 1, 0), top(i, j)]);
+      quads.push([at(i, j, 1), at(i, j + 1, 1), at(i + 1, j + 1, 1), at(i + 1, j, 1), under(i, j)]);
     }
   for (const i of [0, NS])
-    for (let j = 0; j < NC; j++) quads.push([at(i, j, 0), at(i, j + 1, 0), at(i, j + 1, 1), at(i, j, 1), 4]);
+    for (let j = 0; j < NC; j++) quads.push([at(i, j, 0), at(i, j + 1, 0), at(i, j + 1, 1), at(i, j, 1), (styled ? top(Math.min(i, NS - 1), j).multiplyScalar(0.8) : tones[4])]);
   const map = new Uint16Array(quads.length * 6);
   const colors = new Float32Array(quads.length * 18);
-  const main = new THREE.Color(color);
-  const tones = [main, new THREE.Color(0xf4f2ea), main.clone().multiplyScalar(0.62), new THREE.Color(0xb9b6ad), main.clone().multiplyScalar(0.8)];
-  quads.forEach(([a, b, c, d, k], q) => {
+  quads.forEach(([a, b, c, d, tone], q) => {
     [a, b, c, a, c, d].forEach((p, n) => {
       map[q * 6 + n] = p;
-      tones[k].toArray(colors, (q * 6 + n) * 3);
+      tone.toArray(colors, (q * 6 + n) * 3);
     });
   });
   const geo = new THREE.BufferGeometry();

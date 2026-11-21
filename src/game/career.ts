@@ -14,8 +14,29 @@ export const CAREER_KEY = 'lcs.career';
 /** The counter an earlier build kept on its own; read once when there is no career yet. */
 const LEGACY_ROUNDS_KEY = 'lcs.roundsPlayed';
 
+/** Today's daily goals and how far they got (see progress.ts). */
+export interface Daily {
+  /** The local day these goals belong to (YYYY-MM-DD). */
+  day: string;
+  goals: string[];
+  progress: Record<string, number>;
+  done: string[];
+  /** Rounds finished today (0 = the next one is the first of the day). */
+  rounds: number;
+  allDone: boolean;
+}
+
 export interface Career {
   v: 1;
+  /** Career level (from 1) and the XP earned into it. */
+  level: number;
+  xp: number;
+  /** Canopy ids unlocked, and the one picked for the next drop. */
+  unlocked: string[];
+  canopy: string;
+  daily: Daily | null;
+  /** Days in a row with a daily goal done, and the last such day (YYYY-MM-DD). */
+  streak: { days: number; lastDay: string | null };
   roundsPlayed: number;
   wins: number;
   kills: number;
@@ -28,6 +49,12 @@ export interface Career {
 
 export const defaultCareer = (): Career => ({
   v: 1,
+  level: 1,
+  xp: 0,
+  unlocked: ['classic'],
+  canopy: 'classic',
+  daily: null,
+  streak: { days: 0, lastDay: null },
   roundsPlayed: 0,
   wins: 0,
   kills: 0,
@@ -60,8 +87,24 @@ export const loadCareer = (store: KeyValue): Career => {
   const o = raw as Record<string, unknown>;
   const run = o.fighterRun && typeof o.fighterRun === 'object' ? (o.fighterRun as Record<string, unknown>) : {};
   const bestPlace = count(o.bestPlace, 0);
+  const strs = (x: unknown) => (Array.isArray(x) ? x.filter((v): v is string => typeof v === 'string') : []);
+  const unlocked = [...new Set(['classic', ...strs(o.unlocked)])];
+  const streak = o.streak && typeof o.streak === 'object' ? (o.streak as Record<string, unknown>) : {};
+  const d = o.daily && typeof o.daily === 'object' ? (o.daily as Record<string, unknown>) : null;
+  const progress: Record<string, number> = {};
+  if (d && d.progress && typeof d.progress === 'object') for (const [k, v] of Object.entries(d.progress)) progress[k] = count(v);
+  const canopy = typeof o.canopy === 'string' && unlocked.includes(o.canopy) ? o.canopy : 'classic';
   return {
     v: 1,
+    level: Math.max(1, count(o.level, 1)),
+    xp: count(o.xp),
+    unlocked,
+    canopy,
+    daily:
+      d && typeof d.day === 'string'
+        ? { day: d.day, goals: strs(d.goals), progress, done: strs(d.done), rounds: count(d.rounds), allDone: d.allDone === true }
+        : null,
+    streak: { days: count(streak.days), lastDay: typeof streak.lastDay === 'string' ? streak.lastDay : null },
     roundsPlayed: count(o.roundsPlayed),
     wins: count(o.wins),
     kills: count(o.kills),

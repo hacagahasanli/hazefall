@@ -17,10 +17,12 @@ import { setUiSound, startHum, uiImpact, uiTick } from '~/components/uiSound';
 import { COPY } from '~/game/copy/studio';
 import { deviceFacts } from '~/game/render/deviceFacts';
 import { resolveTier } from '~/game/render/quality';
+import { CANOPIES, canopySwatch } from '~/game/canopies';
 import { keyLabel } from '~/game/settings';
 import { FIGHTERS, PLAYERS } from '~/game/sim/constants';
 import { loadCount, onLoadCount } from '~/lib/loading';
 
+import type { Career } from '~/game/career';
 import type { Staging } from '~/game/render/staging';
 import type { Settings } from '~/game/settings';
 import type { FighterId } from '~/game/sim/types';
@@ -42,6 +44,8 @@ export const PreMatch = ({
   onBack,
   quick = false,
   touch,
+  career,
+  onCanopy,
 }: {
   platform: Platform;
   settings: Settings;
@@ -56,6 +60,9 @@ export const PreMatch = ({
   /** Play again: a shorter wait, the lobby already full. */
   quick?: boolean;
   touch: boolean;
+  /** What the game remembers: the canopies unlocked and the one picked (the portal build). */
+  career?: Career;
+  onCanopy?: (id: string) => void;
 }) => {
   /** Seconds from Ready to the match. A rematch is ready the moment the lobby is up, so its countdown is the launch plus a breath. */
   const count = quick ? LAUNCH + 0.8 : 9;
@@ -290,6 +297,35 @@ export const PreMatch = ({
             );
           })}
         </div>
+        {career && onCanopy && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5" role="radiogroup" aria-label="Canopy">
+            <span className="text-sm font-semibold text-cream/70">Canopy</span>
+            {CANOPIES.map((c) => {
+              const open = career.unlocked.includes(c.id);
+              const on = career.canopy === c.id;
+              const lock = 'level' in c.from ? `Lv ${c.from.level}` : `Streak ${c.from.streak}`;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  aria-label={open ? c.name : `${c.name}, locked: ${lock}`}
+                  title={open ? c.name : lock}
+                  disabled={!open || readied}
+                  onClick={() => {
+                    uiTick(false);
+                    onCanopy(c.id);
+                  }}
+                  className={`relative flex h-8 w-8 items-center justify-center overflow-hidden border-2 transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream ${on ? 'border-cream' : 'border-cream/15'} ${open ? (readied && !on ? 'opacity-30' : 'opacity-100') : 'opacity-60'}`}
+                  style={{ background: open ? canopySwatch(c, Number.parseInt(f.color.slice(1), 16)) : '#3a4054' }}
+                >
+                  {!open && <span className="text-[9px] font-bold leading-none text-cream/80">{lock.replace('Streak ', 'S')}</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
         <button
           type="button"
           onClick={ready}

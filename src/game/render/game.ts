@@ -11,6 +11,8 @@ import { canSee, carryCap, chestHeight, feetOf, healChoice, inPlant, inWater, li
 import { buildingAt, roofAt } from '../sim/roofs';
 import { createOfflineSession } from '../net/session';
 import { arrowTo, LOOT_HINT } from './hints';
+import { canopyById, CLASSIC } from '../canopies';
+import type { RoundFacts } from '../progress';
 import { NO_INPUT } from '../sim/types';
 
 import { buildRig, fighterLook, leaveAir, poseChute, poseDeath, poseFreefall, poseRig, poseSwim, poseTopDown } from './characters';
@@ -94,6 +96,8 @@ export interface HudState {
   killedWith: string | null;
   killerFighter: FighterId | null;
   placement: number;
+  /** What the round showed beyond the stats (for the daily goals). */
+  facts: RoundFacts;
   kills: number;
   damage: number;
   won: boolean;
@@ -142,6 +146,8 @@ export interface MatchOptions {
   rookie?: boolean;
   /** The very first round: the shoot key is named once on the ground (the key legend is hidden for it). */
   firstRound?: boolean;
+  /** The id of the canopy colours to fly (see canopies.ts); the default is the fighter's own. */
+  canopy?: string;
   /** An online round (host or guest). Without one, an offline round with bots. */
   session?: Session;
   /** The quality tier to start with (default 'high'), and whether it was picked automatically (then a low frame rate steps it down once per step). */
@@ -357,7 +363,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   });
   // Parachutes hang from a point at the jumper's raised hands (see chute.ts).
   const chutes = state.players.map((p) => {
-    const g = buildChute(FIGHTERS[p.fighter].color);
+    // Your own canopy is the one you unlocked and picked; everyone else flies their fighter's colours.
+    const g = buildChute(FIGHTERS[p.fighter].color, p.id === me ? canopyById(opts.canopy ?? CLASSIC) : undefined);
     g.name = 'chute';
     g.visible = false;
     scene.add(g);
@@ -1388,7 +1395,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         vfx.burst(e.x, 0.3, 6, 'dust', { z: e.y, speed: 2, up: 1, gravity: 5, life: 0.35, size: 0.6 });
         break;
       case 'pickup':
-        if (e.player === me) sfx.pickup();
+        if (e.player === me) {
+          sfx.pickup();
+          if (e.kind === 'rifle') facts.pickedRifle = true;
+        }
         break;
       case 'swap':
         if (e.player === me) sfx.reload();
@@ -1402,7 +1412,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         break;
       case 'land':
         landAt[e.player] = time;
-        if (e.player === me) lootHint = lootHintFor(e.x, e.y, time);
+        if (e.player === me) {
+          lootHint = lootHintFor(e.x, e.y, time);
+          facts.landedIn = DISTRICTS.find((d) => e.x >= d.x0 && e.x < d.x1 && e.y >= d.y0 && e.y < d.y1)?.name ?? null;
+        }
         vfx.burst(e.x, (e.z ?? 0) + 0.2, 12, 'dust', { z: e.y,  speed: 3, up: 1, gravity: 4, life: 0.4 });
         if (e.player === me) sfx.land();
         else {
@@ -1515,6 +1528,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   };
   /** When each player touched down (for the landing roll), and the canopies left on the ground. */
   const landAt: number[] = [];
+  /** What this round showed beyond the report's numbers: where you touched down, a rifle taken, the canopy's opening height. */
+  const facts: RoundFacts = { landedIn: null, pickedRifle: false, openedAlt: null };
   /** When the "Land first, then shoot" hint was shown (-1: not yet this round; once per round). */
   let airHintAt = -1;
   /**
@@ -2710,6 +2725,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       feed: feed.filter((f) => time - f.at < 6).slice(-5).map(({ id, text }) => ({ id, text })),
       prompt,
       dead: !self.alive,
+      facts: { ...facts },
       placement: self.placement,
       kills: self.kills,
       damage: Math.round(self.damage),
@@ -2820,6 +2836,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // A guest's state is replaced by the host's on every correction: always read it back.
       state = session.state;
       events.forEach(handle);
+      // The height the canopy opened at (a daily goal asks for it below 60 m).
+      const mine = state.players[me];
+      if (facts.openedAlt === null && mine.stage === 'falling' && mine.canopy >= 0) facts.openedAlt = Math.round(mine.alt);
       // One hit-confirm tick per tick, the strongest; a kill has its own sound instead.
       if (pendingTick && !killedThisTick) sfx.hitTick(pendingTick);
       pendingTick = null;

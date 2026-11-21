@@ -20,7 +20,7 @@ the round to twenty) are coming soon. Works on phones.
 1. **Room**: pick your fighter, press *Play with friends* and send the link (or play solo with bots).
    Everyone says ready, the host starts.
 2. **Drop**: a cargo plane crosses the map. Jump with Space, free-fall, steer the parachute down.
-3. **Loot**: you land with a pistol and one magazine. Guns, armor, ammo, med kits and bombs lie in
+3. **Loot**: you land with a pistol, a magazine and two spare ones (nobody can shoot in the air). Guns, armor, ammo, med kits and bombs lie in
    houses, barns and the container port; walk over them or press F.
 4. **Fight**: Space shoots (auto-aim on whoever you can see, or mouse aim), Q / E lean, Shift rolls,
    G is your fighter's super, R reloads. Hide in tall grass, swim the river, take a bridge.

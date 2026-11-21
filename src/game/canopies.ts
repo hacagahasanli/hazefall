@@ -81,3 +81,13 @@ export const cellColor = (c: Canopy, i: number, j: number, ns: number, nc: numbe
     }
   }
 };
+
+const css = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
+/** A small CSS fill that shows a canopy's colours (the lobby's swatches and the level-up). */
+export const canopySwatch = (c: Canopy, own = 0xff6a3d): string => {
+  if (c.pattern === 'rainbow') return `linear-gradient(90deg, ${[0, 3, 6, 9, 11].map((i) => css(cellColor(c, i, 0, 12, 6, own))).join(', ')})`;
+  if (c.pattern === 'fade' || c.pattern === 'split') return `linear-gradient(90deg, ${css(cellColor(c, 0, 0, 12, 6, own))}, ${css(cellColor(c, 11, 0, 12, 6, own))})`;
+  const a = css(cellColor(c, 0, 0, 12, 6, own));
+  const b = css(cellColor(c, 1, 0, 12, 6, own));
+  return `repeating-linear-gradient(90deg, ${a} 0 5px, ${b} 5px 10px)`;
+};

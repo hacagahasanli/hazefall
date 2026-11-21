@@ -6,12 +6,13 @@
  * SETTINGS, HOW TO PLAY, CREDITS. ↑/↓ (or W/S) move, Enter picks, Esc closes a panel; hover and focus slide in an accent
  * bar with a soft tick. On phones the menu is a stack of thumb-sized buttons at the bottom over the scene.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { FighterCard, FighterGrid, HowTo, usePortraits } from '~/components/FighterSelect';
 import { MenuBanner } from '~/components/MenuBanner';
 import { SettingsPanel } from '~/components/SettingsPanel';
 import { setUiSound, uiTick } from '~/components/uiSound';
+import { dailyFor, goalDef, hoursToReset, xpToNext } from '~/game/progress';
 import { deviceFacts } from '~/game/render/deviceFacts';
 import { resolveTier } from '~/game/render/quality';
 import { keyLabel } from '~/game/settings';
@@ -22,6 +23,7 @@ import { GAME_TITLE, ONLINE_PLAY } from '~/lib/studio';
 import { showsOnlineRow } from '~/platform/menu';
 import { loadDone, track } from '~/lib/telemetry';
 
+import type { Career } from '~/game/career';
 import type { AimMode } from '~/game/render/game';
 import type { Settings } from '~/game/settings';
 import type { FighterId } from '~/game/sim/types';
@@ -105,6 +107,52 @@ const SidePanel = ({ title, onClose, children }: { title: string; onClose: () =>
   );
 };
 
+/** The career level under the logo: cream text, a thin gold bar, nothing above it. */
+const LevelBar = ({ career }: { career: Career }) => {
+  const need = xpToNext(career.level);
+  return (
+    <div className="flex max-w-[400px] flex-col gap-1 [@media(max-height:500px)]:max-w-[260px]" aria-label={`Level ${career.level}, ${career.xp} of ${need} XP`}>
+      <span className="text-sm font-semibold text-cream/85">
+        Level {career.level} <span className="text-cream/50">·</span> <span className="tabular-nums text-cream/65">{career.xp}/{need} XP</span>
+      </span>
+      <div className="h-1.5 overflow-hidden bg-cream/10">
+        <div className="h-full bg-gold" style={{ width: `${Math.min(100, Math.round((career.xp / need) * 100))}%` }} />
+      </div>
+    </div>
+  );
+};
+
+/** Today's three goals under the menu: a box glyph each and the count; once all are done, when the new ones come. */
+const TodayCard = ({ career }: { career: Career }) => {
+  const now = useMemo(() => new Date(), []);
+  const daily = dailyFor(career, now);
+  const done = daily.done.length;
+  return (
+    <section aria-label="Today" className="panel-cut flex flex-col gap-1.5 bg-ink-deep/70 px-4 py-3 backdrop-blur [animation:slideIn_0.45s_ease-out_0.3s_both] [@media(max-height:500px)]:hidden">
+      <div className="flex items-baseline justify-between gap-4">
+        <h2 className="font-display text-lg leading-none text-cream">Today</h2>
+        <span className="font-display text-lg leading-none tabular-nums text-gold">{done}/{daily.goals.length}</span>
+      </div>
+      <ul className="flex flex-col gap-1 text-sm">
+        {daily.goals.map((id) => {
+          const g = goalDef(id);
+          if (!g) return null;
+          const ok = daily.done.includes(id);
+          const have = Math.min(g.target, daily.progress[id] ?? 0);
+          return (
+            <li key={id} className={`flex items-baseline gap-2 ${ok ? 'text-gold' : 'text-cream/80'}`}>
+              <span aria-hidden className="w-4 shrink-0 font-bold">{ok ? '✓' : '○'}</span>
+              <span className="flex-1">{g.text}</span>
+              {!ok && g.target > 1 && have > 0 && <span className="tabular-nums text-xs text-cream/50">{have}/{g.target}</span>}
+            </li>
+          );
+        })}
+      </ul>
+      {done === daily.goals.length && <p className="text-xs text-cream/60">New goals in {hoursToReset(now)} h</p>}
+    </section>
+  );
+};
+
 /** The menu was shown once in this page visit (menu_view and load_done are sent once). */
 let menuSent = false;
 
@@ -121,6 +169,7 @@ export const MainMenu = ({
   touch,
   support: Support,
   onlineInterest: OnlineInterest,
+  career,
 }: {
   platform: Platform;
   settings: Settings;
@@ -134,6 +183,8 @@ export const MainMenu = ({
   touch: boolean;
   /** Our own site's Support us pill under the menu (portals pass nothing: no outbound links). */
   support?: ComponentType<{ variant?: 'pill' | 'card' | 'menu' }>;
+  /** What the game remembers (portal build): the level bar under the logo and today's goals under the menu. */
+  career?: Career;
   /** Our own site's "Online is coming" button under the menu while online play is closed (portals pass nothing). */
   onlineInterest?: ComponentType;
 }) => {
@@ -251,6 +302,7 @@ export const MainMenu = ({
               className={`h-auto w-full max-w-[400px] drop-shadow-[0_6px_28px_rgba(0,0,0,0.65)] [@media(max-height:500px)]:max-w-[260px] ${settings.reducedMotion ? '' : 'lcs-glitch-in'}`}
             />
           </h1>
+          {career && <LevelBar career={career} />}
         </div>
 
         <div className="flex flex-col gap-4 max-sm:gap-3">
@@ -292,6 +344,8 @@ export const MainMenu = ({
               </button>
             ))}
           </nav>
+
+          {career && <TodayCard career={career} />}
 
           {/* Our own site's extras (never on a portal): the "Online is coming" button and the Support us pill. */}
           {((OnlineInterest && !ONLINE_PLAY) || Support) && (
