@@ -1,5 +1,5 @@
 import { aimError, bestLoot, campSpot, CLOSE, coverPoint, ENGAGE_AT, engageScore, fallbackPersona, FIRE_RANGE, gunScore, isAutomatic, landingPlan, makePersona, mulberry32, PREFERRED, LANDING_GRACE, stagePace, tierOf } from './bot-params';
-import { DROP, DT, HEALS, magOf, WEAPONS, WORLD } from './constants';
+import { DROP, DT, HEALS, magOf, SUPERS, WEAPONS, WORLD } from './constants';
 import { canSee, healChoice, lineOfSight, lootUnder } from './step';
 import { NO_INPUT } from './types';
 
@@ -292,7 +292,9 @@ export const createBot = (id: number, seed: number) => {
     out.aimY = look.y;
     wobble = rand() * 2 - 1;
     if (target && engaged) {
-      out.super = me.superCharge >= 1 && td < 9;
+      // The slow-field canister is thrown (up to its range, at the aim point, which is on the target): use it on anyone
+      // in throwing range; the other supers work up close.
+      out.super = me.superCharge >= 1 && (me.fighter === 'standup' ? td < SUPERS.timebox.range - 2 && td > 2.5 : td < 9);
       out.use = me.bombs > 0 && td < 11 && td > 4;
     } else if (!me.using && !target && !out.use && wantsHeal(me, mode)) out.heal = true;
     else if (!me.using && !target && me.coffees > 0 && me.buzz <= 0 && (me.hp < me.maxHp * 0.85 || mustRun)) out.coffee = true;

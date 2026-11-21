@@ -86,10 +86,11 @@ const ITEM_ICONS = {
 const SUPER_ICONS: Record<FighterId, ReactNode> = {
   hotfix: <path d="M2 3.5 6.5 8 2 12.5M7.5 3.5 12 8l-4.5 4.5M12 3.5h2v9h-2" />,
   legacy: <path d="M1.5 3h13v10h-13zM1.5 6.3h13M1.5 9.7h13M6 3v3.3M10.5 6.3v3.4M6 9.7V13" />,
+  // The slow-field canister: a round bomb with a clock face and a fuse lever.
   standup: (
     <>
-      <circle cx="8" cy="8.5" r="6" />
-      <path d="M8 5.2v3.3l2.2 1.5M6.5 1.2h3" />
+      <circle cx="7.5" cy="9.5" r="5" />
+      <path d="M7.5 7v2.6l1.8 1.2M6 4.5h3M7.5 4.5V3M10.2 3.6 13 1.6M12.4 4.4l1.6-.4" />
     </>
   ),
   intern: (

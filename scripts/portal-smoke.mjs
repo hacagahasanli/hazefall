@@ -7,7 +7,7 @@ const logs = [];
 p.on('pageerror', (e) => logs.push('ERR ' + e.message));
 p.on('console', (m) => logs.push(m.type() + ' ' + m.text().slice(0, 160)));
 p.on('requestfailed', (r) => logs.push('FAIL ' + r.url()));
-await p.goto(process.argv[2] ?? 'http://localhost:3203/?testBreaks');
+await p.goto(process.argv[2] ?? 'http://localhost:3203/');
 await p.waitForFunction(() => !!window.__lcs, null, { timeout: 30000 }).catch(() => logs.push('no __lcs'));
 await p.waitForTimeout(2500);
 await p.screenshot({ path: 'smoke1.png' });

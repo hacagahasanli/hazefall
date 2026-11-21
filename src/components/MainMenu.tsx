@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { FighterCard, FighterGrid, HowTo, usePortraits } from '~/components/FighterSelect';
+import { MenuBanner } from '~/components/MenuBanner';
 import { SettingsPanel } from '~/components/SettingsPanel';
 import { setUiSound, uiTick } from '~/components/uiSound';
 import { deviceFacts } from '~/game/render/deviceFacts';
@@ -233,44 +234,49 @@ export const MainMenu = ({
           </h1>
         </div>
 
-        <nav aria-label="Main menu" className="flex flex-col gap-1.5 max-sm:gap-2 [@media(max-height:500px)]:gap-0.5">
-          {items.map((it, i) => (
-            <button
-              key={it.id}
-              ref={(el) => {
-                buttons.current[i] = el;
-              }}
-              type="button"
-              disabled={it.soon}
-              aria-disabled={it.soon || undefined}
-              title={it.soon ? 'Online play is coming soon' : undefined}
-              onClick={() => {
-                if (it.soon) return;
-                uiTick(true);
-                it.run();
-              }}
-              onMouseEnter={() => {
-                if (it.soon) return;
-                if (focus !== i) uiTick();
-                setFocus(i);
-                buttons.current[i]?.focus({ preventScroll: true });
-              }}
-              onFocus={() => setFocus(i)}
-              style={{ animationDelay: `${0.08 + i * 0.05}s` }}
-              className={`group relative flex items-baseline gap-3 overflow-hidden text-left outline-none disabled:cursor-not-allowed [animation:slideIn_0.45s_ease-out_both] focus-visible:ring-1 focus-visible:ring-green/35 max-sm:panel-cut max-sm:bg-ink/80 max-sm:px-4 max-sm:py-3 max-sm:backdrop-blur ${it.primary ? 'py-1 sm:py-2' : 'py-1'}`}
-            >
-              {/* The accent bar slides in from the left on hover and focus. */}
-              <span className={`absolute left-0 top-1/2 h-[70%] w-1.5 -translate-y-1/2 -skew-x-12 bg-green transition-all duration-200 ${focus === i ? 'translate-x-0 opacity-100' : '-translate-x-3 opacity-0'}`} />
-              <span
-                className={`font-display uppercase italic leading-none transition-all duration-200 ${it.soon ? 'text-cream/35' : focus === i ? 'translate-x-5 text-green' : 'text-cream/85'} ${it.primary ? 'text-5xl sm:text-6xl [@media(max-height:500px)]:text-4xl' : 'text-2xl sm:text-3xl [@media(max-height:500px)]:text-xl'}`}
+        <div className="flex flex-col gap-4 max-sm:gap-3">
+          <nav aria-label="Main menu" className="flex flex-col gap-1.5 max-sm:gap-2 [@media(max-height:500px)]:gap-0.5">
+            {items.map((it, i) => (
+              <button
+                key={it.id}
+                ref={(el) => {
+                  buttons.current[i] = el;
+                }}
+                type="button"
+                disabled={it.soon}
+                aria-disabled={it.soon || undefined}
+                title={it.soon ? 'Online play is coming soon' : undefined}
+                onClick={() => {
+                  if (it.soon) return;
+                  uiTick(true);
+                  it.run();
+                }}
+                onMouseEnter={() => {
+                  if (it.soon) return;
+                  if (focus !== i) uiTick();
+                  setFocus(i);
+                  buttons.current[i]?.focus({ preventScroll: true });
+                }}
+                onFocus={() => setFocus(i)}
+                style={{ animationDelay: `${0.08 + i * 0.05}s` }}
+                className={`group relative flex items-baseline gap-3 overflow-hidden text-left outline-none disabled:cursor-not-allowed [animation:slideIn_0.45s_ease-out_both] focus-visible:ring-1 focus-visible:ring-green/35 max-sm:panel-cut max-sm:bg-ink/80 max-sm:px-4 max-sm:py-3 max-sm:backdrop-blur ${it.primary ? 'py-1 sm:py-2' : 'py-1'}`}
               >
-                {it.label}
-              </span>
-              {it.soon && <span className="self-center rounded-sm bg-gold/90 px-2 py-0.5 text-xs font-bold text-ink-deep">Coming soon</span>}
-              {it.sub && <span className={`text-[11px] font-bold uppercase tracking-widest transition-all duration-200 ${focus === i ? 'translate-x-5 text-cream/80' : 'text-cream/45'}`}>{it.sub}</span>}
-            </button>
-          ))}
-        </nav>
+                {/* The accent bar slides in from the left on hover and focus. */}
+                <span className={`absolute left-0 top-1/2 h-[70%] w-1.5 -translate-y-1/2 -skew-x-12 bg-green transition-all duration-200 ${focus === i ? 'translate-x-0 opacity-100' : '-translate-x-3 opacity-0'}`} />
+                <span
+                  className={`font-display uppercase italic leading-none transition-all duration-200 ${it.soon ? 'text-cream/35' : focus === i ? 'translate-x-5 text-green' : 'text-cream/85'} ${it.primary ? 'text-5xl sm:text-6xl [@media(max-height:500px)]:text-4xl' : 'text-2xl sm:text-3xl [@media(max-height:500px)]:text-xl'}`}
+                >
+                  {it.label}
+                </span>
+                {it.soon && <span className="self-center rounded-sm bg-gold/90 px-2 py-0.5 text-xs font-bold text-ink-deep">Coming soon</span>}
+                {it.sub && <span className={`text-[11px] font-bold uppercase tracking-widest transition-all duration-200 ${focus === i ? 'translate-x-5 text-cream/80' : 'text-cream/45'}`}>{it.sub}</span>}
+              </button>
+            ))}
+          </nav>
+
+          {/* The portal's banner (none on our own site): under the menu, on phones at the bottom, collapsed when empty. */}
+          <MenuBanner platform={platform} active={entered && !panel} />
+        </div>
 
         <footer className="flex items-center justify-between gap-3 text-xs text-cream/50 max-sm:mt-2">
           <span>{credit}</span>

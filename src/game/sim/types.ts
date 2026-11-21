@@ -112,6 +112,8 @@ export interface Player {
   vault: number;
   vaultFrom: { x: number; y: number };
   vaultTo: { x: number; y: number };
+  /** The hop (Space where the mouse shoots): seconds left in the air, 0 on the ground. */
+  hop: number;
   /** How long you've been pushing into something you could vault. */
   pushing: number;
   /** Leaning: -1 (left) .. 1 (right), eased towards the input. */
@@ -123,9 +125,9 @@ export interface Player {
   /** Deadline damage taken in the current second, and how far into that second we are. */
   zoneSum: number;
   zoneClock: number;
-  /** Holding to throw a rocket or a bomb farther: seconds held, and what is being charged. */
+  /** Holding to throw a rocket or a bomb farther (seconds held), or aiming the slow-field canister: what is being charged. */
   charge: number;
-  charging: 'rockets' | 'bomb' | null;
+  charging: 'rockets' | 'bomb' | 'super' | null;
   kills: number;
   damage: number;
   placement: number; // 0 while alive
@@ -164,6 +166,8 @@ export interface Projectile {
   radius: number;
   /** A rocket flies under its own power; kept for old snapshots. */
   rocket?: boolean;
+  /** The slow-field canister (a super): bursts and leaves a slow field instead of exploding. */
+  field?: boolean;
   /**
    * Height above the ground (m). Bullets: from the shooter's height to the target's over `hd`
    * metres (so a round fired up at a parachute climbs to it). Rockets: their own height, with
@@ -250,6 +254,9 @@ export type GameEvent =
   | { type: 'dryFire'; player: number }
   | { type: 'vault'; player: number; x: number; y: number }
   | { type: 'roll'; player: number; x: number; y: number }
+  | { type: 'hop'; player: number; x: number; y: number }
+  /** The slow-field canister burst: the burst radius and the field's. */
+  | { type: 'slowBurst'; owner: number; x: number; y: number; burst: number; radius: number }
   | { type: 'jump'; player: number }
   | { type: 'land'; player: number; x: number; y: number }
   | { type: 'ko'; victim: number; by: number | null; with: string | null; x: number; y: number }

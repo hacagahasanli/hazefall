@@ -1,7 +1,7 @@
 // Weapon roles (docs/BALANCE.md): each gun owns a distance band and none dominates. Change a WEAPONS number and these
 // tell you which role it broke.
 import { BARE, burstDps, falloff, fastestAt, GEARED, GUNS, shotDamage, shotInterval, shotTicks, ttk } from './balance';
-import { DT, RARITY, WEAPONS } from './constants';
+import { DT, FIGHTERS, RARITY, SUPERS, WEAPONS } from './constants';
 import { falloffDamage } from './step';
 
 import type { WeaponKind } from './types';
@@ -138,5 +138,30 @@ describe('nothing dominates', () => {
       const prime = ttk(k, d, hp, RARITY.damage.length - 1).shots;
       if (Number.isFinite(common)) expect(common - prime, `${k} ${d} m ${hp}`).toBeLessThanOrEqual(Math.max(1, Math.ceil(common * 0.12)));
     }
+  });
+});
+
+describe('supers: none dominates', () => {
+  const T = SUPERS.timebox;
+  it('the slow-field canister never one-shoots: its burst is under a third of a bare fighter', () => {
+    expect(T.damage).toBeLessThan(BARE / 3);
+    expect(T.damage).toBeLessThan(GEARED / 3);
+  });
+
+  it('its burst hits about as hard as the other damaging supers, per point of charge too', () => {
+    const others = [SUPERS.deploy.damage, SUPERS.push.damage];
+    expect(T.damage).toBeLessThanOrEqual(Math.max(...others) * 1.1);
+    expect(T.damage).toBeGreaterThanOrEqual(Math.min(...others) * 0.8);
+    const perCharge = (dmg: number, cost: number) => dmg / cost;
+    const mine = perCharge(T.damage, FIGHTERS.standup.superCost);
+    const best = Math.max(perCharge(SUPERS.deploy.damage, FIGHTERS.hotfix.superCost), perCharge(SUPERS.push.damage, FIGHTERS.intern.superCost));
+    expect(mine).toBeLessThanOrEqual(best * 1.25);
+  });
+
+  it('its reach and area stay modest: a short throw, a small burst inside a field the size of the old one', () => {
+    expect(T.range).toBeLessThanOrEqual(16);
+    expect(T.burst).toBeLessThan(T.radius);
+    expect(T.radius).toBeLessThanOrEqual(4.5);
+    expect(T.life).toBeLessThanOrEqual(4.5);
   });
 });

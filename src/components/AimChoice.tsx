@@ -18,7 +18,7 @@ export const AimChoice = ({ value, onChange }: { value: AimMode; onChange: (m: A
       {(
         [
           ['auto', 'Auto-aim', 'Space shoots the nearest enemy you can see'],
-          ['mouse', 'Mouse', 'Point to aim, left click (or Space) to shoot'],
+          ['mouse', 'Mouse', 'Point to aim, left click to shoot, Space jumps'],
         ] as const
       ).map(([id, label, hint]) => (
         <button

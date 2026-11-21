@@ -2,8 +2,8 @@
 
 /**
  * The portal build's whole game: the main menu over the live battleground, then solo rounds against nineteen bots. Nothing
- * online, no outbound links. The round report offers Play again or Main menu; a midgame ad may play as the player leaves
- * it (see useBreaks). Settings are shared by the menu and the pause menu (useSettings).
+ * online, no outbound links. The round report offers Play again or Main menu, straight on with no ad in between; the only
+ * ad is a banner under the main menu (MenuBanner). Settings are shared by the menu and the pause menu (useSettings).
  */
 import { useState } from 'react';
 
