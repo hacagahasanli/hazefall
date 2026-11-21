@@ -11,7 +11,10 @@ export const COPY: Copy = {
     standup: { name: 'Tempo', role: 'Controller', superName: 'Slow Field', superText: 'a field that slows enemies' },
     intern: { name: 'Rookie', role: 'Brawler', superName: 'Shockwave', superText: 'a blast that throws everyone back' },
   },
-  botNames: ['Maverick', 'Pebble', 'Nova', 'Rusty', 'Kiwi', 'Bolt', 'Juniper', 'Ziggy', 'Comet'],
+  botNames: [
+    'Maverick', 'Pebble', 'Nova', 'Rusty', 'Kiwi', 'Bolt', 'Juniper', 'Ziggy', 'Comet',
+    'Pickle', 'Sprocket', 'Willow', 'Cobalt', 'Marble', 'Tango', 'Pepper', 'Echo', 'Waffle', 'Biscuit',
+  ],
   guestPrefix: 'player_',
   zone: {
     name: 'the Storm',

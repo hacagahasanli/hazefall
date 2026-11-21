@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * The portal build's whole game: the main menu over the live battleground, then solo rounds against nine bots. Nothing
+ * The portal build's whole game: the main menu over the live battleground, then solo rounds against nineteen bots. Nothing
  * online, no outbound links. The round report offers Play again or Main menu; a midgame ad may play as the player leaves
  * it (see useBreaks). Settings are shared by the menu and the pause menu (useSettings).
  */

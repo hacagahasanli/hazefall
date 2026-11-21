@@ -23,7 +23,7 @@ const NAME_KEY = 'lcs:name';
 const randomName = () => `${COPY.guestPrefix}${Math.floor(1000 + Math.random() * 9000)}`;
 
 /**
- * The lobby between rounds. Offline: nine bots are always ready, you press Ready. With friends:
+ * The lobby between rounds. Offline: nineteen bots are always ready, you press Ready. With friends:
  * "Play with friends" opens a room and gives you a link; whoever opens it lands in the same
  * room (?room=...), picks a fighter and says ready, and the host starts the round. Same look as
  * the home page (cut panels, rendered portraits, gold call to action) but a calm backdrop.

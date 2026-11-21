@@ -14,7 +14,7 @@ export interface FighterCopy {
 
 export interface Copy {
   fighters: Record<FighterId, FighterCopy>;
-  /** The nine offline bots, in seat order. */
+  /** The nineteen offline bots, in seat order (one per seat after yours: PLAYERS - 1). */
   botNames: string[];
   /** Prefix for a random guest name ("dev_4821"). */
   guestPrefix: string;

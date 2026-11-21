@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 
-import { DISTRICTS, FIGHTERS, WORLD } from '~/game/sim/constants';
+import { DISTRICTS, FIGHTERS, PLAYERS, WORLD } from '~/game/sim/constants';
 
 import { SupportCard, SupportCorner } from '~/components/SupportLink';
 
@@ -179,12 +179,12 @@ export const Home = () => {
               <span className="text-gold">STANDING</span>
             </h1>
             <p className="max-w-md text-lg text-cream/85">
-              Ten developers jump from the cargo plane over the countryside. Land, loot a gun, take cover, and stay inside the
+              Twenty developers jump from the cargo plane over the countryside. Land, loot a gun, take cover, and stay inside the
               Deadline as it closes in. The last commit standing ships.
             </p>
             <div className="flex flex-wrap gap-6 text-sm">
               {[
-                ['10', 'players drop'],
+                [String(PLAYERS), 'players drop'],
                 ['176 m', 'battleground'],
                 ['~4 min', 'to the last circle'],
                 ['1', 'winner'],

@@ -8,7 +8,10 @@ export const COPY: Copy = {
     standup: { name: 'Standup', role: 'Scrum lead', superName: 'Timebox', superText: 'a field that slows enemies' },
     intern: { name: 'Intern', role: 'First week', superName: 'Force push to main', superText: 'a blast that throws everyone back' },
   },
-  botNames: ['merge_bot', 'lint_fail', 'null_ptr', 'race_cond', 'off_by_1', 'rm_rf', 'yolo_push', 'flaky_test', 'tech_debt'],
+  botNames: [
+    'merge_bot', 'lint_fail', 'null_ptr', 'race_cond', 'off_by_1', 'rm_rf', 'yolo_push', 'flaky_test', 'tech_debt',
+    'seg_fault', 'stack_ovf', 'cache_miss', 'dead_lock', 'wip_final', 'todo_later', 'dep_hell', '404_bot', 'prod_fire', 'git_blame',
+  ],
   guestPrefix: 'dev_',
   zone: {
     name: 'the Deadline',

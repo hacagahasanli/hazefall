@@ -3,7 +3,14 @@
 // starts the round and introduces the browsers to each other.
 
 export const ROOM_NAME = 'lcs';
-export const MAX_PLAYERS = 10;
+/**
+ * People in one room. The host's browser runs the match and sends every guest a snapshot 20 times a second (about
+ * 10 KB each with twenty fighters), so nine guests already cost the host about 15 Mbit/s of upload: the room stays at ten
+ * people and bots fill the round up to MATCH_SEATS.
+ */
+export const MAX_PEOPLE = 10;
+/** Fighters in an online round with bots on: the same as offline (sim PLAYERS; net.test checks they agree). */
+export const MATCH_SEATS = 20;
 export const FIGHTER_IDS = ['hotfix', 'legacy', 'standup', 'intern'] as const;
 export type LobbyFighter = (typeof FIGHTER_IDS)[number];
 
@@ -24,7 +31,7 @@ export interface LobbyMember {
 export interface LobbyState {
   roomId: string;
   members: LobbyMember[];
-  /** Fill the empty places up to ten with bots (the host decides). */
+  /** Fill the round up to MATCH_SEATS with bots (the host decides). */
   bots: boolean;
   /** A round is being played: nobody can join until it ends. */
   inMatch: boolean;

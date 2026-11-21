@@ -7,7 +7,7 @@ const [, , RAW, FONTS, OUT] = process.argv;
 const b = await chromium.launch({ executablePath: exe });
 const variants = [
   ['A-parachute', 'A-chute-3500.png', '40% 30%', 'Drop in. Loot. Survive.'],
-  ['B-firefight', 'B-town.png', '50% 35%', '10 players. 1 winner.'],
+  ['B-firefight', 'B-town.png', '50% 35%', '20 players. 1 winner.'],
   ['C-the-drop', 'A-plane.png', '38% 40%', 'Jump anywhere on the island.'],
 ];
 const sizes = [['landscape', 1920, 1080], ['portrait', 800, 1200], ['square', 800, 800]];

@@ -1,5 +1,6 @@
 import { createBot, VS_HUMAN } from './bot';
-import { BUILDINGS, DT, MAP, TILE } from './constants';
+import { CROWD, LANDING_GRACE, stagePace } from './bot-params';
+import { BUILDINGS, DT, MAP, PLAYERS, TILE } from './constants';
 import { createGame, lineOfSight, step } from './step';
 import { NO_INPUT } from './types';
 
@@ -7,7 +8,7 @@ import type { GameState, Input } from './types';
 
 type Bot = ReturnType<typeof createBot>;
 
-const idle = (): Input[] => Array.from({ length: 10 }, () => ({ ...NO_INPUT }));
+const idle = (): Input[] => Array.from({ length: PLAYERS }, () => ({ ...NO_INPUT }));
 
 /** The middle of a stretch of open meadow 30 tiles long: nothing in the way. */
 const OPEN = (() => {
@@ -33,7 +34,7 @@ const meanPairwise = (pts: { x: number; y: number }[]) => {
   return n ? sum / n : 0;
 };
 
-/** Nine bots and an idle player 0 (pushed out of the drone at the end of the route). */
+/** PLAYERS - 1 bots and an idle player 0 (pushed out of the drone at the end of the route). */
 const botMatch = (seed: number) => {
   const s = createGame('hotfix', seed);
   const bots = s.players.map((p) => createBot(p.id, seed * 31 + p.id));
@@ -42,7 +43,7 @@ const botMatch = (seed: number) => {
 };
 
 /**
- * Everyone landed, loot gone, one bot (the first that `want` accepts) alone in open meadow
+ * Everyone landed, loot gone, eight left, one bot (the first that `want` accepts) alone in open meadow
  * facing `enemy` 8 m ahead, its after-landing grace over, in the middle of the match (fourth
  * circle: early on bots are meant to hold back, see the pacing tests).
  */
@@ -57,7 +58,9 @@ const duel = (seed: number, enemy: number, want: (b: Bot) => boolean, phase = 3)
     return want(bots[p.id]);
   });
   s.players.forEach((p) => Object.assign(p, { x: 6, y: 6 }));
-  s.tick += 60 * 40;
+  // Mid-match: eight still standing (bots hold back in a crowd, see CROWD), the rest out of the round.
+  s.players.filter((p) => p.id !== id && p.id !== enemy).slice(6).forEach((p) => (p.alive = false));
+  s.tick += 60 * (LANDING_GRACE.human + 6);
   s.zone.phase = phase;
   Object.assign(s.players[id], { x: OPEN.x, y: OPEN.y, heading: 0, vx: 0, vy: 0 });
   Object.assign(s.players[enemy], { x: OPEN.x + 8, y: OPEN.y, vx: 0, vy: 0 });
@@ -77,7 +80,7 @@ const firstShot = (s: GameState, bot: Bot, id: number, seconds: number) => {
 };
 
 describe('bots behave like separate people', () => {
-  it('land spread over the map: at least 6 different buildings, never more than 2 bots in one', () => {
+  it('land spread over the map: at least 12 different buildings, never more than 2 bots in one', () => {
     for (const seed of [1, 2, 3, 4, 5, 6]) {
       const { s, tick } = botMatch(seed);
       const lands: number[] = [];
@@ -85,9 +88,9 @@ describe('bots behave like separate people', () => {
         tick();
         for (const e of s.events) if (e.type === 'land' && e.player !== 0) lands.push(buildingAt(e.x, e.y));
       }
-      expect(lands).toHaveLength(9);
+      expect(lands).toHaveLength(PLAYERS - 1);
       const used = lands.filter((b) => b >= 0);
-      expect(new Set(used).size).toBeGreaterThanOrEqual(6);
+      expect(new Set(used).size).toBeGreaterThanOrEqual(12);
       for (const b of new Set(used)) expect(used.filter((x) => x === b).length).toBeLessThanOrEqual(2);
     }
   });
@@ -147,13 +150,17 @@ describe('bots behave like separate people', () => {
     expect(hidden || Math.hypot(hurt.me.x - hurt.them.x, hurt.me.y - hurt.them.y) > d0 + 3).toBe(true);
     expect(Math.hypot(hurt.me.x - OPEN.x, hurt.me.y - OPEN.y)).toBeGreaterThan(3);
 
+    // Healthy, it takes the fight and never falls back (it may lose sight of them as it strafes).
     const fine = duel(8, 2, (b) => b.info().persona!.name === 'rusher');
+    const modes = new Set<string>();
     for (let i = 0; i < 60; i++) {
       const inputs = idle();
       inputs[fine.me.id] = fine.bot(fine.s);
       step(fine.s, inputs);
+      modes.add(fine.bot.info().mode);
     }
-    expect(fine.bot.info().mode).toBe('engage');
+    expect(modes.has('engage')).toBe(true);
+    expect(modes.has('retreat')).toBe(false);
   });
 
   it('come in four personalities, each a parameter set with its own jitter', () => {
@@ -187,6 +194,16 @@ describe('bots behave like separate people', () => {
       expect(closest(0, seed)).toBeGreaterThan(18);
       expect(closest(3, seed)).toBeLessThan(18);
     }
+  });
+
+  it('hold back in a crowd, easing off smoothly as the field thins', () => {
+    const full = stagePace(0, PLAYERS);
+    const thin = stagePace(0, CROWD.from);
+    expect(full.aggro).toBeCloseTo(thin.aggro + CROWD.aggro, 5);
+    expect(full.back).toBeGreaterThan(thin.back);
+    expect(full.chase).toBeLessThan(thin.chase);
+    // No jump anywhere between a full match and `from` alive.
+    for (let n = CROWD.from; n < PLAYERS; n++) expect(Math.abs(stagePace(0, n + 1).aggro - stagePace(0, n).aggro)).toBeLessThan(0.05);
   });
 
   it('play exactly the same way twice from the same seeds', () => {

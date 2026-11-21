@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { MAP, TILE } from '../sim/constants';
+import { MAP, PLAYERS, TILE } from '../sim/constants';
 import { createMatch, step } from '../sim/step';
 import { NO_INPUT } from '../sim/types';
 
@@ -11,6 +11,7 @@ import {
   encodeInput,
   encodeSnapshot,
 } from './protocol';
+import { MATCH_SEATS } from './lobby';
 import { createGuestSession, createHostSession } from './session';
 
 import type { Addressed, StartMessage } from './lobby';
@@ -141,11 +142,15 @@ describe('online play', () => {
     expect(n.slot).toBe(2);
   });
 
-  it('a snapshot is small and comes back the same', () => {
-    const s = createMatch(
-      start(0, true).seats.map((x) => ({ ...x, fighter: x.fighter as never })),
-      9,
-    );
+  it('an online round with bots has as many fighters as an offline one', () => {
+    expect(MATCH_SEATS).toBe(PLAYERS);
+  });
+
+  it('a snapshot of a full match is small and comes back the same', () => {
+    const seats = start(0, true).seats.map((x) => ({ ...x, fighter: x.fighter as never }));
+    while (seats.length < PLAYERS) seats.push({ name: `bot${seats.length}`, fighter: null as never, bot: true });
+    const s = createMatch(seats, 9);
+    expect(s.players).toHaveLength(PLAYERS);
     for (let i = 0; i < 600; i++)
       step(
         s,
@@ -162,6 +167,21 @@ describe('online play', () => {
     expect(back.state.loot.length).toBe(s.loot.length);
     expect(back.state.players[3].x).toBeCloseTo(s.players[3].x, 2);
     expect(back.state.players[0].mag).toBe(s.players[0].mag);
+    // Every player field survives the packing (numbers to a millimetre), the last input too.
+    s.players[4].prev = { ...NO_INPUT, fire: true, slot: 2, pitch: 0.25 };
+    Object.assign(s.players[5], { weapon: 'fists', mag: Infinity });
+    const again = decodeSnapshot(
+      encodeSnapshot({ tick: 6, ack: [], inputs: [], state: s, log: [] }, false),
+      s.loot,
+    );
+    const round = (v: unknown) => JSON.parse(JSON.stringify(v, (_k, x) => (typeof x === 'number' && !Number.isInteger(x) ? Math.round(x * 1000) / 1000 : x)));
+    expect(round(again.state.players)).toEqual(round(s.players));
+    expect(again.state.players[5].mag).toBe(Infinity);
+    // The loot list too, when it is sent.
+    const withLoot = encodeSnapshot({ tick: 7, ack: [], inputs: [], state: s, log: [] }, true);
+    expect(withLoot.length).toBeLessThan(18_000);
+    expect(round(decodeSnapshot(withLoot, []).state.loot)).toEqual(round(s.loot));
+    expect(again.state.players[4].prev.slot).toBe(2);
   });
 
   it("a guest's moves and shots reach the host, and every browser ends up seeing the same match", () => {
