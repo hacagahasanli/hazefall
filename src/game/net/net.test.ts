@@ -177,6 +177,10 @@ describe('online play', () => {
     const round = (v: unknown) => JSON.parse(JSON.stringify(v, (_k, x) => (typeof x === 'number' && !Number.isInteger(x) ? Math.round(x * 1000) / 1000 : x)));
     expect(round(again.state.players)).toEqual(round(s.players));
     expect(again.state.players[5].mag).toBe(Infinity);
+    // The loot list too, when it is sent.
+    const withLoot = encodeSnapshot({ tick: 7, ack: [], inputs: [], state: s, log: [] }, true);
+    expect(withLoot.length).toBeLessThan(18_000);
+    expect(round(decodeSnapshot(withLoot, []).state.loot)).toEqual(round(s.loot));
     expect(again.state.players[4].prev.slot).toBe(2);
   });
 

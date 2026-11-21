@@ -186,6 +186,9 @@ const reviver = (_k: string, v: unknown) =>
 const PLAYER_KEYS = Object.keys(newPlayer(0, '', 'hotfix', false, 0, 0)).filter((k) => k !== 'prev');
 const INPUT_KEYS = [...Object.keys(NO_INPUT), 'snap', 'pitch', 'scope', 'throwAt', 'slot', 'cycle', 'heal', 'coffee'];
 
+/** Loot the same way: the list is sent whenever it changes and once a second, and twenty fighters need ~150 pieces. */
+const LOOT_KEYS = ['id', 'kind', 'x', 'y', 'ammo', 'tier', 'active'];
+const LOOT_KNOWN = new Set(LOOT_KEYS);
 const PLAYER_KNOWN = new Set([...PLAYER_KEYS, 'prev']);
 const INPUT_KNOWN = new Set(INPUT_KEYS);
 
@@ -226,15 +229,15 @@ export const encodeSnapshot = (s: Snapshot, withLoot: boolean) => {
     racks,
     players: s.state.players.map(packPlayer),
     events: [],
-    loot: withLoot ? s.state.loot : undefined,
+    loot: withLoot ? s.state.loot.map((l) => pack(l, LOOT_KEYS, LOOT_KNOWN)) : undefined,
   };
   return JSON.stringify({ ...s, state }, replacer);
 };
 
 /** `prevLoot` fills in the loot when this snapshot left it out. */
 export const decodeSnapshot = (raw: string, prevLoot: Loot[]): Snapshot => {
-  const s = JSON.parse(raw, reviver) as Snapshot & {
-    state: Omit<GameState, 'players'> & { racks: [number, number][]; loot?: Loot[]; players: [unknown[], unknown[]][] };
+  const s = JSON.parse(raw, reviver) as Omit<Snapshot, 'state'> & {
+    state: Omit<GameState, 'players' | 'loot' | 'racks'> & { racks: [number, number][]; loot?: unknown[][]; players: [unknown[], unknown[]][] };
   };
   const racks = INITIAL_RACKS.slice();
   for (const [i, v] of s.state.racks) racks[i] = v;
@@ -244,7 +247,7 @@ export const decodeSnapshot = (raw: string, prevLoot: Loot[]): Snapshot => {
       ...s.state,
       racks,
       players: s.state.players.map(unpackPlayer),
-      loot: s.state.loot ?? prevLoot.map((l) => ({ ...l })),
+      loot: s.state.loot ? s.state.loot.map((l) => unpack(l, LOOT_KEYS, true) as unknown as Loot) : prevLoot.map((l) => ({ ...l })),
       events: [],
     },
   };
