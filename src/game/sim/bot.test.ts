@@ -1,5 +1,5 @@
 import { botCanSee, createBot, VS_HUMAN } from './bot';
-import { CROWD, fightCover, guessFromSound, LANDING_GRACE, makePersona, mulberry32, reactionDelay, spotTime, stagePace } from './bot-params';
+import { CROWD, fightCover, GRACE_BY_PERSONA, guessFromSound, LANDING_GRACE, makePersona, mulberry32, reactionDelay, spotTime, stagePace, VIEW } from './bot-params';
 import { BUILDINGS, DT, HEALS, MAP, PLAYERS, TILE, WORLD } from './constants';
 import { createGame, lineOfSight, step } from './step';
 import { NO_INPUT } from './types';
@@ -60,7 +60,8 @@ const duel = (seed: number, enemy: number, want: (b: Bot) => boolean, phase = 3)
   s.players.forEach((p) => Object.assign(p, { x: 6, y: 6 }));
   // Mid-match: eight still standing (bots hold back in a crowd, see CROWD), the rest out of the round.
   s.players.filter((p) => p.id !== id && p.id !== enemy).slice(6).forEach((p) => (p.alive = false));
-  s.tick += 60 * (LANDING_GRACE.human + 6);
+  // Past every after-landing grace: a person's and the longest a bot can draw against another bot.
+  s.tick += 60 * (Math.max(LANDING_GRACE.human, LANDING_GRACE.bot * Math.max(...Object.values(GRACE_BY_PERSONA)) * 1.2) + 6);
   s.zone.phase = phase;
   Object.assign(s.players[id], { x: OPEN.x, y: OPEN.y, heading: 0, vx: 0, vy: 0 });
   Object.assign(s.players[enemy], { x: OPEN.x + 8, y: OPEN.y, vx: 0, vy: 0 });
@@ -174,9 +175,9 @@ describe('bots behave like separate people', () => {
     expect(new Set(rushers).size).toBe(rushers.length);
   });
 
-  it('early on a rusher leaves gunfire 34 m away alone; from the fourth circle it goes to see', () => {
-    const closest = (phase: number, seed: number) => {
-      const { s, bot, me, them } = duel(seed, 2, (b) => b.info().persona!.name === 'rusher', phase);
+  it('hunt gunfire 34 m away from the second circle on (rushers), while a camper leaves it alone', () => {
+    const closest = (phase: number, seed: number, who: string) => {
+      const { s, bot, me, them } = duel(seed, 2, (b) => b.info().persona!.name === who, phase);
       // The shooter is out of sight (26 m) but within earshot, off to the side of the way to the next circle (so roaming
       // there does not lead to it), firing away from the bot.
       // (Whichever side keeps it on the map, so it really is 34 m away.)
@@ -194,15 +195,16 @@ describe('bots behave like separate people', () => {
         inputs[them.id] = { ...NO_INPUT, fire: i % 30 === 0, aimX: them.x + (them.x - me.x), aimY: them.y + (them.y - me.y) };
         step(s, inputs);
         best = Math.min(best, Math.hypot(me.x - them.x, me.y - them.y));
-        if (process.env.DBG && i % 60 === 0) console.log(phase, i, s.events.map((e) => e.type).join(), bot.info().mode, me.x.toFixed(1), me.y.toFixed(1), them.mag, s.zone.state, s.zone.timer.toFixed(1));
+        if (process.env.DBG && i % 30 === 0) console.log(seed, who, Math.hypot(me.x - them.x, me.y - them.y).toFixed(1), bot.info().target, phase, i, s.events.map((e) => e.type).join(), bot.info().mode, me.x.toFixed(1), me.y.toFixed(1), them.mag, s.zone.state, s.zone.timer.toFixed(1));
       }
       return best;
     };
     // (Seed 4 dropped: since bots draw more of their own random numbers, its rusher's own wander in the first circle
     // happens to lead it past that spot, gunfire or not.)
     for (const seed of [3, 5, 6]) {
-      expect(closest(0, seed)).toBeGreaterThan(18);
-      expect(closest(3, seed)).toBeLessThan(18);
+      expect(closest(1, seed, 'rusher')).toBeLessThan(18);
+      expect(closest(3, seed, 'rusher')).toBeLessThan(18);
+      expect(closest(0, seed, 'camper')).toBeGreaterThan(18);
     }
   });
 
@@ -294,7 +296,14 @@ describe('bots fight like people', () => {
     const p = makePersona('tactical', () => 0.5);
     const base = { d: 18, edge: 0, moving: false, firing: false, light: 1, plant: false, alert: false };
     const t = spotTime(p, base);
-    expect(spotTime(p, { ...base, d: 5 })).toBeLessThan(t / 3);
+    expect(spotTime(p, { ...base, d: 5 })).toBeLessThan(t * 0.75);
+    // Quick out to about 30 m in the open; a long look beyond that.
+    expect(spotTime(p, { ...base, d: 25 })).toBeLessThan(0.4);
+    expect(spotTime(p, { ...base, d: 36 })).toBeGreaterThan(spotTime(p, { ...base, d: 25 }) * 3);
+    // Never instant: even right in front, standing still, it takes more than one look (a think is 8 ticks).
+    for (const name of ['rusher', 'camper', 'looter', 'tactical'] as const) {
+      expect(spotTime(makePersona(name, () => 1), { ...base, d: 1 })).toBeGreaterThan(8 * DT);
+    }
     expect(spotTime(p, { ...base, moving: true })).toBeLessThan(t);
     expect(spotTime(p, { ...base, firing: true })).toBeLessThan(t / 2);
     expect(spotTime(p, { ...base, plant: true })).toBeGreaterThan(t * 1.5);
@@ -408,14 +417,16 @@ describe('bots fight like people', () => {
 
   it('never stand still while being hit, even by someone out of sight: get off the line and look that way', () => {
     const { s, bot, me, them } = duel(15, 2, () => true);
-    // A shooter 38 m off across open ground, beyond what a bot can make out: it hears and feels the shots, nothing more.
+    // A shooter far off across open ground, beyond what a bot can make out even just after being hit (VIEW + 8): it hears
+    // and feels the shots, nothing more.
+    const far = VIEW + 12;
     const a = Array.from({ length: 32 }, (_, k) => (k * Math.PI) / 16).find((r) => {
-      const x = me.x + Math.cos(r) * 38;
-      const y = me.y + Math.sin(r) * 38;
+      const x = me.x + Math.cos(r) * far;
+      const y = me.y + Math.sin(r) * far;
       return x > 8 && y > 8 && x < WORLD - 8 && y < WORLD - 8 && lineOfSight(s, me.x, me.y, x, y) && 'gpa'.includes(MAP[Math.floor(y / TILE)][Math.floor(x / TILE)]);
     });
     expect(a).toBeDefined();
-    Object.assign(them, { x: me.x + Math.cos(a!) * 38, y: me.y + Math.sin(a!) * 38, weapon: 'rifle', mag: 30, ammo: 90 });
+    Object.assign(them, { x: me.x + Math.cos(a!) * far, y: me.y + Math.sin(a!) * far, weapon: 'rifle', mag: 30, ammo: 90 });
     // Tough enough to stay up through it (and too healthy to think of running).
     Object.assign(me, { hp: 5000, maxHp: 5000 });
     let firstHit = -1;

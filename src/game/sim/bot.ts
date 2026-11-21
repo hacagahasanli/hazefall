@@ -1,6 +1,6 @@
 import {
   aimError, bestLoot, botSight, campSpot, CLOSE, coverPoint, EARSHOT, ENGAGE_AT, engageScore, fallbackPersona, fightCover, FIRE_RANGE, guessFromSound,
-  gunScore, isAutomatic, landingPlan, lightAt, makePersona, mulberry32, NEAR, PREFERRED, LANDING_GRACE, reactionDelay, spotTime, stagePace, tierOf, VIEW,
+  gunScore, isAutomatic, landingPlan, lightAt, LOW_HP, lootValue, GRACE_BY_PERSONA, makePersona, mulberry32, NEAR, PREFERRED, LANDING_GRACE, reactionDelay, spotTime, stagePace, tierOf, VIEW,
 } from './bot-params';
 import { DROP, DT, FIGHTERS, HEALS, magOf, SUPERS, WEAPONS, WORLD } from './constants';
 import { buildingAt, doorstep, ROOF_LAYER } from './roofs';
@@ -56,8 +56,17 @@ export const botCanSee = (state: GameState, viewer: Player, target: Player) => {
   const h1 = chestHeight(target);
   return botSight(state, eye.x, eye.y, body.x, body.y, h0, h1) || (Math.abs(target.lean) > 0.05 && botSight(state, eye.x, eye.y, target.x, target.y, h0, h1));
 };
-/** Reaction time and aim error against a person, relative to against a bot. */
-export const VS_HUMAN = 1.45;
+/** Reaction time and aim error against a person, relative to against a bot: a little kinder, never a free pass. */
+export const VS_HUMAN = 1.3;
+/** After breaking off to heal, a bot goes back to where it last saw its enemy for this long (s). */
+export const COMEBACK = 15;
+/** How far below the fight threshold a bot still takes shots at someone `POKE_FROM` m or more off, without pushing in. */
+export const POKE = 0.3;
+export const POKE_FROM = 14;
+/** Running footsteps are heard this far (m), as a direction only. */
+export const FOOTSTEPS = 10;
+/** Anyone seen within this distance (m) gets a fight (unless just landed or badly hurt): the crowd holds back the hunt, never a face-off. */
+export const FACE_OFF = 1;
 
 
 /**
@@ -88,7 +97,7 @@ export const createBot = (id: number, seed: number) => {
   let hitAt = -99;
   let hitBy = -1;
   /** Gunfire I heard: where I guess it came from, and how far off it sounded (by how loud it was). */
-  let heard: { x: number; y: number; t: number; from: number; far: number } | null = null;
+  let heard: { x: number; y: number; t: number; from: number; far: number; steps?: boolean } | null = null;
   let chased = -99;
   /** How close I am to noticing each player (1 = noticed). */
   const aware = new Map<number, number>();
@@ -127,6 +136,17 @@ export const createBot = (id: number, seed: number) => {
   let slipReloaded = false;
   let dodgeSeen = -99;
   let healTo = 0.8;
+  /** Seconds after landing before I pick a fight with another bot (my own: rushers soon, looters after a proper look round). */
+  let botGrace: number = LANDING_GRACE.bot;
+  /** Healed up after breaking off: back to where I last saw them, until this time. */
+  let comebackUntil = -99;
+  /** Who I last actually fought (not just saw). */
+  let foughtId = -1;
+  /** Shooting from where I stand without pushing in. */
+  let poking = false;
+  /** Loot I gave up on, until when; when I started for the current one. */
+  const skipLoot = new Map<number, number>();
+  let lootSince = 0;
   // Stuck on a wall? Walk round it for a bit.
   let lastX = 0;
   let lastY = 0;
@@ -140,7 +160,8 @@ export const createBot = (id: number, seed: number) => {
     p = makePersona(mine?.persona ?? fallbackPersona(id), rand);
     if (mine) spot = { x: mine.x, y: mine.y, t: mine.t };
     // The unsure heal up fuller before they go back out.
-    healTo = 0.55 + 0.2 * (1 - p.confidence);
+    healTo = 0.5 + 0.15 * (1 - p.confidence);
+    botGrace = LANDING_GRACE.bot * GRACE_BY_PERSONA[p.name] * between(0.8, 1.2);
     // Aim for the doorstep, not the roof: land beside the house and walk straight in.
     const b = buildingAt(spot.x, spot.y);
     if (b >= 0) spot = { ...doorstep(b, spot.x, spot.y), t: spot.t };
@@ -161,6 +182,19 @@ export const createBot = (id: number, seed: number) => {
     }
   };
 
+  /** Footsteps: someone running close by, through a wall or not, gives a rough direction (when no gunfire was heard lately). */
+  const listenSteps = (state: GameState, me: Player, now: number) => {
+    if (heard && now - heard.t < 1) return;
+    for (const o of state.players) {
+      if (o.id === id || !o.alive || o.stage !== 'ground' || Math.hypot(o.vx, o.vy) < 2.5) continue;
+      const d = Math.hypot(o.x - me.x, o.y - me.y);
+      if (d > FOOTSTEPS) continue;
+      const g = guessFromSound(me.x, me.y, o.x, o.y, rand);
+      heard = { x: g.x, y: g.y, t: now, from: o.id, far: d, steps: true };
+      return;
+    }
+  };
+
   /** A new fight: how long before I shoot, whether I want cover for it, and whether I slip up in it. */
   const meet = (state: GameState, me: Player, o: Player, now: number) => {
     targetId = o.id;
@@ -173,11 +207,12 @@ export const createBot = (id: number, seed: number) => {
     const pace = stagePace(state.zone.phase, state.players.filter((q) => q.alive).length);
     const ratio = (me.hp + me.armor) / me.maxHp;
     const bias = 1 - p!.confidence + (CLOSE[me.weapon] ? -0.2 : 0.15) + (me.weapon === 'shotgun' ? -0.3 : 0) - pace.aggro * 0.5 + (ratio < 0.6 ? 0.25 : 0) + between(-0.2, 0.2);
-    wantsCover = bias > 0.7 && slip !== 'open';
+    // Only the unsure, the badly hurt and those with a long gun fight from cover; most push and shoot.
+    wantsCover = bias > 0.85 && slip !== 'open';
     post = null;
     peek = 'hide';
     peeks = 0;
-    peekMax = 2 + Math.floor(rand() * 2);
+    peekMax = 1 + Math.floor(rand() * 2);
   };
 
   const perceive = (state: GameState, me: Player, now: number) => {
@@ -230,8 +265,8 @@ export const createBot = (id: number, seed: number) => {
       // Someone I was just fighting I pick up again at once; anyone else I have to notice first.
       const known = a >= 1 || (o.id === targetId && now - lastSeen < 3 && a > 0);
       if (!seen || !known) continue;
-      // Stick with whoever I'm fighting, and answer whoever is shooting me.
-      const rank = d - (o.id === targetId ? 6 : 0) - (o.id === hitBy && now - hitAt < 3 ? 8 : 0);
+      // Stick with whoever I'm fighting, answer whoever is shooting me, and go for a person before a bot.
+      const rank = d - (o.id === targetId ? 6 : 0) - (o.id === hitBy && now - hitAt < 3 ? 8 : 0) - (o.bot ? 0 : 5);
       if (rank < bestD) {
         best = o;
         bestD = rank;
@@ -253,15 +288,16 @@ export const createBot = (id: number, seed: number) => {
     const z = state.zone;
     const key = `${z.phase}${z.state}`;
     const reached = Math.hypot(wpX - me.x, wpY - me.y) < 3;
-    if (p!.aggro + pace.aggro > 0.5 && now - lastSeen < 3 && targetId >= 0 && state.players[targetId].alive) {
-      // Lost sight of who I was fighting: push to where they were.
+    const lost = now - lastSeen < (now < comebackUntil ? COMEBACK : 8) && Math.hypot(lastTX - me.x, lastTY - me.y) > 2.5;
+    if (p!.aggro + pace.aggro > 0.5 && lost && foughtId === targetId && targetId >= 0 && state.players[targetId].alive) {
+      // Lost sight of who I was fighting (or just patched up after breaking off): push to where they were.
       wpX = lastTX;
       wpY = lastTY;
       wpKey = '';
       return;
     }
-    if (p!.chase > 0 && heard && now - heard.t < 2 && heard.t > chased && heard.far < p!.chase * pace.chase) {
-      // Gunfire: rushers and tactical players go and see.
+    if (heard && chaseable(state, now, pace)) {
+      // Gunfire: go and see, like a hunter.
       chased = heard.t;
       wpX = heard.x;
       wpY = heard.y;
@@ -287,7 +323,7 @@ export const createBot = (id: number, seed: number) => {
       // My own side of the circle, so bots don't all meet on one ring.
       const a = Math.atan2(me.y - z.toY, me.x - z.toX) + between(-1, 1);
       // The last few head for the middle, where the final circle will be, so the end is a fight and not a search.
-      const r = Math.max(2, z.toR) * (pace.hunt ? between(0, 0.3) : between(0.3, 0.8));
+      const r = Math.max(2, z.toR) * (pace.hunt ? between(0, 0.15) : between(0.3, 0.8));
       wpX = z.toX + Math.cos(a) * r;
       wpY = z.toY + Math.sin(a) * r;
     }
@@ -298,6 +334,13 @@ export const createBot = (id: number, seed: number) => {
       holdUntil = now + between(8, 15);
     } else holdUntil = 0;
   };
+
+  /** Gunfire I heard just now, near enough for me to go after (a person's shots from farther off). */
+  const chaseable = (state: GameState, now: number, pace: ReturnType<typeof stagePace>) =>
+    heard !== null && now - heard.t < 2 && heard.t > chased &&
+    // The last few go to any gunfire they hear: the end is a fight, not a search.
+    // Footsteps turn my head; only the last few walk after them.
+    (pace.hunt || (!heard.steps && heard.far < p!.chase * pace.chase * (state.players[heard.from]?.bot === false ? 1.4 : 1)));
 
   /** A heal worth starting now: a med kit or bandage that would actually help (coffee is not a heal). */
   const canHeal = (me: Player) => {
@@ -317,13 +360,17 @@ export const createBot = (id: number, seed: number) => {
 
     // Fight, fall back, patch up, or leave them be?
     engaged = false;
-    if (mode === 'retreat' && (ratio > 0.8 || now - retreatAt > 10)) {
+    poking = false;
+    if (mode === 'retreat' && (ratio > 0.65 || now - retreatAt > 6)) {
       mode = 'roam';
-      noRetreatUntil = now + 5;
+      noRetreatUntil = now + 6;
+      comebackUntil = now + COMEBACK;
     }
     if (mode === 'heal' && !me.using && (!canHeal(me) || me.hp >= me.maxHp * healTo)) {
+      // Patched up: straight back into it.
       mode = 'roam';
-      noRetreatUntil = now + 5;
+      noRetreatUntil = now + 6;
+      comebackUntil = now + COMEBACK;
     }
     // Broken off and out of their sight for a moment: now heal, with what I carry and at its own pace.
     if (mode === 'retreat' && !target && canHeal(me) && now - hitAt > 0.6 && now - lastSeen > 0.6) mode = 'heal';
@@ -344,10 +391,18 @@ export const createBot = (id: number, seed: number) => {
       if (mode !== 'retreat' && mode !== 'heal') {
         // Fresh off the parachute everyone grabs a gun first, unless someone starts it. A person gets a few seconds more
         // than a bot before anyone picks a fight with them: the first minute is where new players decide to stay.
-        const landing = now - landedAt < (target.bot ? LANDING_GRACE.bot : LANDING_GRACE.human) && !hurtRecently;
-        const score = engageScore(p!, me, target, td, { stage: pace.aggro, hurtRecently, landing });
+        const landing = now - landedAt < (target.bot ? botGrace : LANDING_GRACE.human) && !hurtRecently;
+        const score = engageScore(p!, me, target, td, { stage: target.bot ? pace.aggro : pace.aggro - pace.crowd, hurtRecently, landing });
+        // Shots from range are not held back by the crowd: trading from afar is how a busy field fights without emptying.
+        const far = td >= POKE_FROM ? engageScore(p!, me, target, td, { stage: pace.aggro - pace.crowd, hurtRecently, landing }) : -Infinity;
         const ambush = p!.name === 'camper' && armed && !landing && td < FIRE_RANGE[me.weapon] * 0.7;
-        engaged = score >= ENGAGE_AT || ambush;
+        // Not worth a push, but not right on top of me either: get within my gun's range and take shots from there (a
+        // poke), which starts a trade without a rush.
+        // Face to face nobody walks on by: anyone armed and not badly hurt fights whoever it meets this close.
+        const faceOff = armed && !landing && td < FACE_OFF && (me.hp + me.armor) / me.maxHp >= LOW_HP;
+        poking = !(score >= ENGAGE_AT || ambush || faceOff) && armed && far >= ENGAGE_AT - POKE;
+        engaged = score >= ENGAGE_AT || ambush || faceOff || poking;
+        if (engaged) foughtId = target.id;
         if (!engaged) mode = 'roam';
         else {
           // Fight from cover when that suits me and there is some (and they are not already on top of me).
@@ -363,7 +418,27 @@ export const createBot = (id: number, seed: number) => {
       if (mode !== 'pressure') post = null;
     }
     if (mode === 'roam') {
-      loot = bestLoot(state, me, p!, target);
+      // Armed and hearing a fight I would go to, or going back for someone: that comes before shopping.
+      const hunting = armed && (chaseable(state, now, pace) || (now < comebackUntil && now - lastSeen < COMEBACK));
+      const was = loot;
+      // The last few only pick up what is at their feet: the end is a fight, not a shopping trip.
+      const skip = (k: Loot) => (skipLoot.get(k.id) ?? -1) > now || (pace.hunt && armed && Math.hypot(k.x - me.x, k.y - me.y) > 8);
+      loot = hunting ? null : bestLoot(state, me, p!, target, skip);
+      // Something else lying on top of it is under my feet: take that if I want it, else this one is not for me.
+      const under = loot && Math.hypot(loot.x - me.x, loot.y - me.y) < 1.2 ? lootUnder(state, me) : null;
+      if (loot && under && under.id !== loot.id) {
+        if (lootValue(under, me) > 0) loot = under;
+        else {
+          skipLoot.set(loot.id, now + 20);
+          loot = null;
+        }
+      }
+      if (loot && loot.id !== was?.id) lootSince = now;
+      // Could not get to it in all this time (a wall, a stack): leave it for a while.
+      if (loot && now - lootSince > 8) {
+        skipLoot.set(loot.id, now + 20);
+        loot = null;
+      }
       if (loot) mode = 'loot';
     }
 
@@ -402,11 +477,11 @@ export const createBot = (id: number, seed: number) => {
         // The look starts once I am out there.
         if (Math.hypot(me.x - post.peek.x, me.y - post.peek.y) > 0.4) peekUntil = Math.max(peekUntil, now + 0.5);
         // Done looking, or hit while out there: back behind it (the bold stay out to trade).
-        const flinch = hitAt > ducked && underFire && rand() > p!.confidence * 0.6;
+        const flinch = hitAt > ducked && underFire && rand() > 0.3 + p!.confidence * 0.6;
         if (now > peekUntil || flinch) {
           ducked = now;
           peek = 'hide';
-          peekUntil = now + between(0.6, 1.6);
+          peekUntil = now + between(0.3, 0.8);
           peeks += 1;
         }
       } else {
@@ -416,18 +491,22 @@ export const createBot = (id: number, seed: number) => {
           if (armed && me.reload <= 0 && me.ammo > 0 && me.mag < magOf(me.weapon, me.rarity) * 0.7) out.reload = true;
           if (now > peekUntil && me.reload <= 0) {
             peek = 'peek';
-            peekUntil = now + between(0.9, 1.9);
+            peekUntil = now + between(1.4, 2.6);
           }
         } else peekUntil = Math.max(peekUntil, now + 0.3);
       }
       // Moved on after a few looks, or they have gone quiet: find another angle, or go and find them.
       if (peeks >= peekMax || now - lastSeen > 4) {
-        const fresh = now - lastSeen < 4 && p!.confidence < 0.6 ? fightCover(state, me, threat.x, threat.y, post) : null;
+        // Mostly they leave the cover and push; only the unsure look for another angle.
+        const fresh = now - lastSeen < 4 && p!.confidence < 0.45 ? fightCover(state, me, threat.x, threat.y, post) : null;
         post = fresh;
         peeks = 0;
-        peekMax = 2 + Math.floor(rand() * 2);
+        peekMax = 1 + Math.floor(rand() * 2);
         peek = 'hide';
-        if (!fresh) mode = 'roam';
+        if (!fresh) {
+          mode = 'roam';
+          wantsCover = false;
+        }
       }
     } else if (mode === 'engage' && target) {
       if (now > strafeUntil) {
@@ -436,9 +515,12 @@ export const createBot = (id: number, seed: number) => {
         strafe = rand() < 0.5 ? 1 : -1;
         strafeUntil = now + (planted ? between(0.3, 0.6) : p!.strafeT * between(0.7, 1.4));
       }
+      // Close to my gun's best range and keep shooting while I sidestep; a reloading enemy gets rushed.
       const pref = PREFERRED[me.weapon] * (p!.name === 'rusher' ? 0.75 : 1);
-      const push = p!.name === 'tactical' && target.reload > 0;
-      const away = push ? 1 : td < pref * 0.7 ? -1 : td > pref * 1.2 && p!.name !== 'camper' ? 1 : 0;
+      const push = target.reload > 0 && p!.name !== 'camper';
+      const outOfRange = td > FIRE_RANGE[me.weapon] * 0.9;
+      // A poke closes to my gun's range, then holds there.
+      const away = poking ? (outOfRange ? 1 : td < pref * 0.6 ? -1 : 0) : push || outOfRange ? 1 : td < pref * 0.6 ? -1 : td > pref * 1.1 && p!.name !== 'camper' ? 1 : 0;
       const side = planted ? 0 : p!.strafeW;
       const ax = (target.x - me.x) / td;
       const ay = (target.y - me.y) / td;
@@ -594,7 +676,8 @@ export const createBot = (id: number, seed: number) => {
   const aimAndFire = (state: GameState, me: Player, now: number, out: Input) => {
     out.fire = false;
     if (!target || !target.alive) return out;
-    const shootBack = (mode === 'retreat' || (mode === 'heal' && !me.using)) && now - hitAt < 1 && td < 10;
+    // Falling back is not running blind: it keeps shooting at whoever is on it while it makes for cover.
+    const shootBack = (mode === 'retreat' || (mode === 'heal' && !me.using)) && (now - hitAt < 3 || td < 12);
     if ((!engaged && !shootBack) || me.swapping > 0) return out;
     if (!botCanSee(state, me, target)) {
       // Gone behind something: keep the gun on where they were.
@@ -666,7 +749,10 @@ export const createBot = (id: number, seed: number) => {
     }
     if (detour > 0) detour -= 1;
     const thinking = (tick + id) % 8 === 0;
-    if (thinking) plan = think(state, me, now);
+    if (thinking) {
+      listenSteps(state, me, now);
+      plan = think(state, me, now);
+    }
     else if (target && !target.alive) target = null;
     // One-shot buttons: press on one tick only.
     const out = { ...plan };

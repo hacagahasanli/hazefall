@@ -57,19 +57,19 @@ export interface Persona {
 }
 
 const BASE: Record<PersonaName, Omit<Persona, 'name'>> = {
-  rusher: { react: 0.32, aim0: 12, aimMin: 3.5, decay: 0.6, fov: 150, aggro: 0.8, back: 0.25, loot: 0.6, hot: 0.8, chase: 45, confidence: 0.85, eyes: 0.95, mistake: 0.14, strafeW: 2.4, strafeT: 0.8, dodge: 0.3 },
-  camper: { react: 0.45, aim0: 9, aimMin: 2.5, decay: 0.8, fov: 120, aggro: 0.3, back: 0.45, loot: 1.0, hot: 0.2, chase: 0, confidence: 0.35, eyes: 1.15, mistake: 0.07, strafeW: 0.8, strafeT: 1.4, dodge: 0.1 },
-  looter: { react: 0.55, aim0: 14, aimMin: 4, decay: 1, fov: 130, aggro: 0.4, back: 0.55, loot: 1.4, hot: 0.1, chase: 0, confidence: 0.4, eyes: 0.85, mistake: 0.16, strafeW: 1.6, strafeT: 1.1, dodge: 0.15 },
-  tactical: { react: 0.3, aim0: 10, aimMin: 2.5, decay: 0.5, fov: 150, aggro: 0.6, back: 0.35, loot: 0.9, hot: 0.5, chase: 35, confidence: 0.55, eyes: 1.1, mistake: 0.05, strafeW: 2, strafeT: 1, dodge: 0.25 },
+  rusher: { react: 0.24, aim0: 10, aimMin: 3, decay: 0.5, fov: 160, aggro: 1.05, back: 0.16, loot: 0.5, hot: 0.8, chase: 60, confidence: 0.75, eyes: 1.0, mistake: 0.12, strafeW: 2.6, strafeT: 0.75, dodge: 0.3 },
+  camper: { react: 0.32, aim0: 8, aimMin: 2.2, decay: 0.7, fov: 130, aggro: 0.6, back: 0.3, loot: 0.9, hot: 0.3, chase: 25, confidence: 0.45, eyes: 1.15, mistake: 0.07, strafeW: 1.0, strafeT: 1.2, dodge: 0.12 },
+  looter: { react: 0.38, aim0: 12, aimMin: 3.4, decay: 0.8, fov: 140, aggro: 0.7, back: 0.3, loot: 1.1, hot: 0.2, chase: 35, confidence: 0.5, eyes: 0.95, mistake: 0.14, strafeW: 1.8, strafeT: 1, dodge: 0.18 },
+  tactical: { react: 0.22, aim0: 9, aimMin: 2.2, decay: 0.45, fov: 160, aggro: 0.9, back: 0.22, loot: 0.8, hot: 0.5, chase: 55, confidence: 0.65, eyes: 1.1, mistake: 0.05, strafeW: 2.2, strafeT: 0.9, dodge: 0.25 },
 };
 
 /**
- * The bots' personalities, nine at a time (three rushers, three looters, two campers and one tactical player), repeated
- * for more bots (nineteen: seven looters, six rushers, four campers, two tactical) and shuffled per match. The first three
- * take the spots near the middle of the route, the player's likely neighbours, so they are the ones who loot before they
- * fight.
+ * The bots' personalities, nine at a time (four rushers, two tactical players, two looters and one camper), repeated for
+ * more bots (nineteen: eight rushers, four tactical, five looters, two campers) and shuffled per match: mostly fighters,
+ * still a few who gear up or sit and wait. The first three take the spots near the middle of the route, the player's
+ * likely neighbours: a looter, a rusher and a tactical player, so a person meets a fight soon after landing.
  */
-const ROSTER: PersonaName[] = ['looter', 'camper', 'looter', 'rusher', 'tactical', 'rusher', 'camper', 'rusher', 'looter'];
+const ROSTER: PersonaName[] = ['looter', 'rusher', 'tactical', 'rusher', 'camper', 'rusher', 'tactical', 'rusher', 'looter'];
 
 /** A personality with +-15% per-bot jitter (+-30% for how sure of itself and how slip-prone it is), so two rushers differ. */
 export const makePersona = (name: PersonaName, rand: () => number): Persona => {
@@ -160,15 +160,18 @@ export const lootValue = (k: Pick<Loot, 'kind' | 'ammo'> & { tier?: number }, me
   return have === 0 ? 0.35 : 0;
 };
 
-/** The loot most worth walking to (none near the enemy I can see); the search shrinks after the first circle. */
-export const bestLoot = (state: GameState, me: Player, p: Persona, enemy: Player | null) => {
+/**
+ * The loot most worth walking to (none near the enemy I can see, none I have given up on: `skip`); the search shrinks
+ * after the first circle.
+ */
+export const bestLoot = (state: GameState, me: Player, p: Persona, enemy: Player | null, skip: (k: Loot) => boolean = () => false) => {
   const reach = (state.zone.phase === 0 || tierOf(me) === 0 ? 30 : 14) * p.loot;
   // After the first circle a bot wants a better reason to walk off.
   let best = state.zone.phase === 0 ? 0.15 : 0.25;
   let pick: Loot | null = null;
   for (const k of state.loot) {
     const d = Math.hypot(k.x - me.x, k.y - me.y);
-    if (!k.active || d > reach || (enemy && Math.hypot(k.x - enemy.x, k.y - enemy.y) < 8)) continue;
+    if (!k.active || d > reach || (enemy && Math.hypot(k.x - enemy.x, k.y - enemy.y) < 8) || skip(k)) continue;
     const v = lootValue(k, me);
     // Late on, only a real upgrade is worth the walk; after the first circle, supplies only close by.
     if (state.zone.phase >= 3 && v < 1) continue;
@@ -198,21 +201,28 @@ export const AIM_PENALTY = { moving: 0.2, underFire: 1.2, range: 0.3 };
 
 // ---------- perception
 
-/** How far a bot can make someone out at all (m), and the distance inside which it notices anyone, whichever way it faces. */
-export const VIEW = 26;
+/**
+ * How far a bot can make someone out at all (m), the distance inside which it notices anyone, whichever way it faces, and
+ * how far out it spots someone in the open quickly (beyond that it takes a long look).
+ */
+export const VIEW = 38;
 export const NEAR = 6;
+export const QUICK = 30;
 
 /**
- * Seconds of looking before a bot notices someone it has a clear line to: quick up close, slow far out; sooner when the
- * other one moves or shoots, later at the edge of its view, in the dark, or half hidden in a bush. A bot that has just
- * been shot at is on edge and quicker. Pure, so tests can check each factor.
+ * Seconds of looking before a bot notices someone it has a clear line to: a fifth of a second or so out to `QUICK` (30 m)
+ * in the open, then slow far out; sooner when the other one moves or shoots, later at the edge of its view, in the dark
+ * (indoors), or half hidden in a bush. Never instant: even up close it takes more than one look (a think, 8 ticks) unless
+ * the other one moves or shoots. A bot that has just been shot at is on edge and quicker. Pure, so tests can check each
+ * factor.
  */
 export const spotTime = (
   p: Persona,
   c: { d: number; edge: number; moving: boolean; firing: boolean; light: number; plant: boolean; alert: boolean },
 ) => {
-  const k = Math.min(1, c.d / VIEW);
-  let t = 0.06 + 0.9 * k * k;
+  const k = Math.min(1, c.d / QUICK);
+  const far = Math.max(0, Math.min(c.d, VIEW) - QUICK) / (VIEW - QUICK);
+  let t = 0.18 + 0.22 * k * k + 1.4 * far;
   if (c.moving) t *= 0.6;
   if (c.firing) t *= 0.3;
   if (c.plant) t *= 2;
@@ -242,32 +252,40 @@ export const lightAt = (x: number, y: number) => (INDOORS.some((b) => x > b.x0 &
 
 /**
  * Pace by stage: how much readier to fight every bot is (added to the fight score), how far it walks towards gunfire
- * (x its own chase distance) and how much sooner it breaks off when hurt, by Deadline phase. Early on bots gear up and
- * leave distant fights alone, so the first circle is not a chain of third parties; from the fourth phase they press.
- * It changes how often fights start and how often they end in a KO, never aim or reaction.
+ * (x its own chase distance) and how much sooner it breaks off when hurt, by Deadline phase. Bots fight from the start
+ * (a quiet first circle is boring) and press harder from the fourth phase. It changes how often fights start and how
+ * often they end in a KO, never aim or reaction.
  */
-export const STAGE_AGGRO = [-0.35, -0.25, -0.1, 0.1, 0.3, 0.3];
-export const STAGE_CHASE = [0.55, 0.8, 1, 1, 1, 1];
-/** Added to the personality's retreat threshold: early on a hurt bot breaks off sooner and heals instead of trading to the death. */
-export const STAGE_BACK = [0.3, 0.15, 0.05, 0, 0, 0];
+export const STAGE_AGGRO = [-0.6, -0.35, 0, 0.2, 0.35, 0.35];
+export const STAGE_CHASE = [0.7, 0.9, 1, 1, 1, 1];
+/** Added to the personality's retreat threshold: early on a hurt bot breaks off a little sooner and heals instead of trading to the death. */
+export const STAGE_BACK = [0.15, 0.1, 0.05, 0, 0, 0];
 /** With this many or fewer alive, everyone hunts: full aggression and chase, and roaming heads for the middle of the circle. */
 export const HUNT_ALIVE = 4;
-/** Seconds after landing before a bot picks a fight: with another bot, and with a person. */
-export const LANDING_GRACE = { bot: 40, human: 44 };
 /**
- * A crowd holds back: with more than `from` alive, every bot is less ready to fight, walks less far towards gunfire and
- * breaks off sooner, by up to these amounts with a full match (PLAYERS alive), easing off as the field thins (never a
+ * Seconds after landing before a bot picks a fight: with another bot (x its personality's share, `GRACE_BY_PERSONA`, so
+ * the field does not all start at once and empty in a minute), and with a person, sooner: the player is who the match is
+ * for, and a quiet first minute is what makes it boring. Long enough to grab the gun by the door.
+ */
+export const LANDING_GRACE = { bot: 32, human: 18 };
+export const GRACE_BY_PERSONA: Record<PersonaName, number> = { rusher: 0.6, tactical: 0.8, camper: 1, looter: 1.1 };
+/**
+ * A crowd holds back: with more than `from` alive, every bot is less ready to fight another bot (never a person), walks
+ * less far towards gunfire and breaks off sooner, by up to these amounts with a full match (PLAYERS alive), easing off as the field thins (never a
  * switch, which turns into a bloodbath the moment it flips). Twenty fighters on this map meet each other twice as often
  * as ten, so without it a quarter of them are gone a minute in.
  */
-export const CROWD = { from: 8, aggro: -0.3, chase: 0.6, back: 0.2 };
+export const CROWD = { from: 5, aggro: -0.72, chase: 0.5, back: 0.1 };
 export const stagePace = (phase: number, alive: number) => {
   const k = Math.min(phase, STAGE_AGGRO.length - 1);
-  if (alive <= HUNT_ALIVE) return { aggro: 0.3, chase: 1, back: 0, hunt: true };
+  if (alive <= HUNT_ALIVE) return { aggro: 0.3, crowd: 0, chase: 1, back: 0, hunt: true };
   const c = Math.min(1, Math.max(0, (alive - CROWD.from) / Math.max(1, PLAYERS - CROWD.from)));
   return {
     aggro: STAGE_AGGRO[k] + CROWD.aggro * c,
-    chase: STAGE_CHASE[k] * (1 - (1 - CROWD.chase) * c),
+    /** The crowd's share of `aggro`: it holds bots back from each other, not from a person. */
+    crowd: CROWD.aggro * c,
+    // A thinned-out field (eight or fewer) goes to every fight it hears within its range, whatever the stage.
+    chase: alive <= 8 ? 1 : STAGE_CHASE[k] * (1 - (1 - CROWD.chase) * c),
     back: STAGE_BACK[k] + CROWD.back * c,
     hunt: false,
   };
@@ -289,19 +307,23 @@ export const engageScore = (
   const low = (me.hp + me.armor) / me.maxHp < LOW_HP && !why.hurtRecently;
   return (
     p.aggro +
-    (low ? -0.35 : 0) +
-    (why.landing ? -0.6 : 0) +
+    (low ? -2 : 0) +
+    (why.landing ? -1 : 0) +
     why.stage +
-    (why.hurtRecently ? 0.6 : 0) +
-    (d < 10 ? 0.4 : 0) +
+    // Shot at up close: fight back hard; shot at from afar: shoot back, not necessarily charge.
+    (why.hurtRecently ? (d < 14 ? 0.6 : 0.2) : 0) +
+    (d < 10 ? 0.4 : d < 22 ? 0.1 : 0) +
+    (enemy.bot ? 0 : HUNT_HUMAN) +
     (weak ? 0.3 : 0) +
     (busy ? 0.3 : 0) +
     (armed || d < 3 ? 0 : -2)
   );
 };
 export const ENGAGE_AT = 0.85;
+/** How much readier a bot is to fight a person than another bot: never ignore the player. */
+export const HUNT_HUMAN = 0.3;
 /** Below this share of health plus armor a bot would rather patch up than start something. */
-export const LOW_HP = 0.45;
+export const LOW_HP = 0.35;
 
 // ---------- landing spots
 
@@ -319,7 +341,7 @@ export const LAST_JUMP = DROP.forceJump - 0.03;
 const REACH = 68;
 
 /** How far from the middle of the route the player's two or three neighbours land (m): far enough to loot in peace first. */
-export const NEAR_BAND = { min: 32, max: 62 };
+export const NEAR_BAND = { min: 24, max: 50 };
 
 export interface Landing {
   x: number;
