@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "npm run build:web",
+  "outputDirectory": "dist/web",
+  "redirects": [
+    { "source": "/play/:path+", "destination": "/play", "permanent": false },
+    { "source": "/play/", "destination": "/play", "permanent": false }
+  ],
+  "rewrites": [
+    { "source": "/play", "destination": "/index.html" },
+    { "source": "/((?!assets/).*)", "destination": "/index.html" }
+  ]
+}
