@@ -471,6 +471,16 @@ export const createSfx = () => {
         noise('bandpass', 1500 + Math.random() * 2500, 600, 0.04, 0.2, 4, { delay: 0.08 + Math.random() * 0.4, room: 0.6, pan: pan + (Math.random() - 0.5) * 0.4 });
       }
     },
+    /** The slow-field canister bursting: a short low thump, a glassy crack and a falling shimmer, as time drags. */
+    slowBurst: (x?: number) => {
+      if (!may('explosion')) return;
+      const pan = panOf(x);
+      duck(-6, 0.5);
+      tone('sine', 110, 40, 0.45, 0.7, { room: 0.6, pan });
+      noise('highpass', 5000, 2500, 0.06, 0.4, 1, { pan });
+      tone('triangle', 1400, 260, 0.9, 0.16, { room: 0.9, pan });
+      tone('sine', 900, 180, 1.1, 0.1, { delay: 0.05, room: 0.9, pan });
+    },
     impact: (x?: number) => noise('bandpass', 4500, 2500, 0.03, 0.12, 3, { room: 0.4, pan: panOf(x) }),
     land: (x?: number) => {
       tone('sine', 90, 50, 0.08, 0.35, { room: 0.2, pan: panOf(x) });

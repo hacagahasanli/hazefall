@@ -31,6 +31,8 @@ const COLORS = {
   dirt: 0x6a4a30,
   leaf: PALETTE.green,
   foam: 0xf4f6fa,
+  /** The slow field's blue (the canister's trail, its burst, slowed fighters). */
+  slow: 0x6fe3ff,
 } as const;
 
 export type ParticleColor = keyof typeof COLORS;

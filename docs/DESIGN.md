@@ -58,7 +58,7 @@ and the same movement. They differ in how they fight.
 |---|---|---|---|---|
 | **Hotfix** (on-call engineer) | 3200 | fast | **Patch burst**: 3 quick shots, mid range | **Deploy**: a fast dash that damages everyone it passes through |
 | **Legacy** (senior maintainer) | 4800 | slow | **Monolith**: wide close-range spread | **Deprecated**: drops a wall segment that blocks bullets for 6 s |
-| **Standup** (scrum lead) | 2600 | normal | **Ping**: one long-range precise shot | **Timebox**: a field that slows enemies inside it for 4 s |
+| **Standup** (scrum lead) | 2600 | normal | **Ping**: one long-range precise shot | **Timebox**: a canister thrown on an arc (up to 15 m) that bursts for up to 32 damage and leaves a field that slows enemies inside it for 4 s |
 | **Intern** (first week) | 3000 | normal | **Lob**: a bomb arcing over walls | **Force push to main**: a big blast around them that knocks enemies back |
 
 ## Items

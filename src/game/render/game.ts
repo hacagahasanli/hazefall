@@ -7,7 +7,7 @@ import { actionFor, DEFAULT_SETTINGS, keyLabel, keyMap } from '../settings';
 import type { VolumeKind } from '../sfx';
 import type { Action, Settings } from '../settings';
 import { ARMOR, HEALS, VEST, ROLL, HOP, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITEMS, MAP, PLAYERS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
-import { canSee, carryCap, healChoice, inPlant, inWater, lineOfSight, lootUnder, reloadTime, solidAt, throwDistance } from '../sim/step';
+import { canSee, carryCap, healChoice, inPlant, inWater, lineOfSight, lootUnder, reloadTime, solidAt, superThrowTarget, throwDistance } from '../sim/step';
 import { createOfflineSession } from '../net/session';
 import { NO_INPUT } from '../sim/types';
 
@@ -633,6 +633,21 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     scene.add(m);
     return m;
   });
+  /** The slow-field canister in flight: a dark steel can with a glowing blue band and caps, tumbling end over end. */
+  const canisters = Array.from({ length: 4 }, () => {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.5, 14), mat(0x2b3045));
+    const glow = new THREE.MeshBasicMaterial({ color: 0x6fe3ff });
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.12, 14), glow);
+    const capA = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.06, 12), glow);
+    capA.position.y = 0.28;
+    const capB = capA.clone();
+    capB.position.y = -0.28;
+    g.add(body, band, capA, capB);
+    g.visible = false;
+    scene.add(g);
+    return g;
+  });
   /**
    * A rocket you can see coming: an olive body with a red nose and four fins, a flickering
    * flame out of the back, and a trail of smoke behind it. Built along +z.
@@ -674,12 +689,37 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     scene.add(m);
     return m;
   });
+  /** The slow field: a pale blue floor, a glassy dome over it and a bright edge that pulses; it fades out at the end. */
   const fields = Array.from({ length: PLAYERS }, () => {
-    const m = new THREE.Mesh(new THREE.CircleGeometry(1, 40), new THREE.MeshBasicMaterial({ color: 0x3ec5ff, transparent: true, opacity: 0.22, depthWrite: false }));
-    m.rotation.x = -Math.PI / 2;
-    m.visible = false;
-    scene.add(m);
-    return m;
+    const g = new THREE.Group();
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x3ec5ff, transparent: true, opacity: 0.26, depthWrite: false }));
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0x8fe9ff, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }),
+    );
+    dome.scale.y = 0.55;
+    const edge = new THREE.Mesh(new THREE.RingGeometry(0.95, 1, 56).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xbff4ff, transparent: true, opacity: 0.7, depthWrite: false }));
+    edge.position.y = 0.02;
+    g.add(floor, dome, edge);
+    g.userData = { floor, dome, edge };
+    g.visible = false;
+    scene.add(g);
+    return g;
+  });
+  /** A slowed fighter: a cold blue shell round the body and a ring at the feet (one per fighter, pooled). */
+  const slowShells = Array.from({ length: PLAYERS }, () => {
+    const g = new THREE.Group();
+    const shell = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.5, 0.42, 1.9, 16, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0x6fe3ff, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }),
+    );
+    shell.position.y = 0.95;
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.7, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xbff4ff, transparent: true, opacity: 0.6, depthWrite: false }));
+    ring.position.y = 0.04;
+    g.add(shell, ring);
+    g.visible = false;
+    scene.add(g);
+    return g;
   });
 
   // ---------- throw preview: while you hold a rocket or a bomb, a dotted arc and a red landing
@@ -699,20 +739,54 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     m.renderOrder = 10;
   }
   scene.add(landRing, landDisc);
+  // The slow-field canister's landing (hold G): a light blue arc, the burst's ring and the field's faint edge.
+  const fieldEdge = new THREE.Mesh(new THREE.RingGeometry(0.96, 1, 56).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x6fe3ff, transparent: true, opacity: 0.45, depthWrite: false, depthTest: false }));
+  fieldEdge.renderOrder = 10;
+  fieldEdge.visible = false;
+  scene.add(fieldEdge);
+  const BOMB_ARC = 0xff5a3d;
+  const BOMB_RING = 0xff3d3d;
+  const SLOW_ARC = 0x8fe9ff;
+  const tint = (bomb: boolean) => {
+    arcDots.forEach((d) => (d.material as THREE.MeshBasicMaterial).color.setHex(bomb ? BOMB_ARC : SLOW_ARC));
+    (landRing.material as THREE.MeshBasicMaterial).color.setHex(bomb ? BOMB_RING : SLOW_ARC);
+    (landDisc.material as THREE.MeshBasicMaterial).color.setHex(bomb ? BOMB_RING : SLOW_ARC);
+    arcDots.forEach((d) => ((d.material as THREE.MeshBasicMaterial).opacity = bomb ? 0.85 : 0.55));
+  };
   const updateThrowPreview = (self: Player, x: number, y: number) => {
-    // Only a bomb gets the landing circle: rockets fly straight where you aim, like a gun.
-    const on = self.alive && self.stage === 'ground' && self.charging === 'bomb';
+    // Only a bomb and the slow-field canister get the landing circle: rockets fly straight where you aim, like a gun.
+    const ground = self.alive && self.stage === 'ground';
+    const bomb = ground && self.charging === 'bomb';
+    const slow = ground && self.charging === 'super';
+    const on = bomb || slow;
     landRing.visible = landDisc.visible = on;
+    fieldEdge.visible = slow;
     arcDots.forEach((d) => (d.visible = on));
     if (!on) return;
-    const range = ITEMS.bomb.range;
-    const radius = ITEMS.bomb.radius;
-    // With the mouse the bomb lands under the cursor (up to its range); otherwise hold to throw farther.
-    const toCursor = lastThrowAim ? Math.hypot(lastThrowAim.x - self.x, lastThrowAim.y - self.y) : 0;
-    const d = lastThrowAim ? Math.min(range, toCursor) : throwDistance(self.charge, range);
-    const a = lastThrowAim && toCursor > 0.3 ? Math.atan2(lastThrowAim.y - self.y, lastThrowAim.x - self.x) : self.heading;
-    const tx = x + Math.cos(a) * d;
-    const ty = y + Math.sin(a) * d;
+    tint(bomb);
+    let tx: number;
+    let ty: number;
+    let radius: number;
+    if (slow) {
+      // Where the sim will put it: the aim point, 2 to 15 m out.
+      const at = superThrowTarget({ x, y, heading: self.heading }, lastAim.x - self.x + x, lastAim.y - self.y + y);
+      tx = at.x;
+      ty = at.y;
+      radius = SUPERS.timebox.burst;
+    } else {
+      const range = ITEMS.bomb.range;
+      radius = ITEMS.bomb.radius;
+      // With the mouse the bomb lands under the cursor (up to its range); otherwise hold to throw farther.
+      const toCursor = lastThrowAim ? Math.hypot(lastThrowAim.x - self.x, lastThrowAim.y - self.y) : 0;
+      const d = lastThrowAim ? Math.min(range, toCursor) : throwDistance(self.charge, range);
+      const a = lastThrowAim && toCursor > 0.3 ? Math.atan2(lastThrowAim.y - self.y, lastThrowAim.x - self.x) : self.heading;
+      tx = x + Math.cos(a) * d;
+      ty = y + Math.sin(a) * d;
+    }
+    if (slow) {
+      fieldEdge.position.set(tx, 0.06, ty);
+      fieldEdge.scale.setScalar(SUPERS.timebox.radius);
+    }
     // The same arc the projectile flies (see the lob drawing below).
     arcDots.forEach((dot, k) => {
       const t = (k + 1) / (arcDots.length + 1);
@@ -741,6 +815,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   let rightDown = false;
   /** Mouse aim with a bomb: where it will land (null when throwing by holding). */
   let lastThrowAim: { x: number; y: number } | null = null;
+  /** The aim point of the last input read (the slow-field canister's landing preview follows it). */
+  const lastAim = { x: 0, y: 0 };
   const onMouseMove = (e: MouseEvent) => {
     const r = canvas.getBoundingClientRect();
     mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
@@ -1064,6 +1140,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         aimY: shoulder ? crossAim.y : p.y + sn * 30,
       };
       lastThrowAim = null;
+      lastAim.x = input.aimX;
+      lastAim.y = input.aimY;
       touchLatched.clear();
       tapped.clear();
       return input;
@@ -1101,6 +1179,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       aimY: aim.y,
     };
     lastThrowAim = pointed ? { x: pointed.x, y: pointed.y } : null;
+    lastAim.x = input.aimX;
+    lastAim.y = input.aimY;
     touchLatched.clear();
     tapped.clear();
     return input;
@@ -1214,11 +1294,27 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         if (Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y) < 20) trauma = Math.min(1, trauma + 0.5);
         sfx.explosion(e.x - camX());
         break;
+      case 'slowBurst': {
+        // The canister bursts: a blue shockwave the size of the burst, a ring out to the field's edge, frost flying.
+        vfx.ring(e.x, 0.25, 0x6fe3ff, { grow: e.burst * 2.2, life: 0.35, z: e.y, flat: true });
+        vfx.ring(e.x, 0.15, 0xbff4ff, { grow: e.radius * 2.1, life: 0.6, z: e.y, flat: true });
+        vfx.burst(e.x, 0.8, 26, 'slow', { z: e.y, speed: 6, up: 3, life: 0.55, size: 1.3 });
+        vfx.burst(e.x, 0.6, 10, 'glass', { z: e.y, speed: 3, up: 2, gravity: 4, life: 0.5, size: 1 });
+        if (Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y) < 14) trauma = Math.min(1, trauma + 0.25);
+        sfx.slowBurst(e.x - camX());
+        break;
+      }
       case 'rackBroken':
         vfx.burst(e.x, 1, 20, 'spark', { z: e.y,  speed: 5, up: 3, life: 0.5 });
         sfx.glass(e.x - camX());
         break;
       case 'super':
+        if (e.fighter === 'standup') {
+          // The canister leaves the hand: a whoosh and a small blue flick; the burst comes when it lands.
+          vfx.ring(e.x, 1.2, 0x6fe3ff, { grow: 2, life: 0.25, z: e.y, flat: true });
+          sfx.dash(e.x - camX());
+          break;
+        }
         vfx.ring(e.x, 0.2, 0xffd23f, { grow: 8, life: 0.4, z: e.y, flat: true });
         sfx.push(e.x - camX());
         break;
@@ -1960,6 +2056,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // Projectiles.
     let t = 0;
     let lb = 0;
+    let cn = 0;
     let rk = 0;
     smokeClock += dt;
     const smokeTick = smokeClock > 0.035;
@@ -1995,6 +2092,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           tmpV.set(0, 0, -0.75).applyQuaternion(m.quaternion).add(m.position);
           vfx.burst(tmpV.x, tmpV.y, 2, 'dust', { z: tmpV.z, speed: 0.4, up: 0.6, gravity: -0.5, life: 0.9, size: 1.1 });
         }
+      } else if (pr.field) {
+        // The slow-field canister: the same arc as a bomb, tumbling, a thin blue trail behind it.
+        const m = canisters[cn++];
+        if (!m) continue;
+        m.visible = true;
+        const hgt = 1 + 4 * pr.t * (1 - pr.t) * 5;
+        m.position.set(pr.x, hgt, pr.y);
+        m.rotation.set(time * 9, Math.atan2(pr.tx - pr.sx, pr.ty - pr.sy), 0, 'YXZ');
+        if (smokeTick) vfx.burst(pr.x, hgt, 1, 'slow', { z: pr.y, speed: 0.3, up: 0.2, gravity: 0, life: 0.45, size: 0.8 });
       } else {
         const m = lobs[lb++];
         if (!m) continue;
@@ -2002,6 +2108,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         m.position.set(pr.x, 1 + 4 * pr.t * (1 - pr.t) * 5, pr.y);
       }
     }
+    for (; cn < canisters.length; cn++) canisters[cn].visible = false;
     for (; rk < rocketMeshes.length; rk++) rocketMeshes[rk].visible = false;
     for (; t < tracers.length; t++) tracers[t].visible = false;
     for (const c of contrails) {
@@ -2026,7 +2133,23 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       if (f) {
         m.position.set(f.x, 0.05, f.y);
         m.scale.setScalar(f.r);
+        // In over the first 0.2 s, out over the last 0.6 s; the edge breathes.
+        const k = Math.min(1, (SUPERS.timebox.life - f.life) / 0.2, f.life / 0.6);
+        const u = m.userData as { floor: THREE.Mesh; dome: THREE.Mesh; edge: THREE.Mesh };
+        (u.floor.material as THREE.MeshBasicMaterial).opacity = 0.26 * k;
+        (u.dome.material as THREE.MeshBasicMaterial).opacity = 0.2 * k;
+        (u.edge.material as THREE.MeshBasicMaterial).opacity = (0.55 + Math.sin(time * 6) * 0.2) * k;
       }
+    });
+    // Slowed fighters (inside an enemy's field) wear the cold blue shell, with the odd fleck of frost.
+    slowShells.forEach((g, i) => {
+      const p = state.players[i];
+      const on = !!p && p.alive && p.stage === 'ground' && p.slowed > 0 && rigs[i].root.visible;
+      g.visible = on;
+      if (!on) return;
+      g.position.copy(rigs[i].root.position);
+      g.rotation.y = time * 1.5;
+      if (smokeTick && Math.random() < 0.3) vfx.burst(g.position.x, 0.4 + Math.random() * 1.4, 1, 'slow', { z: g.position.z, speed: 0.4, up: 0.3, gravity: 0.5, life: 0.5, size: 0.7 });
     });
 
     // The Deadline.
@@ -2381,6 +2504,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           ? 'Swimming · no shooting in the water'
         : self.using
           ? `${HEAL_NAME[self.using]}… · shoot or roll to stop`
+        : self.charging === 'super'
+          ? `Aim where it lands · let go of ${touch ? 'SUPER' : keyLabel(settings.keys.super)} to throw`
         : self.charging
             ? lastThrowAim ? `Point where it lands · let go of ${keyLabel(settings.keys.use)} to throw` : 'Hold to throw farther · let go to throw'
             : self.weapon === 'sniper' && self.mag + self.ammo > 0 && !scoped && !touch

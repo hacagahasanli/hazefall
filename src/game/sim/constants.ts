@@ -715,7 +715,12 @@ export const LEAN = { offset: 0.7, speed: 0.6, rate: 6 };
 export const SUPERS = {
   deploy: { distance: 8, time: 0.28, damage: 35 },
   deprecated: { length: 6, thickness: 1, ahead: 2.5, life: 7 },
-  timebox: { radius: 4, life: 4, reach: 12, slow: 0.45 },
+  /**
+   * A canister thrown on an arc (hold G to aim, let go to throw; bots throw at once): it lands at the aim point, up to
+   * `range` m away, bursts for `damage` at the centre (falling off to 30 % at `burst` m, never the thrower) and leaves a
+   * field of `radius` m for `life` s in which enemies move at `slow` of their speed.
+   */
+  timebox: { range: 15, burst: 3, damage: 32, radius: 4, life: 4, slow: 0.45 },
   push: { radius: 4.5, damage: 30, knockback: 4 },
 };
 

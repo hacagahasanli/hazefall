@@ -190,7 +190,7 @@ Falloff, spread, the roles each gun is tuned for and time-to-kill tables are in 
 - **Rockets and bombs** are lobbed: a `lob` projectile flies a fixed 0.35 s plus distance/22 along an arc to the aim point, then `explode` damages everyone in radius with linear falloff (`1 - 0.7 * d/radius`), halved for the thrower, and damages crates and racks.
 - **Armor** absorbs 60 % of each hit (`ARMOR.absorb`) until its 500 points are gone; the Deadline ignores armor.
 - **Regeneration**: 25 hp/s starting 6 s after the last combat.
-- **Supers**: charge grows with damage dealt (`damage / superCost`); Q fires it when full. Hotfix dashes (takes no damage from other players while dashing), Legacy places a wall, Standup a slow field, Intern a knock-back blast.
+- **Supers**: charge grows with damage dealt (`damage / superCost`); Q fires it when full. Hotfix dashes (takes no damage from other players while dashing), Legacy places a wall, Standup throws a slow-field canister (hold G to aim: a light blue arc and landing rings show where; let go to throw, up to 15 m; it bursts for up to 32 damage within 3 m, never the thrower, and leaves a 4 m field that slows enemies to 45 % for 4 s; bots throw it at once at a target 2.5 to 13 m away), Intern a knock-back blast.
 
 ### 4.7 The drop
 

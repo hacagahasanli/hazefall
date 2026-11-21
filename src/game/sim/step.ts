@@ -839,6 +839,38 @@ const lob = (state: GameState, p: Player, aimX: number, aimY: number, range: num
   });
 };
 
+/**
+ * Where the slow-field canister comes down: at the aim point, at least 2 m out and at most its range (along the facing
+ * when the aim point is on top of you). The HUD's landing preview uses the same rule.
+ */
+export const superThrowTarget = (p: { x: number; y: number; heading: number }, aimX: number, aimY: number) => {
+  const toAim = Math.hypot(aimX - p.x, aimY - p.y);
+  const a = toAim > 0.3 ? Math.atan2(aimY - p.y, aimX - p.x) : p.heading;
+  const d = Math.max(2, Math.min(SUPERS.timebox.range, toAim));
+  return { x: p.x + Math.cos(a) * d, y: p.y + Math.sin(a) * d };
+};
+
+const throwCanister = (state: GameState, p: Player, aimX: number, aimY: number) => {
+  const s = SUPERS.timebox;
+  const at = superThrowTarget(p, aimX, aimY);
+  lob(state, p, at.x, at.y, s.range, s.damage, s.burst);
+  state.projectiles[state.projectiles.length - 1].field = true;
+};
+
+/** The canister lands: a modest burst (never the thrower) and the slow field. */
+const slowBurst = (state: GameState, owner: number, x: number, y: number) => {
+  const s = SUPERS.timebox;
+  state.events.push({ type: 'slowBurst', owner, x, y, burst: s.burst, radius: s.radius });
+  for (const o of state.players) {
+    if (!o.alive || o.stage !== 'ground' || o.id === owner) continue;
+    const d = Math.hypot(o.x - x, o.y - y);
+    if (d > s.burst + PLAYER_RADIUS) continue;
+    o.lastHitWith = 'super';
+    hurt(state, o, s.damage * (1 - 0.7 * Math.min(1, d / s.burst)), owner);
+  }
+  state.fields.push({ x, y, r: s.radius, life: s.life, owner });
+};
+
 /** Rounds this player has for the gun in hand (magazine + spare). */
 export const roundsLeft = (p: Player) => (p.weapon === 'fists' ? Infinity : p.mag + p.ammo);
 
@@ -910,12 +942,9 @@ const useSuper = (state: GameState, p: Player, input: Input) => {
       state.walls.push({ x: p.x + cos * s.ahead, y: p.y + sin * s.ahead, w: across ? s.thickness : s.length, h: across ? s.length : s.thickness, life: s.life });
       break;
     }
-    case 'standup': {
-      const s = SUPERS.timebox;
-      const d = Math.min(s.reach, Math.hypot(input.aimX - p.x, input.aimY - p.y));
-      state.fields.push({ x: p.x + cos * d, y: p.y + sin * d, r: s.radius, life: s.life, owner: p.id });
+    case 'standup':
+      throwCanister(state, p, input.aimX, input.aimY);
       break;
-    }
     case 'intern': {
       const s = SUPERS.push;
       state.events.push({ type: 'explosion', x: p.x, y: p.y, radius: s.radius });
@@ -1256,7 +1285,17 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     p.charging = null;
     p.charge = 0;
   }
-  if (pressed('super') && !swimming && p.superCharge >= 1 && p.dashTime <= 0) useSuper(state, p, input);
+  // The slow-field canister (people): hold G to aim (the HUD shows the arc and where it lands), let go to throw.
+  // Bots, and every other super, go off on the press.
+  const aimsSuper = !p.bot && p.fighter === 'standup';
+  if (p.charging === 'super' && (swimming || p.superCharge < 1)) p.charging = null;
+  if (aimsSuper && p.charging === 'super' && !input.super) {
+    p.charging = null;
+    useSuper(state, p, input);
+  } else if (pressed('super') && !swimming && p.superCharge >= 1 && p.dashTime <= 0) {
+    if (aimsSuper) p.charging = 'super';
+    else useSuper(state, p, input);
+  }
 
   const k = lootUnder(state, p);
   // Walking over a pile, take whatever of it is wanted (the nearest first).
@@ -1318,7 +1357,8 @@ const updateProjectile = (state: GameState, pr: Projectile) => {
     pr.x = pr.sx + (pr.tx - pr.sx) * pr.t;
     pr.y = pr.sy + (pr.ty - pr.sy) * pr.t;
     if (pr.t >= 1) {
-      explode(state, pr.owner, pr.tx, pr.ty, pr.radius, pr.damage);
+      if (pr.field) slowBurst(state, pr.owner, pr.tx, pr.ty);
+      else explode(state, pr.owner, pr.tx, pr.ty, pr.radius, pr.damage);
       return false;
     }
     return true;

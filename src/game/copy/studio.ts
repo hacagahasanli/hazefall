@@ -5,7 +5,7 @@ export const COPY: Copy = {
   fighters: {
     hotfix: { name: 'Hotfix', role: 'On-call engineer', superName: 'Deploy', superText: 'a fast dash that hits everyone in its path' },
     legacy: { name: 'Legacy', role: 'Senior maintainer', superName: 'Deprecated', superText: 'drops a wall that blocks bullets' },
-    standup: { name: 'Standup', role: 'Scrum lead', superName: 'Timebox', superText: 'a field that slows enemies' },
+    standup: { name: 'Standup', role: 'Scrum lead', superName: 'Timebox', superText: 'a thrown canister that bursts and slows enemies' },
     intern: { name: 'Intern', role: 'First week', superName: 'Force push to main', superText: 'a blast that throws everyone back' },
   },
   botNames: [
