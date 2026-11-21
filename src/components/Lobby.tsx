@@ -341,7 +341,7 @@ export const Lobby = () => {
                 </div>
 
                 {/* The studio's support card, out of the way under the buttons. */}
-                <Support variant="menu" className="w-full max-w-md self-end" />
+                <Support variant="menu" className="self-end" />
               </>
             )}
           </div>

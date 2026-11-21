@@ -205,7 +205,7 @@ export const Home = () => {
                 How to play
               </a>
             </div>
-            <Support variant="menu" className="w-full max-w-md" />
+            <Support variant="menu" />
           </div>
 
           <aside className="panel-cut hidden w-[320px] flex-col gap-2 bg-ink-deep/80 p-3 backdrop-blur lg:flex">
