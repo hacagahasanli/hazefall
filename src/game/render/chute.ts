@@ -290,37 +290,78 @@ export const newChuteMotion = (yaw: number): ChuteMotion => ({ yaw, yawV: 0, ban
 
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 
+/** The canopy's steering limits and springs (see docs/collab/CREATIVE/specifications/canopy-feel.md). */
+const YAW_ERR_MAX = 1.0;
+const YAW_RATE_MAX = 1.6;
+const MAX_BANK = 0.38;
+const MAX_BANK_DIVE = 0.45;
+const SUBSTEP = 1 / 60;
+
+/** The body's roll under the canopy, as a share of the canopy's bank, and its hard ceiling (rad). */
+export const BODY_ROLL = 0.8;
+export const BODY_ROLL_MAX = 0.436;
+
+const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
+const ease = (x: number) => {
+  const t = clamp(x, 0, 1);
+  return t * t * (3 - 2 * t);
+};
+
+const swing = { w: 3, zeta: 0.6 };
+/**
+ * The body's swing spring under the canopy. The opening keeps a lively, lightly damped swing (zeta 0.30, w 3.6) that
+ * blends over 2.5 s after the canopy is open into the calm turn spring (zeta 0.60, w 3.0); reduced motion damps it
+ * at 0.8 throughout. The returned object is reused: read it at once.
+ */
+export const swingSpring = (canopy: number, reduced = false) => {
+  const e = ease((canopy - DROP.deployTime) / 2.5);
+  swing.w = 3.6 + (3 - 3.6) * e;
+  swing.zeta = reduced ? 0.8 : 0.3 + 0.3 * e;
+  return swing;
+};
+
 /**
  * Fly the canopy for a frame from the jumper's velocity (map m/s): it turns towards the way you are going with real
- * inertia (a slow, slightly under-damped yaw spring), banks into the turn, rocks forward and back (the surge when it
- * opens, then a slow pendulum) and leans back with airspeed. Returns the toggle pulls the turn asks for (the inside
- * toggle comes down) and the turn, -1..1.
+ * inertia (a slow, well damped yaw spring on a clamped heading error and rate, so a stick reversal is one continuous
+ * turn), banks into the turn with a smoothly saturating lean on its own spring, dips its nose in the turn, rocks
+ * forward and back (the surge when it opens, then a slow pendulum) and leans back with airspeed. Returns the toggle
+ * pulls the turn asks for (the inside toggle comes down), the turn (-1..1) and the dive share (0..1, by airspeed).
+ * Stepped in at most 1/60 s so 30 Hz and 60 Hz fly the same canopy.
  */
 export const moveChute = (m: ChuteMotion, dt: number, v: { vx: number; vy: number; canopy: number; time: number; seed: number }) => {
   const speed = Math.hypot(v.vx, v.vy);
   const open = inflation(v.canopy);
-  if (speed > 1.2) {
-    const d = wrap(Math.atan2(v.vy, v.vx) - m.yaw);
-    const w = 3.2;
-    m.yawV += (w * w * d - 2 * 0.78 * w * m.yawV) * dt;
-  } else m.yawV -= m.yawV * Math.min(1, 3 * dt);
-  m.yaw = wrap(m.yaw + m.yawV * dt);
-  // Bank into the turn (turning left on the map, yaw rising, the inside is the -x side: it goes down), on its own spring.
-  const bankWant = Math.max(-0.7, Math.min(0.7, m.yawV * 0.55)) * open;
-  const wb = 5;
-  m.bankV += (wb * wb * (bankWant - m.bank) - 2 * 0.5 * wb * m.bankV) * dt;
-  m.bank += m.bankV * dt;
-  // Pitch: the canopy surges forward as it bites, then rocks back and settles; it leans back with airspeed.
+  const dive = clamp((speed - DROP.chuteSpeed) / (DROP.chuteDiveSpeed - DROP.chuteSpeed), 0, 1);
+  const maxBank = MAX_BANK + (MAX_BANK_DIVE - MAX_BANK) * dive;
   if (!m.surged && v.canopy >= DROP.deployTime * 0.8) {
     m.pitchV -= 1.6;
     m.surged = true;
   }
-  const pitchWant = -0.05 * (speed / DROP.chuteSpeed) + Math.sin(v.time * 0.9 + v.seed) * 0.025 * open;
+  const steering = speed > 1.2;
+  let d = wrap(Math.atan2(v.vy, v.vx) - m.yaw);
+  // A reversal: the heading error flips sign near pi. Keep turning through the side the canopy is already turning.
+  if (Math.abs(d) > Math.PI / 2 && Math.abs(m.yawV) > 0.05 && Math.sign(d) !== Math.sign(m.yawV)) d += Math.sign(m.yawV) * 2 * Math.PI;
+  d = clamp(d, -YAW_ERR_MAX, YAW_ERR_MAX);
+  const n = Math.max(1, Math.ceil(dt / SUBSTEP - 1e-6));
+  const h = dt / n;
+  const wy = 3.2;
+  const wb = 4;
   const wp = 3.2;
-  m.pitchV += (wp * wp * (pitchWant - m.pitch) - 2 * 0.3 * wp * m.pitchV) * dt;
-  m.pitch += m.pitchV * dt;
-  const turn = Math.max(-1, Math.min(1, m.yawV / 1.2));
-  return { brakeL: Math.max(0, turn), brakeR: Math.max(0, -turn), turn };
+  for (let i = 0; i < n; i++) {
+    if (steering) m.yawV = clamp(m.yawV + (wy * wy * d - 2 * 0.9 * wy * m.yawV) * h, -YAW_RATE_MAX, YAW_RATE_MAX);
+    else m.yawV -= m.yawV * Math.min(1, 3 * h);
+    m.yaw = wrap(m.yaw + m.yawV * h);
+    // Bank into the turn (turning left on the map, yaw rising, the inside is the -x side: it goes down).
+    const bankWant = maxBank * Math.tanh(m.yawV) * open;
+    m.bankV += (wb * wb * (bankWant - m.bank) - 2 * 0.85 * wb * m.bankV) * h;
+    m.bank += m.bankV * h;
+    // Pitch: the nose dips in a turn (it costs height); the surge, the pendulum and the lean back with airspeed stay.
+    const pitchWant = -0.05 * (speed / DROP.chuteSpeed) + Math.sin(v.time * 0.9 + v.seed) * 0.025 * open + 0.06 * Math.min(1, Math.abs(m.yawV) / YAW_RATE_MAX) * open;
+    m.pitchV += (wp * wp * (pitchWant - m.pitch) - 2 * 0.3 * wp * m.pitchV) * h;
+    m.pitch += m.pitchV * h;
+  }
+  const turn = clamp(m.yawV / 1.2, -1, 1);
+  return { brakeL: Math.max(0, turn), brakeR: Math.max(0, -turn), turn, dive };
 };
 
 const tmpEuler = new THREE.Euler();

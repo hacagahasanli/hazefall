@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 import { skinRig } from './merge';
 
-import { HARNESS_BACK, toggleGrip } from './chute';
+import { BODY_ROLL, BODY_ROLL_MAX, HARNESS_BACK, swingSpring, toggleGrip } from './chute';
 import { mat, mesh, PALETTE } from './palette';
 
 import type { FighterId as CharacterId, WeaponKind } from '../sim/types';
@@ -474,6 +474,12 @@ export interface PoseInput {
   pushing: number;
 }
 
+/** Clamp `x` to [lo, hi]; one argument is a symmetric limit +-hi. */
+const clampN = (x: number, hi: number, lo = -hi) => Math.max(lo, Math.min(hi, x));
+const smoothN = (x: number) => {
+  const t = clampN(x, 1, 0);
+  return t * t * (3 - 2 * t);
+};
 const damp = (cur: number, target: number, k: number, dt: number) => cur + (target - cur) * (1 - Math.exp(-k * dt));
 
 /** Procedural animation: running, jumping, aiming, recoil, Force Push. */
@@ -848,7 +854,7 @@ const gust = (t: number, seed: number, k: number) =>
   Math.sin(t * 1.37 * k + seed * 1.9) * 0.5 + Math.sin(t * 2.91 * k + seed * 3.7 + 1.3) * 0.3 + Math.sin(t * 6.43 * k + seed * 0.61 + 2.1) * 0.2;
 
 /** Drive the body's tilt springs towards (pitch, roll) and keep the chosen pivot still while it turns. */
-const airBody = (rig: Rig, dt: number, pitch: number, roll: number, yaw: number, w: number, zeta: number, pivotTo: number) => {
+const airBody = (rig: Rig, dt: number, pitch: number, roll: number, yaw: number, w: number, zeta: number, pivotTo: number, rollCap = 0) => {
   const sw = rig.chuteSwing;
   // Integrated in small steps: the springs are stiff and a long frame (phones) must not overshoot numerically.
   const n = Math.max(1, Math.ceil(dt / 0.012));
@@ -858,6 +864,11 @@ const airBody = (rig: Rig, dt: number, pitch: number, roll: number, yaw: number,
     sw.vz += (w * w * (roll - rig.body.rotation.z) - 2 * zeta * w * sw.vz) * h;
     rig.body.rotation.x += sw.vx * h;
     rig.body.rotation.z += sw.vz * h;
+    // A hard ceiling on the roll, so a swing can never read as a flip.
+    if (rollCap > 0 && Math.abs(rig.body.rotation.z) > rollCap) {
+      rig.body.rotation.z = Math.sign(rig.body.rotation.z) * rollCap;
+      if (Math.sign(sw.vz) === Math.sign(rig.body.rotation.z)) sw.vz = 0;
+    }
   }
   rig.body.rotation.y = damp(rig.body.rotation.y, yaw, 6, dt);
   rig.airPivot = damp(rig.airPivot, pivotTo, 5, dt);
@@ -945,6 +956,10 @@ export interface ChutePose {
   pitch: number;
   /** Near the ground: 0..1 into the flare and landing stance. */
   flare: number;
+  /** Diving the canopy (Shift), 0..1 by airspeed: the legs stream back and together. */
+  dive?: number;
+  /** The settings' reduced motion: a calmer swing, half the idle leg noise. */
+  reducedMotion?: boolean;
   shooting: boolean;
 }
 
@@ -966,12 +981,14 @@ export const poseChute = (rig: Rig, p: ChutePose) => {
   const sw = rig.chuteSwing;
   if (!stretched) airBody(rig, dt, 1.1, 0, 0, 5.5, 0.75, 0);
   else {
-    airBody(rig, dt, p.pitch * 0.7 + gust(t, seed, 0.35) * 0.03, p.bank * 0.85 + gust(t, seed + 3, 0.3) * 0.03, p.turn * 0.18, 3.6, 0.28, 1);
+    // The body swings under the wing on a spring that rings only while the canopy opens, then settles in about a swing.
+    const sp = swingSpring(k, p.reducedMotion);
+    airBody(rig, dt, p.pitch * 0.7 + gust(t, seed, 0.35) * 0.03, p.bank * BODY_ROLL + gust(t, seed + 3, 0.3) * 0.03, clampN(p.turn * 0.18, 0.1745), sp.w, sp.zeta, 1, BODY_ROLL_MAX);
   }
   // Head: down at the handle during the pull, up at the canopy as it opens, then looking ahead and into turns.
   const check = k > 0.6 && k < 2.2 ? 1 : 0;
   rig.head.rotation.x = damp(rig.head.rotation.x, !stretched ? -0.2 : check ? -0.75 : 0.12 + p.flare * 0.25, 5, dt);
-  rig.head.rotation.y = damp(rig.head.rotation.y, stretched ? p.turn * 0.45 : 0, 5, dt);
+  rig.head.rotation.y = damp(rig.head.rotation.y, stretched ? clampN(p.turn * 0.45, 0.436) : 0, 7, dt);
 
   // Legs.
   if (!stretched) {
@@ -980,15 +997,38 @@ export const poseChute = (rig: Rig, p: ChutePose) => {
     toward(rig.shinL, 0.9, 0, 0, 8, dt);
     toward(rig.shinR, 0.9, 0, 0, 8, dt);
   } else {
-    // Dangling: each leg on its own slow noise, trailing the body's swing (thrown back when it swings forward).
-    const lag = Math.max(-0.5, Math.min(0.5, sw.vx * 0.09));
-    const f = p.flare;
-    const dl = gust(t, seed + 7, 0.9) * 0.16;
-    const dr = gust(t, seed + 13, 0.8) * 0.16;
-    toward(rig.legL, (-0.1 + dl + lag) * (1 - f) - 0.32 * f, 0, -0.07 + gust(t, seed + 17, 0.5) * 0.05 + sw.vz * 0.04, 6, dt);
-    toward(rig.legR, (-0.06 + dr + lag) * (1 - f) - 0.32 * f, 0, 0.07 + gust(t, seed + 19, 0.55) * 0.05 + sw.vz * 0.04, 6, dt);
-    toward(rig.shinL, 0.28 + gust(t, seed + 23, 1.1) * 0.14 + Math.max(0, -lag) * 0.4 + f * 0.1, 0, 0, 7, dt);
-    toward(rig.shinR, 0.22 + gust(t, seed + 29, 1.2) * 0.14 + Math.max(0, -lag) * 0.4 + f * 0.1, 0, 0, 7, dt);
+    // Sitting in the leg straps: hips flexed, knees softly bent, the legs a little apart and not mirrored. The wind
+    // works each joint on its own noise; the legs trail the swing (thrown back when the body swings forward), the
+    // inside knee comes up in a turn and both feet drift to the outside; a dive streams them back and together; the
+    // flare brings the feet forward and together, knees bent to absorb.
+    const fe = smoothN(p.flare);
+    const dv = clampN(p.dive ?? 0, 1, 0);
+    const life = (p.reducedMotion ? 0.5 : 1) * (1 - 0.8 * fe);
+    const swingS = clampN(sw.vx / 1.5, 1);
+    const turn = clampN(p.turn, 1);
+    const leg = (side: 1 | -1, hipBase: number, kneeBase: number, s: number) => {
+      const inside = Math.max(0, -side * turn);
+      const outside = Math.max(0, side * turn);
+      let hip = hipBase + (-0.15 - hipBase) * dv + gust(t, s, 0.5) * 0.08 * life + 0.3 * swingS - 0.2 * inside;
+      let knee = kneeBase + (0.35 - kneeBase) * dv + gust(t, s + 6, 0.8) * 0.12 * life + (swingS > 0 ? -0.2 * swingS : -0.3 * swingS) + 0.35 * inside - 0.15 * outside;
+      hip = clampN(hip + (-0.75 - hip) * fe, 0.15, -0.95);
+      knee = clampN(knee + (0.55 - knee) * fe, 1.3, 0.15);
+      return { hip, knee, spread: side * (0.1 + (0.03 - 0.1) * dv) + 0.12 * turn };
+    };
+    const L = leg(-1, -0.42, 0.62, seed + 7);
+    const R = leg(1, -0.58, 0.85, seed + 13);
+    let zL = L.spread * (1 - fe) - 0.03 * fe;
+    let zR = R.spread * (1 - fe) + 0.03 * fe;
+    // The feet never cross or touch.
+    if (zR - zL < 0.06) {
+      const push = (0.06 - (zR - zL)) / 2;
+      zL -= push;
+      zR += push;
+    }
+    toward(rig.legL, L.hip, 0, zL, 5, dt);
+    toward(rig.legR, R.hip, 0, zR, 5, dt);
+    toward(rig.shinL, L.knee, 0, 0, 6, dt);
+    toward(rig.shinR, R.knee, 0, 0, 6, dt);
   }
 
   // Arms.

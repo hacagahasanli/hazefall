@@ -1978,7 +1978,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         ai.turn = m.turn;
         poseChute(rig, {
           dt, time, seed: i, canopy: canopyT, brakeL: m.brakeL, brakeR: m.brakeR, turn: m.turn,
-          bank: ai.motion.bank, pitch: ai.motion.pitch, flare, shooting: sinceShot < 1.5,
+          bank: ai.motion.bank, pitch: ai.motion.pitch, flare, dive: m.dive, reducedMotion: settings.reducedMotion, shooting: sinceShot < 1.5,
         });
       } else if (p.stage === 'falling') {
         // Free fall: the stick in the body's own frame (track forward / back off, slide), the turn from the yaw spring.
