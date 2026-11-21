@@ -12,6 +12,7 @@ import { createRoom, joinRoom } from '~/game/net/client';
 import { createGuestSession, createHostSession } from '~/game/net/session';
 import { COPY } from '~/game/copy/studio';
 import { BOT_NAMES, FIGHTERS } from '~/game/sim/constants';
+import { ONLINE_PLAY } from '~/lib/studio';
 
 import type { LobbyState, StartMessage } from '~/game/net/lobby';
 import type { Session } from '~/game/net/session';
@@ -90,7 +91,7 @@ export const Lobby = () => {
   // Opened from a friend's link: join their room (once, even under React's double effects).
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('room');
-    if (!id || joinedFromLink.current) return;
+    if (!ONLINE_PLAY || !id || joinedFromLink.current) return;
     joinedFromLink.current = true;
     void enter(id);
   }, [enter]);
@@ -271,7 +272,7 @@ export const Lobby = () => {
                       IN THIS LOBBY
                     </span>
                     <span className="text-[10px] text-cream/40">
-                      Invite links come with online play
+                      {ONLINE_PLAY ? 'Invite links come with online play' : 'Online play is coming soon'}
                     </span>
                   </div>
                   <ul className="grid grid-cols-2 gap-1 text-xs sm:grid-cols-5">
@@ -292,14 +293,28 @@ export const Lobby = () => {
                 </div>
 
                 <div className="flex flex-wrap items-center justify-end gap-3">
-                  <button
-                    type="button"
-                    disabled={connecting}
-                    onClick={() => void enter(null)}
-                    className="panel-cut bg-blue/90 px-6 py-4 font-display text-base uppercase text-ink-deep transition hover:brightness-110 disabled:opacity-60"
-                  >
-                    {connecting ? 'Opening a room…' : 'Play with friends'}
-                  </button>
+                  {ONLINE_PLAY ? (
+                    <button
+                      type="button"
+                      disabled={connecting}
+                      onClick={() => void enter(null)}
+                      className="panel-cut bg-blue/90 px-6 py-4 font-display text-base uppercase text-ink-deep transition hover:brightness-110 disabled:opacity-60"
+                    >
+                      {connecting ? 'Opening a room…' : 'Play with friends'}
+                    </button>
+                  ) : (
+                    // Online play is not open yet: a clearly disabled tile, nothing to click into.
+                    <button
+                      type="button"
+                      disabled
+                      aria-disabled
+                      title="Online play is coming soon"
+                      className="panel-cut flex cursor-not-allowed items-center gap-3 border border-cream/15 bg-cream/5 px-6 py-3 text-left"
+                    >
+                      <span className="font-display text-base uppercase text-cream/45">Play with friends</span>
+                      <span className="rounded-sm bg-gold/90 px-2 py-0.5 text-xs font-bold text-ink-deep">Coming soon</span>
+                    </button>
+                  )}
                   {/* Desktop: the big button sits here; on phones it rides along at the bottom. */}
                   <button
                     type="button"

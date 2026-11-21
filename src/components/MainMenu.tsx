@@ -17,7 +17,7 @@ import { keyLabel } from '~/game/settings';
 import { FIGHTERS, PLAYERS } from '~/game/sim/constants';
 import { brandUrl } from '~/lib/assets';
 import { boot, loadCount, onLoadCount } from '~/lib/loading';
-import { GAME_TITLE } from '~/lib/studio';
+import { GAME_TITLE, ONLINE_PLAY } from '~/lib/studio';
 
 import type { AimMode } from '~/game/render/game';
 import type { Settings } from '~/game/settings';
@@ -172,8 +172,10 @@ export const MainMenu = ({
   }, []);
   useEffect(() => setUiSound(settings.master, settings.muted || platform.muted()), [settings.master, settings.muted, platform]);
 
-  const items: { id: string; label: string; sub?: string; primary?: boolean; run: () => void }[] = [
+  const items: { id: string; label: string; sub?: string; primary?: boolean; soon?: boolean; run: () => void }[] = [
     { id: 'play', label: 'Play', sub: `Solo · ${PLAYERS - 1} bots`, primary: true, run: onPlay },
+    // Online play is not open yet (ONLINE_PLAY): shown, labelled, and not selectable.
+    ...(ONLINE_PLAY ? [] : [{ id: 'online', label: 'Online', soon: true, run: () => {} }]),
     { id: 'fighter', label: 'Fighter', sub: f.name, run: () => setPanel('fighter') },
     { id: 'settings', label: 'Settings', run: () => setPanel('settings') },
     { id: 'how', label: 'How to play', run: () => setPanel('how') },
@@ -189,7 +191,9 @@ export const MainMenu = ({
       if (!up && !down) return;
       e.preventDefault();
       setFocus((i) => {
-        const n = (i + (down ? 1 : items.length - 1)) % items.length;
+        let n = i;
+        do n = (n + (down ? 1 : items.length - 1)) % items.length;
+        while (items[n].soon && n !== i);
         buttons.current[n]?.focus();
         return n;
       });
@@ -237,26 +241,32 @@ export const MainMenu = ({
                 buttons.current[i] = el;
               }}
               type="button"
+              disabled={it.soon}
+              aria-disabled={it.soon || undefined}
+              title={it.soon ? 'Online play is coming soon' : undefined}
               onClick={() => {
+                if (it.soon) return;
                 uiTick(true);
                 it.run();
               }}
               onMouseEnter={() => {
+                if (it.soon) return;
                 if (focus !== i) uiTick();
                 setFocus(i);
                 buttons.current[i]?.focus({ preventScroll: true });
               }}
               onFocus={() => setFocus(i)}
               style={{ animationDelay: `${0.08 + i * 0.05}s` }}
-              className={`group relative flex items-baseline gap-3 overflow-hidden text-left outline-none [animation:slideIn_0.45s_ease-out_both] focus-visible:ring-1 focus-visible:ring-green/35 max-sm:panel-cut max-sm:bg-ink/80 max-sm:px-4 max-sm:py-3 max-sm:backdrop-blur ${it.primary ? 'py-1 sm:py-2' : 'py-1'}`}
+              className={`group relative flex items-baseline gap-3 overflow-hidden text-left outline-none disabled:cursor-not-allowed [animation:slideIn_0.45s_ease-out_both] focus-visible:ring-1 focus-visible:ring-green/35 max-sm:panel-cut max-sm:bg-ink/80 max-sm:px-4 max-sm:py-3 max-sm:backdrop-blur ${it.primary ? 'py-1 sm:py-2' : 'py-1'}`}
             >
               {/* The accent bar slides in from the left on hover and focus. */}
               <span className={`absolute left-0 top-1/2 h-[70%] w-1.5 -translate-y-1/2 -skew-x-12 bg-green transition-all duration-200 ${focus === i ? 'translate-x-0 opacity-100' : '-translate-x-3 opacity-0'}`} />
               <span
-                className={`font-display uppercase italic leading-none transition-all duration-200 ${focus === i ? 'translate-x-5 text-green' : 'text-cream/85'} ${it.primary ? 'text-5xl sm:text-6xl [@media(max-height:500px)]:text-4xl' : 'text-2xl sm:text-3xl [@media(max-height:500px)]:text-xl'}`}
+                className={`font-display uppercase italic leading-none transition-all duration-200 ${it.soon ? 'text-cream/35' : focus === i ? 'translate-x-5 text-green' : 'text-cream/85'} ${it.primary ? 'text-5xl sm:text-6xl [@media(max-height:500px)]:text-4xl' : 'text-2xl sm:text-3xl [@media(max-height:500px)]:text-xl'}`}
               >
                 {it.label}
               </span>
+              {it.soon && <span className="self-center rounded-sm bg-gold/90 px-2 py-0.5 text-xs font-bold text-ink-deep">Coming soon</span>}
               {it.sub && <span className={`text-[11px] font-bold uppercase tracking-widest transition-all duration-200 ${focus === i ? 'translate-x-5 text-cream/80' : 'text-cream/45'}`}>{it.sub}</span>}
             </button>
           ))}
