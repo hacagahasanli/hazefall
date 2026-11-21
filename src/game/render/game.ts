@@ -11,13 +11,13 @@ import { canSee, carryCap, healChoice, inPlant, inWater, lineOfSight, lootUnder,
 import { createOfflineSession } from '../net/session';
 import { NO_INPUT } from '../sim/types';
 
-import { buildRig, fighterLook, poseChute, poseDeath, poseFreefall, poseRig, poseSwim, poseTopDown } from './characters';
+import { buildRig, fighterLook, leaveAir, poseChute, poseDeath, poseFreefall, poseRig, poseSwim, poseTopDown } from './characters';
 import { buildGun } from './guns';
 import { mat, mesh, PALETTE } from './palette';
 import { createVfx } from './vfx';
 import { createHitOverlay, flinchCurve, hitstopFor } from './feedback';
 import { setPeople, updateNature } from './nature';
-import { buildChute, HARNESS_BACK } from './chute';
+import { buildChute, chuteQuaternion, hangChute, moveChute, newChuteMotion } from './chute';
 import { PICKUP_ICON } from './icons';
 import { paintMapImage } from './mapImage';
 import { buildPlane } from './plane';
@@ -1284,8 +1284,12 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const yaw = state.players.map((p) => ({ a: p.heading, v: 0 }));
   const lastShot: number[] = [];
   const deadAt: number[] = [];
-  const chuteAt: number[] = [];
-  const harness = new THREE.Vector3();
+  /**
+   * Per fighter in the air (render only, rebuilt from the sim state, so it works the same for bots and online):
+   * when they left the plane, the canopy's own motion, its last toggle pulls, and the canopy's orientation.
+   */
+  const air = state.players.map(() => ({ jumpAt: -1, motion: null as ReturnType<typeof newChuteMotion> | null, brakeL: 0, brakeR: 0, turn: 0, q: new THREE.Quaternion() }));
+  let airFrame = 0;
   /** When each player touched down (for the landing roll), and the canopies left on the ground. */
   const landAt: number[] = [];
   const ROLL_TIME = 0.75;
@@ -1303,19 +1307,23 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const src = chutes[i];
     // userData.deploy is a scene node: keep it out of the clone (Object3D.clone serialises userData to JSON).
     const deploy = src.userData.deploy as THREE.Object3D;
+    const parts = src.userData.parts as unknown;
     delete src.userData.deploy;
+    delete src.userData.parts;
     const g = src.clone(true);
     src.userData.deploy = deploy;
+    src.userData.parts = parts;
     g.name = 'chute (collapsing)';
     g.traverse((o) => {
-      if (!(o instanceof THREE.Mesh)) return;
-      // Lines and risers go at once; the fabric gets its own material so it can fade alone.
-      if (o.userData.line) o.visible = false;
-      else {
-        const m = (o.material as THREE.Material).clone();
-        m.transparent = true;
-        o.material = m;
+      // Lines, risers, the bag and the pilot chute go at once; the fabric gets its own material so it can fade alone.
+      if (o.userData.line) {
+        o.visible = false;
+        return;
       }
+      if (!(o instanceof THREE.Mesh)) return;
+      const m = (o.material as THREE.Material).clone();
+      m.transparent = true;
+      o.material = m;
     });
     g.visible = true;
     scene.add(g);
@@ -1613,6 +1621,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
   const renderFrame = (dt: number, alpha: number) => {
     resize();
+    airFrame++;
     const self = state.players[me];
     const frozen = hitstop > 0;
     hitstop = Math.max(0, hitstop - dt);
@@ -1680,9 +1689,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         yw.v = 0;
       } else {
         // A spring a little under critical damping: the body swings into a turn and settles with a
-        // touch of overshoot, like a person, not a turret.
-        const d = Math.atan2(Math.sin(p.heading - yw.a), Math.cos(p.heading - yw.a));
-        const w = 13;
+        // touch of overshoot, like a person, not a turret. In the air the body turns slower (it has the air to turn
+        // against), and under the canopy it faces the way the canopy flies unless it is shooting.
+        const ai = air[i];
+        const shootingAir = p.stage === 'falling' && lastShot[i] !== undefined && time - lastShot[i] < 1.5;
+        const want = p.stage === 'falling' && ai.motion && p.canopy >= 0.5 && !shootingAir ? ai.motion.yaw : p.heading;
+        const d = Math.atan2(Math.sin(want - yw.a), Math.cos(want - yw.a));
+        const w = p.stage === 'falling' ? (ai.motion ? 9 : 5) : 13;
         const zeta = 0.72;
         yw.v += (w * w * d - 2 * zeta * w * yw.v) * dt;
         yw.a += yw.v * dt;
@@ -1716,12 +1729,35 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           roll: p.rolling > 0 ? 1 - p.rolling / ROLL.time : sinceLand < ROLL_TIME ? sinceLand / ROLL_TIME : null,
         });
       } else if (chuteOpen) {
-        // Steering tilts you, in the body's own frame.
+        // The canopy flies on its own springs (heading, bank, pitch); the body hangs from it.
+        const ai = air[i];
+        ai.motion ??= newChuteMotion(yw.a);
+        const canopyT = p.canopy + alpha * DT;
+        const m = moveChute(ai.motion, dt, { vx: p.vx, vy: p.vy, canopy: canopyT, time, seed: i });
+        // Near the ground both toggles come down: the flare.
+        const flare = canopyT >= DROP.deployTime ? Math.min(1, Math.max(0, (DROP.flareAlt + 2 - h) / (DROP.flareAlt + 1))) : 0;
+        ai.brakeL = Math.min(1, m.brakeL + flare);
+        ai.brakeR = Math.min(1, m.brakeR + flare);
+        ai.turn = m.turn;
+        poseChute(rig, {
+          dt, time, seed: i, canopy: canopyT, brakeL: m.brakeL, brakeR: m.brakeR, turn: m.turn,
+          bank: ai.motion.bank, pitch: ai.motion.pitch, flare, shooting: sinceShot < 1.5,
+        });
+      } else if (p.stage === 'falling') {
+        // Free fall: the stick in the body's own frame (track forward / back off, slide), the turn from the yaw spring.
+        const ai = air[i];
+        if (ai.jumpAt < 0) ai.jumpAt = time;
         const c = Math.cos(yw.a);
         const sn = Math.sin(yw.a);
-        poseChute(rig, { dt, time, seed: i, steerX: -p.vx * sn + p.vy * c, steerZ: p.vx * c + p.vy * sn, shooting: sinceShot < 1.5 });
-      } else if (p.stage === 'falling') {
-        poseFreefall(rig, { dt, time, seed: i });
+        const fs = DROP.freefallSpeed;
+        poseFreefall(rig, {
+          dt, time, seed: i,
+          track: Math.max(-1, Math.min(1, (p.vx * c + p.vy * sn) / fs)),
+          side: Math.max(-1, Math.min(1, (p.vx * sn - p.vy * c) / fs)),
+          turn: yw.v,
+          speed: Math.min(1, p.vz / DROP.freefallTerminal),
+          sinceJump: time - ai.jumpAt,
+        });
       } else {
         poseRig(rig, {
           dt, time, vx: 0, vy: 0, onGround: false, facing: 1, aim: 0, sideways: false, wall: 0, dashing: false, stunned: false,
@@ -1758,18 +1794,17 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       hitFlash[i] = Math.max(0, hitFlash[i] - dt);
       setFlash(rig, hitFlash[i] > 0);
       rig.root.updateMatrixWorld(true);
-      if (chutes[i].visible) {
-        // Rigidly attached to the top of the backpack: the rig hangs from the canopy, so the canopy
-        // takes the body's own position and tilt (its swing and its banking into turns), and the
-        // risers always leave from the shoulder straps, through the hands, to the lines. The
-        // canopy unfolds out of the pack over 0.7 s when it opens.
-        rig.body.localToWorld(harness.set(0, rig.shoulderL.y, HARNESS_BACK));
-        chutes[i].position.copy(harness);
-        rig.body.getWorldQuaternion(chutes[i].quaternion);
-        if (chuteAt[i] === undefined) chuteAt[i] = time;
-        const k = Math.min(1, (time - chuteAt[i]) / 0.7);
-        const open = 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2); // ease out with a little overshoot
-        (chutes[i].userData.deploy as THREE.Group).scale.setScalar(Math.max(0.08, open));
+      if (chutes[i].visible && air[i].motion) {
+        // On the harness at the top of the backpack, flying with the canopy's own orientation; the lines are restrung
+        // to the straps and hands every frame. Far canopies (others, beyond 55 m) reshape every third frame.
+        const ai = air[i];
+        const far = i !== me && Math.hypot(x - camera.position.x, h - camera.position.y, y - camera.position.z) > 55;
+        hangChute(chutes[i], rig, chuteQuaternion(ai.motion!, ai.q), { canopy: p.canopy + alpha * DT, time, seed: i, brakeL: ai.brakeL, brakeR: ai.brakeR }, !far || (airFrame + i) % 3 === 0);
+      }
+      if (p.stage !== 'falling') {
+        if (air[i].motion || air[i].jumpAt >= 0) leaveAir(rig);
+        air[i].motion = null;
+        air[i].jumpAt = -1;
       }
 
       // Gun in hand.
