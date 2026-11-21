@@ -70,6 +70,11 @@ export interface Player {
   /** Velocity: movement accelerates and slows down instead of snapping. */
   vx: number;
   vy: number;
+  /** On the ground: feet above the ground (m; a roof or a hop lifts them) and vertical speed (m/s, up is positive). */
+  z: number;
+  jz: number;
+  /** Climbing a ladder onto a roof: seconds left (uses vaultFrom/vaultTo for where from and to). */
+  climb: number;
   heading: number;
   hp: number;
   maxHp: number;
@@ -186,6 +191,8 @@ export interface Loot {
   /** A gun's rarity (0 common, 1 tuned, 2 prime), a vest's tier (1..3) or a backpack's (1..2). */
   tier?: number;
   active: boolean;
+  /** Height it lies at (dropped on a roof); absent = on the ground or a floor. */
+  z?: number;
 }
 
 export interface TempWall {
@@ -235,8 +242,9 @@ export interface Drone {
 export type GameEvent =
   | { type: 'shot'; owner: number; x: number; y: number; angle: number; weapon: WeaponKind }
   | { type: 'hit'; target: number; by: number | null; x: number; y: number; damage: number; armor: boolean; ko: boolean }
-  | { type: 'impact'; x: number; y: number }
-  | { type: 'explosion'; x: number; y: number; radius: number }
+  /** `z`: the height it happened at (absent = the old default height). */
+  | { type: 'impact'; x: number; y: number; z?: number }
+  | { type: 'explosion'; x: number; y: number; radius: number; z?: number }
   | { type: 'rackBroken'; x: number; y: number }
   | { type: 'super'; owner: number; fighter: FighterId; x: number; y: number; angle: number }
   | { type: 'pickup'; player: number; kind: LootKind }
@@ -251,7 +259,9 @@ export type GameEvent =
   | { type: 'vault'; player: number; x: number; y: number }
   | { type: 'roll'; player: number; x: number; y: number }
   | { type: 'jump'; player: number }
-  | { type: 'land'; player: number; x: number; y: number }
+  | { type: 'land'; player: number; x: number; y: number; z?: number }
+  /** Feet coming down hard on foot (off a roof's edge, from a ladder's top): a thump, not a parachute landing. */
+  | { type: 'thud'; player: number; x: number; y: number; z?: number }
   | { type: 'ko'; victim: number; by: number | null; with: string | null; x: number; y: number }
   | { type: 'zone'; phase: number; state: Zone['state'] }
   | { type: 'win'; player: number };

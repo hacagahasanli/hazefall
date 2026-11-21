@@ -45,6 +45,7 @@ import {
   ZONE_RULES,
   ZONE_START_RADIUS,
 } from './constants';
+import { BODY, buildingAt, CLIMB, EAVE, FEET, inRoofSlab, ladderAt, roofAt, roofBetween, ROOF_LAYER, roofHeightOf, supportAt } from './roofs';
 import { NO_INPUT } from './types';
 
 import type { FighterId, GameState, Gun, HealKind, Input, Loot, LootKind, Player, Projectile, WeaponKind } from './types';
@@ -97,11 +98,22 @@ const boxHit = (x: number, y: number, r: number, x0: number, y0: number, x1: num
 const circleHit = (x: number, y: number, r: number, cx: number, cy: number, cr: number) => (x - cx) ** 2 + (y - cy) ** 2 < (r + cr) ** 2;
 
 /**
+ * How tall each obstacle is: you only bump into it while your feet are below its top (a hop clears none of them; on a
+ * roof the walls are under you), and a bullet only stops on it below its bullet top. Trunks stop you at any height;
+ * rounds fly over everything else above 3 m as before, except a roof (see `inRoofSlab`).
+ */
+const MOVE_TOP: Record<string, number> = { '#': EAVE, w: EAVE, v: EAVE, d: 1.1, u: 0.9, f: 1.1, t: Infinity, k: 1.3, r: 1.3 };
+const BULLET_TOP: Record<string, number> = { '#': EAVE, w: 0.9, v: EAVE, t: 3, k: 1.3, r: 1.3 };
+const TEMP_WALL_TOP = 3;
+
+/**
  * Does a circle (x, y, r) overlap what stands on tile (tx, ty)? Each obstacle has its real shape
  * (see SHAPES). `bullet` leaves out windows and fences, which stop you but not bullets.
  */
-const tileHit = (state: GameState, tx: number, ty: number, x: number, y: number, r: number, bullet: boolean) => {
+const tileHit = (state: GameState, tx: number, ty: number, x: number, y: number, r: number, bullet: boolean, z = 0) => {
   const t = tileAt(tx, ty);
+  // Above its top an obstacle is not in the way (on a roof, the walls are under your feet).
+  if (z >= ((bullet ? BULLET_TOP : MOVE_TOP)[t] ?? Infinity) - 0.05) return false;
   const x0 = tx * TILE;
   const y0 = ty * TILE;
   const c = TILE / 2;
@@ -139,23 +151,32 @@ const tileHit = (state: GameState, tx: number, ty: number, x: number, y: number,
   }
 };
 
-/** Walls, trunks, rocks, standing crates and Deprecated walls stop bullets. Windows, fences and plants don't. */
-export const solidAt = (state: GameState, x: number, y: number) => {
+/**
+ * Walls, trunks, rocks, standing crates, Deprecated walls and roofs stop bullets, each up to its own top; windows let them
+ * through above the sill; fences and plants never stop them. `h` is the height of the point (chest height by default,
+ * where every obstacle but a window sill and a roof is in the way, as before roofs had a height).
+ */
+export const solidAt = (state: GameState, x: number, y: number, h = 1.1) => {
   const tx = toTile(x);
   const ty = toTile(y);
   // Trunks can stand up to 0.4 m off their tile, so check the neighbours too.
-  for (let j = ty - 1; j <= ty + 1; j++) for (let i = tx - 1; i <= tx + 1; i++) if (tileHit(state, i, j, x, y, 0, true)) return true;
-  return state.walls.some((w) => Math.abs(x - w.x) <= w.w / 2 && Math.abs(y - w.y) <= w.h / 2);
+  for (let j = ty - 1; j <= ty + 1; j++) for (let i = tx - 1; i <= tx + 1; i++) if (tileHit(state, i, j, x, y, 0, true, h)) return true;
+  if (inRoofSlab(x, y, h)) return true;
+  return h < TEMP_WALL_TOP && state.walls.some((w) => Math.abs(x - w.x) <= w.w / 2 && Math.abs(y - w.y) <= w.h / 2);
 };
 
-export const circleBlocked = (state: GameState, x: number, y: number, r: number) => {
+/** A step of a bullet or a sight line from one point to the next: anything solid at the end, or a roof crossed between. */
+export const solidStep = (state: GameState, x0: number, y0: number, h0: number, x1: number, y1: number, h1: number) =>
+  solidAt(state, x1, y1, h1) || roofBetween(x0, y0, h0, x1, y1, h1);
+
+export const circleBlocked = (state: GameState, x: number, y: number, r: number, z = 0) => {
   // The tree line around the map is the edge of the world, whatever gaps its trunks leave.
   const edge = TILE * 2;
   if (x < edge + r || y < edge + r || x > WORLD - edge - r || y > WORLD - edge - r) return true;
   for (let ty = toTile(y - r) - 1; ty <= toTile(y + r) + 1; ty++) {
-    for (let tx = toTile(x - r) - 1; tx <= toTile(x + r) + 1; tx++) if (tileHit(state, tx, ty, x, y, r, false)) return true;
+    for (let tx = toTile(x - r) - 1; tx <= toTile(x + r) + 1; tx++) if (tileHit(state, tx, ty, x, y, r, false, z)) return true;
   }
-  return state.walls.some((w) => Math.abs(x - w.x) < w.w / 2 + r && Math.abs(y - w.y) < w.h / 2 + r);
+  return z < TEMP_WALL_TOP && state.walls.some((w) => Math.abs(x - w.x) < w.w / 2 + r && Math.abs(y - w.y) < w.h / 2 + r);
 };
 
 /**
@@ -164,7 +185,7 @@ export const circleBlocked = (state: GameState, x: number, y: number, r: number)
  * along walls and glide round trunks instead of stopping dead. Returns the vaultable tile you
  * pressed against, if any.
  */
-const pushOut = (state: GameState, pos: { x: number; y: number }, r: number) => {
+const pushOut = (state: GameState, pos: { x: number; y: number }, r: number, z = 0) => {
   let vaultable: string | null = null;
   for (let iter = 0; iter < 3; iter++) {
     let moved = false;
@@ -209,6 +230,7 @@ const pushOut = (state: GameState, pos: { x: number; y: number }, r: number) => 
     for (let ty = toTile(pos.y - r) - 1; ty <= toTile(pos.y + r) + 1; ty++) {
       for (let tx = toTile(pos.x - r) - 1; tx <= toTile(pos.x + r) + 1; tx++) {
         const t = tileAt(tx, ty);
+        if (z >= (MOVE_TOP[t] ?? Infinity) - 0.05) continue;
         const x0 = tx * TILE;
         const y0 = ty * TILE;
         const c = TILE / 2;
@@ -231,7 +253,22 @@ const pushOut = (state: GameState, pos: { x: number; y: number }, r: number) => 
         else if (t === 'r' && state.racks[tileIndex(tx, ty)] > 0) outCircle(x0 + c, y0 + c, SHAPES.crate);
       }
     }
-    for (const w of state.walls) outBox(w.x - w.w / 2, w.y - w.h / 2, w.x + w.w / 2, w.y + w.h / 2);
+    if (z < TEMP_WALL_TOP) for (const w of state.walls) outBox(w.x - w.w / 2, w.y - w.h / 2, w.x + w.w / 2, w.y + w.h / 2);
+    // Off the ground (higher than a hop) a house is solid from outside up to its roof, doorways included (your head
+    // would meet the lintel, and the gable ends rise to the ridge): you step onto a roof only from as high as its edge
+    // (less a small step), never into it from below.
+    if (z > 0.8) {
+      const here = buildingAt(pos.x, pos.y);
+      for (let ty = toTile(pos.y - r); ty <= toTile(pos.y + r); ty++) {
+        for (let tx = toTile(pos.x - r); tx <= toTile(pos.x + r); tx++) {
+          const b = buildingAt(tx * TILE + 1, ty * TILE + 1);
+          if (b < 0 || b === here) continue;
+          const nx = Math.max(tx * TILE, Math.min(pos.x, tx * TILE + TILE));
+          const ny = Math.max(ty * TILE, Math.min(pos.y, ty * TILE + TILE));
+          if (z < roofHeightOf(b, nx, ny) - 0.35) outBox(tx * TILE, ty * TILE, tx * TILE + TILE, ty * TILE + TILE);
+        }
+      }
+    }
     const edge = TILE * 2 + r;
     const cx = Math.min(WORLD - edge, Math.max(edge, pos.x));
     const cy = Math.min(WORLD - edge, Math.max(edge, pos.y));
@@ -253,28 +290,47 @@ const moveBy = (state: GameState, p: Player, dx: number, dy: number) => {
   for (let i = 0; i < steps; i++) {
     pos.x += dx / steps;
     pos.y += dy / steps;
-    vaultable = pushOut(state, pos, PLAYER_RADIUS) ?? vaultable;
+    vaultable = pushOut(state, pos, PLAYER_RADIUS, p.z) ?? vaultable;
   }
   p.x = pos.x;
   p.y = pos.y;
   return vaultable;
 };
 
-export const lineOfSight = (state: GameState, x0: number, y0: number, x1: number, y1: number) => {
+/**
+ * A clear straight line from (x0, y0) at height h0 to (x1, y1) at height h1 (chest heights by default): nothing solid
+ * on it, walls and roofs included, both ways the same. Doorways and windows are open.
+ */
+export const lineOfSight = (state: GameState, x0: number, y0: number, x1: number, y1: number, h0 = 1.1, h1 = 1.1) => {
   const d = Math.hypot(x1 - x0, y1 - y0);
   const steps = Math.ceil(d / 0.5);
+  let px = x0;
+  let py = y0;
+  let ph = h0;
   for (let i = 1; i < steps; i++) {
     const k = i / steps;
-    if (solidAt(state, x0 + (x1 - x0) * k, y0 + (y1 - y0) * k)) return false;
+    const x = x0 + (x1 - x0) * k;
+    const y = y0 + (y1 - y0) * k;
+    const h = h0 + (h1 - h0) * k;
+    if (solidStep(state, px, py, ph, x, y, h)) return false;
+    px = x;
+    py = y;
+    ph = h;
   }
-  return true;
+  // The last stretch: a roof between the last sample and the end (someone on the far side of a roof slab).
+  return !roofBetween(px, py, ph, x1, y1, h1);
 };
+
+/** Sight from one player's eyes (chest) to another's chest. */
+export const seesBody = (state: GameState, a: Player, b: Player) => lineOfSight(state, a.x, a.y, b.x, b.y, chestHeight(a), chestHeight(b));
 
 /** Can `viewer` see `target`? Plants hide you unless someone is very close or you just fired. */
 /** On the ground, or hanging under an open parachute: you can be seen, aimed at and hit. */
 export const targetable = (p: Player) => p.alive && (p.stage === 'ground' || p.stage === 'falling');
 /** How high a player's chest is above the ground (in the air: on the way down). */
-export const chestHeight = (p: Player) => (p.stage === 'falling' ? Math.max(0, p.alt) + 1.1 : 1.1);
+export const chestHeight = (p: Player) => feetOf(p) + 1.1;
+/** How high a player's feet are: in the air their height, on the ground the roof or hop they are on. */
+export const feetOf = (p: Player) => (p.stage === 'falling' ? Math.max(0, p.alt) : p.z ?? 0);
 
 /** Where a player's body is for bullets: leaning out moves the exposed shoulder sideways. */
 export const hitPoint = (p: Player) => ({
@@ -291,14 +347,14 @@ export const canSee = (state: GameState, viewer: Player, target: Player) => {
   return true;
 };
 
-/** Nearest open spot to (x, y), searching outwards. */
+/** Nearest open spot to (x, y) outside every house (you come down beside one, not inside), searching outwards. */
 const freeSpot = (state: GameState, x: number, y: number) => {
   for (let ring = 0; ring < 12; ring++) {
     for (let i = 0; i < Math.max(1, ring * 8); i++) {
       const a = (i / Math.max(1, ring * 8)) * Math.PI * 2;
       const cx = Math.min(WORLD - 3, Math.max(3, x + Math.cos(a) * ring * 0.8));
       const cy = Math.min(WORLD - 3, Math.max(3, y + Math.sin(a) * ring * 0.8));
-      if (!circleBlocked(state, cx, cy, PLAYER_RADIUS + 0.1)) return { x: cx, y: cy };
+      if (!circleBlocked(state, cx, cy, PLAYER_RADIUS + 0.1) && buildingAt(cx, cy) < 0) return { x: cx, y: cy };
     }
   }
   return { x: CENTER, y: CENTER };
@@ -335,9 +391,22 @@ export const rollLoot = (state: GameState, tier: number): { kind: LootKind; tier
   return { kind, tier: 0, ammo: kind === 'ammo' ? 0 : 1 };
 };
 
-const addLoot = (state: GameState, kind: LootKind, x: number, y: number, ammo?: number, tier = 0) => {
-  state.loot.push({ id: state.nextId++, kind, x, y, ammo: ammo ?? (isWeapon(kind) ? foundRounds(kind, tier) : 0), tier, active: true });
+const addLoot = (state: GameState, kind: LootKind, x: number, y: number, ammo?: number, tier = 0, z = 0) => {
+  const k: Loot = { id: state.nextId++, kind, x, y, ammo: ammo ?? (isWeapon(kind) ? foundRounds(kind, tier) : 0), tier, active: true };
+  if (z > 0) k.z = z;
+  state.loot.push(k);
 };
+/** Drop loot where a player stands: on a roof it stays on the roof (kept inside its edges), else on the ground. */
+const dropAt = (state: GameState, p: Player, kind: LootKind, x: number, y: number, ammo?: number, tier = 0) => {
+  const b = p.z >= ROOF_LAYER ? buildingAt(p.x, p.y) : -1;
+  if (b >= 0 && buildingAt(x, y) !== b) {
+    x = p.x;
+    y = p.y;
+  }
+  addLoot(state, kind, x, y, ammo, tier, b >= 0 ? roofHeightOf(b, x, y) : 0);
+};
+/** Close enough in height to reach: loot on a roof from the roof, loot on the floor from the floor. */
+const withinReach = (p: Player, k: Loot) => Math.abs((k.z ?? 0) - p.z) < 1.2;
 const addRolled = (state: GameState, x: number, y: number) => {
   const r = rollLoot(state, lootTierAt(x, y));
   addLoot(state, r.kind, x, y, r.ammo, r.tier);
@@ -430,6 +499,9 @@ export const newPlayer = (id: number, name: string, fighter: FighterId, bot: boo
   x, y,
   vx: 0,
   vy: 0,
+  z: 0,
+  jz: 0,
+  climb: 0,
   heading: 0,
   hp: FIGHTERS[fighter].hp,
   maxHp: FIGHTERS[fighter].hp,
@@ -571,23 +643,42 @@ const updateDrop = (state: GameState, inputs: Input[]) => {
         state.events.push({ type: 'jump', player: p.id });
       }
     } else if (p.stage === 'falling') {
+      const was = { x: p.x, y: p.y, alt: p.alt };
       updateFall(state, p, input);
-      if (p.alt <= 0) {
-        const spot = freeSpot(state, p.x, p.y);
-        p.x = spot.x;
-        p.y = spot.y;
-        p.alt = 0;
-        p.vz = 0;
+      // A house is solid in the air too: coming down over it you land on its roof; drifting into its walls below the
+      // eaves you are stopped there (and come down beside it, never inside).
+      const roof = roofAt(p.x, p.y);
+      if (roof >= 0 && p.alt <= roof && was.alt > roof - 0.01) {
+        land(state, p, roof);
+      } else if (roof >= 0 && p.alt <= roof) {
+        p.x = was.x;
+        p.y = was.y;
         p.vx = 0;
         p.vy = 0;
-        p.canopy = -1;
-        p.stage = 'ground';
-        state.events.push({ type: 'land', player: p.id, x: p.x, y: p.y });
-      }
+        if (p.alt <= 0) land(state, p, 0);
+      } else if (p.alt <= 0) land(state, p, 0);
     }
     p.prev = { ...input };
   }
   if (state.players.every((p) => p.stage === 'ground')) state.phase = 'play';
+};
+
+/** Touch down from the sky: on a roof at its height (`z` > 0), else on the nearest open spot of the ground. */
+const land = (state: GameState, p: Player, z: number) => {
+  if (z <= 0) {
+    const spot = freeSpot(state, p.x, p.y);
+    p.x = spot.x;
+    p.y = spot.y;
+  }
+  p.alt = 0;
+  p.z = z;
+  p.jz = 0;
+  p.vz = 0;
+  p.vx = 0;
+  p.vy = 0;
+  p.canopy = -1;
+  p.stage = 'ground';
+  state.events.push(z > 0 ? { type: 'land', player: p.id, x: p.x, y: p.y, z } : { type: 'land', player: p.id, x: p.x, y: p.y });
 };
 
 // ---------- the Deadline
@@ -714,7 +805,7 @@ const knockOut = (state: GameState, p: Player) => {
   drops.forEach(([kind, ammo, tier], i) => {
     const a = (i / drops.length) * Math.PI * 2;
     const r = drops.length > 1 ? 0.9 : 0;
-    addLoot(state, kind, p.x + Math.cos(a) * r, p.y + Math.sin(a) * r, ammo, tier);
+    dropAt(state, p, kind, p.x + Math.cos(a) * r, p.y + Math.sin(a) * r, ammo, tier);
   });
   const alive = alivePlayers(state);
   if (alive.length <= 1) {
@@ -746,11 +837,15 @@ const hitRack = (state: GameState, tx: number, ty: number, amount: number) => {
   }
 };
 
-const explode = (state: GameState, owner: number, x: number, y: number, radius: number, damage: number) => {
-  state.events.push({ type: 'explosion', x, y, radius });
+/** A blast at (x, y) at height `h` (0 = on the ground): it reaches up and down too, but never through a roof. */
+const explode = (state: GameState, owner: number, x: number, y: number, radius: number, damage: number, h = 0) => {
+  state.events.push(h > 0.5 ? { type: 'explosion', x, y, radius, z: h } : { type: 'explosion', x, y, radius });
   for (const o of state.players) {
     if (!o.alive || o.stage !== 'ground') continue;
-    const d = Math.hypot(o.x - x, o.y - y);
+    // Height apart beyond the body's own height (on the same level, the same as before).
+    const dz = Math.max(0, Math.abs(o.z + 0.9 - (h + 0.9)) - 0.9);
+    const d = Math.hypot(o.x - x, o.y - y, dz);
+    if (dz > 0 && roofBetween(x, y, h + 0.3, o.x, o.y, o.z + 1.1)) continue;
     if (d > radius + PLAYER_RADIUS) continue;
     const self = o.id === owner ? 0.5 : 1;
     o.lastHitWith = 'explosion';
@@ -767,7 +862,9 @@ const aimedAt = (state: GameState, p: Player, aimX: number, aimY: number) => {
   let bd = 2.5;
   for (const o of state.players) {
     if (o.id === p.id || !targetable(o)) continue;
-    const d = Math.hypot(o.x - aimX, o.y - aimY);
+    let d = Math.hypot(o.x - aimX, o.y - aimY);
+    // Two people near the aim point at different heights (one on a roof, one under it): the one in sight.
+    if (d < bd && feetOf(o) !== feetOf(p) && !seesBody(state, p, o)) d += 2.5;
     if (d < bd) {
       best = o;
       bd = d;
@@ -787,13 +884,15 @@ const fireBullet = (state: GameState, p: Player, angle: number, aim?: { x: numbe
   const y = o.y + Math.sin(angle) * 0.6;
   const target = aim ? aimedAt(state, p, aim.x, aim.y) : null;
   const h0 = chestHeight(p);
+  // At nobody: the round goes to chest height over the aim point (from a roof, down at what you point at).
+  const toAim = aim ? Math.max(1, Math.hypot(aim.x - x, aim.y - y)) : 1;
   state.projectiles.push({
     id: state.nextId++, owner: p.id, kind: 'bullet', weapon: p.weapon,
     x, y,
     vx: Math.cos(angle) * w.speed, vy: Math.sin(angle) * w.speed,
     damage: gunDamage(p), life: w.range / w.speed,
     sx: x, sy: y, tx: 0, ty: 0, t: 0, duration: 0, radius: 0,
-    h: h0, h0, h1: target ? chestHeight(target) : h0, hd: target ? Math.max(1, Math.hypot(target.x - x, target.y - y)) : 1,
+    h: h0, h0, h1: target ? chestHeight(target) : aim ? 1.1 : h0, hd: target ? Math.max(1, Math.hypot(target.x - x, target.y - y)) : toAim,
   });
 };
 
@@ -835,6 +934,10 @@ const lob = (state: GameState, p: Player, aimX: number, aimY: number, range: num
     sx: p.x, sy: p.y, tx: p.x + Math.cos(a) * d, ty: p.y + Math.sin(a) * d,
     t: 0, duration: 0.35 + d / 22, radius, rocket,
   });
+  // It comes down on whatever is there: a roof, unless you threw it from that house's floor (then it lands inside).
+  const pr = state.projectiles[state.projectiles.length - 1];
+  const b = buildingAt(pr.tx, pr.ty);
+  if (b >= 0 && !(buildingAt(p.x, p.y) === b && p.z < ROOF_LAYER)) pr.h1 = roofHeightOf(b, pr.tx, pr.ty);
 };
 
 /** Rounds this player has for the gun in hand (magazine + spare). */
@@ -918,7 +1021,7 @@ const useSuper = (state: GameState, p: Player, input: Input) => {
       const s = SUPERS.push;
       state.events.push({ type: 'explosion', x: p.x, y: p.y, radius: s.radius });
       for (const o of state.players) {
-        if (!o.alive || o.id === p.id || o.stage !== 'ground') continue;
+        if (!o.alive || o.id === p.id || o.stage !== 'ground' || Math.abs(o.z - p.z) > 1.5) continue;
         const dx = o.x - p.x;
         const dy = o.y - p.y;
         const d = Math.hypot(dx, dy);
@@ -941,7 +1044,7 @@ export const lootUnder = (state: GameState, p: Player): Loot | null => {
   let bestD = 1.2;
   for (const k of state.loot) {
     const d = Math.hypot(k.x - p.x, k.y - p.y);
-    if (k.active && d < bestD) {
+    if (k.active && d < bestD && withinReach(p, k)) {
       best = k;
       bestD = d;
     }
@@ -1003,7 +1106,7 @@ const takeLoot = (state: GameState, p: Player, k: Loot) => {
       p.swapping = SWAP_TIME;
     } else {
       // Both slots full: swap the one in your hands for it, and drop yours where you stand.
-      if (roundsLeft(p) > 0) addLoot(state, p.weapon, p.x, p.y + 0.4, roundsLeft(p), p.rarity);
+      if (roundsLeft(p) > 0) dropAt(state, p, p.weapon, p.x, p.y + 0.4, roundsLeft(p), p.rarity);
       toHand(p, gun);
     }
     p.using = null;
@@ -1020,7 +1123,7 @@ const takeLoot = (state: GameState, p: Player, k: Loot) => {
     } else if (p.holster && box(p.holster) > 0) p.holster.ammo += box(p.holster);
     else return false;
   } else if (k.kind === 'armor') {
-    if (p.armor >= 1 && p.vest > 0) addLoot(state, 'armor', p.x, p.y + 0.4, Math.round(p.armor), p.vest);
+    if (p.armor >= 1 && p.vest > 0) dropAt(state, p, 'armor', p.x, p.y + 0.4, Math.round(p.armor), p.vest);
     p.vest = k.tier ?? 3;
     p.armor = vestPoints(k);
   } else if (k.kind === 'backpack') {
@@ -1105,6 +1208,45 @@ const finishHeal = (state: GameState, p: Player) => {
 
 // ---------- per tick
 
+/**
+ * Feet: on a surface they follow it (up and down a roof's slope); off it (a hop, or walking off a roof's edge) gravity
+ * pulls them down to whatever is under them, the ground or another roof. A drop of more than a metre is a thud.
+ */
+const updateFeet = (state: GameState, p: Player, hop: boolean) => {
+  const under = supportAt(p.x, p.y, p.z);
+  if (p.jz === 0 && p.z <= under + 0.35 && p.z >= under - 0.6) {
+    p.z = under;
+    if (!hop) return;
+    p.jz = FEET.jump;
+  }
+  const was = p.z;
+  p.jz -= FEET.gravity * DT;
+  p.z += p.jz * DT;
+  // You come down onto a roof only from above it; under it (never reached from the side) the floor is what holds you.
+  let below = supportAt(p.x, p.y, was);
+  if (below > was + 0.35) below = 0;
+  if (p.z <= below) {
+    if (p.jz * p.jz > 2 * FEET.gravity * FEET.landDrop) state.events.push(below > 0 ? { type: 'thud', player: p.id, x: p.x, y: p.y, z: below } : { type: 'thud', player: p.id, x: p.x, y: p.y });
+    p.z = below;
+    p.jz = 0;
+  }
+};
+
+/** Start up a ladder: from its foot (in line with its rungs) to the roof just inside the wall. */
+const startClimb = (state: GameState, p: Player, l: NonNullable<ReturnType<typeof ladderAt>>) => {
+  const cx = l.tx * TILE + TILE / 2;
+  const cy = l.ty * TILE + TILE / 2;
+  p.climb = CLIMB.time;
+  p.vaultFrom = { x: cx + l.nx * (TILE / 2 + PLAYER_RADIUS + 0.05), y: cy + l.ny * (TILE / 2 + PLAYER_RADIUS + 0.05) };
+  p.vaultTo = { x: cx - l.nx * 0.3, y: cy - l.ny * 0.3 };
+  p.vx = 0;
+  p.vy = 0;
+  p.jz = 0;
+  p.pushing = 0;
+  p.using = null;
+  state.events.push({ type: 'vault', player: p.id, x: p.x, y: p.y });
+};
+
 const updatePlayer = (state: GameState, p: Player, input: Input) => {
   const pressed = (k: 'super' | 'use' | 'reload' | 'roll') => input[k] && !p.prev[k];
   p.cooldown = Math.max(0, p.cooldown - DT);
@@ -1164,7 +1306,23 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     p.vx = Math.cos(p.rollDir) * v;
     p.vy = Math.sin(p.rollDir) * v;
     moveBy(state, p, p.vx * DT, p.vy * DT);
+    updateFeet(state, p, false);
     p.heading = p.rollDir;
+    p.prev = { ...input };
+    return;
+  }
+
+  if (p.climb > 0) {
+    // Up the ladder (three quarters of the time), then over the eave onto the roof. No shooting meanwhile.
+    p.climb = Math.max(0, p.climb - DT);
+    const k = 1 - p.climb / CLIMB.time;
+    const top = roofAt(p.vaultTo.x, p.vaultTo.y);
+    const up = Math.min(1, k / 0.75);
+    const over = Math.max(0, (k - 0.75) / 0.25);
+    p.x = p.vaultFrom.x + (p.vaultTo.x - p.vaultFrom.x) * over;
+    p.y = p.vaultFrom.y + (p.vaultTo.y - p.vaultFrom.y) * over;
+    p.z = top * up;
+    p.jz = 0;
     p.prev = { ...input };
     return;
   }
@@ -1185,7 +1343,7 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     const v = SUPERS.deploy.distance / SUPERS.deploy.time;
     moveBy(state, p, Math.cos(p.dashAngle) * v * DT, Math.sin(p.dashAngle) * v * DT);
     for (const o of state.players) {
-      if (!o.alive || o.id === p.id || p.dashHit.includes(o.id)) continue;
+      if (!o.alive || o.id === p.id || p.dashHit.includes(o.id) || Math.abs(feetOf(o) - p.z) > 1.5) continue;
       if (Math.hypot(o.x - p.x, o.y - p.y) < PLAYER_RADIUS * 2.2) {
         p.dashHit.push(o.id);
         o.lastHitWith = 'super';
@@ -1227,11 +1385,15 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
         p.vy -= into * ny;
       }
     }
-    // Keep pushing into a fence, window or low furniture and you climb over it.
+    // Keep pushing into a fence, window or low furniture and you climb over it; into a ladder, and you climb up it.
     const pushingInto = vaultable && len > 0.01 && c > 1e-5 && (input.mx * cx + input.my * cy) / (len * c) < -0.6;
-    p.pushing = pushingInto ? p.pushing + DT : 0;
-    if (pushingInto && p.pushing >= VAULT.after) tryVault(state, p, -cx / c, -cy / c);
+    const ladder = p.z < 0.3 && p.jz === 0 && len > 0.01 && !swimming ? ladderAt(p.x, p.y, PLAYER_RADIUS + 0.3) : null;
+    const climbing = !!ladder && -(input.mx * ladder.nx + input.my * ladder.ny) / len > 0.6;
+    p.pushing = pushingInto || climbing ? p.pushing + DT : 0;
+    if (climbing && p.pushing >= CLIMB.after) startClimb(state, p, ladder);
+    else if (pushingInto && p.pushing >= VAULT.after) tryVault(state, p, -cx / c, -cy / c);
   }
+  if (p.climb <= 0) updateFeet(state, p, !swimming && input.jump && !p.prev.jump);
 
   // People charge rockets and bombs: hold to throw farther, let go to throw. Bots throw at once.
   if (swimming) {
@@ -1253,7 +1415,7 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
   // Walking over a pile, take whatever of it is wanted (the nearest first).
   let auto: Loot | null = k && autoTakes(p, k) ? k : null;
   if (!auto) {
-    for (const o of state.loot) if (o.active && Math.hypot(o.x - p.x, o.y - p.y) < 1.2 && autoTakes(p, o)) {
+    for (const o of state.loot) if (o.active && Math.hypot(o.x - p.x, o.y - p.y) < 1.2 && withinReach(p, o) && autoTakes(p, o)) {
       auto = o;
       break;
     }
@@ -1309,7 +1471,7 @@ const updateProjectile = (state: GameState, pr: Projectile) => {
     pr.x = pr.sx + (pr.tx - pr.sx) * pr.t;
     pr.y = pr.sy + (pr.ty - pr.sy) * pr.t;
     if (pr.t >= 1) {
-      explode(state, pr.owner, pr.tx, pr.ty, pr.radius, pr.damage);
+      explode(state, pr.owner, pr.tx, pr.ty, pr.radius, pr.damage, pr.h1 ?? 0);
       return false;
     }
     return true;
@@ -1319,18 +1481,25 @@ const updateProjectile = (state: GameState, pr: Projectile) => {
   if (pr.life <= 0) return false;
   const steps = Math.max(1, Math.ceil((Math.hypot(pr.vx, pr.vy) * DT) / 0.4));
   for (let s = 0; s < steps; s++) {
+    const px = pr.x;
+    const py = pr.y;
+    const ph = pr.h ?? 1.1;
     pr.x += (pr.vx * DT) / steps;
     pr.y += (pr.vy * DT) / steps;
-    // A round fired up at someone in the air climbs over the roofs and trees in between.
+    // A round climbs to someone higher up (in the air, on a roof) or dips to someone lower, in a straight line.
     if (pr.h0 !== undefined) pr.h = pr.h0 + ((pr.h1 ?? pr.h0) - pr.h0) * Math.min(1, Math.hypot(pr.x - pr.sx, pr.y - pr.sy) / (pr.hd ?? 1));
-    if ((pr.h ?? 1.1) < 3 && solidAt(state, pr.x, pr.y)) {
+    const ht = pr.h ?? 1.1;
+    if (ht <= 0.02 || solidStep(state, px, py, ph, pr.x, pr.y, ht)) {
       hitRack(state, toTile(pr.x), toTile(pr.y), pr.damage);
-      state.events.push({ type: 'impact', x: pr.x, y: pr.y });
+      state.events.push(ht === 1.1 ? { type: 'impact', x: pr.x, y: pr.y } : { type: 'impact', x: pr.x, y: pr.y, z: ht });
       return false;
     }
     for (const o of state.players) {
       if (o.id === pr.owner || !targetable(o)) continue;
       const h = hitPoint(o);
+      // The body runs from the feet to the top of the head: a round over or under it misses.
+      const feet = feetOf(o);
+      if (ht < feet - 0.1 || ht > feet + BODY.top) continue;
       if (Math.hypot(h.x - pr.x, h.y - pr.y) < PLAYER_RADIUS + 0.15) {
         o.lastHitWith = pr.weapon;
         state.players[pr.owner].hits += 1;
@@ -1345,18 +1514,21 @@ const updateProjectile = (state: GameState, pr: Projectile) => {
 const updateRocket = (state: GameState, pr: Projectile) => {
   pr.life -= DT;
   const boom = () => {
-    explode(state, pr.owner, pr.x, pr.y, pr.radius, pr.damage);
+    explode(state, pr.owner, pr.x, pr.y, pr.radius, pr.damage, Math.max(0, (pr.h ?? 0) - 1.1));
     return false;
   };
   if (pr.life <= 0) return boom();
   const steps = Math.max(1, Math.ceil((Math.hypot(pr.vx, pr.vy) * DT) / 0.3));
   for (let s = 0; s < steps; s++) {
+    const px = pr.x;
+    const py = pr.y;
+    const ph = pr.h ?? ROCKET.launchHeight;
     pr.x += (pr.vx * DT) / steps;
     pr.y += (pr.vy * DT) / steps;
     pr.vh = (pr.vh ?? 0) - (ROCKET.gravity * DT) / steps;
     pr.h = (pr.h ?? ROCKET.launchHeight) + (pr.vh * DT) / steps;
     if (pr.h <= 0.05) return boom();
-    if (pr.h < ROCKET.wallHeight && solidAt(state, pr.x, pr.y)) {
+    if (solidStep(state, px, py, ph, pr.x, pr.y, pr.h)) {
       hitRack(state, toTile(pr.x), toTile(pr.y), pr.damage);
       return boom();
     }
