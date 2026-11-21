@@ -1,6 +1,7 @@
 import { aimError, bestLoot, campSpot, CLOSE, coverPoint, ENGAGE_AT, engageScore, fallbackPersona, FIRE_RANGE, gunScore, isAutomatic, landingPlan, makePersona, mulberry32, PREFERRED, LANDING_GRACE, stagePace, tierOf } from './bot-params';
 import { DROP, DT, HEALS, magOf, WEAPONS, WORLD } from './constants';
-import { canSee, healChoice, lineOfSight, lootUnder } from './step';
+import { buildingAt, doorstep, ROOF_LAYER } from './roofs';
+import { canSee, healChoice, lineOfSight, lootUnder, seesBody } from './step';
 import { NO_INPUT } from './types';
 
 import type { Persona } from './bot-params';
@@ -80,6 +81,9 @@ export const createBot = (id: number, seed: number) => {
     const mine = landingPlan(state).get(id);
     p = makePersona(mine?.persona ?? fallbackPersona(id), rand);
     if (mine) spot = { x: mine.x, y: mine.y, t: mine.t };
+    // Aim for the doorstep, not the roof: land beside the house and walk straight in.
+    const b = buildingAt(spot.x, spot.y);
+    if (b >= 0) spot = { ...doorstep(b, spot.x, spot.y), t: spot.t };
   };
 
   /** Hits and shots from the last tick: being shot or hearing a gun wakes me up. */
@@ -109,7 +113,7 @@ export const createBot = (id: number, seed: number) => {
       }
       // Stick with whoever I'm fighting, and answer whoever is shooting me.
       const rank = d - (o.id === targetId ? 6 : 0) - (o.id === hitBy && now - hitAt < 3 ? 8 : 0);
-      if (rank < bestD && lineOfSight(state, me.x, me.y, o.x, o.y)) {
+      if (rank < bestD && seesBody(state, me, o)) {
         best = o;
         bestD = rank;
       }
@@ -265,6 +269,17 @@ export const createBot = (id: number, seed: number) => {
       roamTo(state, me, now, pace);
       wantX = wpX;
       wantY = wpY;
+    }
+
+    // Up on a roof with nobody to fight from it: walk off the edge the way I want to go (if what I
+    // want is in the house under me: the edge by its door), rather than stand over it.
+    if (me.z >= ROOF_LAYER && !(engaged && target)) {
+      const b = buildingAt(me.x, me.y);
+      if (b >= 0 && buildingAt(wantX, wantY) === b) {
+        const out = doorstep(b, me.x, me.y);
+        wantX = out.x;
+        wantY = out.y;
+      }
     }
 
     const moved = Math.hypot(me.x - lastX, me.y - lastY);
