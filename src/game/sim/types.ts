@@ -112,6 +112,8 @@ export interface Player {
   vault: number;
   vaultFrom: { x: number; y: number };
   vaultTo: { x: number; y: number };
+  /** The hop (Space where the mouse shoots): seconds left in the air, 0 on the ground. */
+  hop: number;
   /** How long you've been pushing into something you could vault. */
   pushing: number;
   /** Leaning: -1 (left) .. 1 (right), eased towards the input. */
@@ -250,6 +252,7 @@ export type GameEvent =
   | { type: 'dryFire'; player: number }
   | { type: 'vault'; player: number; x: number; y: number }
   | { type: 'roll'; player: number; x: number; y: number }
+  | { type: 'hop'; player: number; x: number; y: number }
   | { type: 'jump'; player: number }
   | { type: 'land'; player: number; x: number; y: number }
   | { type: 'ko'; victim: number; by: number | null; with: string | null; x: number; y: number }

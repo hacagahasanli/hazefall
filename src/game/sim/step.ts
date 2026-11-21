@@ -9,6 +9,7 @@ import {
   dragAt,
   ROCKET,
   ROLL,
+  HOP,
   railSides,
   SWIM,
   START_WEAPON,
@@ -468,6 +469,7 @@ export const newPlayer = (id: number, name: string, fighter: FighterId, bot: boo
   rolling: 0,
   rollDir: 0,
   rollCooldown: 0,
+  hop: 0,
   zoneSum: 0,
   zoneClock: 0,
   charge: 0,
@@ -1148,6 +1150,13 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
   updateReload(p);
   if (pressed('reload') && !p.using) startReload(state, p);
   p.rollCooldown = Math.max(0, p.rollCooldown - DT);
+
+  // The hop: a fresh press of jump on your feet (not swimming, rolling, vaulting or dashing). Movement carries on as usual.
+  p.hop = Math.max(0, p.hop - DT);
+  if (input.jump && !p.prev.jump && p.hop <= 0 && !swimming && p.rolling <= 0 && p.vault <= 0 && p.dashTime <= 0) {
+    p.hop = HOP.time;
+    state.events.push({ type: 'hop', player: p.id, x: p.x, y: p.y });
+  }
 
   // The dodge roll: the way you're moving (or facing), sliding along whatever it meets.
   if (pressed('roll') && !swimming && p.rollCooldown <= 0 && p.rolling <= 0 && p.vault <= 0 && p.dashTime <= 0 && !p.charging) {

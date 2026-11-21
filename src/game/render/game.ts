@@ -6,12 +6,13 @@ import { actionFor, DEFAULT_SETTINGS, keyLabel, keyMap } from '../settings';
 
 import type { VolumeKind } from '../sfx';
 import type { Action, Settings } from '../settings';
-import { ARMOR, HEALS, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITEMS, MAP, PLAYERS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
+import { ARMOR, HEALS, VEST, ROLL, HOP, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITEMS, MAP, PLAYERS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
 import { canSee, carryCap, healChoice, inPlant, inWater, lineOfSight, lootUnder, reloadTime, solidAt, throwDistance } from '../sim/step';
 import { createOfflineSession } from '../net/session';
 import { NO_INPUT } from '../sim/types';
 
 import { buildRig, fighterLook, leaveAir, poseChute, poseDeath, poseFreefall, poseRig, poseSwim, poseTopDown } from './characters';
+import { shootJump } from './keyRoles';
 import { buildGun } from './guns';
 import { mat, mesh, PALETTE } from './palette';
 import { createVfx } from './vfx';
@@ -776,10 +777,19 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     return raycaster.ray.intersectPlane(aimPlane, aimHit) ? { x: aimHit.x, y: aimHit.z } : null;
   };
   let muted = sfx.muted;
+  /** A round is being played: not paused, not held for the launch, you are alive and it is not over. */
+  const inRound = () => !paused && !holding && state.phase !== 'over' && !!state.players[me]?.alive;
+  const blurButtons = () => {
+    const a = typeof document === 'undefined' ? null : document.activeElement;
+    if (a instanceof HTMLButtonElement || (a instanceof HTMLElement && a.getAttribute('role') === 'button')) a.blur();
+  };
   const onDown = (e: KeyboardEvent) => {
     sfx.unlock();
     const action = actionFor(settings.keys, e.code);
     if (action && action !== 'pause' && action !== 'mute' && action !== 'aim') e.preventDefault();
+    // In a round, a game key never presses a button that kept the focus (the HUD's, or one clicked before the round):
+    // Space would click it instead of jumping. Menus (paused, the report, the launch) keep their keyboard focus.
+    if (action && inRound()) blurButtons();
     if (action === 'mute' && !e.repeat) {
       if (opts.onMuteKey) opts.onMuteKey();
       else muted = sfx.toggleMute();
@@ -789,7 +799,12 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     keys.add(e.code);
     if (!e.repeat) tapped.add(e.code);
   };
-  const onUp = (e: KeyboardEvent) => keys.delete(e.code);
+  const onUp = (e: KeyboardEvent) => {
+    keys.delete(e.code);
+    // A button fires on Space's release: in a round, the release of a game key is the game's too.
+    const action = actionFor(settings.keys, e.code);
+    if (action && action !== 'pause' && action !== 'mute' && action !== 'aim' && inRound()) e.preventDefault();
+  };
   const onBlur = () => {
     keys.clear();
     tapped.clear();
@@ -1032,10 +1047,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         mx /= len;
         my /= len;
       }
+      // The mouse shoots here, so the shoot / jump key (Space) only jumps: the hop on the ground, the canopy in the air.
       const input: Input = {
         mx, my,
-        fire: held('fire') || mouseDown || btn('fire'),
-        jump: held('fire') || btn('fire'),
+        ...shootJump({ mouseShoots: true, ground: p.stage === 'ground', key: held('fire'), mouse: mouseDown, touchFire: btn('fire') }),
         super: held('super') || btn('super'),
         use: held('use') || btn('use'),
         lean: (held('leanR') || btn('leanR') ? 1 : 0) - (held('leanL') || btn('leanL') ? 1 : 0),
@@ -1067,10 +1082,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const pointed = aimMode === 'mouse' && !touch && canAim ? mouseAim() : null;
     const target = canAim && !pointed ? autoAim(p) : null;
     const aim = pointed ?? (target ? { x: target.x, y: target.y } : { x: p.x + lastMove.x * 6, y: p.y + lastMove.y * 6 });
+    // With mouse aim the mouse shoots, so on the ground the shoot / jump key (Space) hops, as in first person. With auto-aim
+    // it is the only trigger (the mouse does not shoot), so it keeps shooting and jumps only from the plane and the canopy.
     const input = {
       mx, my,
-      fire: held('fire') || (aimMode === 'mouse' && mouseDown) || btn('fire'),
-      jump: held('fire') || btn('fire'),
+      ...shootJump({ mouseShoots: aimMode === 'mouse' && !touch, ground: p.stage === 'ground', key: held('fire'), mouse: mouseDown, touchFire: btn('fire') }),
       // Battle-royale keys: Q / E lean, F picks up or uses, G is the super.
       super: held('super') || btn('super'),
       use: held('use') || btn('use'),
@@ -1222,6 +1238,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       case 'roll':
         sfx.vault(e.x - camX(), e.player === me ? 0 : Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y));
         vfx.burst(e.x, 0.2, 8, 'dust', { z: e.y, speed: 2.5, up: 0.8, gravity: 5, life: 0.4, size: 0.7 });
+        break;
+      case 'hop':
+        // A light push-off: the vault's sound, softer, and a puff of dust where you left the ground.
+        sfx.vault(e.x - camX(), e.player === me ? 0 : Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y));
+        vfx.burst(e.x, 0.1, 4, 'dust', { z: e.y, speed: 1.4, up: 0.5, gravity: 5, life: 0.3, size: 0.5 });
         break;
       case 'vault':
         sfx.vault(e.x - camX(), e.player === me ? 0 : Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y));
@@ -1724,6 +1745,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       deck[i] += (onDeck - deck[i]) * Math.min(1, dt * 14);
       if (p.stage === 'ground') h += deck[i];
       if (p.vault > 0) h = Math.sin((1 - p.vault / VAULT.time) * Math.PI) * 0.7 + deck[i]; // the hop over
+      if (p.stage === 'ground' && p.hop > 0 && p.vault <= 0) h += Math.sin((1 - p.hop / HOP.time) * Math.PI) * HOP.height; // the hop (Space)
       // Knocked out in the water: the body floats for a moment, then slowly sinks out of sight,
       // a few bubbles coming up as it goes.
       if (fallen && inWater(p.x, p.y)) {
@@ -1785,7 +1807,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         }
       } else if (p.stage === 'ground') {
         poseTopDown(rig, {
-          dt, time, vx: p.vx, vy: p.vy, yaw: yw.a, yawRate: yw.v, onGround: true, dashing: p.dashTime > 0,
+          dt, time, vx: p.vx, vy: p.vy, yaw: yw.a, yawRate: yw.v, onGround: p.hop <= 0, dashing: p.dashTime > 0,
           gun: p.weapon, sinceShot,
           reload: p.reload > 0 ? 1 - p.reload / reloadTime(p) : null,
           lean: p.lean,
