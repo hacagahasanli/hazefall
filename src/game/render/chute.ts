@@ -301,12 +301,12 @@ export const moveChute = (m: ChuteMotion, dt: number, v: { vx: number; vy: numbe
   const open = inflation(v.canopy);
   if (speed > 1.2) {
     const d = wrap(Math.atan2(v.vy, v.vx) - m.yaw);
-    const w = 2.4;
+    const w = 3.2;
     m.yawV += (w * w * d - 2 * 0.78 * w * m.yawV) * dt;
   } else m.yawV -= m.yawV * Math.min(1, 3 * dt);
   m.yaw = wrap(m.yaw + m.yawV * dt);
   // Bank into the turn (turning left on the map, yaw rising, the inside is the -x side: it goes down), on its own spring.
-  const bankWant = Math.max(-0.55, Math.min(0.55, m.yawV * 0.42)) * open;
+  const bankWant = Math.max(-0.7, Math.min(0.7, m.yawV * 0.55)) * open;
   const wb = 5;
   m.bankV += (wb * wb * (bankWant - m.bank) - 2 * 0.5 * wb * m.bankV) * dt;
   m.bank += m.bankV * dt;

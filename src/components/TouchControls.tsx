@@ -218,6 +218,7 @@ export const TouchControls = ({
   onMove,
   onPause,
   onPlane,
+  inAir = false,
   superReady,
   rollReady,
   sniper = false,
@@ -232,6 +233,8 @@ export const TouchControls = ({
   onMove: (x: number, y: number) => void;
   onPause: () => void;
   onPlane: boolean;
+  /** Out of the plane and still in the air: the roll button dives the canopy. */
+  inAir?: boolean;
   superReady: number;
   rollReady: number;
   /** A sniper in hand: a SCOPE button to hold. */
@@ -272,7 +275,7 @@ export const TouchControls = ({
         <>
           <Pad
             b="roll"
-            label="Roll"
+            label={inAir ? 'Dive' : 'Roll'}
             press={press}
             ready={rollReady}
             style={{ right: 136, bottom: 14 }}
