@@ -257,6 +257,32 @@ const SPECS: Record<CharacterId, Spec> = {
   },
 };
 
+/**
+ * Fighters only: a faint cool light on the edges that turn away from the camera, so a body separates from the grass or
+ * the wall behind it. It is a share of the fighter's own lit colour (at most about a third, on the very rim), so it never
+ * glows in the dark and never shows through anything.
+ */
+const rimCache = new Map<THREE.Material, THREE.Material>();
+const withRim = (m: THREE.Material) => {
+  let r = rimCache.get(m);
+  if (r) return r;
+  const c = m.clone();
+  const base = m.onBeforeCompile;
+  c.onBeforeCompile = (sh, renderer) => {
+    base.call(m, sh, renderer);
+    sh.fragmentShader = sh.fragmentShader.replace(
+      '#include <emissivemap_fragment>',
+      `#include <emissivemap_fragment>
+      float rimK = 1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0);
+      totalEmissiveRadiance += diffuseColor.rgb * vec3(0.8, 0.88, 1.0) * (rimK * rimK * rimK * 0.35);`,
+    );
+  };
+  const key = m.customProgramCacheKey();
+  c.customProgramCacheKey = () => `${key}-rim`;
+  rimCache.set(m, c);
+  return c;
+};
+
 export const buildRig = (id: CharacterId): Rig => {
   const s = SPECS[id];
   const root = new THREE.Group();
@@ -412,6 +438,9 @@ export const buildRig = (id: CharacterId): Rig => {
 
   // Drawn as a skinned mesh (the groups above are its bones): a fighter is two or three draw calls instead of ~40.
   skinRig(root, new Set([weapon]), [vest]);
+  root.traverse((o) => {
+    if (o instanceof THREE.SkinnedMesh && !Array.isArray(o.material)) o.material = withRim(o.material);
+  });
   return {
     root, body, armL, armR, foreL: left.fore, foreR: right.fore, armLen: s.armLen,
     shinL: ll.shin, shinR: lr.shin, legLen: s.legLen,

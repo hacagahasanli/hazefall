@@ -48,7 +48,7 @@ const paint = (g: THREE.BufferGeometry, hex: number) => {
 const roofMats = {
   roof: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide, flatShading: true }),
   gable: new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, flatShading: true }),
-  ceiling: new THREE.MeshBasicMaterial({ color: 0xa8a092 }),
+  ceiling: new THREE.MeshBasicMaterial({ color: 0x8c8374 }),
 };
 
 const buildRoof = (x0: number, z0: number, w: number, d: number, barn: boolean, i: number) => {
@@ -194,6 +194,8 @@ export interface CullOptions {
   lodNear: number;
   /** Ground distance (m) past which nothing is drawn (beyond the fog). */
   far: number;
+  /** The soft additive glows (door halos and light cones, warm room fill): off on the low tier. Default on. */
+  glow?: boolean;
 }
 
 export interface World {
@@ -259,6 +261,61 @@ const addGroundDetail = (m: THREE.MeshStandardMaterial) => {
   };
 };
 
+/**
+ * Soft light without textures or lights: a disc or cone whose vertex colour fades from `hex` to black at its rim, drawn
+ * additively (black adds nothing). One material for every glow on the map, so they merge into a batch or two.
+ */
+const glowMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
+// Faded out right in front of the camera, so walking through a doorway (through its cone) never washes the screen.
+glowMat.onBeforeCompile = (sh) => {
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', '#include <common>\nvarying float vNear;')
+    .replace('#include <project_vertex>', '#include <project_vertex>\nvNear = smoothstep(0.8, 3.0, -mvPosition.z);');
+  sh.fragmentShader = sh.fragmentShader
+    .replace('#include <common>', '#include <common>\nvarying float vNear;')
+    .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.rgb *= vNear;');
+};
+glowMat.customProgramCacheKey = () => 'glow-near';
+/** A flat disc (in its own xy plane) bright at the centre, black at the rim. */
+const glowDisc = (radius: number, hex: number, segs = 18) => {
+  const g = new THREE.CircleGeometry(radius, segs);
+  const c = new THREE.Color(hex);
+  const pos = g.getAttribute('position');
+  const col = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const k = Math.max(0, 1 - Math.hypot(pos.getX(i), pos.getY(i)) / radius);
+    col.set([c.r * k, c.g * k, c.b * k], i * 3);
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return g;
+};
+/** An open cone of light, narrow and bright at the top, wide and gone at the bottom. */
+const glowCone = (top: number, bottom: number, height: number, hex: number) => {
+  const g = new THREE.CylinderGeometry(top, bottom, height, 14, 1, true);
+  const c = new THREE.Color(hex);
+  const pos = g.getAttribute('position');
+  const col = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const k = pos.getY(i) > 0 ? 1 : 0;
+    col.set([c.r * k, c.g * k, c.b * k], i * 3);
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return g;
+};
+/** The wall lamp over every door: a dark housing and a warm bulb (self-lit, so it reads in shade, storm and fog). */
+const lampMats = {
+  housing: new THREE.MeshStandardMaterial({ color: 0x2b2d30, roughness: 0.8, metalness: 0.3 }),
+  bulb: new THREE.MeshStandardMaterial({ color: 0xffe6b0, emissive: 0xffc46a, emissiveIntensity: 2.4, roughness: 1 }),
+  // Worn hazard tape along the lintel: the first thing that says "way in" from across a field.
+  tapeA: new THREE.MeshStandardMaterial({ color: 0xd4a21f, roughness: 0.9 }),
+  tapeB: new THREE.MeshStandardMaterial({ color: 0x2a2a2c, roughness: 0.9 }),
+  ceilingLamp: new THREE.MeshStandardMaterial({ color: 0xfff0d0, emissive: 0xffc878, emissiveIntensity: 1.8, roughness: 1 }),
+  sandbag: new THREE.MeshStandardMaterial({ color: 0x8c7b58, roughness: 1, flatShading: true }),
+  sandbagDark: new THREE.MeshStandardMaterial({ color: 0x74664a, roughness: 1, flatShading: true }),
+};
+const LAMP_GLOW = 0x8a5a26;
+const ROOM_GLOW = 0x4a2e12;
+
 export const buildWorld = (scene: THREE.Scene): World => {
   // ---------- ground
   const groundMat = new THREE.MeshStandardMaterial({ map: paintTerrain(), roughness: 1 });
@@ -313,15 +370,19 @@ export const buildWorld = (scene: THREE.Scene): World => {
     g2.fillRect(0, 0, 64, 64);
     return new THREE.CanvasTexture(c);
   })();
-  const poolMat = new THREE.MeshBasicMaterial({ map: poolTex, color: 0xffcf8a, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, fog: true });
-  const poolGeo = new THREE.PlaneGeometry(4.6, 3.4).rotateX(-Math.PI / 2);
+  const poolMat = new THREE.MeshBasicMaterial({ map: poolTex, color: 0xffcf8a, transparent: true, opacity: 0.62, blending: THREE.AdditiveBlending, depthWrite: false, fog: true });
+  const poolGeo = new THREE.PlaneGeometry(5.4, 4.2).rotateX(-Math.PI / 2);
   const frameMat = new THREE.MeshStandardMaterial({ color: 0xf4f0e6, roughness: 0.7 });
   const roomMat = new THREE.MeshStandardMaterial({ color: 0xead8b4, emissive: 0x6b4c26, emissiveIntensity: 0.9, roughness: 1 });
   const matMat = new THREE.MeshStandardMaterial({ color: 0x6a4a2a, roughness: 1 });
   // Built per building, then merged per material over the whole map (frames, doormats, openings, light pools: four
   // draw calls); a building's doors are hidden by collapsing its triangles in those batches.
+  // The lamps over the doors, merged apart from the frames (their look baked into the vertices, one batch, plus one for
+  // their glow), and hidden with the doors.
+  const lampParts: ReturnType<typeof collectParts> = [];
   const doorParts = BUILDINGS.flatMap((b, bi) => {
     const g = new THREE.Group();
+    const lg = new THREE.Group();
     const ring = (x: number, y: number) => x === b.x0 || y === b.y0 || x === b.x0 + b.w - 1 || y === b.y0 + b.h - 1;
     const seen = new Set<string>();
     for (let ty = b.y0; ty < b.y0 + b.h; ty++) {
@@ -359,18 +420,126 @@ export const buildWorld = (scene: THREE.Scene): World => {
         holder.traverse((o) => o instanceof THREE.Mesh && (o.castShadow = true));
         holder.add(pool);
         g.add(holder);
+
+        // The lamp: housing and bulb above the lintel, a halo round it (upright for the eye-level views, flat for the
+        // view from above), a faint cone of light down onto the step, and hazard tape across the lintel.
+        const lamp = new THREE.Group();
+        lamp.position.copy(holder.position);
+        lamp.rotation.copy(holder.rotation);
+        const housing = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.16, 0.34), lampMats.housing);
+        housing.position.set(0, 2.84, sgn * 0.2);
+        const bulb = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.08, 0.22), lampMats.bulb);
+        bulb.position.set(0, 2.74, sgn * 0.24);
+        lamp.add(housing, bulb);
+        for (let k = 0; k < 9; k++) {
+          const stripe = new THREE.Mesh(new THREE.BoxGeometry(3.9 / 9, 0.13, 0.02), k % 2 ? lampMats.tapeB : lampMats.tapeA);
+          stripe.position.set(-1.95 + (k + 0.5) * (3.9 / 9), 2.5, sgn * 0.22);
+          lamp.add(stripe);
+        }
+        lamp.traverse((o) => o instanceof THREE.Mesh && (o.castShadow = true));
+        const halo = new THREE.Mesh(glowDisc(0.85, LAMP_GLOW), glowMat);
+        halo.position.set(0, 2.74, sgn * 0.3);
+        const haloTop = new THREE.Mesh(glowDisc(1.2, LAMP_GLOW).rotateX(-Math.PI / 2), glowMat);
+        haloTop.position.set(0, 2.95, sgn * 0.45);
+        const cone = new THREE.Mesh(glowCone(0.2, 1.2, 2.6, 0x30200e), glowMat);
+        cone.position.set(0, 1.4, sgn * 0.95);
+        for (const m of [halo, haloTop, cone]) m.renderOrder = 3;
+        lamp.add(halo, haloTop, cone);
+        lg.add(lamp);
       }
     }
+    lampParts.push(...collectParts(lg, bi));
     return collectParts(g, bi);
   });
   const doorBatches = mergeParts(doorParts);
   doorBatches.forEach((d) => scene.add(d.mesh));
   const openingBatch = doorBatches.find((d) => d.mesh.material === roomMat);
+  const lampBatches = mergeParts(lampParts, { bake: true });
+  lampBatches.forEach((d) => scene.add(d.mesh));
+  /** Everything hidden with a building's doors (when you stand in it, seen from above). */
+  const doorways = [...doorBatches, ...lampBatches];
+  const glows: THREE.Object3D[] = lampBatches.filter((d) => d.mesh.material === glowMat).map((d) => d.mesh);
+
+  // ---------- inside: a warm, dim fill on the floor of every room (the lights are on in there), so a house reads as lived
+  // in from the door and through the windows and its inside differs from the daylight outside. One batch for the map;
+  // under the house shells from above it only shows once a house opens up.
+  const roomGlow = mergeStatic(
+    (() => {
+      const g = new THREE.Group();
+      BUILDINGS.forEach((b) => {
+        const w = b.w * TILE;
+        const d = b.h * TILE;
+        const fill = new THREE.Mesh(glowDisc(1, ROOM_GLOW, 24).rotateX(-Math.PI / 2), glowMat);
+        fill.scale.set(w * 0.48, 1, d * 0.48);
+        fill.position.set(b.x0 * TILE + w / 2, 0.035, b.y0 * TILE + d / 2);
+        fill.renderOrder = 2;
+        g.add(fill);
+      });
+      return g;
+    })(),
+  );
+  roomGlow.name = 'room glow';
+  scene.add(roomGlow);
+  glows.push(roomGlow);
+
+  // ---------- the battle zone: scorch marks on the ground by some houses, and a low pile of sandbags in some of their
+  // corners. Picked per building from a fixed hash, so every match looks the same; flat or tucked into a corner, so none
+  // of it reads as cover you could use (they are not in the simulation).
+  const scorchMat = new THREE.MeshBasicMaterial({ map: poolTex, color: 0x1c1610, transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+  const open = (tx: number, ty: number) => 'gpd'.includes(MAP[ty]?.[tx] ?? '#');
+  const wear = new THREE.Group();
+  BUILDINGS.forEach((b, bi) => {
+    const x0 = b.x0 * TILE;
+    const z0 = b.y0 * TILE;
+    const x1 = (b.x0 + b.w) * TILE;
+    const z1 = (b.y0 + b.h) * TILE;
+    if (hash(bi, 3, 11) < 0.6) {
+      // Along one wall, outside, a few metres from a corner.
+      const side = Math.floor(hash(bi, 5, 12) * 4);
+      const t = 0.2 + hash(bi, 7, 13) * 0.6;
+      const at = [[x0 + (x1 - x0) * t, z0 - 1.4], [x0 + (x1 - x0) * t, z1 + 1.4], [x0 - 1.4, z0 + (z1 - z0) * t], [x1 + 1.4, z0 + (z1 - z0) * t]][side];
+      if (open(Math.floor(at[0] / TILE), Math.floor(at[1] / TILE))) {
+        const r = 1.3 + hash(bi, 9, 14) * 0.9;
+        const s = new THREE.Mesh(new THREE.PlaneGeometry(r * 2, r * 1.6).rotateX(-Math.PI / 2), scorchMat);
+        s.position.set(at[0], 0.03, at[1]);
+        s.rotation.y = hash(bi, 2, 15) * Math.PI;
+        s.renderOrder = 1;
+        wear.add(s);
+      }
+    }
+    if (hash(bi, 4, 16) < 0.4) {
+      // Sandbags hugging a corner, outside, where nobody walks.
+      const corner = Math.floor(hash(bi, 6, 17) * 4);
+      const cx = corner & 1 ? x1 : x0;
+      const cz = corner & 2 ? z1 : z0;
+      const ox = corner & 1 ? 1 : -1;
+      const oz = corner & 2 ? 1 : -1;
+      if (open(Math.floor((cx + ox * 0.6) / TILE), Math.floor((cz + oz * 0.6) / TILE))) {
+        const pile = new THREE.Group();
+        pile.position.set(cx + ox * 0.45, 0, cz + oz * 0.45);
+        const bag = (x: number, y: number, z: number, ry: number, k: number) => {
+          const m = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.24, 0.38), k % 3 ? lampMats.sandbag : lampMats.sandbagDark);
+          m.position.set(x, y, z);
+          m.rotation.y = ry + (hash(bi, k, 18) - 0.5) * 0.25;
+          m.castShadow = m.receiveShadow = true;
+          pile.add(m);
+        };
+        // Along the wall of the corner on each side, a second row on top.
+        bag(-ox * 0.1, 0.12, -oz * 0.05 - oz * 0.0, 0, 0);
+        bag(-ox * 0.85, 0.12, 0, 0, 1);
+        bag(0, 0.12, -oz * 0.8, Math.PI / 2, 2);
+        bag(-ox * 0.45, 0.36, 0, 0, 3);
+        wear.add(pile);
+      }
+    }
+  });
+  scene.add(mergeStatic(wear, { bake: true }));
 
   // ---------- building interiors: walls and windows, shown only when you're inside
   const wallMat = new THREE.MeshStandardMaterial({ color: 0xece4d4, flatShading: true });
   const sillMat = new THREE.MeshStandardMaterial({ color: 0x8a6a4a, flatShading: true });
-  const glassMat = new THREE.MeshStandardMaterial({ color: 0x9fd0ff, transparent: true, opacity: 0.35, roughness: 0.1 });
+  // A faint warm cast in the glass: the room behind it has its lights on.
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x9fd0ff, emissive: 0x3a2610, transparent: true, opacity: 0.35, roughness: 0.1 });
   // From above, only the house you're in opens up, its walls in the room colour (at eye level see allInteriors below).
   const interiors = BUILDINGS.map((b) => {
     const g = new THREE.Group();
@@ -445,11 +614,29 @@ export const buildWorld = (scene: THREE.Scene): World => {
   const roofs = mergeStatic(
     (() => {
       const g = new THREE.Group();
-      BUILDINGS.forEach((b, i) => g.add(buildRoof(b.x0 * TILE, b.y0 * TILE, b.w * TILE, b.h * TILE, b.barn, i)));
+      BUILDINGS.forEach((b, i) => {
+        g.add(buildRoof(b.x0 * TILE, b.y0 * TILE, b.w * TILE, b.h * TILE, b.barn, i));
+        // A lamp or two on the ceiling, each with a warm halo on the plaster round it.
+        const w = b.w * TILE;
+        const d = b.h * TILE;
+        const n = Math.max(w, d) >= 12 ? 2 : 1;
+        for (let k = 0; k < n; k++) {
+          const f = n === 1 ? 0.5 : (k + 0.75) / (n + 0.5);
+          const x = b.x0 * TILE + (w >= d ? w * f : w / 2);
+          const z = b.y0 * TILE + (w >= d ? d / 2 : d * f);
+          const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.07, 0.55), lampMats.ceilingLamp);
+          lamp.position.set(x, 2.54, z);
+          const halo = new THREE.Mesh(glowDisc(2.2, 0x6a4420).rotateX(Math.PI / 2), glowMat);
+          halo.position.set(x, 2.565, z);
+          halo.name = 'ceiling glow';
+          g.add(lamp, halo);
+        }
+      });
       return g;
     })(),
     { bake: true },
   );
+  roofs.traverse((o) => o instanceof THREE.Mesh && o.material === glowMat && glows.push(o));
   roofs.visible = false;
   scene.add(roofs);
 
@@ -566,6 +753,8 @@ export const buildWorld = (scene: THREE.Scene): World => {
       view.far = o.far;
       view.frame++;
       natureUniforms.uReach.value = o.reach;
+      const glowOn = o.glow ?? true;
+      for (const g of glows) g.visible = glowOn;
       nature.forEach((n) => n.update(view));
     },
     update: (state, selfX, selfY, firstPerson = false) => {
@@ -583,7 +772,7 @@ export const buildWorld = (scene: THREE.Scene): World => {
           const ext = exteriors[i];
           if (ext) ext.visible = false;
           interiors[i].visible = false;
-          doorBatches.forEach((d) => d.setHidden(i, false));
+          doorways.forEach((d) => d.setHidden(i, false));
           fade[i] = 1;
           return;
         }
@@ -599,7 +788,7 @@ export const buildWorld = (scene: THREE.Scene): World => {
         interiors[i].visible = fade[i] < 0.98;
         // Inside, the walls are cut down to waist height so the whole room reads from above.
         interiors[i].scale.y = firstPerson ? 1 : 0.4 + 0.6 * fade[i];
-        doorBatches.forEach((d) => d.setHidden(i, !(fade[i] > 0.5)));
+        doorways.forEach((d) => d.setHidden(i, !(fade[i] > 0.5)));
       });
       crates.forEach((t, k) => {
         const alive = state.racks[t.ty * SIZE + t.tx] > 0;
