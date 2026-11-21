@@ -2,7 +2,10 @@
 
 import { useEffect, useRef } from 'react';
 
+import type { MouseEvent } from 'react';
+
 import { SUPPORT_PAY_URL, SUPPORT_URL } from '~/lib/links';
+import { track } from '~/lib/telemetry';
 
 /*
  * Site only: the portal build renders PortalGame from portal/main.tsx and never imports this file, and Match only shows
@@ -33,7 +36,11 @@ export const Support = ({ variant, className = '' }: { variant: Variant; classNa
       cleanup?.();
     };
   }, [variant]);
-  return <div ref={host} className={`${RESERVE[variant]} ${className}`} />;
+  // A click on any link inside the module (the shadow DOM keeps its events composed): counted as a support click, nothing else.
+  const counted = (e: MouseEvent<HTMLDivElement>) => {
+    if (e.nativeEvent.composedPath().some((n) => n instanceof HTMLAnchorElement)) track('support_click', { where: variant });
+  };
+  return <div ref={host} onClick={counted} className={`${RESERVE[variant]} ${className}`} />;
 };
 
 /** What Match is handed by the lobby: `pill` in the pause menu (one line), `card` on the round report. */

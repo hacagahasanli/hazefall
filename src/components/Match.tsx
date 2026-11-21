@@ -10,6 +10,7 @@ import { FIGHTERS } from '~/game/sim/constants';
 
 import { AimChoice, readAim, saveAim } from '~/components/AimChoice';
 import { useBreaks } from '~/components/useBreaks';
+import { useTelemetry } from '~/components/useTelemetry';
 import { deviceFacts } from '~/game/render/deviceFacts';
 import { resolveTier } from '~/game/render/quality';
 import { keyLabel } from '~/game/settings';
@@ -465,6 +466,9 @@ export const Match = ({
     !!hud && ((hud.dead && hud.deadFor > DEATH_CARD) || (hud.won && hud.phase === 'over'));
   /** Kill colour (the banner, the death card): red, or orange in colour-blind mode. */
   const killColor = settings.colorBlind ? '#ff9f1c' : '#ff3d6e';
+
+  // Anonymous usage events: a no-op unless the site started counting (never on a portal build).
+  useTelemetry(hud, { held, showResult, online });
 
   const breaks = useBreaks(platform, game, {
     loaded: !!hud && !held,

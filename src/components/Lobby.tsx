@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AimChoice, readAim, saveAim } from '~/components/AimChoice';
 import { FighterCard, FighterGrid, FIGHTER_IDS as IDS, HowTo, PICK_KEY, usePortraits } from '~/components/FighterSelect';
 import { Match } from '~/components/Match';
+import { OnlineInterest } from '~/components/OnlineInterest';
 import { OnlinePanel } from '~/components/OnlinePanel';
 import { Support, SupportLink } from '~/components/SupportLink';
 import { createRoom, joinRoom } from '~/game/net/client';
@@ -13,6 +14,7 @@ import { createGuestSession, createHostSession } from '~/game/net/session';
 import { COPY } from '~/game/copy/studio';
 import { BOT_NAMES, FIGHTERS } from '~/game/sim/constants';
 import { ONLINE_PLAY } from '~/lib/studio';
+import { loadDone, track } from '~/lib/telemetry';
 
 import type { LobbyState, StartMessage } from '~/game/net/lobby';
 import type { Session } from '~/game/net/session';
@@ -171,6 +173,17 @@ export const Lobby = () => {
   // Portraits come from the game's own models, rendered once after the page has painted.
   const portraits = usePortraits(playing);
 
+  // Anonymous counting (site only; a no-op unless TelemetryInit started it). Loading starts when /play opens and ends when the
+  // lobby's models have rendered: that is the moment the player can pick a fighter.
+  useEffect(() => track('load_start'), []);
+  const menuSent = useRef(false);
+  useEffect(() => {
+    if (!portraits || menuSent.current) return;
+    menuSent.current = true;
+    loadDone();
+    track('menu_view');
+  }, [portraits]);
+
   const pick = (id: FighterId) => {
     setFighter(id);
     room?.send('profile', { fighter: id });
@@ -315,6 +328,7 @@ export const Lobby = () => {
                       <span className="rounded-sm bg-gold/90 px-2 py-0.5 text-xs font-bold text-ink-deep">Coming soon</span>
                     </button>
                   )}
+                  {!ONLINE_PLAY && <OnlineInterest />}
                   {/* Desktop: the big button sits here; on phones it rides along at the bottom. */}
                   <button
                     type="button"
