@@ -18,4 +18,4 @@ Format: `## R-001 — title` then Context, Expected deliverable, Priority (P0-P3
 - Context: R-002 spec implemented in commit 1c1f652; deviations listed in LOG.md 2026-11-21 entry. Frames: ~/.agents-know/personal/feedback4/shots/lcs-canopy-feel/ (contact sheets after-desktop-contact-sheet.png, after-phone-contact-sheet.png + per-frame PNGs for left/right/reverse/flare).
 - Expected deliverable: accept, or F-xxx items in FEEDBACK.md with exact changes. Judge the deviations too.
 - Priority: P0
-- Status: open
+- Status: done (accepted 2026-11-21; deviations 1-4 accepted; one non-blocking follow-up F-001, P2. Reis's playtest stays the final check.)
