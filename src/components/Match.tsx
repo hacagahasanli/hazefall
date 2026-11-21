@@ -19,27 +19,12 @@ import { createWebPlatform } from '~/platform/web';
 import { TouchControls, useTouch } from '~/components/TouchControls';
 import { ShockRing, Streaks } from '~/components/Transitions';
 import { uiImpact } from '~/components/uiSound';
+import { capLabel, Counters, Vitals, Weapons } from '~/components/Hud';
 import { loadCount, onLoadCount } from '~/lib/loading';
 import type { Session } from '~/game/net/session';
 import type { HudState } from '~/game/render/game';
 import type { FighterId } from '~/game/sim/types';
 import type { Platform } from '~/platform/types';
-
-const Bar = ({ value, max, color }: { value: number; max: number; color: string }) => (
-  <div className="panel-cut h-3 w-44 bg-ink-deep/80 sm:w-64">
-    <div
-      className="h-full transition-[width] duration-150"
-      style={{ width: `${Math.max(0, Math.min(1, value / max)) * 100}%`, background: color }}
-    />
-  </div>
-);
-
-const ROMAN = ['', 'I', 'II', 'III'];
-const Chip = ({ children, color }: { children: React.ReactNode; color?: string }) => (
-  <span className="rounded-sm bg-ink-deep/70 px-1.5 py-px text-cream/85" style={color ? { color, boxShadow: `inset 2px 0 0 ${color}` } : undefined}>
-    {children}
-  </span>
-);
 
 const Key = ({ k }: { k: string }) => (
   <kbd className="inline-flex min-w-5 items-center justify-center rounded-sm border border-b-2 border-cream/30 bg-cream/10 px-1 text-[10px] font-bold leading-4 text-cream">
@@ -52,9 +37,13 @@ const DEATH_CARD = 2.2;
 
 const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
+/** The placement's colour: gold for the win, green for the last five, cream for the rest. */
+const placeColor = (place: number) => (place === 1 ? '#ffd23f' : place <= 5 ? '#3ddc84' : '#e6ebf5');
+
 /**
- * The placement on the round report: counts down from the last place to yours, then lands with a hit and a ring (a win
- * lands gold, with slow rays behind). Without motion it is simply there.
+ * The placement on the round report, in the game's display face as a sticker: a hard dark drop under the numerals and a
+ * slanted band behind them (red for a knock-out, gold for the win). It counts down from the last place to yours, then
+ * lands with a hit and a ring (a win lands gold, with slow rays behind). Without motion it is simply there.
  */
 const Placement = ({ place, total, won, fx }: { place: number; total: number; won: boolean; fx: boolean }) => {
   const [n, setN] = useState(fx ? total : place);
@@ -75,14 +64,15 @@ const Placement = ({ place, total, won, fx }: { place: number; total: number; wo
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const color = landed ? placeColor(place) : '#e6ebf5';
   return (
-    <div className="relative flex items-baseline font-display leading-none">
+    <div className="relative flex items-end gap-3 leading-none" aria-label={`Placed ${place} of ${total}`}>
       {won && (
         <span
           aria-hidden
-          className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[30rem] w-[30rem] -translate-x-1/2 -translate-y-1/2 opacity-60"
+          className="pointer-events-none absolute left-[40%] top-1/2 -z-10 h-[34rem] w-[34rem] -translate-x-1/2 -translate-y-1/2 opacity-70"
           style={{
-            background: 'repeating-conic-gradient(from 0deg, rgba(255,210,63,0.32) 0deg 7deg, transparent 7deg 22deg)',
+            background: 'repeating-conic-gradient(from 0deg, rgba(255,210,63,0.3) 0deg 7deg, transparent 7deg 22deg)',
             maskImage: 'radial-gradient(circle, #000 15%, transparent 68%)',
             WebkitMaskImage: 'radial-gradient(circle, #000 15%, transparent 68%)',
             animation: fx ? 'lcsRays 24s linear infinite' : undefined,
@@ -90,17 +80,33 @@ const Placement = ({ place, total, won, fx }: { place: number; total: number; wo
         />
       )}
       {landed && fx && <ShockRing color={won ? '#ffd23f' : '#ff3d6e'} size="16rem" duration={0.7} />}
-      <span
-        key={landed ? 'landed' : 'counting'}
-        className={`relative text-[7rem] sm:text-[11rem] [@media(max-height:520px)]:text-[5.5rem] ${won ? 'text-gold' : 'text-cream'} ${landed ? '' : 'opacity-70'}`}
-        style={{
-          textShadow: landed ? '-4px 0 rgba(255,61,110,0.55), 4px 0 rgba(62,197,255,0.55), 0 8px 40px rgba(0,0,0,0.6)' : undefined,
-          animation: landed && fx ? 'lcsLand 0.45s cubic-bezier(0.2,0.8,0.2,1) both' : undefined,
-        }}
-      >
-        #{n}
+      <span aria-hidden className="relative block">
+        {/* The band behind the numerals. */}
+        <span
+          className="absolute -left-4 -right-5 bottom-[14%] top-[46%] -skew-x-12"
+          style={{
+            background: won ? 'linear-gradient(90deg,#1d2540,#141a2b)' : 'linear-gradient(90deg,#ff3d6e,#c42a55)',
+            boxShadow: won ? 'inset 0 3px 0 #ffd23f, inset 0 -3px 0 #ffb020' : undefined,
+            opacity: landed ? 0.95 : 0.4,
+          }}
+        />
+        <span
+          key={landed ? 'landed' : 'counting'}
+          className={`relative flex items-start font-display text-[7rem] sm:text-[10rem] [@media(max-height:520px)]:text-[5rem] ${landed ? '' : 'opacity-70'}`}
+          style={{
+            color,
+            textShadow: '0 0.045em 0 #0a0d18, 0 0.09em 0 rgba(10,13,24,0.55), 0 0.2em 0.5em rgba(0,0,0,0.45)',
+            animation: landed && fx ? 'lcsLand 0.45s cubic-bezier(0.2,0.8,0.2,1) both' : undefined,
+          }}
+        >
+          <span className="mr-[0.04em] mt-[0.12em] text-[0.45em]">#</span>
+          {n}
+        </span>
       </span>
-      <span className="relative text-4xl text-cream/40">/{total}</span>
+      <span className="relative mb-[1rem] flex items-baseline gap-1.5 whitespace-nowrap text-cream/60 [@media(max-height:520px)]:mb-2">
+        <span className="text-lg">of</span>
+        <span className="font-display text-3xl leading-none text-cream/80">{total}</span>
+      </span>
     </div>
   );
 };
@@ -149,6 +155,28 @@ const MatchLoading = ({ fx }: { fx: boolean }) => {
   );
 };
 
+/** The cup that crowns a win. */
+const Trophy = ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
+  <svg viewBox="0 0 48 48" className={className} style={style} aria-hidden>
+    <path d="M14 6h20v10a10 10 0 0 1-20 0z" fill="#ffd23f" stroke="#0a0d18" strokeWidth="2.5" strokeLinejoin="round" />
+    <path d="M14 9H7v3a8 8 0 0 0 8 8M34 9h7v3a8 8 0 0 1-8 8" fill="none" stroke="#0a0d18" strokeWidth="6" strokeLinecap="round" />
+    <path d="M14 9H7v3a8 8 0 0 0 8 8M34 9h7v3a8 8 0 0 1-8 8" fill="none" stroke="#ffd23f" strokeWidth="2.5" strokeLinecap="round" />
+    <path d="M21 26h6v7h-6zM15 34h18v6H15z" fill="#ffb020" stroke="#0a0d18" strokeWidth="2.5" strokeLinejoin="round" />
+    <path d="M18 9v6" stroke="#fff6c8" strokeWidth="2.5" strokeLinecap="round" />
+  </svg>
+);
+
+const StatGlyph = ({ d }: { d: string }) => (
+  <svg viewBox="0 0 16 16" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d={d} />
+  </svg>
+);
+const STAT_ICON = {
+  kills: 'M8 2.8a5.2 5.2 0 1 0 0 10.4A5.2 5.2 0 1 0 8 2.8M8 .8v3.4M8 11.8v3.4M.8 8h3.4M11.8 8h3.4',
+  damage: 'M8 1l1.6 4.2L14 4l-2.6 3.6L15 10l-4.4.2L11 15l-3-3.4L5 15l.4-4.8L1 10l3.6-2.4L2 4l4.4 1.2z',
+  survived: 'M8 2.5a6 6 0 1 0 0 12 6 6 0 1 0 0-12M8 5.5v3.2l2.2 1.4M6.4 1h3.2',
+};
+
 /**
  * The round report: where you placed, who took you out and with what, and how your round went,
  * then straight into the next match or back to the lobby.
@@ -176,16 +204,16 @@ const Result = ({
 }) => {
   // The host's browser runs the round: it must stay until the round is over.
   const hostWaits = online && hud.host && hud.phase !== 'over';
-  const stats: [string, string][] = [
-    ['Kills', String(hud.kills)],
-    ['Damage dealt', String(hud.damage)],
-    ['Accuracy', `${hud.accuracy}%`],
-    ['Survived', fmtTime(hud.survived)],
-    ['Distance', `${hud.distance} m`],
+  const place = hud.won ? 1 : hud.placement;
+  const stats: { key: keyof typeof STAT_ICON; label: string; value: string; color: string }[] = [
+    { key: 'kills', label: hud.kills === 1 ? 'Kill' : 'Kills', value: String(hud.kills), color: '#ff3d6e' },
+    { key: 'damage', label: 'Damage', value: String(hud.damage), color: '#ffd23f' },
+    { key: 'survived', label: 'Survived', value: fmtTime(hud.survived), color: '#3ec5ff' },
   ];
   const killerColor = hud.killerFighter ? FIGHTERS[hud.killerFighter].color : '#6fb6ff';
+  const accent = hud.won ? '#ffd23f' : '#ff3d6e';
   return (
-    <div className="absolute inset-0 z-30 flex animate-[fadeIn_0.35s_ease-out] overflow-y-auto overflow-x-hidden bg-[radial-gradient(ellipse_at_center,rgba(10,13,24,0.72),rgba(10,13,24,0.95))] px-6 py-4 backdrop-blur-sm">
+    <div className="absolute inset-0 z-30 flex animate-[fadeIn_0.35s_ease-out] overflow-y-auto overflow-x-hidden bg-[radial-gradient(ellipse_at_30%_40%,rgba(20,26,43,0.7),rgba(10,13,24,0.95))] px-6 py-4 backdrop-blur-sm">
       {/* The report comes in on a slash of light, gold for a win and red for a loss, and a few streaks. */}
       {fx && (
         <>
@@ -194,25 +222,30 @@ const Result = ({
             className="pointer-events-none absolute inset-y-[-20%] left-0 w-[45vw]"
             style={{ background: `linear-gradient(90deg, transparent, ${hud.won ? 'rgba(255,210,63,0.35)' : 'rgba(255,61,110,0.3)'}, transparent)`, animation: 'lcsSweep 0.7s cubic-bezier(0.6,0,0.3,1) both' }}
           />
-          <Streaks color={hud.won ? '#ffd23f' : '#ff3d6e'} count={6} seed={hud.placement} />
+          <Streaks color={accent} count={hud.won ? 10 : 6} seed={hud.placement} />
         </>
       )}
-      <div className="relative m-auto flex w-full max-w-4xl flex-col gap-8 [@media(max-height:520px)]:gap-3">
-        <div className="flex flex-wrap items-end gap-8 [@media(max-height:520px)]:gap-4">
-          <Placement place={hud.won ? 1 : hud.placement} total={hud.total} won={hud.won} fx={fx} />
-          <div className="flex flex-col gap-2 pb-6 [@media(max-height:520px)]:pb-2">
-            <span
-              className={`text-base font-bold ${hud.won ? 'text-green' : 'text-orange'}`}
-            >
-              {hud.won ? 'Round won' : 'Eliminated'}
-            </span>
+      {/* A win: a warm gold light from above. */}
+      {hud.won && <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-2/3 bg-[radial-gradient(ellipse_at_50%_0%,rgba(255,210,63,0.22),transparent_70%)]" />}
+      <div className="relative m-auto flex w-full max-w-3xl flex-col gap-7 [@media(max-height:520px)]:gap-3">
+        <div className="flex flex-wrap items-end gap-x-10 gap-y-4 [@media(max-height:520px)]:gap-y-2">
+          <div className="flex flex-col items-start">
+            {hud.won && (
+              <Trophy
+                className="mb-1 ml-2 h-16 w-16 drop-shadow-[0_0_24px_rgba(255,210,63,0.6)] sm:h-20 sm:w-20 [@media(max-height:520px)]:h-10 [@media(max-height:520px)]:w-10"
+                style={fx ? { animation: 'lcsLand 0.5s cubic-bezier(0.2,0.8,0.2,1) 0.55s both' } : undefined}
+              />
+            )}
+            <Placement place={place} total={hud.total} won={hud.won} fx={fx} />
+          </div>
+          <div className="flex max-w-sm flex-col gap-2 pb-4 [@media(max-height:520px)]:pb-1">
             <h2
-              className={`font-display text-3xl leading-none sm:text-5xl [@media(max-height:520px)]:text-3xl ${fx ? 'lcs-glitch-in' : ''}`}
-              style={fx ? { animationDelay: '0.45s' } : undefined}
+              className={`font-display text-3xl leading-none sm:text-[2.6rem] [@media(max-height:520px)]:text-2xl ${fx ? 'lcs-glitch-in' : ''}`}
+              style={{ color: hud.won ? '#ffd23f' : '#e6ebf5', ...(fx ? { animationDelay: '0.45s' } : {}) }}
             >
               {hud.won ? COPY.result.won : COPY.result.lost}
             </h2>
-            <p className="text-lg text-cream/80">
+            <p className="text-lg leading-snug text-cream/80">
               {hud.won ? (
                 <>{COPY.result.wonLine(hud.total - 1)}</>
               ) : hud.killedBy ? (
@@ -230,21 +263,29 @@ const Result = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5 [@media(max-height:520px)]:grid-cols-5 [@media(max-height:520px)]:gap-2">
-          {stats.map(([label, value], i) => (
-            <div
-              key={label}
-              className="panel-cut flex animate-[riseIn_0.5s_ease-out_both] flex-col gap-1 bg-ink/90 p-4 [@media(max-height:520px)]:p-2.5"
-              style={{ animationDelay: `${0.5 + i * 0.07}s` }}
-            >
-              <span className="font-display text-3xl text-cream [@media(max-height:520px)]:text-2xl">
-                {value}
-              </span>
-              <span className="text-[11px] font-semibold uppercase tracking-widest text-cream/55">
-                {label}
-              </span>
-            </div>
-          ))}
+        <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            {stats.map((st, i) => (
+              <div
+                key={st.key}
+                className="panel-cut flex animate-[riseIn_0.5s_ease-out_both] items-center gap-3 bg-ink/90 px-4 py-3 [@media(max-height:520px)]:py-2"
+                style={{ animationDelay: `${0.5 + i * 0.07}s`, boxShadow: `inset 3px 0 0 ${st.color}` }}
+              >
+                <span style={{ color: st.color }} className="hidden sm:block">
+                  <StatGlyph d={STAT_ICON[st.key]} />
+                </span>
+                <span className="flex flex-col">
+                  <span className="font-display text-3xl leading-none text-cream [@media(max-height:520px)]:text-2xl">{st.value}</span>
+                  <span className="mt-1 text-sm text-cream/60">{st.label}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="animate-[riseIn_0.5s_ease-out_0.75s_both] text-sm text-cream/55">
+            Accuracy <b className="font-semibold text-cream/85">{hud.accuracy}%</b>
+            <span className="mx-2 text-cream/25">·</span>
+            <b className="font-semibold text-cream/85">{hud.distance} m</b> on foot
+          </p>
         </div>
 
         {hostWaits && (
@@ -253,22 +294,22 @@ const Result = ({
             there is a winner. {hud.alive} still standing.
           </p>
         )}
-        <div className="flex flex-wrap gap-3 [animation:riseIn_0.4s_ease-out_0.75s_both]">
+        <div className="flex flex-wrap gap-3 [animation:riseIn_0.4s_ease-out_0.8s_both]">
           <button
             type="button"
             autoFocus
             disabled={hostWaits || busy}
             onClick={onPlayAgain}
-            className="panel-cut flex items-center gap-3 bg-gold px-10 py-4 font-display text-xl uppercase disabled:opacity-40 [@media(max-height:520px)]:py-3 text-ink-deep shadow-[0_0_40px_rgba(255,210,63,0.3)] hover:brightness-110"
+            className="panel-cut bg-gold px-10 py-3.5 font-display text-xl text-ink-deep shadow-[0_6px_0_#b8901c] transition hover:brightness-110 active:translate-y-[3px] active:shadow-[0_3px_0_#b8901c] disabled:opacity-40 [@media(max-height:520px)]:py-2.5"
           >
-            {online ? 'Back to the room →' : 'Play again →'}
+            {online ? 'Back to the room' : 'Play again'}
           </button>
           {!online && (
             <button
               type="button"
               disabled={busy}
               onClick={onExit}
-              className="panel-cut bg-cream/10 px-8 py-4 font-bold uppercase tracking-wider text-cream/90 hover:bg-cream/20 disabled:opacity-40 [@media(max-height:520px)]:py-3"
+              className="panel-cut bg-cream/10 px-8 py-3.5 font-display text-lg text-cream/90 transition hover:bg-cream/20 disabled:opacity-40 [@media(max-height:520px)]:py-2.5"
             >
               {exitLabel}
             </button>
@@ -501,92 +542,31 @@ export const Match = ({
 
       {hud && (
         <>
-          {/* You */}
+          {/* You: health, shield, what you carry and the ability rings, bottom left (top left on a phone, out of the thumbs' way). */}
           <div
-            className="pointer-events-none absolute left-4 top-3 flex flex-col gap-1.5"
+            className={`pointer-events-none absolute flex flex-col gap-1.5 ${touch ? 'left-3 top-2' : 'bottom-4 left-4'}`}
             style={{ ...(touch ? { marginLeft: 'env(safe-area-inset-left)' } : {}), zoom: hudZoom }}
           >
-            <div className="flex items-baseline gap-2">
-              <span className="font-display text-lg" style={{ color: f.color }}>
-                {f.name}
-              </span>
-              {hud.reloading !== null && (
-                <span className="flex items-center gap-1 text-[10px] font-bold tracking-widest text-gold">
-                  RELOADING
-                  <span className="h-1 w-12 overflow-hidden rounded bg-cream/15">
-                    <span
-                      className="block h-full bg-gold"
-                      style={{ width: `${hud.reloading * 100}%` }}
-                    />
-                  </span>
-                </span>
-              )}
-            </div>
-            {/* Two gun slots: the one in your hands lit, its grade as the colour of the edge. */}
-            <div className="flex gap-1.5">
-              {hud.slots.map((sl, i) => (
-                <div
-                  key={i}
-                  className={`flex min-w-[5.5rem] items-baseline gap-1.5 rounded-sm border-l-[3px] px-1.5 py-0.5 sm:min-w-[7.5rem] ${sl.active ? 'bg-ink-deep/85' : 'bg-ink-deep/50 opacity-60'}`}
-                  style={{ borderColor: sl.name ? GRADE_CSS[sl.rarity] : 'rgba(232,238,247,0.2)' }}
-                >
-                  {!touch && <span className="text-[10px] font-bold text-cream/50">{keyLabel(i === 0 ? settings.keys.slot1 : settings.keys.slot2)}</span>}
-                  <span className="text-xs font-semibold" style={{ color: sl.name ? (sl.rarity > 0 ? GRADE_CSS[sl.rarity] : '#e8eef7') : 'rgba(232,238,247,0.4)' }}>
-                    {sl.name ?? 'empty'}
-                  </span>
-                  {sl.name && (
-                    <span className={`font-display text-sm ${sl.mag === 0 ? 'text-orange' : 'text-cream'}`}>
-                      {sl.mag}
-                      <span className="text-cream/50">/{sl.ammo}</span>
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-            <Bar
-              value={hud.hp}
-              max={hud.maxHp}
-              color={hud.hp / hud.maxHp > 0.35 ? (settings.colorBlind ? '#3ec5ff' : '#3ddc84') : settings.colorBlind ? '#ff9f1c' : '#ff3d6e'}
+            <Vitals
+              hud={hud}
+              colorBlind={settings.colorBlind}
+              rings={!touch}
+              keys={{ super: capLabel(settings.keys.super), roll: capLabel(settings.keys.roll) }}
             />
-            {hud.armor > 0 && <Bar value={hud.armor} max={hud.vestMax} color="#3ec5ff" />}
-            {/* What you carry: vest and backpack grades, heals and bombs out of what the backpack holds, coffee left. */}
-            <div className="flex flex-wrap items-center gap-1 text-[10px] font-semibold">
-              {hud.vest > 0 && <Chip color={GRADE_CSS[hud.vest - 1]}>Vest {ROMAN[hud.vest]}</Chip>}
-              {hud.pack > 0 && <Chip color={GRADE_CSS[hud.pack - 1]}>Pack {ROMAN[hud.pack]}</Chip>}
-              {hud.bag.bandages > 0 && <Chip>{COPY.items.bandage} {hud.bag.bandages}/{hud.bag.cap.bandage}</Chip>}
-              {hud.bag.medkits > 0 && <Chip>{COPY.items.medkit} {hud.bag.medkits}/{hud.bag.cap.medkit}</Chip>}
-              {hud.bag.coffees > 0 && <Chip>{COPY.items.coffee} {hud.bag.coffees}</Chip>}
-              {hud.bag.bombs > 0 && <Chip>Bomb {hud.bag.bombs}</Chip>}
-              {hud.buzz > 0 && <Chip color="#ffd23f">{COPY.items.coffee} {Math.ceil(hud.buzz)}s</Chip>}
-            </div>
-            <div className="flex items-center gap-2 text-[11px]">
-              <span className="text-cream/60">
-                {touch ? 'Super' : keyLabel(settings.keys.super)} · {hud.superName}
-              </span>
-              <div className="h-1.5 w-28 overflow-hidden rounded bg-cream/15">
-                <div
-                  className="h-full"
-                  style={{
-                    width: `${hud.superCharge * 100}%`,
-                    background: hud.superCharge >= 1 ? '#ffd23f' : '#8b93ad',
-                  }}
-                />
-              </div>
-              {hud.superCharge >= 1 && <span className="font-bold text-gold">ready</span>}
-            </div>
-            <div className="flex items-center gap-2 text-[11px]">
-              <span className="text-cream/60">{touch ? 'Roll' : `${keyLabel(settings.keys.roll)} · Roll`}</span>
-              <div className="h-1.5 w-28 overflow-hidden rounded bg-cream/15">
-                <div
-                  className="h-full"
-                  style={{
-                    width: `${Math.min(1, hud.roll) * 100}%`,
-                    background: hud.roll >= 1 ? '#3ec5ff' : '#8b93ad',
-                  }}
-                />
-              </div>
-            </div>
+            {touch && <Weapons hud={hud} keys={null} compact />}
           </div>
+          {/* Your guns, over the minimap (bottom right). */}
+          {!touch && (
+            <div className="pointer-events-none absolute bottom-[222px] right-3 w-[204px]" style={{ zoom: hudZoom }}>
+              <Weapons hud={hud} keys={[capLabel(settings.keys.slot1), capLabel(settings.keys.slot2)]} compact={false} />
+            </div>
+          )}
+          {/* Players left and your kills, top right, the kill feed under them. */}
+          {!touch && (
+            <div className="panel-cut pointer-events-none absolute right-4 top-3 bg-ink-deep/80 px-3 py-1.5" style={{ zoom: hudZoom }}>
+              <Counters alive={hud.alive} kills={hud.kills} pulse={!settings.reducedMotion} />
+            </div>
+          )}
 
           {/* The first seconds on the plane: what this game is about. */}
           {hud.stage === 'drone' && hud.phase === 'drop' && hud.planeTime < 3.2 && (
@@ -614,17 +594,12 @@ export const Match = ({
             className={`pointer-events-none absolute inset-x-0 flex justify-center ${touch ? 'top-[124px] sm:top-3' : 'top-3'}`}
           >
             <div className="panel-cut flex items-center gap-3 bg-ink-deep/85 px-3 py-1 sm:gap-4 sm:px-4 sm:py-1.5" style={{ zoom: hudZoom }}>
-              <span className="font-display text-xl text-cream">{hud.alive}</span>
-              <span className="text-[10px] font-semibold tracking-widest text-cream/50">LEFT</span>
-              <span className="h-4 w-px bg-cream/20" />
-              {/* Your kills; the number jumps each time it goes up. */}
-              <span
-                key={hud.kills}
-                className={`inline-block font-display text-xl text-cream ${hud.kills > 0 && !settings.reducedMotion ? 'animate-[killPulse_0.5s_ease-out] motion-reduce:animate-none' : ''}`}
-              >
-                {hud.kills}
-              </span>
-              <span className="text-[10px] font-semibold tracking-widest text-cream/50">{hud.kills === 1 ? 'KILL' : 'KILLS'}</span>
+              {touch && (
+                <>
+                  <Counters alive={hud.alive} kills={hud.kills} pulse={!settings.reducedMotion} />
+                  <span className="h-4 w-px bg-cream/20" />
+                </>
+              )}
               <span
                 className={`text-sm ${hud.zone.outside ? 'font-bold text-orange' : 'text-cream/80'}`}
               >
@@ -751,7 +726,7 @@ export const Match = ({
 
           {/* Kill feed */}
           <div
-            className={`pointer-events-none absolute flex flex-col items-end gap-1 text-xs ${touch ? 'right-2 top-[176px] sm:top-[min(140px,32vh,33vw)]' : 'right-4 top-3'}`}
+            className={`pointer-events-none absolute flex flex-col items-end gap-1 text-xs ${touch ? 'right-2 top-[176px] sm:top-[min(140px,32vh,33vw)]' : 'right-4 top-[52px]'}`}
           >
             {hud.feed.map((k) => (
               <span key={k.id} className="rounded bg-ink-deep/80 px-2 py-0.5 text-cream/80">
@@ -812,7 +787,7 @@ export const Match = ({
 
           {/* Controls */}
           {!touch && (
-            <div className="pointer-events-none absolute bottom-3 left-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-cream/50">
+            <div className="pointer-events-none absolute left-3 top-3 flex max-w-[calc(50vw-13rem)] flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-cream/50">
               <span className="flex items-center gap-1">
                 <Key k={keyLabel(settings.keys.up)} />
                 <Key k={keyLabel(settings.keys.left)} />
