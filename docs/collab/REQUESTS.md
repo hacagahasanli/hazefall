@@ -19,3 +19,9 @@ Format: `## R-001 — title` then Context, Expected deliverable, Priority (P0-P3
 - Expected deliverable: accept, or F-xxx items in FEEDBACK.md with exact changes. Judge the deviations too.
 - Priority: P0
 - Status: done (accepted 2026-11-21; deviations 1-4 accepted; one non-blocking follow-up F-001, P2. Reis's playtest stays the final check.)
+
+## R-004 — Results screen stat cards (Kills / Damage / Survived) redesign
+- Context: Reis (verbatim, Azerbaijani): "qırağında xətt dizaynı olmasın, başa düşülür ki standard Claude dizaynıdır, redesign qəşəng et gəlsin" = no coloured edge-line on the side; it reads as a generic AI-made design; redesign it beautifully. Screenshot: CREATIVE/research/reis-results-stats-2026-11-21.png. Code: src/components/Match.tsx ~line 232 (`stats` array) and the grid below it: `panel-cut` cards, bg-ink/90, `boxShadow: inset 3px 0 0 <color>` (the edge line), icon (StatGlyph, hidden on phone), big display-font number + small label, rise-in animation. Colours: kills #ff3d6e, damage #ffd23f, survived #3ec5ff. Scope: ONLY these three cards — the rest of the results screen stays as it is. Must work at phone width (3 columns, small heights ≤520px) and with reduced motion. No eyebrow labels, no left/side accent stripes, nothing that reads as a template dashboard tile.
+- Expected deliverable: CREATIVE/ui/results-stats.md — exact visual spec (shape, background, how colour identity is carried without an edge line, number/label typography, icon treatment incl. phone, spacing, entrance animation, states like 0 kills), CSS-level values engineering can implement directly.
+- Priority: P0
+- Status: done (spec ready for implementation: CREATIVE/ui/results-stats.md, 2026-11-21)

@@ -197,6 +197,80 @@ const StatGlyph = ({ d }: { d: string }) => (
     <path d={d} />
   </svg>
 );
+const STAT_BAND = {
+  kills: 'linear-gradient(90deg,#ff3d6e,#c42a55)',
+  damage: 'linear-gradient(90deg,#ffd23f,#d9a514)',
+  survived: 'linear-gradient(90deg,#3ec5ff,#1f8fcf)',
+};
+type Stat = { key: keyof typeof STAT_BAND; label: string; value: string; color: string; count?: number };
+
+/**
+ * One stat on the round report: a smaller sibling of the placement sticker, a cream number with a hard drop on its own
+ * slanted colour band as wide as the digits. Kills and damage count up as they land; a zero gets a grey band.
+ */
+const StatSticker = ({ stat, index, fx }: { stat: Stat; index: number; fx: boolean }) => {
+  const d = 0.55 + index * 0.09;
+  const zero = stat.count === 0;
+  const [shown, setShown] = useState(fx && stat.count !== undefined ? '0' : stat.value);
+  useEffect(() => {
+    if (!fx || stat.count === undefined || stat.count === 0) return;
+    const to = stat.count;
+    let raf = 0;
+    const timer = window.setTimeout(() => {
+      const t0 = performance.now();
+      const step = (now: number) => {
+        const k = Math.min(1, (now - t0) / 500);
+        setShown(String(Math.round(to * (1 - Math.pow(1 - k, 3)))));
+        if (k < 1) raf = requestAnimationFrame(step);
+      };
+      raf = requestAnimationFrame(step);
+    }, (d + 0.08) * 1000);
+    return () => {
+      window.clearTimeout(timer);
+      cancelAnimationFrame(raf);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div role="group" aria-label={`${stat.value} ${stat.label}`} className="relative flex flex-col items-start">
+      <span aria-hidden className="relative inline-block">
+        <span
+          className="absolute"
+          style={{
+            left: '-0.22em',
+            right: '-0.38em',
+            top: '50%',
+            bottom: '6%',
+            transform: 'skewX(-12deg)',
+            transformOrigin: 'left',
+            background: zero ? 'rgba(230,235,245,0.10)' : STAT_BAND[stat.key],
+            opacity: 0.92,
+            animation: fx ? `lcsBandIn 0.26s cubic-bezier(0.2,0.8,0.2,1) ${d}s both` : undefined,
+          }}
+        />
+        <span
+          className={`relative block font-display tabular-nums leading-none text-[1.9rem] sm:text-5xl [@media(max-height:520px)]:text-[1.75rem] ${zero ? 'text-cream/55' : 'text-cream'}`}
+          style={{
+            textShadow: '0 0.06em 0 #0a0d18, 0 0.12em 0 rgba(10,13,24,0.55), 0 0.25em 0.5em rgba(0,0,0,0.4)',
+            transformOrigin: 'left bottom',
+            animation: fx ? `lcsStatLand 0.38s cubic-bezier(0.2,0.8,0.2,1) ${d + 0.08}s both` : undefined,
+          }}
+        >
+          {shown}
+        </span>
+      </span>
+      <span
+        className="mt-1.5 flex items-center gap-1.5 text-sm text-cream/65 [@media(max-height:520px)]:mt-1 [@media(max-height:520px)]:text-xs"
+        style={fx ? { animation: `riseIn 0.35s ease-out ${d + 0.16}s both` } : undefined}
+      >
+        <span style={{ color: stat.color, opacity: zero ? 0.6 : 1 }} className="[&_svg]:h-3.5 [&_svg]:w-3.5">
+          <StatGlyph d={STAT_ICON[stat.key]} />
+        </span>
+        {stat.label}
+      </span>
+    </div>
+  );
+};
+
 const STAT_ICON = {
   kills: 'M8 2.8a5.2 5.2 0 1 0 0 10.4A5.2 5.2 0 1 0 8 2.8M8 .8v3.4M8 11.8v3.4M.8 8h3.4M11.8 8h3.4',
   damage: 'M8 1l1.6 4.2L14 4l-2.6 3.6L15 10l-4.4.2L11 15l-3-3.4L5 15l.4-4.8L1 10l3.6-2.4L2 4l4.4 1.2z',
@@ -228,9 +302,9 @@ const Result = ({
   // The host's browser runs the round: it must stay until the round is over.
   const hostWaits = online && hud.host && hud.phase !== 'over';
   const place = hud.won ? 1 : hud.placement;
-  const stats: { key: keyof typeof STAT_ICON; label: string; value: string; color: string }[] = [
-    { key: 'kills', label: hud.kills === 1 ? 'Kill' : 'Kills', value: String(hud.kills), color: '#ff3d6e' },
-    { key: 'damage', label: 'Damage', value: String(hud.damage), color: '#ffd23f' },
+  const stats: Stat[] = [
+    { key: 'kills', label: hud.kills === 1 ? 'Kill' : 'Kills', value: String(hud.kills), color: '#ff3d6e', count: hud.kills },
+    { key: 'damage', label: 'Damage', value: String(hud.damage), color: '#ffd23f', count: hud.damage },
     { key: 'survived', label: 'Survived', value: fmtTime(hud.survived), color: '#3ec5ff' },
   ];
   const killerColor = hud.killerFighter ? FIGHTERS[hud.killerFighter].color : '#6fb6ff';
@@ -287,21 +361,9 @@ const Result = ({
         </div>
 
         <div className="flex flex-col gap-2">
-          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          <div className="grid grid-cols-3 items-end justify-items-start gap-x-5 gap-y-2 pl-2 sm:gap-x-10">
             {stats.map((st, i) => (
-              <div
-                key={st.key}
-                className="panel-cut flex animate-[riseIn_0.5s_ease-out_both] items-center gap-3 bg-ink/90 px-4 py-3 [@media(max-height:520px)]:py-2"
-                style={{ animationDelay: `${0.5 + i * 0.07}s`, boxShadow: `inset 3px 0 0 ${st.color}` }}
-              >
-                <span style={{ color: st.color }} className="hidden sm:block">
-                  <StatGlyph d={STAT_ICON[st.key]} />
-                </span>
-                <span className="flex flex-col">
-                  <span className="font-display text-3xl leading-none text-cream [@media(max-height:520px)]:text-2xl">{st.value}</span>
-                  <span className="mt-1 text-sm text-cream/60">{st.label}</span>
-                </span>
-              </div>
+              <StatSticker key={st.key} stat={st} index={i} fx={fx} />
             ))}
           </div>
           <p className="animate-[riseIn_0.5s_ease-out_0.75s_both] text-sm text-cream/55">

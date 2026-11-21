@@ -268,6 +268,17 @@
   55% { transform: scale(1.05); }
   100% { opacity: 1; transform: scale(1); }
 }
+/* A round-report stat: its band wipes in from the left, then the number lands. */
+@keyframes lcsBandIn {
+  from { transform: skewX(-12deg) scaleX(0); }
+  to { transform: skewX(-12deg) scaleX(1); }
+}
+@keyframes lcsStatLand {
+  0% { opacity: 0; transform: scale(1.6); }
+  35% { opacity: 1; transform: scale(0.92); }
+  60% { transform: scale(1.04); }
+  100% { opacity: 1; transform: scale(1); }
+}
 /* A shock ring out from an impact. */
 @keyframes lcsRing {
   0% { opacity: 0.95; transform: scale(0.15); }
