@@ -830,6 +830,19 @@ export const Match = ({
             </>
           )}
 
+          {/* You walked into a named place: its name, top centre, for 1.6 s (the placement sticker's language: cream with a hard dark drop). */}
+          {hud.place && !over && !hud.dead && (
+            <div className={`pointer-events-none absolute inset-x-0 z-[4] flex justify-center px-4 ${touch ? 'top-[22%]' : 'top-[9%]'}`} role="status" aria-live="polite">
+              <div
+                key={hud.place.id}
+                className={`text-center font-display text-[1.75rem] leading-none text-cream sm:text-[2.5rem] ${settings.reducedMotion ? 'animate-[elimFade_1.6s_ease-out_forwards]' : 'animate-[placeIn_1.6s_ease-out_forwards]'} motion-reduce:animate-none`}
+                style={{ zoom: hudZoom, textShadow: '0 0.045em 0 #0a0d18, 0 0.09em 0 rgba(10,13,24,0.55), 0 0.2em 0.5em rgba(0,0,0,0.45)' }}
+              >
+                {hud.place.name}
+              </div>
+            </div>
+          )}
+
           {/* You took someone out: a big centred banner for a moment, and the kill sound. */}
           {hud.elim && !over && (
             <div

@@ -6,7 +6,7 @@ import { actionFor, DEFAULT_SETTINGS, keyLabel, keyMap } from '../settings';
 
 import type { VolumeKind } from '../sfx';
 import type { Action, Settings } from '../settings';
-import { ARMOR, HEALS, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITEMS, MAP, PLAYERS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
+import { ARMOR, HEALS, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITEMS, MAP, PLACE_TIER, PLAYERS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
 import { canSee, carryCap, chestHeight, feetOf, healChoice, inPlant, inWater, lineOfSight, lootUnder, reloadTime, solidAt, superThrowTarget, throwDistance } from '../sim/step';
 import { buildingAt, roofAt } from '../sim/roofs';
 import { createOfflineSession } from '../net/session';
@@ -125,6 +125,8 @@ export interface HudState {
   tier: Tier;
   /** Your latest elimination, while its banner shows (about 1.4 s): who, and how many are left. */
   elim: { id: number; name: string; left: number } | null;
+  /** The named place you just walked into, while its banner shows (1.6 s, once per place per round). */
+  place: { id: number; name: string } | null;
 }
 
 export type AimMode = 'auto' | 'mouse';
@@ -1272,6 +1274,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const TICK_RANK = { body: 0, armor: 1, break: 2 } as const;
   let pendingTick: keyof typeof TICK_RANK | null = null;
   let killedThisTick = false;
+  /** The place banner: which place you are in, the ones already shown this round, and the banner showing now. */
+  let inPlace: string | null = null;
+  const placesShown = new Set<string>();
+  let placeBanner: { id: number; name: string; at: number } | null = null;
+  let placeId = 0;
   /** Your eliminations, for the banner. */
   let elim: { id: number; name: string; left: number; at: number } | null = null;
   let elimId = 0;
@@ -1800,6 +1807,35 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       mmCtx.beginPath();
       mmCtx.arc(lootHint.x * s, lootHint.y * s, pulse, 0, Math.PI * 2);
       mmCtx.stroke();
+    }
+    // Place names: all of them while you are in the plane or the air (to pick where to go), only the one you stand in on the
+    // ground. White with a dark edge in the display face, about 9 CSS px tall whatever size the map is drawn at; a name that
+    // would cover a better one is left out.
+    {
+      const shown = self.stage === 'ground' ? (inPlace ? DISTRICTS.filter((d) => d.name === inPlace) : []) : [...DISTRICTS];
+      if (shown.length) {
+        const css = mm.clientWidth || mm.width;
+        const px = Math.round((9 * mm.width) / css);
+        mmCtx.font = `900 ${px}px "Bungee", "Chakra Petch", system-ui, sans-serif`;
+        mmCtx.textAlign = 'center';
+        mmCtx.textBaseline = 'middle';
+        mmCtx.lineJoin = 'round';
+        mmCtx.lineWidth = Math.max(2, px / 3);
+        mmCtx.strokeStyle = 'rgba(10,13,24,0.9)';
+        mmCtx.fillStyle = '#ffffff';
+        const taken: { x0: number; y0: number; x1: number; y1: number }[] = [];
+        shown.sort((a, b) => (PLACE_TIER[b.name] ?? 1) - (PLACE_TIER[a.name] ?? 1));
+        for (const d of shown) {
+          const x = ((d.x0 + d.x1) / 2) * s;
+          const y = ((d.y0 + d.y1) / 2) * s;
+          const w = mmCtx.measureText(d.name).width + 4;
+          const box = { x0: x - w / 2, y0: y - px * 0.6, x1: x + w / 2, y1: y + px * 0.6 };
+          if (box.x0 < 1 || box.x1 > mm.width - 1 || taken.some((t) => box.x0 < t.x1 && box.x1 > t.x0 && box.y0 < t.y1 && box.y1 > t.y0)) continue;
+          taken.push(box);
+          mmCtx.strokeText(d.name, x, y);
+          mmCtx.fillText(d.name, x, y);
+        }
+      }
     }
     // Only you on the map: never where the others are.
     mmCtx.save();
@@ -2642,6 +2678,20 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     }
     return 'something';
   };
+  /** The named place a point of the map lies in (the riskiest one where they overlap), or null out in the fields. */
+  const placeAt = (x: number, y: number) => {
+    let best: string | null = null;
+    let tier = 0;
+    for (const d of DISTRICTS) {
+      if (x < d.x0 || x >= d.x1 || y < d.y0 || y >= d.y1) continue;
+      const t = PLACE_TIER[d.name] ?? 1;
+      if (t > tier || (t === tier && best === null)) {
+        best = d.name;
+        tier = t;
+      }
+    }
+    return best;
+  };
   const emitHud = () => {
     const self = state.players[me];
     const z = state.zone;
@@ -2657,6 +2707,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
             ? { label: COPY.zone.closing, seconds: Math.ceil(z.timer), outside }
             : { label: COPY.zone.final, seconds: 0, outside };
     const k = self.stage === 'ground' ? lootUnder(state, self) : null;
+    // Walking into a named place on the ground shows its name once; nothing in the plane or the air, nothing once you are down.
+    const here = self.alive && self.stage === 'ground' ? placeAt(self.x, self.y) : null;
+    if (here !== inPlace) {
+      inPlace = here;
+      if (here && !placesShown.has(here)) {
+        placesShown.add(here);
+        placeBanner = { id: placeId++, name: here, at: time };
+      }
+    }
     const healNext = healChoice(self);
     // Loot to take: a keycap over it in the world instead of a line of text.
     showKeycap(self.alive && !self.using ? k : null);
@@ -2753,6 +2812,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       mouseLocked: locked,
       tier,
       elim: elim && time - elim.at < 1.4 ? { id: elim.id, name: elim.name, left: elim.left } : null,
+      place: placeBanner && self.alive && time - placeBanner.at < 1.6 ? { id: placeBanner.id, name: placeBanner.name } : null,
     });
   };
 

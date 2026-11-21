@@ -375,7 +375,7 @@ describe('loot by place', () => {
     };
     expect(mid('Old Town')).toBe(3);
     expect(mid('Container Yard')).toBe(3);
-    expect(mid('North Farm')).toBe(2);
+    expect(mid('Hollis Farm')).toBe(2);
     expect(mid('Lakeside')).toBe(1);
     expect(mid('Deadwood')).toBe(1);
     expect(lootTierAt(5, 5)).toBe(1);

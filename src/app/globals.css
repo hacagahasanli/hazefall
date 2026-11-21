@@ -93,6 +93,25 @@
     transform: translateY(-10px) scale(1);
   }
 }
+/* The place banner: drops in a little, holds, fades (1.6 s in all). */
+@keyframes placeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  12% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  78% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+}
 /* The same without the scale (reduced motion): a plain fade in and out. */
 @keyframes elimFade {
   0% {

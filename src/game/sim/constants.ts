@@ -43,13 +43,15 @@ export interface Route {
 
 /** Big props the renderer draws over their 'v' tiles (and decor with no collision). */
 export interface Prop {
-  kind: 'car' | 'container' | 'tent' | 'windmill' | 'campfire' | 'pond' | 'river';
+  kind: 'car' | 'container' | 'tent' | 'windmill' | 'campfire' | 'pond' | 'river' | 'tower' | 'crane' | 'sign';
   /** Tile rectangle. */
   x0: number;
   y0: number;
   w: number;
   h: number;
   seed: number;
+  /** A crane's boom runs this way along the map's y axis (1 = south, -1 = north). */
+  dir?: number;
 }
 
 export interface Building {
@@ -99,10 +101,11 @@ const buildMap = () => {
   const routes: Route[] = [];
   const props: Prop[] = [];
   /** Place a solid prop over a w x h tile rectangle if it's all open grass, path or asphalt. */
-  const solidProp = (kind: Prop['kind'], x0: number, y0: number, w: number, h: number, on = 'gpa') => {
+  const solidProp = (kind: Prop['kind'], x0: number, y0: number, w: number, h: number, on = 'gpa', fixed?: { seed: number; dir?: number }) => {
     for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) if (!on.includes(get(x, y))) return false;
     for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) set(x, y, 'v');
-    props.push({ kind, x0, y0, w, h, seed: r() });
+    // A landmark has a fixed look (and takes no number from the map's random stream, so the places round it stay as they were).
+    props.push({ kind, x0, y0, w, h, seed: fixed ? fixed.seed : r(), ...(fixed?.dir ? { dir: fixed.dir } : {}) });
     return true;
   };
   const district = (name: string, x0: number, y0: number, x1: number, y1: number) =>
@@ -321,6 +324,8 @@ const buildMap = () => {
   for (let y = 78; y <= 83; y++) for (let x = 38; x <= 52; x++) if ('gp'.includes(get(x, y))) set(x, y, 'a');
   for (let i = 0; i < 6; i++) solidProp('car', 39 + i * 2 + (i > 2 ? 2 : 0), r() < 0.5 ? 78 : 82, 1, 2, 'a');
   if (free(54, 77, 6, 5)) house(54, 77, 6, 5, false);
+  // The pole sign beside the main path, a gold disc you can see from the plane.
+  solidProp('sign', 46, 75, 1, 1, 'gpa', { seed: 0.5 });
   for (let i = 0; i < 3; i++) {
     const x = ri(38, 52);
     const y = ri(79, 81);
@@ -337,6 +342,9 @@ const buildMap = () => {
   ];
   // A paved yard: nothing grows between the containers.
   for (let y = 20; y <= 65; y++) for (let x = 73; x <= 85; x++) if (get(x, y) === 'g') set(x, y, 'a');
+  // The twin cranes, one on each bank, booms out over the water; they stand where containers would have.
+  solidProp('crane', 79, 37, 3, 2, 'gpa', { seed: 0.31, dir: 1 });
+  solidProp('crane', 83, 49, 3, 2, 'gpa', { seed: 0.74, dir: -1 });
   const inSquare = (x: number, y: number) => squares.some((q) => x >= q.x0 && x <= q.x1 && y >= q.y0 && y <= q.y1);
   for (let y = 21; y <= 64; y += 3) {
     for (const x of [74, 78, 82]) {
@@ -361,6 +369,14 @@ const buildMap = () => {
 
   // Old Town: a tight grid of houses of every size, with alleys between them.
   district('Old Town', 16 + O, 14 + O, 50 + O, 50 + O);
+  // The Market Square, the one open space in town: paved, no houses in it, the water tower on one side, two market tents,
+  // three crates and six supply spots to fight round.
+  for (let y = 31; y < 37; y++) for (let x = 40; x < 50; x++) if ('gp'.includes(get(x, y))) set(x, y, 'a');
+  solidProp('tower', 47, 32, 2, 2, 'gpa', { seed: 0.5 });
+  solidProp('tent', 41, 32, 2, 2, 'gpa', { seed: 0.2 });
+  solidProp('tent', 41, 35, 2, 2, 'gpa', { seed: 0.8 });
+  for (const [x, y] of [[47, 35], [43, 31], [49, 34]]) if (get(x, y) === 'a') set(x, y, 'r');
+  for (const [x, y] of [[42, 34], [45, 32], [46, 34], [44, 36], [48, 36], [40, 33]]) if (get(x, y) === 'a') set(x, y, 's');
   for (let gy = 0; gy < 4; gy++) {
     for (let gx = 0; gx < 4; gx++) {
       // The road crosses the town around row 31 and the main path around column 32: step around them.
@@ -419,9 +435,9 @@ const buildMap = () => {
       if (get(x, y) === 'g') set(x, y, 's');
     }
   };
-  farm('North Farm', 6 + O, 4 + O);
-  farm('East Farm', 44 + O, 6 + O);
-  farm('South Farm', 5 + O, 46 + O);
+  farm('Hollis Farm', 6 + O, 4 + O);
+  farm('Redgate Farm', 44 + O, 6 + O);
+  farm('Southfield Farm', 5 + O, 46 + O);
 
   // Forest in the south-east, a quarry of rocks in the east.
   district('Deadwood', 44 + O, 42 + O, 60 + O, 60 + O);
@@ -654,9 +670,9 @@ export const LOOT_TABLES: { kinds: LootWeights; rarity: number[]; vest: number[]
 export const PLACE_TIER: Record<string, number> = {
   'Old Town': 3,
   'Container Yard': 3,
-  'North Farm': 2,
-  'East Farm': 2,
-  'South Farm': 2,
+  'Hollis Farm': 2,
+  'Redgate Farm': 2,
+  'Southfield Farm': 2,
   Quarry: 2,
   'Truck Stop': 2,
   Lakeside: 1,

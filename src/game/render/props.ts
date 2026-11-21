@@ -274,6 +274,82 @@ const container = (p: Prop) => {
   return g;
 };
 
+
+// ---------------------------------------------------------------------------
+// Landmarks: things you can name from the plane. Each is built for the view from above first (its colour and the shape it
+// makes seen from above), then for the side view. Code-made, plain coloured parts that merge with the other statics.
+// ---------------------------------------------------------------------------
+
+/** A low-poly cylinder standing on its base at y, vertex-coloured, with a few sides. */
+const drum = (rTop: number, rBottom: number, h: number, x: number, y: number, z: number, sides: number, color: THREE.ColorRepresentation) => {
+  const g = new THREE.CylinderGeometry(rTop, rBottom, h, sides).toNonIndexed();
+  g.deleteAttribute('uv');
+  g.translate(x, y + h / 2, z);
+  const c = new THREE.Color(color);
+  const col = new Float32Array(g.getAttribute('position').count * 3);
+  for (let i = 0; i < col.length; i += 3) col.set([c.r, c.g, c.b], i);
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return g;
+};
+
+/** The water tower: a cream drum under a red lid on four legs with X braces, 16 m up. A red disc seen from the plane. */
+const waterTower = () => {
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const parts: THREE.BufferGeometry[] = [];
+  const legY = 11.6;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) parts.push(box(0.34, legY, 0.34, sx * 1.6, legY / 2, sz * 1.6, 0x6b7280));
+  for (const y of [3.8, 7.6]) {
+    parts.push(box(3.4, 0.16, 0.16, 0, y, 1.6, 0x6b7280), box(3.4, 0.16, 0.16, 0, y, -1.6, 0x6b7280), box(0.16, 0.16, 3.4, 1.6, y, 0, 0x6b7280), box(0.16, 0.16, 3.4, -1.6, y, 0, 0x6b7280));
+    for (const sz of [-1, 1]) {
+      parts.push(beam(v(-1.6, y - 3.8, sz * 1.6), v(1.6, y, sz * 1.6), 0.1, 0.1, 0x4b5563), beam(v(1.6, y - 3.8, sz * 1.6), v(-1.6, y, sz * 1.6), 0.1, 0.1, 0x4b5563));
+    }
+  }
+  parts.push(box(4.4, 0.3, 4.4, 0, legY + 0.15, 0, 0x4b5563)); // the platform under the tank
+  parts.push(drum(3, 3, 3.4, 0, legY + 0.3, 0, 8, 0xf1e6c8)); // the drum
+  parts.push(drum(0.2, 2.6, 0.9, 0, legY + 3.7, 0, 8, 0xe23d5c)); // the lid
+  return mesh(join(parts));
+};
+
+/**
+ * A harbour crane: a gold portal on four legs with a long boom out over the water (towards +z; the caller turns it), a cab
+ * and a counterweight at the back. Two long gold bars seen from above. The boom has no collision.
+ */
+const crane = () => {
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const GOLD = 0xffc93c;
+  const DARK = 0x2a2d33;
+  const parts: THREE.BufferGeometry[] = [];
+  const top = 17.6;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) parts.push(box(0.4, top, 0.4, sx * 2.6, top / 2, sz * 1.5, GOLD));
+  for (const sz of [-1, 1]) parts.push(box(5.7, 0.55, 0.55, 0, top, sz * 1.5, GOLD)); // the top beams
+  for (const sx of [-1, 1]) {
+    parts.push(box(0.55, 0.55, 3.5, sx * 2.6, top, 0, GOLD));
+    parts.push(beam(v(sx * 2.6, 6, -1.5), v(sx * 2.6, top, 1.5), 0.2, 0.2, 0xe8a91f), beam(v(sx * 2.6, 6, 1.5), v(sx * 2.6, top, -1.5), 0.2, 0.2, 0xe8a91f));
+    parts.push(box(0.4, 0.4, 3.4, sx * 2.6, 6, 0, 0xe8a91f));
+  }
+  parts.push(box(1.1, 0.7, 25, 0, top + 0.6, 8.5, GOLD)); // the boom: from 4 m behind the portal to 21 m out
+  parts.push(box(1.3, 0.16, 25.2, 0, top + 1.05, 8.5, 0xe8a91f)); // its deck line
+  parts.push(box(2.4, 2, 2.6, 0, top + 2, -1.2, GOLD)); // the cab
+  parts.push(box(2.2, 1.1, 0.4, 0, top + 2.3, 0.1, 0x1b2a38)); // its window
+  parts.push(box(2.2, 1.6, 2.2, 0, top + 1.5, -3.6, DARK)); // the counterweight
+  for (const z of [13, 20]) parts.push(box(0.05, 6, 0.05, 0, top - 2.6, z, DARK)); // the hoist cables
+  parts.push(box(1.1, 0.6, 1.1, 0, top - 5.8, 20, DARK)); // the spreader
+  return mesh(join(parts));
+};
+
+/** The pole sign: a dark pole and a gold disc with a dark rim, tilted 20 degrees towards the sky so the disc shows from above. */
+const poleSign = () => {
+  const parts: THREE.BufferGeometry[] = [box(0.34, 11.2, 0.34, 0, 5.6, 0, 0x3a3e45)];
+  const board = (r: number, h: number, y: number, color: THREE.ColorRepresentation) => {
+    const g = drum(r, r, h, 0, 0, 0, 20, color);
+    g.rotateX(Math.PI * (70 / 180));
+    g.translate(0, y, 0.2);
+    return g;
+  };
+  parts.push(board(2.15, 0.3, 11.6, 0x2a2d33), board(1.85, 0.34, 11.66, 0xffc93c));
+  return mesh(join(parts));
+};
+
 const tent = (p: Prop) => {
   const color = p.seed > 0.5 ? 0x3f6b3a : 0xd0782c;
   const shape = new THREE.Shape();
@@ -306,7 +382,15 @@ export const buildProps = (scene: THREE.Scene) => {
     if (p.kind === 'car') o = car(p);
     else if (p.kind === 'container') o = container(p);
     else if (p.kind === 'tent') o = tent(p);
-    if (o) {
+    else if (p.kind === 'tower') o = waterTower();
+    else if (p.kind === 'crane') o = crane();
+    else if (p.kind === 'sign') o = poleSign();
+    if (o && (p.kind === 'tower' || p.kind === 'crane' || p.kind === 'sign')) {
+      // Landmarks stand square to the map (a crane's boom runs along the map's y axis towards `dir`) and keep their own look.
+      o.position.set(c.x, 0, c.y);
+      if (p.kind === 'crane') o.rotation.y = p.dir === -1 ? Math.PI : 0;
+      statics.add(o);
+    } else if (o) {
       o.position.set(c.x, 0, c.y);
       o.rotation.y = (c.alongX ? 0 : Math.PI / 2) + (p.seed - 0.5) * 0.12;
       statics.add(o);
