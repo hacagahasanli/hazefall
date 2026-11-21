@@ -505,7 +505,8 @@ export const createSfx = () => {
      * placed in the world), so you know it connected even when the target is off to one side.
      * A plain hit ticks; a hit on armor rings a little higher and metallic; the hit that strips
      * the last of the armor jumps up in pitch with a small shatter. Rapid fire: one tick per
-     * 45 ms at most (a stronger tick always gets through).
+     * 45 ms at most (a stronger tick always gets through). Under every tick sits a dry body layer: a 2 ms crack and a
+     * short low thump, so the hit lands with weight and not only a click.
      */
     hitTick: (kind: 'body' | 'armor' | 'break') => {
       const c = ctx;
@@ -515,6 +516,8 @@ export const createSfx = () => {
       lastTick.at = c.currentTime;
       lastTick.rank = rank;
       const o = { room: 0, bus: 'ui' as Bus };
+      noise('highpass', 3200, 2400, 0.012, 0.2, 0.7, o);
+      tone('sine', 210, 62, 0.06, kind === 'body' ? 0.3 : 0.2, o);
       if (kind === 'body') {
         tone('triangle', 1900, 1500, 0.045, 0.22, o);
         noise('bandpass', 5200, 4200, 0.012, 0.14, 4, o);
@@ -538,6 +541,9 @@ export const createSfx = () => {
       if (!c || muted) return;
       duck(-10, 0.8);
       const o = { room: 0.25, bus: 'ui' as Bus };
+      // The crack that opens it: a bright snap over a hard knock, dry, before the low punch blooms.
+      noise('highpass', 4800, 2600, 0.025, 0.42, 0.8, { ...o, room: 0 });
+      tone('square', 1500, 420, 0.03, 0.12, { ...o, room: 0 });
       tone('sine', 150, 42, 0.32, 0.9, o);
       noise('lowpass', 1800, 120, 0.12, 0.45, 0.8, o);
       tone('triangle', 784, 784, 0.12, 0.2, { ...o, delay: 0.05 });

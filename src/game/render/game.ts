@@ -15,7 +15,7 @@ import { buildRig, fighterLook, poseChute, poseDeath, poseFreefall, poseRig, pos
 import { buildGun } from './guns';
 import { mat, mesh, PALETTE } from './palette';
 import { createVfx } from './vfx';
-import { createHitOverlay } from './feedback';
+import { createHitOverlay, flinchCurve, hitstopFor } from './feedback';
 import { setPeople, updateNature } from './nature';
 import { buildChute, HARNESS_BACK } from './chute';
 import { paintMapImage } from './mapImage';
@@ -1113,10 +1113,20 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
    */
   let hitstop = 0;
   let hitstopVictim = -1;
+  /** When the last hitstop started (game time), so a spray of light hits holds at most every HITSTOP.lightGap. */
+  let lastStopAt = -9;
   const stopFor = (s: number, victim: number) => {
+    // Off with reduced motion: the picture never holds still on a hit.
+    if (s <= 0 || settings.reducedMotion) return;
     if (s >= hitstop) hitstopVictim = victim;
     hitstop = Math.max(hitstop, s);
+    lastStopAt = time;
   };
+  /**
+   * The flinch of whoever was hit (render only): the body snaps away from the shot and eases back, harder for a heavy
+   * hit. Game time of the hit, the push direction on the map, and its strength (0..1).
+   */
+  const flinch = state.players.map(() => ({ at: -9, dx: 0, dy: 0, k: 0 }));
   /** The strongest hit-confirm tick of this tick's hits (played once, after the events). */
   const TICK_RANK = { body: 0, armor: 1, break: 2 } as const;
   let pendingTick: keyof typeof TICK_RANK | null = null;
@@ -1158,15 +1168,20 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         if (e.target === me) trauma = Math.min(1, trauma + 0.25);
         sfx.hit(Math.min(20, e.damage / 30), e.x - camX());
         hitFlash[e.target] = 0.08;
+        if (e.by !== null && e.by !== e.target) {
+          const from = state.players[e.by];
+          const d = Math.hypot(e.x - from.x, e.y - from.y) || 1;
+          Object.assign(flinch[e.target], { at: time, dx: (e.x - from.x) / d, dy: (e.y - from.y) / d, k: 0.55 + 0.45 * Math.min(1, e.damage / 45) });
+        }
         if (e.by === me && e.target !== me) {
           // A hit you landed: a small nudge, the 2D tick, the hitmarker, and a short freeze on a heavy gun.
           trauma = Math.min(1, trauma + 0.05);
           const broke = e.armor && state.players[e.target].armor <= 0;
           const tick = broke ? 'break' : e.armor ? 'armor' : 'body';
           if (!e.ko && (pendingTick === null || TICK_RANK[tick] > TICK_RANK[pendingTick])) pendingTick = tick;
-          hitFx?.hit(e.ko ? 'kill' : e.armor ? 'armor' : 'hit', e.target);
-          const w = state.players[me].weapon;
-          if (w === 'shotgun' || w === 'sniper' || w === 'rockets') stopFor(0.05, e.target);
+          hitFx?.hit(e.ko ? 'kill' : broke ? 'break' : e.armor ? 'armor' : 'hit', e.target);
+          // A few milliseconds' hold on every hit you land (longer on a heavy gun); the kill's own hold comes with the ko.
+          if (!e.ko) stopFor(hitstopFor(state.players[me].weapon, false, time - lastStopAt), e.target);
         }
         if (e.target === me && e.by !== null && e.by !== me) {
           const from = state.players[e.by];
@@ -1239,7 +1254,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           // Your elimination: a solid jolt (not the full one you get going down), a 90 ms freeze,
           // the kill sound and the banner, at once.
           trauma = Math.min(1, Math.max(trauma, 0.6));
-          stopFor(0.09, e.victim);
+          stopFor(hitstopFor(state.players[me].weapon, true, time - lastStopAt), e.victim);
           killedThisTick = true;
           sfx.elim();
           elim = { id: elimId++, name: v.name, left: state.players.filter((p) => p.alive).length, at: time };
@@ -1654,6 +1669,17 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         });
       }
       rig.root.rotation.y = Math.PI / 2 - yw.a;
+      // The flinch: a quick lean away from the shot, pivoting at the feet, and a small push back. Yaw first, then the
+      // tilt in world axes ('ZXY'), so it leans the same way whichever way the body faces.
+      const fl = flinch[i];
+      const fk = settings.reducedMotion || !p.alive ? 0 : flinchCurve(time - fl.at) * fl.k;
+      rig.root.rotation.order = 'ZXY';
+      rig.root.rotation.x = fk * 0.16 * fl.dy;
+      rig.root.rotation.z = -fk * 0.16 * fl.dx;
+      if (fk > 0) {
+        rig.root.position.x += fl.dx * 0.07 * fk;
+        rig.root.position.z += fl.dy * 0.07 * fk;
+      }
       rig.vest.visible = p.armor > 0;
 
       // Footsteps, at each footfall of the stride: yours and everyone near you, panned left or right.
