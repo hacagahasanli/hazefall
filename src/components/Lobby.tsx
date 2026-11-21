@@ -7,7 +7,7 @@ import { AimChoice, readAim, saveAim } from '~/components/AimChoice';
 import { FighterCard, FighterGrid, FIGHTER_IDS as IDS, HowTo, PICK_KEY, usePortraits } from '~/components/FighterSelect';
 import { Match } from '~/components/Match';
 import { OnlinePanel } from '~/components/OnlinePanel';
-import { SupportLink } from '~/components/SupportLink';
+import { Support, SupportLink } from '~/components/SupportLink';
 import { createRoom, joinRoom } from '~/game/net/client';
 import { createGuestSession, createHostSession } from '~/game/net/session';
 import { COPY } from '~/game/copy/studio';
@@ -325,6 +325,9 @@ export const Lobby = () => {
                     <span className="transition group-hover:translate-x-1">→</span>
                   </button>
                 </div>
+
+                {/* The studio's support card, out of the way under the buttons. */}
+                <Support variant="menu" className="w-full max-w-md self-end" />
               </>
             )}
           </div>

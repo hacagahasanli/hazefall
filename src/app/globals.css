@@ -183,23 +183,6 @@
   }
 }
 
-/* Home page support: the coffee crate sways under its parachute, the corner cup gives a little wiggle now and then. */
-@keyframes lcsSway {
-  0%, 100% { transform: rotate(-5deg) translateY(0); }
-  50% { transform: rotate(5deg) translateY(2px); }
-}
-@keyframes lcsWiggle {
-  0%, 84%, 100% { transform: rotate(0); }
-  88% { transform: rotate(-16deg); }
-  92% { transform: rotate(14deg); }
-  96% { transform: rotate(-8deg); }
-}
-.lcs-drop { transform-origin: 50% 10%; animation: lcsSway 3.2s ease-in-out infinite; }
-.lcs-cup { animation: lcsWiggle 4s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) {
-  .lcs-drop, .lcs-cup { animation: none; }
-}
-
 /* ---------- Transitions (src/components/Transitions.tsx). Transforms and opacity only, so they keep moving on the
    compositor while the page builds the next scene. The reduced-motion rule above shortens all of them to nothing. */
 
@@ -322,16 +305,4 @@
 @keyframes lcsSweep {
   from { transform: translateX(-120%) skewX(-20deg); }
   to { transform: translateX(260%) skewX(-20deg); }
-}
-/* The coffee's steam. */
-@keyframes lcsSteam {
-  0% { opacity: 0; transform: translateY(4px) scaleX(0.8); }
-  30% { opacity: 0.8; }
-  100% { opacity: 0; transform: translateY(-14px) scaleX(1.3); }
-}
-.lcs-steam path { animation: lcsSteam 2.4s ease-out infinite; transform-box: fill-box; transform-origin: 50% 100%; }
-.lcs-steam path:nth-child(2) { animation-delay: 0.8s; }
-.lcs-steam path:nth-child(3) { animation-delay: 1.6s; }
-@media (prefers-reduced-motion: reduce) {
-  .lcs-steam path { animation: none; opacity: 0.6; }
 }
