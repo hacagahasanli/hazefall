@@ -1847,6 +1847,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     return speed * 6 * (1 - open) + bite;
   };
 
+  /** A vertical field of view (degrees) opened so the picture shows `widen` times as much at the same distance. */
+  const widenFov = (fov: number, widen: number) =>
+    widen === 1 ? fov : THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(fov) / 2) * widen));
+
   const renderFrame = (dt: number, alpha: number) => {
     resize();
     airFrame++;
@@ -2237,6 +2241,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const n = (f: number, ph: number) => Math.sin(time * f + ph) * 0.6 + Math.sin(time * f * 2.3 + ph) * 0.4;
     const kf = 1 - Math.exp(-3 * dt);
     let want: THREE.Vector3;
+    /** On the ground, how much wider than normal the lens opens on a narrow screen (1 on a wide one). */
+    let lensWiden = 1;
     let look: THREE.Vector3;
     if (self.stage === 'drone' && state.phase === 'drop') {
       // High above the plane, looking down over most of the map, so you can choose where to jump.
@@ -2288,8 +2294,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         look = new THREE.Vector3(selfX, hh + 2.2, selfY);
       }
     } else {
-      // Narrow screens (a phone held upright) pull the camera up so you still see around you.
-      const k = (camera.aspect < 1.3 ? Math.min(1.75, 1.3 / camera.aspect) : 1) * camZoom;
+      // Narrow screens (a phone held upright) see as far around you as a wide one by opening the lens wider, not by pulling
+      // the camera up: pulled up it sat above the cloud layer (DROP.cloudLow) and the screen was mostly cloud.
+      lensWiden = camera.aspect < 1.3 ? Math.min(1.75, 1.3 / camera.aspect) : 1;
+      const k = camZoom;
       // Look-ahead: 0.35 s of your velocity plus 2.5 m the way you face, capped at 4 m, so more of the screen shows where
       // you are going and shooting. Off while standing still and aiming nowhere in particular: the view settles on you.
       const lx = self.vx * 0.35 + Math.cos(self.heading) * 2.5;
@@ -2335,7 +2343,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       ? THREE.MathUtils.damp(camera.fov, scoped ? 16 : settings.fov, 18, dt)
       : sv
         ? THREE.MathUtils.damp(camera.fov, scoped ? 30 : Math.min(settings.fov, 78), 14, dt)
-        : THREE.MathUtils.damp(camera.fov, overview ? 52 : 42 + airFov(self), 3, dt);
+        : THREE.MathUtils.damp(camera.fov, widenFov(overview ? 52 : 42 + airFov(self), lensWiden), 3, dt);
     // Far away above the map, a nearer near-plane wastes depth precision and the ground and the
     // roads fight (flicker); push it out while in the overview.
     const near = overview ? 4 : camNear < 1 || fp || sv ? 0.05 : 0.5;
