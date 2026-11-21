@@ -2904,11 +2904,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       window.removeEventListener('keydown', onDown);
       window.removeEventListener('keyup', onUp);
       window.removeEventListener('blur', onBlur);
+      // Every drawable, not only meshes: the renderer hangs a dispose listener on each geometry, material and texture it
+      // drew, and one left undisposed (the chute lines' shared module-level material) kept the whole old renderer, its
+      // canvas and the old match's DOM alive after Play again.
       scene.traverse((o) => {
-        if (o instanceof THREE.Mesh) {
-          o.geometry.dispose();
-          const m = o.material as THREE.Material & { map?: THREE.Texture | null };
-          m.map?.dispose();
+        const d = o as THREE.Object3D & { geometry?: THREE.BufferGeometry; material?: THREE.Material | THREE.Material[] };
+        d.geometry?.dispose();
+        for (const m of d.material ? (Array.isArray(d.material) ? d.material : [d.material]) : []) {
+          for (const v of Object.values(m)) if (v instanceof THREE.Texture) v.dispose();
           m.dispose();
         }
       });
