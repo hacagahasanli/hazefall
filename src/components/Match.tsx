@@ -639,14 +639,14 @@ export const Match = ({
               hud={hud}
               colorBlind={settings.colorBlind}
               rings={!touch}
-              keys={{ super: capLabel(settings.keys.super), roll: capLabel(settings.keys.roll) }}
+              keys={settings.showKeyHints ? { super: capLabel(settings.keys.super), roll: capLabel(settings.keys.roll) } : null}
             />
             {touch && <Weapons hud={hud} keys={null} compact />}
           </div>
           {/* Your guns, over the minimap (bottom right). */}
           {!touch && (
             <div className="pointer-events-none absolute bottom-[222px] right-3 w-[204px]" style={{ zoom: hudZoom }}>
-              <Weapons hud={hud} keys={[capLabel(settings.keys.slot1), capLabel(settings.keys.slot2)]} compact={false} />
+              <Weapons hud={hud} keys={settings.showKeyHints ? [capLabel(settings.keys.slot1), capLabel(settings.keys.slot2)] : null} compact={false} />
             </div>
           )}
           {/* Players left and your kills, top right, the kill feed under them. */}
@@ -875,7 +875,7 @@ export const Match = ({
           )}
 
           {/* Controls */}
-          {!touch && (
+          {!touch && settings.showKeyHints && (
             <div className="pointer-events-none absolute left-3 top-3 flex max-w-[calc(50vw-13rem)] flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-cream/50">
               <span className="flex items-center gap-1">
                 <Key k={keyLabel(settings.keys.up)} />

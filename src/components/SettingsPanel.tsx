@@ -350,6 +350,9 @@ export const SettingsPanel = ({
               <Row label="Colour-blind friendly" hint="Blue and orange in place of green and red">
                 <Toggle label="Colour-blind friendly" on={s.colorBlind} onChange={(v) => patch({ colorBlind: v })} />
               </Row>
+              <Row label="Show key hints" hint="The key legend and the keys shown on the HUD">
+                <Toggle label="Show key hints" on={s.showKeyHints} onChange={(v) => patch({ showKeyHints: v })} />
+              </Row>
               <Row label="Larger HUD text">
                 <Toggle label="Larger HUD text" on={s.largeHud} onChange={(v) => patch({ largeHud: v })} />
               </Row>

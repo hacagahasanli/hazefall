@@ -291,7 +291,7 @@ export const PreMatch = ({
           className={`panel-cut relative mt-2 w-fit px-8 py-3 font-display text-xl uppercase transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream sm:text-2xl ${readied ? 'bg-cream/15 text-cream/70' : 'bg-green text-ink-deep hover:brightness-110'} ${!readied && live && !settings.reducedMotion ? '[animation:readyPulse_1.6s_ease-in-out_infinite]' : ''}`}
         >
           {readied ? <span className={fx ? 'lcs-glitch-in inline-block' : ''}>Ready ✓</span> : 'Ready'}
-          {!touch && !readied && <span className="ml-3 text-sm opacity-70">Space</span>}
+          {!touch && !readied && settings.showKeyHints && <span className="ml-3 text-sm opacity-70">Space</span>}
         </button>
         {!readied && live && full && <span className="text-xs text-cream/60">The match starts when you are ready.</span>}
       </section>

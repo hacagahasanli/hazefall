@@ -212,7 +212,7 @@ export const Vitals = ({
   colorBlind: boolean;
   /** Show the cooldown rings (on a phone the buttons carry their own). */
   rings: boolean;
-  keys: { super: string; roll: string };
+  keys: { super: string; roll: string } | null;
 }) => {
   const f = FIGHTERS[hud.fighter];
   const low = hud.hp / hud.maxHp <= 0.35;
@@ -247,8 +247,8 @@ export const Vitals = ({
       </div>
       {rings && (
         <div className="flex gap-2 pb-px">
-          <Ring value={hud.superCharge} color="#ffd23f" icon={SUPER_ICONS[hud.fighter]} cap={keys.super} label={hud.superName} size={44} />
-          <Ring value={Math.min(1, hud.roll)} color="#3ec5ff" icon={ROLL_ICON} cap={keys.roll} label="Roll" size={36} />
+          <Ring value={hud.superCharge} color="#ffd23f" icon={SUPER_ICONS[hud.fighter]} cap={keys?.super} label={hud.superName} size={44} />
+          <Ring value={Math.min(1, hud.roll)} color="#3ec5ff" icon={ROLL_ICON} cap={keys?.roll} label="Roll" size={36} />
         </div>
       )}
     </div>

@@ -39,6 +39,15 @@ describe('settings store', () => {
     expect(normalize({ keys: { ...DEFAULT_KEYS, fire: 'KeyW' } }).keys).toEqual(DEFAULT_KEYS);
   });
 
+  it('shows key hints by default, keeps an old save on, and remembers turning them off', () => {
+    expect(DEFAULT_SETTINGS.showKeyHints).toBe(true);
+    expect(normalize({ fov: 80 }).showKeyHints).toBe(true);
+    expect(normalize({ showKeyHints: 'no' }).showKeyHints).toBe(true);
+    const st = mem();
+    saveSettings(st, { ...DEFAULT_SETTINGS, showKeyHints: false });
+    expect(loadSettings(st).showKeyHints).toBe(false);
+  });
+
   it('keeps a layout saved before the gun slot and heal keys existed, giving those a free key', () => {
     const old = Object.fromEntries(Object.entries(DEFAULT_KEYS).filter(([a]) => !['slot1', 'slot2', 'swap', 'heal', 'coffee'].includes(a)));
     const keys = normalize({ keys: { ...old, use: 'Digit1', reload: 'KeyC' } }).keys;

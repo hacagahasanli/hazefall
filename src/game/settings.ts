@@ -105,6 +105,8 @@ export interface Settings {
   /** Blue and orange in place of green and red on the health bar and the danger edge. */
   colorBlind: boolean;
   largeHud: boolean;
+  /** The keyboard legend and the keycaps on the HUD (touch buttons always stay). */
+  showKeyHints: boolean;
   /** Which default layout the key bindings were saved under (see normalize: older saves move once). */
   keysVersion: number;
 }
@@ -129,6 +131,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reducedMotion: false,
   colorBlind: false,
   largeHud: false,
+  showKeyHints: true,
   keysVersion: 2,
 };
 
@@ -190,6 +193,7 @@ export const normalize = (raw: unknown): Settings => {
     reducedMotion: bool(r.reducedMotion, d.reducedMotion),
     colorBlind: bool(r.colorBlind, d.colorBlind),
     largeHud: bool(r.largeHud, d.largeHud),
+    showKeyHints: bool(r.showKeyHints, d.showKeyHints),
     keysVersion: d.keysVersion,
   };
 };
