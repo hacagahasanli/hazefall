@@ -433,6 +433,7 @@ export const createSfx = () => {
       }
     },
     unlock: () => ensure(),
+    dispose: () => { const c = ctx; ctx = null; if (c && c.state !== 'closed') void c.close(); },
     /** Silence (or un-silence) everything for a reason, without touching the player's own mute or volumes. */
     setMuted: (reason: string, on: boolean) => {
       if (on) silenced.add(reason);

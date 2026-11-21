@@ -662,7 +662,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
    * A rocket you can see coming: an olive body with a red nose and four fins, a flickering
    * flame out of the back, and a trail of smoke behind it. Built along +z.
    */
-  const rocketMeshes = Array.from({ length: 8 }, () => {
+  // Only the first two rockets in flight carry a light, and those two lights always stay in the scene (dark when idle):
+  // a change in the number of lights recompiles every lit material, which froze the game for up to 1.6 s at the first rocket.
+  const ROCKET_LIGHTS = 2;
+  const rocketMeshes = Array.from({ length: 8 }, (_, ri) => {
     const g = new THREE.Group();
     const body = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.85, 12).rotateX(Math.PI / 2), mat(0x5a6a3a));
     const band = new THREE.Mesh(new THREE.CylinderGeometry(0.135, 0.135, 0.08, 12).rotateX(Math.PI / 2), mat(0xe9c46a));
@@ -681,9 +684,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const core = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.3, 8).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xfff3c4 }));
     core.position.z = -0.58;
     g.add(flame, core);
-    const light = new THREE.PointLight(0xff9a3c, 3, 6);
-    light.position.z = -0.7;
-    g.add(light);
+    if (ri < ROCKET_LIGHTS) {
+      const light = new THREE.PointLight(0xff9a3c, 0, 6);
+      scene.add(light);
+      g.userData.light = light;
+    }
     g.userData.flame = flame;
     g.scale.setScalar(1.3); // readable from the top-down camera
     g.traverse((o) => (o.castShadow = o instanceof THREE.Mesh && o !== flame && o !== core));
@@ -2143,6 +2148,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         if (!m) continue;
         m.visible = true;
         m.position.set(pr.x, pr.h ?? 1.3, pr.y);
+        const rl = m.userData.light as THREE.PointLight | undefined;
+        if (rl) {
+          rl.position.set(pr.x, pr.h ?? 1.3, pr.y);
+          rl.intensity = 3;
+        }
         m.lookAt(pr.x + pr.vx, (pr.h ?? 1.3) + (pr.vh ?? 0), pr.y + pr.vy);
         const f = m.userData.flame as THREE.Mesh;
         f.scale.set(1, 1, 0.8 + Math.random() * 0.5);
@@ -2167,7 +2177,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       }
     }
     for (; cn < canisters.length; cn++) canisters[cn].visible = false;
-    for (; rk < rocketMeshes.length; rk++) rocketMeshes[rk].visible = false;
+    for (; rk < rocketMeshes.length; rk++) {
+      rocketMeshes[rk].visible = false;
+      const rl = rocketMeshes[rk].userData.light as THREE.PointLight | undefined;
+      if (rl) rl.intensity = 0;
+    }
     for (; t < tracers.length; t++) tracers[t].visible = false;
     for (const c of contrails) {
       if (!c.visible) continue;
@@ -2723,6 +2737,19 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // Waiting behind the pre-match screen: draw the first frames (compiles shaders, uploads textures), report ready,
       // then sleep until released.
       if (heldFrames < 3) {
+        if (heldFrames === 0) {
+          const vis: [THREE.Object3D, boolean, boolean][] = [];
+          scene.traverse((o) => {
+            vis.push([o, o.visible, o.frustumCulled]);
+            o.visible = true;
+            o.frustumCulled = false;
+          });
+          renderer.render(scene, camera);
+          vis.forEach(([o, v, f]) => {
+            o.visible = v;
+            o.frustumCulled = f;
+          });
+        }
         heldFrames++;
         renderFrame(dt, 0);
         if (heldFrames === 3) emitHud();
@@ -2886,7 +2913,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           m.dispose();
         }
       });
+      sfx.dispose();
       renderer.dispose();
+      renderer.forceContextLoss();
       perf.dispose();
     },
   };
