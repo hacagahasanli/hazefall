@@ -2054,7 +2054,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const c = chuteCam;
       // Free fall: looking steeply down past the jumper, the ground rushing up below.
       const fb = 1 + (back - 1) * 0.6;
-      want = new THREE.Vector3(selfX, hh + 8.5 * fb + (13 * back - 8.5 * fb) * c, selfY + 5.5 * fb + (19 * back - 5.5 * fb) * c);
+      want = new THREE.Vector3(selfX, hh + 8.5 * fb + (14.5 * back - 8.5 * fb) * c, selfY + 5.5 * fb + (17.5 * back - 5.5 * fb) * c);
       look = new THREE.Vector3(selfX, hh - 2 + 3.8 * c, selfY);
       // The wind: a small, speed-scaled buffet in free fall (three unrelated rates, so it never reads as a loop).
       if (!settings.reducedMotion) {
