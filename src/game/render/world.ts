@@ -194,7 +194,7 @@ export interface CullOptions {
   lodNear: number;
   /** Ground distance (m) past which nothing is drawn (beyond the fog). */
   far: number;
-  /** The soft additive glows (door halos and light cones, warm room fill): off on the low tier. Default on. */
+  /** The soft additive glows (door halos, warm room fill): off on the low tier. Default on. */
   glow?: boolean;
 }
 
@@ -290,19 +290,89 @@ const glowDisc = (radius: number, hex: number, segs = 18) => {
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   return g;
 };
-/** An open cone of light, narrow and bright at the top, wide and gone at the bottom. */
-const glowCone = (top: number, bottom: number, height: number, hex: number) => {
-  const g = new THREE.CylinderGeometry(top, bottom, height, 14, 1, true);
-  const c = new THREE.Color(hex);
-  const pos = g.getAttribute('position');
-  const col = new Float32Array(pos.count * 3);
-  for (let i = 0; i < pos.count; i++) {
-    const k = pos.getY(i) > 0 ? 1 : 0;
-    col.set([c.r * k, c.g * k, c.b * k], i * 3);
+/**
+ * What you see through an open doorway from outside, painted in perspective (RGBA, row 0 at the bottom, as a texture
+ * wants it): wooden floor boards running into the room, lit warm at the threshold and darker towards the back, the
+ * side walls and the back wall in shadow, and the door leaf swung open (about 85 degrees) against the right-hand
+ * wall. From above the house shell covers the real room, so this fakes its depth inside the opening.
+ */
+export const doorwayInterior = (w: number, h: number) => {
+  const px = new Uint8Array(w * h * 4);
+  const BACK = 0.6; // where the floor meets the back wall (fraction of the height)
+  const NEAR = 0.5; // half the floor's width at the threshold, and at the back wall:
+  const FAR = 0.27;
+  const halfAt = (v: number) => NEAR - (NEAR - FAR) * Math.min(1, v / BACK);
+  const mix = (a: number, b: number, t: number) => a + (b - a) * t;
+  const clamp = (x: number) => Math.max(0, Math.min(1, x));
+  for (let y = 0; y < h; y++) {
+    const v = (y + 0.5) / h;
+    for (let x = 0; x < w; x++) {
+      const u = (x + 0.5) / w;
+      const du = u - 0.5;
+      let r: number;
+      let g: number;
+      let b: number;
+      const hw = halfAt(v);
+      if (v < BACK && Math.abs(du) <= hw) {
+        // The floor: boards converging on the back wall, every other one a shade off, dark seams between them.
+        const t = v / BACK;
+        const across = (du / hw) * 4.5 + 4.5;
+        const board = Math.floor(across);
+        const seam = Math.abs(across - Math.round(across)) < 0.06 + 0.05 * t ? 0.62 : 1;
+        // Short end joints, staggered per board, spaced closer with depth.
+        const depth = 1 / (1.15 - t);
+        const joint = Math.abs(((depth * 0.7 + (board % 3) * 0.37) % 1) - 0.5) > 0.48 ? 0.72 : 1;
+        const tone = board % 2 ? 0.93 : 1.04;
+        // Light from the door and a ceiling lamp: bright at the threshold, a pool a little way in, dim at the back.
+        const pool = Math.exp(-((du * 2.2) ** 2 + ((t - 0.42) * 2.6) ** 2));
+        const light = mix(1, 0.42, t ** 0.8) + 0.22 * pool;
+        const k = light * tone * seam * joint;
+        r = 0.72 * k;
+        g = 0.5 * k;
+        b = 0.3 * k;
+      } else if (v >= BACK && Math.abs(du) <= FAR) {
+        // The back wall: warm plaster in shade, a skirting board along the floor, darker up into the ceiling.
+        const up = (v - BACK) / (1 - BACK);
+        const skirt = up < 0.08 ? 0.6 : 1;
+        const k = mix(0.42, 0.22, up) * skirt;
+        r = 0.78 * k;
+        g = 0.6 * k;
+        b = 0.44 * k;
+      } else {
+        // The side walls, darker the deeper they go (towards the middle of the picture).
+        const deep = clamp((0.5 - Math.abs(du)) / (0.5 - FAR));
+        const floorV = ((NEAR - Math.abs(du)) / (NEAR - FAR)) * BACK;
+        const k = mix(0.5, 0.25, deep);
+        r = 0.74 * k;
+        g = 0.58 * k;
+        b = 0.42 * k;
+        // The door leaf, swung in against the right-hand wall: its near part, from the floor up to the top of the
+        // frame, wood with two sunk panels and a dark free edge.
+        const lu = (u - 0.83) / 0.17;
+        const top = 0.93 - (1 - lu) * 0.06;
+        if (du > 0 && lu >= 0 && v >= floorV - 0.01 && v <= top) {
+          const lv = (v - floorV) / (top - floorV);
+          const edge = lu < 0.12 ? 0.55 : 1;
+          const panel = lu > 0.3 && lu < 0.85 && ((lv > 0.1 && lv < 0.45) || (lv > 0.55 && lv < 0.9)) ? 0.82 : 1;
+          const knob = lu > 0.16 && lu < 0.26 && Math.abs(lv - 0.47) < 0.03;
+          const k2 = mix(0.62, 0.95, lu) * edge * panel;
+          r = knob ? 0.85 : 0.66 * k2;
+          g = knob ? 0.7 : 0.42 * k2;
+          b = knob ? 0.32 : 0.24 * k2;
+        }
+      }
+      // The lintel's shadow along the top of the opening.
+      const shade = v > 0.9 ? mix(1, 0.55, (v - 0.9) / 0.1) : 1;
+      const o = (y * w + x) * 4;
+      px[o] = Math.round(clamp(r * shade) * 255);
+      px[o + 1] = Math.round(clamp(g * shade) * 255);
+      px[o + 2] = Math.round(clamp(b * shade) * 255);
+      px[o + 3] = 255;
+    }
   }
-  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  return g;
+  return px;
 };
+
 /** The wall lamp over every door: a dark housing and a warm bulb (self-lit, so it reads in shade, storm and fog). */
 const lampMats = {
   housing: new THREE.MeshStandardMaterial({ color: 0x2b2d30, roughness: 0.8, metalness: 0.3 }),
@@ -354,10 +424,11 @@ export const buildWorld = (scene: THREE.Scene): World => {
   // can see from outside where to walk in (the house models' own doors are only decoration)
   /**
    * The doorway panels, per building: shown from above (where the house is a shell model you cannot see into), gone in
-   * first person (where you see the real room through the door). They used to be near-black, so from above every
-   * entrance read as a dark hole while the same door in first person showed a bright room: now the panel is the lit room
-   * colour, self-lit so roof and eave shadows cannot darken it, and both cameras share a warm pool of light on the
-   * threshold. All of it is unlit or emissive, so it reads the same on every quality tier (no point lights needed).
+   * first person (where you see the real room through the door). A near-black panel read as a dark hole and a flat
+   * cream one as a closed white door, so the panel is now a painted glimpse of the room (doorwayInterior): lit floor
+   * boards at the threshold going dark towards the back, shaded walls, the door leaf swung open inside. It is unlit, so
+   * roof and eave shadows cannot darken it and it reads the same on every quality tier (no point lights needed); both
+   * cameras share a warm pool of light on the step.
    */
   const poolTex = (() => {
     const c = document.createElement('canvas');
@@ -373,8 +444,15 @@ export const buildWorld = (scene: THREE.Scene): World => {
   })();
   const poolMat = new THREE.MeshBasicMaterial({ map: poolTex, color: 0xffcf8a, transparent: true, opacity: 0.62, blending: THREE.AdditiveBlending, depthWrite: false, fog: true });
   const poolGeo = new THREE.PlaneGeometry(5.4, 4.2).rotateX(-Math.PI / 2);
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0xf4f0e6, roughness: 0.7 });
-  const roomMat = new THREE.MeshStandardMaterial({ color: 0xead8b4, emissive: 0x6b4c26, emissiveIntensity: 0.9, roughness: 1 });
+  // A painted wood frame, in the houses' warm browns rather than stark white.
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x8a6440, roughness: 0.8 });
+  const roomTex = new THREE.DataTexture(doorwayInterior(128, 96), 128, 96);
+  roomTex.colorSpace = THREE.SRGBColorSpace;
+  roomTex.magFilter = THREE.LinearFilter;
+  roomTex.minFilter = THREE.LinearMipmapLinearFilter;
+  roomTex.generateMipmaps = true;
+  roomTex.needsUpdate = true;
+  const roomMat = new THREE.MeshBasicMaterial({ map: roomTex, fog: true });
   const matMat = new THREE.MeshStandardMaterial({ color: 0x6a4a2a, roughness: 1 });
   // Built per building, then merged per material over the whole map (frames, doormats, openings, light pools: four
   // draw calls); a building's doors are hidden by collapsing its triangles in those batches.
@@ -403,8 +481,13 @@ export const buildWorld = (scene: THREE.Scene): World => {
         holder.rotation.y = horizontal ? 0 : Math.PI / 2;
         // After the quarter turn local +z is world +x, so 'out' is the outward side in both cases.
         const sgn = out;
-        const opening = new THREE.Mesh(new THREE.BoxGeometry(3.4, 2.4, 0.08), roomMat);
+        // The open doorway, facing out (a plane: from inside the house the panels are hidden anyway).
+        const opening = new THREE.Mesh(new THREE.PlaneGeometry(3.44, 2.4), roomMat);
         opening.position.set(0, 1.2, sgn * 0.06);
+        if (sgn < 0) opening.rotation.y = Math.PI;
+        // A wooden sill across the threshold.
+        const sill = new THREE.Mesh(new THREE.BoxGeometry(3.44, 0.06, 0.3), frameMat);
+        sill.position.set(0, 0.03, sgn * 0.12);
         const lintel = new THREE.Mesh(new THREE.BoxGeometry(3.9, 0.25, 0.22), frameMat);
         lintel.position.set(0, 2.5, sgn * 0.1);
         const postL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 2.5, 0.22), frameMat);
@@ -417,13 +500,13 @@ export const buildWorld = (scene: THREE.Scene): World => {
         const pool = new THREE.Mesh(poolGeo, poolMat);
         pool.position.set(0, 0.04, sgn * 0.5);
         pool.renderOrder = 2;
-        holder.add(opening, lintel, postL, postR, mat);
+        holder.add(opening, sill, lintel, postL, postR, mat);
         holder.traverse((o) => o instanceof THREE.Mesh && (o.castShadow = true));
         holder.add(pool);
         g.add(holder);
 
         // The lamp: housing and bulb above the lintel, a halo round it (upright for the eye-level views, flat for the
-        // view from above), a faint cone of light down onto the step, and hazard tape across the lintel.
+        // view from above) and hazard tape across the lintel. No cone of light: it filled the doorway with a pale wedge.
         const lamp = new THREE.Group();
         lamp.position.copy(holder.position);
         lamp.rotation.copy(holder.rotation);
@@ -442,10 +525,8 @@ export const buildWorld = (scene: THREE.Scene): World => {
         halo.position.set(0, 2.74, sgn * 0.3);
         const haloTop = new THREE.Mesh(glowDisc(1.2, LAMP_GLOW).rotateX(-Math.PI / 2), glowMat);
         haloTop.position.set(0, 2.95, sgn * 0.45);
-        const cone = new THREE.Mesh(glowCone(0.2, 1.2, 2.6, 0x30200e), glowMat);
-        cone.position.set(0, 1.4, sgn * 0.95);
-        for (const m of [halo, haloTop, cone]) m.renderOrder = 3;
-        lamp.add(halo, haloTop, cone);
+        for (const m of [halo, haloTop]) m.renderOrder = 3;
+        lamp.add(halo, haloTop);
         lg.add(lamp);
       }
     }
