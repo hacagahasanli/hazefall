@@ -9,7 +9,7 @@ import { GRADE_CSS, startMatch } from '~/game/render/game';
 import { FIGHTERS } from '~/game/sim/constants';
 
 import { AimChoice, readAim, saveAim } from '~/components/AimChoice';
-import { useBreaks } from '~/components/useBreaks';
+import { usePlatformRound } from '~/components/usePlatformRound';
 import { useTelemetry } from '~/components/useTelemetry';
 import { deviceFacts } from '~/game/render/deviceFacts';
 import { resolveTier } from '~/game/render/quality';
@@ -214,7 +214,6 @@ const Result = ({
   online,
   Support,
   exitLabel,
-  busy,
   fx,
 }: {
   hud: HudState;
@@ -225,8 +224,6 @@ const Result = ({
   exitLabel: string;
   /** Motion on (the game's reduced-motion setting off). */
   fx: boolean;
-  /** A midgame ad is playing: the buttons wait. */
-  busy: boolean;
 }) => {
   // The host's browser runs the round: it must stay until the round is over.
   const hostWaits = online && hud.host && hud.phase !== 'over';
@@ -324,7 +321,7 @@ const Result = ({
           <button
             type="button"
             autoFocus
-            disabled={hostWaits || busy}
+            disabled={hostWaits}
             onClick={onPlayAgain}
             className="panel-cut bg-gold px-10 py-3.5 font-display text-xl text-ink-deep shadow-[0_6px_0_#b8901c] transition hover:brightness-110 active:translate-y-[3px] active:shadow-[0_3px_0_#b8901c] disabled:opacity-40 [@media(max-height:520px)]:py-2.5"
           >
@@ -333,7 +330,6 @@ const Result = ({
           {!online && (
             <button
               type="button"
-              disabled={busy}
               onClick={onExit}
               className="panel-cut bg-cream/10 px-8 py-3.5 font-display text-lg text-cream/90 transition hover:bg-cream/20 disabled:opacity-40 [@media(max-height:520px)]:py-2.5"
             >
@@ -470,10 +466,9 @@ export const Match = ({
   // Anonymous usage events: a no-op unless the site started counting (never on a portal build).
   useTelemetry(hud, { held, showResult, online });
 
-  const breaks = useBreaks(platform, game, {
+  usePlatformRound(platform, game, {
     loaded: !!hud && !held,
     playing: !!hud && !held && !menuOpen && !showResult && hud.phase !== 'over',
-    roundOver: showResult,
   });
 
   // Esc twice opens the menu and pauses the match (it's offline, so pausing is fair). Esc closes it.
@@ -926,12 +921,11 @@ export const Match = ({
           {showResult && (
             <Result
               hud={hud}
-              onPlayAgain={() => void breaks.next(onPlayAgain)}
-              onExit={() => void breaks.next(onExit)}
+              onPlayAgain={onPlayAgain}
+              onExit={onExit}
               online={online}
               Support={Support}
               exitLabel={exitLabel}
-              busy={breaks.inBreak}
               fx={!settings.reducedMotion}
             />
           )}

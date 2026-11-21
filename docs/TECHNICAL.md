@@ -348,9 +348,18 @@ with hot reload on port 3203, and `npm run phone:portal` builds it and serves th
 - **Neutral copy**: `src/game/copy/studio.ts` (the developer jokes) is swapped for `neutral.ts` at build time by an alias.
   The game keeps its name; fighters, bots, the zone ("the Storm"), the result and intro lines change.
 - **Platform adapter** (`src/platform/`): `detectPlatform` picks the CrazyGames adapter when the SDK inits, else a no-op web
-  adapter. `useBreaks` reports loading stop (menu shown), gameplay start/stop (a round on screen, not paused, not on the
-  report), asks for a midgame ad only as the player leaves the round report (`BreakScheduler`: after one round and 90 s of
-  play, at most every 180 s), mutes and freezes only once the ad starts, and follows the portal's mute button.
+  adapter. `usePlatformRound` reports loading stop (menu shown), gameplay start/stop (a round on screen, not paused, not
+  on the report) and follows the portal's mute button.
+- **Ads**: no midgame video ads. They used to play as the player left the round report and broke the tempo between
+  rounds (on localhost the SDK shows its "Midgame ad would appear here" demo for them), so the report now goes straight
+  on. The only ad is one banner under the main menu (`MenuBanner`, SDK `banner.requestResponsiveBanner`): requested
+  once the menu is on screen (boot screen gone, no side panel open), cleared when the menu goes (Play), so never in a
+  round. The slot is 320x50 (320x250 on windows at least 880 px tall, where the SDK may pick 300x250), sits below the
+  menu buttons (on phones at the bottom of the stack, above the version line) and is not rendered at all on windows under
+  560 px tall (phones held sideways). No SDK, or any refusal (no fill, `bannerCooldown` within 30 s, `maxRefreshReached`,
+  `bannersDisabled`, `notVisible`, `noAvailableSizes`): the slot collapses, never an empty box. The site build (Next.js)
+  never loads the SDK script and always uses the web adapter (`banners: false`, no break of any kind), so the site shows
+  no ads and no placeholder. `rewardedBreak` stays in the adapter for a reward the player chooses (unused in this game).
 - **Performance tiers** (`src/game/render/quality.ts`): auto by device (phones, tablets and 4 GB Chromebooks get low),
   a frame-rate guard steps down once if it stays under 40 fps; Settings > Graphics overrides it, plus shadows, resolution
   scale and an FPS counter. The menu backdrop is cheaper on low and holds still with reduced motion.
@@ -362,7 +371,7 @@ with hot reload on port 3203, and `npm run phone:portal` builds it and serves th
   the SDK, the lobby server in the bundle, or a studio joke in the shipped text, and prints the size.
 - **Captures** (`scripts/portal-*.mjs`, need playwright-core in a scratch folder): covers into `docs/portal/covers`
   (1920x1080, 800x1200, 800x800, three variants), screens into `docs/portal/screens`, load times (`portal-serve.mjs` +
-  `portal-load.mjs`). `?testBreaks` on the dev server makes an ad due after every round (the SDK's demo ad on localhost).
+  `portal-load.mjs`). On localhost the SDK fills the menu banner with its demo placeholder.
 
 Measured 2026-11-20 (`portal-load.mjs`, build served with gzip under a sub-path, cache off, three runs): fast 4G (9 Mbps,
 85 ms) menu usable in 0.9 s and the first frame of a round 1.4 s after Play; slow 4G (1.6 Mbps, 150 ms, 4x CPU, Pixel 7)
