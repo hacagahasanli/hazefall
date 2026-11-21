@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createCrazyGamesPlatform } from './crazygames';
 import { detectPlatform } from './index';
+import { showsOnlineRow } from './menu';
 import { createWebPlatform, memoryStore } from './web';
 
 import type { CrazySdk } from './crazygames';
@@ -210,5 +211,13 @@ describe('the CrazyGames adapter', () => {
     expect(p.deviceType()).toBe('tablet');
     p.storage.setItem('q', 'low');
     expect(f.sdk.data!.getItem('q')).toBe('low');
+  });
+});
+
+describe('the main menu', () => {
+  it('hides the Online · Coming soon row on CrazyGames only', () => {
+    expect(showsOnlineRow('web', false)).toBe(true);
+    expect(showsOnlineRow('crazygames', false)).toBe(false);
+    expect(showsOnlineRow('web', true)).toBe(false);
   });
 });

@@ -19,6 +19,7 @@ import { FIGHTERS, PLAYERS } from '~/game/sim/constants';
 import { brandUrl } from '~/lib/assets';
 import { boot, loadCount, onLoadCount } from '~/lib/loading';
 import { GAME_TITLE, ONLINE_PLAY } from '~/lib/studio';
+import { showsOnlineRow } from '~/platform/menu';
 import { loadDone, track } from '~/lib/telemetry';
 
 import type { AimMode } from '~/game/render/game';
@@ -193,8 +194,8 @@ export const MainMenu = ({
 
   const items: { id: string; label: string; sub?: string; primary?: boolean; soon?: boolean; run: () => void }[] = [
     { id: 'play', label: 'Play', sub: `Solo · ${PLAYERS - 1} bots`, primary: true, run: onPlay },
-    // Online play is not open yet (ONLINE_PLAY): shown, labelled, and not selectable.
-    ...(ONLINE_PLAY ? [] : [{ id: 'online', label: 'Online', soon: true, run: () => {} }]),
+    // Online play is not open yet (ONLINE_PLAY): shown, labelled, and not selectable (not on CrazyGames).
+    ...(!showsOnlineRow(platform.id, ONLINE_PLAY) ? [] : [{ id: 'online', label: 'Online', soon: true, run: () => {} }]),
     { id: 'fighter', label: 'Fighter', sub: f.name, run: () => setPanel('fighter') },
     { id: 'settings', label: 'Settings', run: () => setPanel('settings') },
     { id: 'how', label: 'How to play', run: () => setPanel('how') },
