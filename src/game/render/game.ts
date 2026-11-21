@@ -51,7 +51,7 @@ export interface HudState {
   /** 0..1 while reloading, else null. */
   reloading: number | null;
   /** Both gun slots in key order (slot 1, slot 2): what is in it (null = empty), its grade, rounds, and which one is in your hands. */
-  slots: { name: string | null; rarity: number; mag: number; ammo: number; active: boolean }[];
+  slots: { name: string | null; kind: WeaponKind | null; rarity: number; mag: number; ammo: number; active: boolean }[];
   /** Seconds left of drawing the other gun (0 = ready). */
   swapping: number;
   /** Vest tier (0..3) and its full points; backpack tier (0..2). */
@@ -2214,9 +2214,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
   /** Slot 1 and slot 2 for the HUD, whichever is in your hands. */
   const slotsOf = (p: Player): HudState['slots'] => {
-    const inHand = { name: p.weapon === 'fists' ? null : WEAPONS[p.weapon].name, rarity: p.rarity, mag: p.mag, ammo: p.ammo, active: true };
+    const inHand = { name: p.weapon === 'fists' ? null : WEAPONS[p.weapon].name, kind: p.weapon === 'fists' ? null : p.weapon, rarity: p.rarity, mag: p.mag, ammo: p.ammo, active: true };
     const h = p.holster;
-    const other = h && h.weapon !== 'fists' ? { name: WEAPONS[h.weapon].name, rarity: h.rarity, mag: h.mag, ammo: h.ammo, active: false } : { name: null, rarity: 0, mag: 0, ammo: 0, active: false };
+    const other = h && h.weapon !== 'fists' ? { name: WEAPONS[h.weapon].name, kind: h.weapon, rarity: h.rarity, mag: h.mag, ammo: h.ammo, active: false } : { name: null, kind: null, rarity: 0, mag: 0, ammo: 0, active: false };
     return p.slot === 0 ? [inHand, other] : [other, inHand];
   };
   /** Draw at another quality tier: pixel ratio, shadows and view distance change at once (antialiasing on the next load). */

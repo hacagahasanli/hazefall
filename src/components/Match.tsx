@@ -19,27 +19,12 @@ import { createWebPlatform } from '~/platform/web';
 import { TouchControls, useTouch } from '~/components/TouchControls';
 import { ShockRing, Streaks } from '~/components/Transitions';
 import { uiImpact } from '~/components/uiSound';
+import { capLabel, Counters, Vitals, Weapons } from '~/components/Hud';
 import { loadCount, onLoadCount } from '~/lib/loading';
 import type { Session } from '~/game/net/session';
 import type { HudState } from '~/game/render/game';
 import type { FighterId } from '~/game/sim/types';
 import type { Platform } from '~/platform/types';
-
-const Bar = ({ value, max, color }: { value: number; max: number; color: string }) => (
-  <div className="panel-cut h-3 w-44 bg-ink-deep/80 sm:w-64">
-    <div
-      className="h-full transition-[width] duration-150"
-      style={{ width: `${Math.max(0, Math.min(1, value / max)) * 100}%`, background: color }}
-    />
-  </div>
-);
-
-const ROMAN = ['', 'I', 'II', 'III'];
-const Chip = ({ children, color }: { children: React.ReactNode; color?: string }) => (
-  <span className="rounded-sm bg-ink-deep/70 px-1.5 py-px text-cream/85" style={color ? { color, boxShadow: `inset 2px 0 0 ${color}` } : undefined}>
-    {children}
-  </span>
-);
 
 const Key = ({ k }: { k: string }) => (
   <kbd className="inline-flex min-w-5 items-center justify-center rounded-sm border border-b-2 border-cream/30 bg-cream/10 px-1 text-[10px] font-bold leading-4 text-cream">
@@ -501,92 +486,31 @@ export const Match = ({
 
       {hud && (
         <>
-          {/* You */}
+          {/* You: health, shield, what you carry and the ability rings, bottom left (top left on a phone, out of the thumbs' way). */}
           <div
-            className="pointer-events-none absolute left-4 top-3 flex flex-col gap-1.5"
+            className={`pointer-events-none absolute flex flex-col gap-1.5 ${touch ? 'left-3 top-2' : 'bottom-4 left-4'}`}
             style={{ ...(touch ? { marginLeft: 'env(safe-area-inset-left)' } : {}), zoom: hudZoom }}
           >
-            <div className="flex items-baseline gap-2">
-              <span className="font-display text-lg" style={{ color: f.color }}>
-                {f.name}
-              </span>
-              {hud.reloading !== null && (
-                <span className="flex items-center gap-1 text-[10px] font-bold tracking-widest text-gold">
-                  RELOADING
-                  <span className="h-1 w-12 overflow-hidden rounded bg-cream/15">
-                    <span
-                      className="block h-full bg-gold"
-                      style={{ width: `${hud.reloading * 100}%` }}
-                    />
-                  </span>
-                </span>
-              )}
-            </div>
-            {/* Two gun slots: the one in your hands lit, its grade as the colour of the edge. */}
-            <div className="flex gap-1.5">
-              {hud.slots.map((sl, i) => (
-                <div
-                  key={i}
-                  className={`flex min-w-[5.5rem] items-baseline gap-1.5 rounded-sm border-l-[3px] px-1.5 py-0.5 sm:min-w-[7.5rem] ${sl.active ? 'bg-ink-deep/85' : 'bg-ink-deep/50 opacity-60'}`}
-                  style={{ borderColor: sl.name ? GRADE_CSS[sl.rarity] : 'rgba(232,238,247,0.2)' }}
-                >
-                  {!touch && <span className="text-[10px] font-bold text-cream/50">{keyLabel(i === 0 ? settings.keys.slot1 : settings.keys.slot2)}</span>}
-                  <span className="text-xs font-semibold" style={{ color: sl.name ? (sl.rarity > 0 ? GRADE_CSS[sl.rarity] : '#e8eef7') : 'rgba(232,238,247,0.4)' }}>
-                    {sl.name ?? 'empty'}
-                  </span>
-                  {sl.name && (
-                    <span className={`font-display text-sm ${sl.mag === 0 ? 'text-orange' : 'text-cream'}`}>
-                      {sl.mag}
-                      <span className="text-cream/50">/{sl.ammo}</span>
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-            <Bar
-              value={hud.hp}
-              max={hud.maxHp}
-              color={hud.hp / hud.maxHp > 0.35 ? (settings.colorBlind ? '#3ec5ff' : '#3ddc84') : settings.colorBlind ? '#ff9f1c' : '#ff3d6e'}
+            <Vitals
+              hud={hud}
+              colorBlind={settings.colorBlind}
+              rings={!touch}
+              keys={{ super: capLabel(settings.keys.super), roll: capLabel(settings.keys.roll) }}
             />
-            {hud.armor > 0 && <Bar value={hud.armor} max={hud.vestMax} color="#3ec5ff" />}
-            {/* What you carry: vest and backpack grades, heals and bombs out of what the backpack holds, coffee left. */}
-            <div className="flex flex-wrap items-center gap-1 text-[10px] font-semibold">
-              {hud.vest > 0 && <Chip color={GRADE_CSS[hud.vest - 1]}>Vest {ROMAN[hud.vest]}</Chip>}
-              {hud.pack > 0 && <Chip color={GRADE_CSS[hud.pack - 1]}>Pack {ROMAN[hud.pack]}</Chip>}
-              {hud.bag.bandages > 0 && <Chip>{COPY.items.bandage} {hud.bag.bandages}/{hud.bag.cap.bandage}</Chip>}
-              {hud.bag.medkits > 0 && <Chip>{COPY.items.medkit} {hud.bag.medkits}/{hud.bag.cap.medkit}</Chip>}
-              {hud.bag.coffees > 0 && <Chip>{COPY.items.coffee} {hud.bag.coffees}</Chip>}
-              {hud.bag.bombs > 0 && <Chip>Bomb {hud.bag.bombs}</Chip>}
-              {hud.buzz > 0 && <Chip color="#ffd23f">{COPY.items.coffee} {Math.ceil(hud.buzz)}s</Chip>}
-            </div>
-            <div className="flex items-center gap-2 text-[11px]">
-              <span className="text-cream/60">
-                {touch ? 'Super' : keyLabel(settings.keys.super)} · {hud.superName}
-              </span>
-              <div className="h-1.5 w-28 overflow-hidden rounded bg-cream/15">
-                <div
-                  className="h-full"
-                  style={{
-                    width: `${hud.superCharge * 100}%`,
-                    background: hud.superCharge >= 1 ? '#ffd23f' : '#8b93ad',
-                  }}
-                />
-              </div>
-              {hud.superCharge >= 1 && <span className="font-bold text-gold">ready</span>}
-            </div>
-            <div className="flex items-center gap-2 text-[11px]">
-              <span className="text-cream/60">{touch ? 'Roll' : `${keyLabel(settings.keys.roll)} · Roll`}</span>
-              <div className="h-1.5 w-28 overflow-hidden rounded bg-cream/15">
-                <div
-                  className="h-full"
-                  style={{
-                    width: `${Math.min(1, hud.roll) * 100}%`,
-                    background: hud.roll >= 1 ? '#3ec5ff' : '#8b93ad',
-                  }}
-                />
-              </div>
-            </div>
+            {touch && <Weapons hud={hud} keys={null} compact />}
           </div>
+          {/* Your guns, over the minimap (bottom right). */}
+          {!touch && (
+            <div className="pointer-events-none absolute bottom-[222px] right-3 w-[204px]" style={{ zoom: hudZoom }}>
+              <Weapons hud={hud} keys={[capLabel(settings.keys.slot1), capLabel(settings.keys.slot2)]} compact={false} />
+            </div>
+          )}
+          {/* Players left and your kills, top right, the kill feed under them. */}
+          {!touch && (
+            <div className="panel-cut pointer-events-none absolute right-4 top-3 bg-ink-deep/80 px-3 py-1.5" style={{ zoom: hudZoom }}>
+              <Counters alive={hud.alive} kills={hud.kills} pulse={!settings.reducedMotion} />
+            </div>
+          )}
 
           {/* The first seconds on the plane: what this game is about. */}
           {hud.stage === 'drone' && hud.phase === 'drop' && hud.planeTime < 3.2 && (
@@ -614,17 +538,12 @@ export const Match = ({
             className={`pointer-events-none absolute inset-x-0 flex justify-center ${touch ? 'top-[124px] sm:top-3' : 'top-3'}`}
           >
             <div className="panel-cut flex items-center gap-3 bg-ink-deep/85 px-3 py-1 sm:gap-4 sm:px-4 sm:py-1.5" style={{ zoom: hudZoom }}>
-              <span className="font-display text-xl text-cream">{hud.alive}</span>
-              <span className="text-[10px] font-semibold tracking-widest text-cream/50">LEFT</span>
-              <span className="h-4 w-px bg-cream/20" />
-              {/* Your kills; the number jumps each time it goes up. */}
-              <span
-                key={hud.kills}
-                className={`inline-block font-display text-xl text-cream ${hud.kills > 0 && !settings.reducedMotion ? 'animate-[killPulse_0.5s_ease-out] motion-reduce:animate-none' : ''}`}
-              >
-                {hud.kills}
-              </span>
-              <span className="text-[10px] font-semibold tracking-widest text-cream/50">{hud.kills === 1 ? 'KILL' : 'KILLS'}</span>
+              {touch && (
+                <>
+                  <Counters alive={hud.alive} kills={hud.kills} pulse={!settings.reducedMotion} />
+                  <span className="h-4 w-px bg-cream/20" />
+                </>
+              )}
               <span
                 className={`text-sm ${hud.zone.outside ? 'font-bold text-orange' : 'text-cream/80'}`}
               >
@@ -751,7 +670,7 @@ export const Match = ({
 
           {/* Kill feed */}
           <div
-            className={`pointer-events-none absolute flex flex-col items-end gap-1 text-xs ${touch ? 'right-2 top-[176px] sm:top-[min(140px,32vh,33vw)]' : 'right-4 top-3'}`}
+            className={`pointer-events-none absolute flex flex-col items-end gap-1 text-xs ${touch ? 'right-2 top-[176px] sm:top-[min(140px,32vh,33vw)]' : 'right-4 top-[52px]'}`}
           >
             {hud.feed.map((k) => (
               <span key={k.id} className="rounded bg-ink-deep/80 px-2 py-0.5 text-cream/80">
@@ -812,7 +731,7 @@ export const Match = ({
 
           {/* Controls */}
           {!touch && (
-            <div className="pointer-events-none absolute bottom-3 left-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-cream/50">
+            <div className="pointer-events-none absolute left-3 top-3 flex max-w-[calc(50vw-13rem)] flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-cream/50">
               <span className="flex items-center gap-1">
                 <Key k={keyLabel(settings.keys.up)} />
                 <Key k={keyLabel(settings.keys.left)} />
