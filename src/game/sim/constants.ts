@@ -719,39 +719,51 @@ export const SUPERS = {
 /**
  * The plane flies slowly, above the clouds. You jump, fall through the cloud layer with real gravity and drag, the
  * canopy deploys below it (or earlier, on Space) and slows you hard over about a second, then you glide down under it.
- * Heights in metres, speeds in m/s, times in seconds. Tuned so a whole drop still takes about 8.2 s (`glide`), the
- * length the match pacing was balanced on: about 3.1 s of free fall to 40 m, 1.1 s of opening, 4 s under the canopy.
+ * Heights in metres, speeds in m/s, times in seconds. The canopy is the part to enjoy: a door-to-ground drop with the
+ * automatic pull takes about `glide` seconds, about 3.1 s of free fall to 40 m and then about 9 s under the canopy
+ * (it was 5 s), long enough to look over the map, pick a spot and see who else is coming down.
  */
 export const DROP = {
   flight: 20,
   /** Past this point of the route everyone still aboard is pushed out. */
   forceJump: 0.85,
   /** Total seconds from the door to the ground with the canopy opened at `deployAlt` (what the sim tests hold it to). */
-  glide: 8.2,
+  glide: 11.6,
   height: 75,
   cloudLow: 44,
   cloudHigh: 58,
   gravity: 9.8,
-  /** Terminal speed falling belly to earth, and under the open canopy. */
+  /**
+   * Terminal speed falling belly to earth, and under the open canopy flying at up to `chuteSpeed` (a slow, floating
+   * sink). Diving the canopy (`chuteDiveSpeed`) sinks at up to `chuteDiveSink`, about the old canopy's rate.
+   */
   freefallTerminal: 20,
-  chuteTerminal: 5.7,
+  chuteTerminal: 3.7,
+  chuteDiveSink: 5.6,
   /** The canopy opens by itself at this height; Space opens it earlier, once you have fallen this far (about a second). */
-  deployAlt: 40,
+  deployAlt: 44,
   minFreefallDrop: 5,
   /**
    * The opening, in seconds since the pull: the bag leaves the pack and the lines pay out (drag up by 60 %) until
    * `stretch`, then the cells inflate (drag ramps to the canopy's on a smoothstep) until `deployTime`.
    */
   stretch: 0.5,
-  deployTime: 1.1,
+  deployTime: 1.25,
   /** The last metres: the jumper flares (both toggles down) and the descent eases off for the touchdown. */
   flareAlt: 2.5,
-  flareTerminal: 3.4,
-  /** Top steering speeds, and how fast the body's momentum follows the stick (1/s): brisk in free fall, floaty under the canopy. */
+  flareTerminal: 2.6,
+  /**
+   * Top steering speeds, and how fast the body's momentum follows the stick (1/s). Under the canopy it always flies:
+   * hands off it glides on at `chuteTrim` the way it was going, steered it flies at up to `chuteSpeed`, and holding the
+   * dive (the roll key) it trades height for `chuteDiveSpeed`, the way to reach a far spot first. A glide ratio of about
+   * 2 (2.3 diving) from the 40 m pull reaches about 55-65 m under the canopy, about 100 m from the door.
+   */
   freefallSpeed: 14,
-  chuteSpeed: 7,
+  chuteSpeed: 8,
+  chuteTrim: 3,
+  chuteDiveSpeed: 14,
   freefallResponse: 1.8,
-  chuteResponse: 1.1,
+  chuteResponse: 1.6,
   /** Share of the plane's speed you leave the door with (it bleeds off with the momentum response). */
   exitThrow: 0.5,
   /** The wind's drift (m/s), felt under the canopy, and the turbulence wobble (m/s^2) at full speed. */
@@ -767,18 +779,25 @@ export const deployProgress = (canopy: number) => (canopy < 0 ? 0 : Math.min(1, 
 /**
  * The drag coefficient (per metre) at a moment of the opening: free fall's before the pull, up by 60 % while the bag
  * and lines pay out, then a smoothstep up to the canopy's while the cells inflate, and the flare's near the ground.
+ * `chuteTerminal` is the open canopy's sink at its present airspeed (`chuteSink`).
  */
-export const dragAt = (canopy: number, alt: number) => {
+export const dragAt = (canopy: number, alt: number, chuteTerminal: number = DROP.chuteTerminal) => {
   const g = DROP.gravity;
   const kF = g / (DROP.freefallTerminal * DROP.freefallTerminal);
   if (canopy < 0) return kF;
   if (canopy < DROP.stretch) return kF * (1 + 0.6 * (canopy / DROP.stretch));
   const s = Math.min(1, (canopy - DROP.stretch) / (DROP.deployTime - DROP.stretch));
-  const kC = g / (DROP.chuteTerminal * DROP.chuteTerminal);
+  const kC = g / (chuteTerminal * chuteTerminal);
   const k = kF * 1.6 + (kC - kF * 1.6) * s * s * (3 - 2 * s);
   if (s < 1 || alt > DROP.flareAlt) return k;
   const kL = g / (DROP.flareTerminal * DROP.flareTerminal);
   return k + (kL - k) * Math.min(1, (DROP.flareAlt - alt) / DROP.flareAlt * 2);
+};
+
+/** The open canopy's sink (m/s) at an airspeed: the floating rate up to `chuteSpeed`, rising to `chuteDiveSink` in a full dive. */
+export const chuteSink = (airspeed: number) => {
+  const d = Math.min(1, Math.max(0, (airspeed - DROP.chuteSpeed) / (DROP.chuteDiveSpeed - DROP.chuteSpeed)));
+  return DROP.chuteTerminal + (DROP.chuteDiveSink - DROP.chuteTerminal) * d;
 };
 
 /** Under an open (or opening) canopy: steering is gentle and you can shoot. */

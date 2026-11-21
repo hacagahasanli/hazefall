@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createBot } from './bot';
 import { deployProgress, dragAt, DROP, DT } from './constants';
-import { createGame, step, updateFall } from './step';
+import { createGame, step, updateFall, windOf } from './step';
 import { NO_INPUT } from './types';
 
 import type { GameState, Input, Player } from './types';
@@ -84,12 +84,16 @@ describe('the skydive', () => {
     expect(after.vz).toBeLessThan(DROP.chuteTerminal * 1.1);
   });
 
-  it('the whole drop still takes the time the match pacing was balanced on, and the flare softens the touchdown', () => {
+  it('the whole drop takes its set time, most of it under the canopy, and the flare softens the touchdown', () => {
     const { s, p } = jumped();
     const all = fly(s, p, () => NO_INPUT, (q) => q.alt <= 0);
     const total = all[all.length - 1].t;
     expect(Math.abs(total - DROP.glide)).toBeLessThan(0.15);
     expect(all[all.length - 1].vz).toBeLessThan(DROP.chuteTerminal * 0.8);
+    // The canopy part is the long one now: about 9 s, against about 5 s before the floatier canopy.
+    const pull = all.find((k) => k.canopy >= 0)!;
+    expect(total - pull.t).toBeGreaterThan(5.05 * 1.5);
+    expect(total - pull.t).toBeLessThan(5.05 * 2);
   });
 
   it('Space pulls early once you have fallen a little, never straight out of the door', () => {
@@ -101,7 +105,7 @@ describe('the skydive', () => {
     expect(pullAt.alt).toBeGreaterThan(DROP.deployAlt + 20);
   });
 
-  it('steering has momentum: the body speeds up and slows down over time, faster in free fall than under the canopy', () => {
+  it('steering has momentum: the body speeds up and slows down over time, in free fall and under the canopy', () => {
     const { s, p } = jumped();
     p.vx = 0;
     p.vy = 0;
@@ -114,14 +118,78 @@ describe('the skydive', () => {
     // Let go: it coasts rather than stopping dead.
     const coast = fly(s, p, () => NO_INPUT, (_q, t) => t >= 0.2);
     expect(coast[coast.length - 1].vx).toBeGreaterThan(ff[ff.length - 1].vx * 0.6);
-    // Under the canopy the same push takes longer to build.
+    // Under the canopy the push builds over time too: not instant, but most of the way within a second.
     const c = jumped(4);
     Object.assign(c.p, { alt: 30, canopy: DROP.deployTime, vz: DROP.chuteTerminal, vx: 0, vy: 0 });
-    const ch = fly(c.s, c.p, () => right, (_q, t) => t >= 0.5);
-    expect(ch[ch.length - 1].vx / DROP.chuteSpeed).toBeLessThan(ff[ff.length - 1].vx / DROP.freefallSpeed);
+    const ch = fly(c.s, c.p, () => right, (_q, t) => t >= 1);
+    expect(ch[0].vx).toBeLessThan(DROP.chuteSpeed * 0.1);
+    expect(ch[ch.length - 1].vx).toBeGreaterThan(DROP.chuteSpeed * 0.7);
+    expect(ch[ch.length - 1].vx).toBeLessThan(DROP.chuteSpeed * 1.15);
     // Reversing under the canopy swings through, it does not flip.
     const rev = fly(c.s, c.p, () => ({ ...NO_INPUT, mx: -1 }), (_q, t) => t >= 0.3);
     expect(rev[0].vx).toBeGreaterThan(0);
+  });
+
+  /** Player 0 under a fully open canopy at `alt`, flying +x at `speed` from the left edge, wind and all. */
+  const flying = (alt: number, speed: number, seed = 5) => {
+    const { s, p } = jumped(seed);
+    Object.assign(p, { x: 8, y: 88, alt, canopy: DROP.deployTime + 1, vz: DROP.chuteTerminal, vx: speed, vy: 0 });
+    return { s, p };
+  };
+
+  it('the canopy never stops in the air: hands off it glides on the way it was going, and sinks slowly', () => {
+    const { s, p } = flying(40, DROP.chuteSpeed);
+    const all = fly(s, p, () => NO_INPUT, (_q, t) => t >= 4);
+    const last = all[all.length - 1];
+    const w = windOf(s);
+    expect(last.vx - w.x).toBeGreaterThan(DROP.chuteTrim * 0.85);
+    expect(Math.abs(Math.hypot(last.vx - w.x, last.vy - w.y) - DROP.chuteTrim)).toBeLessThan(0.6);
+    expect(last.vz).toBeLessThan(DROP.chuteTerminal * 1.05);
+    expect(last.vz).toBeGreaterThan(DROP.chuteTerminal * 0.9);
+  });
+
+  it('the canopy turns briskly towards the stick and keeps flying through the turn', () => {
+    const { s, p } = flying(40, DROP.chuteSpeed);
+    const all = fly(s, p, () => ({ ...NO_INPUT, my: 1 }), (_q, t) => t >= 1);
+    // Within a second the heading has come round most of the 90 degrees, without stalling on the way.
+    const last = all[all.length - 1];
+    expect(Math.atan2(last.vy, last.vx)).toBeGreaterThan((60 * Math.PI) / 180);
+    for (const k of all) expect(Math.hypot(k.vx, k.vy)).toBeGreaterThan(DROP.chuteTrim * 1.3);
+  });
+
+  it('the dive trades height for speed: faster across the map, a quicker descent, and a longer reach', () => {
+    const glide = flying(40, DROP.chuteSpeed);
+    const dive = flying(40, DROP.chuteSpeed);
+    const a = fly(glide.s, glide.p, () => ({ ...NO_INPUT, mx: 1 }), (q) => q.alt <= 0);
+    const b = fly(dive.s, dive.p, () => ({ ...NO_INPUT, mx: 1, roll: true }), (q) => q.alt <= 0);
+    const mid = (k: typeof a) => k[Math.floor(k.length / 2)];
+    expect(mid(b).vx).toBeGreaterThan(mid(a).vx * 1.4);
+    expect(mid(b).vz).toBeGreaterThan(mid(a).vz * 1.3);
+    expect(mid(b).vz).toBeLessThanOrEqual(DROP.chuteDiveSink + 0.05);
+    // It lands sooner, and farther away.
+    expect(b.length).toBeLessThan(a.length * 0.85);
+    expect(dive.p.x).toBeGreaterThan(glide.p.x + 5);
+    // No dive in free fall: the key does nothing before the canopy is open.
+    const ff = jumped(6);
+    const ff2 = jumped(6);
+    fly(ff.s, ff.p, () => NO_INPUT, (_q, t) => t >= 1.5);
+    fly(ff2.s, ff2.p, () => ({ ...NO_INPUT, roll: true }), (_q, t) => t >= 1.5);
+    expect(ff2.p.alt).toBe(ff.p.alt);
+    expect(ff2.p.x).toBe(ff.p.x);
+  });
+
+  it('you can choose a landing spot across a wide circle: about 100 m from the door with the automatic pull', () => {
+    const { s, p } = jumped(7);
+    Object.assign(p, { x: 8, y: 88 });
+    const all = fly(s, p, () => ({ ...NO_INPUT, mx: 1, roll: true }), (q) => q.alt <= 0);
+    expect(p.x - 8).toBeGreaterThan(95);
+    expect(all.length * DT).toBeGreaterThan(8);
+    // Hands off you come down close to where you jumped.
+    const still = jumped(7);
+    const x0 = still.p.x;
+    const y0 = still.p.y;
+    fly(still.s, still.p, () => NO_INPUT, (q) => q.alt <= 0);
+    expect(Math.hypot(still.p.x - x0, still.p.y - y0)).toBeLessThan(30);
   });
 
   it('you leave the door with some of the plane’s speed, and the air takes it off', () => {
