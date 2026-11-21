@@ -52,6 +52,8 @@ const randomSeed = () => (Math.random() * 1e9) | 0;
 export const createOfflineSession = (fighter: FighterId, name: string): Session => {
   const state = createGame(fighter, randomSeed(), name);
   const bots = state.players.map((p) => (p.bot ? createBot(p.id, randomSeed()) : null));
+  // Development only: what each bot is doing, for checking their behaviour in the browser.
+  if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') (window as unknown as { __lcsBots?: unknown }).__lcsBots = bots;
   return {
     me: 0,
     online: false,
