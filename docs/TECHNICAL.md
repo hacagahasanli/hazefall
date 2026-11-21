@@ -204,20 +204,37 @@ You spawn on a cargo drone that crosses the map on a random line (`createGame`, 
 
 `canSee(state, viewer, target)` (`step.ts:231`): a target standing in a bush or crops is invisible unless the viewer is within `PLANT_REVEAL` (2.4 m) or the target fired in the last second (`revealed`). Auto-aim and bots both use it, so hiding works against them too. `lineOfSight` samples the segment every 0.5 m with `solidAt`.
 
-### 4.10 The bots (`bot.ts`)
+### 4.10 The bots (`bot.ts`, `bot-params.ts`)
 
-Each bot is a closure `state -> Input` that re-thinks every 8 ticks (7.5 times a second) and repeats its plan in between; one-shot buttons (super, use) are only pressed on a thinking tick.
+Each bot is a closure `state -> Input` with its own seeded PRNG. It thinks every 8 ticks (7.5 times a second) and repeats
+its plan in between; one-shot buttons are pressed on a thinking tick only. Aiming and firing run every tick.
 
-| Priority | Behaviour |
-|---|---|
-| Drone | jump at a personal moment (`jumpAt`) |
-| Falling | glide gently toward the point (48 m, 48 m), a little left of the map centre |
-| Zone | if outside the target circle's 85 % and the Deadline is shrinking or under 12 s away, run to the next circle's centre |
-| Target seen (within 22 m, line of sight) | keep the range the gun likes (`PREFERRED`: pistol 9 m, shotgun 3.5 m, sniper 18 m, ...) while strafing; fire inside 95 % of range; super under 9 m; throw a bomb under 11 m |
-| Otherwise | walk to the nearest useful loot within 30 m, else toward the next circle |
-| Hurt, calm | use a med kit under 55 % hp |
+- **Seeing.** Every "can this bot see or shoot that player?" question goes through `botCanSee(state, viewer, target)`
+  (bushes via `canSee`, then a clear line from the viewer's eyes, which move when it leans, to the target's body). The
+  roof and floor line of sight replaces its body only. A bot notices someone only after looking for `spotTime` seconds
+  (quick up close, slow far out; sooner when the other one moves or fires; later at the edge of its view, indoors
+  (`lightAt`, 0.6 under a roof until the lighting work supplies a real level) or in a bush). Half-noticed movement makes
+  it turn its head. Within 6 m, or when just shot, it notices in any direction; never through walls.
+- **Hearing.** Gunfire within 45 m gives a guess of where it came from (`guessFromSound`: bearing off by up to about
+  20 degrees, distance by up to 30 %), never the shooter's position.
+- **Reacting and aiming.** The first shot at someone new waits a `reactionDelay` drawn per target round the personality's
+  reaction time (slower against a person, `VS_HUMAN`). Aim error settles over time on target and grows while the bot moves,
+  while it is hit and near the end of its gun's range (`aimError`, `AIM_PENALTY`). Fire comes in bursts, semi-automatics
+  included.
+- **Ways of playing** (`BotMode`): explore (`roam`, `loot`), attack (`engage`: strafing in its own style, now and then
+  planting its feet), defend (`cover`: behind a wall, rock or tree trunk found by `fightCover`, ducking out to a
+  `peekFrom` spot and leaning out to shoot, then back; it moves to another angle after a few looks), under pressure
+  (`pressure`: hit by someone it cannot see, it gets behind something or zigzags off the line), and heal (`retreat` breaks
+  off, then `heal` out of sight with the items it carries at their own use times). Being hit never leaves it standing
+  still. Badly hurt, it does not start fights (`LOW_HP`), and it fights again once healed to its own level.
+- **Personalities.** Rusher, camper, looter, tactical, each with per-bot jitter: reaction, aim, field of view,
+  aggression, confidence, eyes, slip chance, strafe width and rhythm, dodge-roll chance. Now and then a bot slips once in a
+  fight: a late reaction, staying in the open, a reload mid-fight, a long loose burst, or tunnel vision.
+- **Pacing** stays with `stagePace` (by Deadline phase, the crowd and the last few alive) and the after-landing grace.
 
-Aim has a per-bot random error (0.6 to 1.4 m) so they can be beaten. There is no path-finding: when a bot barely moved over a think interval and its goal is more than 1.5 m away, it walks 25 to 55 ticks in a direction 90 degrees (plus a little) off its goal (`detour`).
+There is no path-finding: when a bot that was trying to walk barely moved over a think interval, it walks 25 to 55 ticks
+in a direction 90 degrees (plus a little) off its goal (`detour`). There is no crouch in the game, so bots peek by
+stepping out and leaning.
 
 ### 4.11 Tests (`sim.test.ts`)
 
