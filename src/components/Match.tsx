@@ -220,7 +220,7 @@ const Result = ({
   onPlayAgain: () => void;
   onExit: () => void;
   online: boolean;
-  Support?: ComponentType<{ variant?: 'pill' | 'card' }>;
+  Support?: ComponentType<{ variant?: 'pill' | 'card' | 'menu' }>;
   exitLabel: string;
   /** Motion on (the game's reduced-motion setting off). */
   fx: boolean;
@@ -366,7 +366,7 @@ export const Match = ({
   /** The page's platform (a portal SDK); our own site gets the no-op web adapter. */
   platform?: Platform;
   /** The site's support link (the only outbound link in a round). Left out in the portal build: portals allow none. */
-  support?: ComponentType<{ variant?: 'pill' | 'card' }>;
+  support?: ComponentType<{ variant?: 'pill' | 'card' | 'menu' }>;
   /** A studio credit line in the pause menu. */
   credit?: string;
   /** The report's second button, and the pause menu's way out. */

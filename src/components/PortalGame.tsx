@@ -18,9 +18,25 @@ import { useSettings } from '~/components/useSettings';
 
 import type { AimMode } from '~/game/render/game';
 import type { FighterId } from '~/game/sim/types';
+import type { ComponentType } from 'react';
 import type { Platform } from '~/platform/types';
 
-export const PortalGame = ({ platform, credit }: { platform: Platform; credit: string }) => {
+export const PortalGame = ({
+  platform,
+  credit,
+  support: givenSupport,
+  onlineInterest: givenInterest,
+}: {
+  platform: Platform;
+  credit: string;
+  /** Our own site's Support us pill (main menu, pause menu, round report). The portal build passes nothing. */
+  support?: ComponentType<{ variant?: 'pill' | 'card' | 'menu' }>;
+  /** Our own site's "Online is coming" button on the main menu. The portal build passes nothing. */
+  onlineInterest?: ComponentType;
+}) => {
+  // Never an outbound link when the game runs on CrazyGames, whatever the page passed in.
+  const support = platform.id === 'crazygames' ? undefined : givenSupport;
+  const onlineInterest = platform.id === 'crazygames' ? undefined : givenInterest;
   const [fighter, setFighter] = useState<FighterId>(() => {
     const saved = platform.storage.getItem(PICK_KEY) as FighterId | null;
     return saved && FIGHTER_IDS.includes(saved) ? saved : 'hotfix';
@@ -70,6 +86,7 @@ export const PortalGame = ({ platform, credit }: { platform: Platform; credit: s
             fighter={fighter}
             platform={platform}
             credit={credit}
+            support={support}
             exitLabel="Main menu"
             held={stage !== 'match'}
             onLoaded={() => setLoaded(true)}
@@ -117,6 +134,8 @@ export const PortalGame = ({ platform, credit }: { platform: Platform; credit: s
       onPlay={() => toLobby(false)}
       credit={credit}
       touch={touch}
+      support={support}
+      onlineInterest={onlineInterest}
     />
     </>
   );

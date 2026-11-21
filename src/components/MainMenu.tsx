@@ -19,12 +19,13 @@ import { FIGHTERS, PLAYERS } from '~/game/sim/constants';
 import { brandUrl } from '~/lib/assets';
 import { boot, loadCount, onLoadCount } from '~/lib/loading';
 import { GAME_TITLE, ONLINE_PLAY } from '~/lib/studio';
+import { loadDone, track } from '~/lib/telemetry';
 
 import type { AimMode } from '~/game/render/game';
 import type { Settings } from '~/game/settings';
 import type { FighterId } from '~/game/sim/types';
 import type { Platform } from '~/platform/types';
-import type { ReactNode } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 
 export const GAME_VERSION = '1.0.0';
 
@@ -103,6 +104,9 @@ const SidePanel = ({ title, onClose, children }: { title: string; onClose: () =>
   );
 };
 
+/** The menu was shown once in this page visit (menu_view and load_done are sent once). */
+let menuSent = false;
+
 export const MainMenu = ({
   platform,
   settings,
@@ -114,6 +118,8 @@ export const MainMenu = ({
   onPlay,
   credit,
   touch,
+  support: Support,
+  onlineInterest: OnlineInterest,
 }: {
   platform: Platform;
   settings: Settings;
@@ -125,6 +131,10 @@ export const MainMenu = ({
   onPlay: () => void;
   credit: string;
   touch: boolean;
+  /** Our own site's Support us pill under the menu (portals pass nothing: no outbound links). */
+  support?: ComponentType<{ variant?: 'pill' | 'card' | 'menu' }>;
+  /** Our own site's "Online is coming" button under the menu while online play is closed (portals pass nothing). */
+  onlineInterest?: ComponentType;
 }) => {
   const [panel, setPanel] = useState<Panel>(null);
   const [focus, setFocus] = useState(0);
@@ -172,6 +182,14 @@ export const MainMenu = ({
     return onLoadCount(models);
   }, []);
   useEffect(() => setUiSound(settings.master, settings.muted || platform.muted()), [settings.master, settings.muted, platform]);
+
+  // Anonymous counting (a no-op unless the web build started it; never on a portal): the first time the menu is on screen.
+  useEffect(() => {
+    if (!entered || menuSent) return;
+    menuSent = true;
+    loadDone();
+    track('menu_view');
+  }, [entered]);
 
   const items: { id: string; label: string; sub?: string; primary?: boolean; soon?: boolean; run: () => void }[] = [
     { id: 'play', label: 'Play', sub: `Solo · ${PLAYERS - 1} bots`, primary: true, run: onPlay },
@@ -273,6 +291,15 @@ export const MainMenu = ({
               </button>
             ))}
           </nav>
+
+          {/* Our own site's extras (never on a portal): the "Online is coming" button and the Support us pill. */}
+          {((OnlineInterest && !ONLINE_PLAY) || Support) && (
+            // On a short landscape screen the menu fills the height, so they sit at the bottom right, over the scene.
+            <div className="flex flex-col items-start gap-3 [animation:slideIn_0.45s_ease-out_0.4s_both] [@media(max-height:500px)]:fixed [@media(max-height:500px)]:bottom-[max(0.75rem,env(safe-area-inset-bottom))] [@media(max-height:500px)]:right-[max(1rem,env(safe-area-inset-right))] [@media(max-height:500px)]:z-10 [@media(max-height:500px)]:items-end [@media(max-height:500px)]:gap-2">
+              {OnlineInterest && !ONLINE_PLAY && <OnlineInterest />}
+              {Support && <Support variant="menu" />}
+            </div>
+          )}
 
           {/* The portal's banner (none on our own site): under the menu, on phones at the bottom, collapsed when empty. */}
           <MenuBanner platform={platform} active={entered && !panel} />

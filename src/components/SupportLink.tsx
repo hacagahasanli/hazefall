@@ -27,6 +27,6 @@ export const Support = ({ variant, className = '' }: { variant: Variant; classNa
   </a>
 );
 
-/** What Match is handed by the lobby: `pill` in the pause menu (one line), `card` on the round report. */
-export const SupportLink = ({ variant = 'pill' }: { variant?: 'pill' | 'card' }) =>
-  variant === 'card' ? <Support variant="results" /> : <Support variant="pause" />;
+/** What Match is handed by the lobby and the web build: `pill` in the pause menu (one line), `card` on the round report, `menu` on the main menu. */
+export const SupportLink = ({ variant = 'pill' }: { variant?: 'pill' | 'card' | 'menu' }) =>
+  variant === 'card' ? <Support variant="results" /> : variant === 'menu' ? <Support variant="menu" /> : <Support variant="pause" />;
