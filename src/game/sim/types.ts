@@ -61,7 +61,10 @@ export interface Player {
   bot: boolean;
   /** Where in the drop: on the plane, falling (free fall, then under the parachute), or on the ground. */
   stage: 'drone' | 'falling' | 'ground';
-  fall: number; // seconds of the descent left; the parachute is open for the last DROP.chute seconds
+  /** In the air: height above the ground (m), descent speed (m/s, down is positive) and seconds since the canopy's pull (-1 before). */
+  alt: number;
+  vz: number;
+  canopy: number;
   x: number;
   y: number;
   /** Velocity: movement accelerates and slows down instead of snapping. */

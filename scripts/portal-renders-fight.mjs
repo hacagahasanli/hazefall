@@ -28,7 +28,7 @@ const stage = (spot, rivals, zone) => (p) => p.evaluate(([spot, rivals, zone]) =
   for (let r = 0; r < 30 && !best; r++) for (let dy = -r; dy <= r && !best; dy++) for (let dx = -r; dx <= r && !best; dx++) if (open(spot[0] + dx, spot[1] + dy)) best = [spot[0] + dx, spot[1] + dy];
   const x = best[0] * 2 + 1, y = best[1] * 2 + 1;
   Object.assign(me, { x, y, weapon: 'rifle', mag: 25, ammo: 75, hp: 100 });
-  rivals.forEach(([dx, dy, w], i) => Object.assign(s.players[i + 1], { stage: 'ground', fall: 0, x: x + dx, y: y + dy, weapon: w, mag: 6, ammo: 20, alive: true, hp: 100 }));
+  rivals.forEach(([dx, dy, w], i) => Object.assign(s.players[i + 1], { stage: 'ground', alt: 0, x: x + dx, y: y + dy, weapon: w, mag: 6, ammo: 20, alive: true, hp: 100 }));
   if (zone) Object.assign(s.zone, { cx: x + zone[0], cy: y + zone[1], r: zone[2] });
   return best;
 }, [spot, rivals, zone]);

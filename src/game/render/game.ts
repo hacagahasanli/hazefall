@@ -6,7 +6,7 @@ import { actionFor, DEFAULT_SETTINGS, keyLabel, keyMap } from '../settings';
 
 import type { VolumeKind } from '../sfx';
 import type { Action, Settings } from '../settings';
-import { ARMOR, HEALS, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, ITEMS, MAP, PLAYERS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
+import { ARMOR, HEALS, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITEMS, MAP, PLAYERS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
 import { canSee, carryCap, healChoice, inPlant, inWater, lineOfSight, lootUnder, reloadTime, solidAt, throwDistance } from '../sim/step';
 import { createOfflineSession } from '../net/session';
 import { NO_INPUT } from '../sim/types';
@@ -1063,7 +1063,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     if (sp > 0.8) lastMove = { x: p.vx / sp, y: p.vy / sp };
     else if (mx || my) lastMove = { x: mx, y: my };
     // On the ground or under the parachute you aim (and auto-aim) at people.
-    const canAim = p.stage === 'ground' || (p.stage === 'falling' && p.fall <= DROP.chute);
+    const canAim = p.stage === 'ground' || (p.stage === 'falling' && p.canopy >= DROP.deployTime);
     const pointed = aimMode === 'mouse' && !touch && canAim ? mouseAim() : null;
     const target = canAim && !pointed ? autoAim(p) : null;
     const aim = pointed ?? (target ? { x: target.x, y: target.y } : { x: p.x + lastMove.x * 6, y: p.y + lastMove.y * 6 });
@@ -1548,7 +1548,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     }
   };
 
-  const prev = state.players.map((p) => ({ x: p.x, y: p.y, fall: p.fall }));
+  const prev = state.players.map((p) => ({ x: p.x, y: p.y, alt: p.alt }));
   let fallTime = 0;
   /** 0 in free fall, eases to 1 once the canopy is open: the camera backs off and tilts up to keep the canopy in view. */
   let chuteCam = 0;
@@ -1637,15 +1637,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const fallen = !p.alive && p.stage === 'ground' && deadAt[i] !== undefined;
       const visible = fallen || (p.alive && p.stage !== 'drone' && (i === me || p.stage === 'falling' || canSee(state, self, p)));
       rig.root.visible = visible && !(i === me && firstPerson());
-      const chuteOpen = p.stage === 'falling' && p.fall <= DROP.chute;
+      const chuteOpen = p.stage === 'falling' && p.canopy >= 0;
       const hadChute = chutes[i].visible;
       chutes[i].visible = visible && chuteOpen;
       // The canopy stops hanging over this fighter (landed, or knocked out in the air): it collapses where it was.
       if (hadChute && !chutes[i].visible) releaseChute(i, p.stage === 'falling');
       // Free fall from the plane down to chute height, then drift slowly under the canopy.
       // Height interpolated between ticks like x and y, so the fall is smooth at any frame rate.
-      const fall = prev[i].fall + (p.fall - prev[i].fall) * alpha;
-      let h = p.stage === 'falling' ? fallHeight(Math.max(0, fall)) : 0;
+      let h = p.stage === 'falling' ? Math.max(0, prev[i].alt + (p.alt - prev[i].alt) * alpha) : 0;
       // Standing on a bridge or the pier lifts you onto its deck, smoothly at its ends.
       const onDeck = p.stage === 'ground' && MAP[Math.floor(y / TILE)]?.[Math.floor(x / TILE)] === 'd' ? DECK_Y : 0;
       deck[i] += (onDeck - deck[i]) * Math.min(1, dt * 14);
@@ -1930,7 +1929,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // Stay close above and behind the jumper the whole way down, so you see yourself from the
       // first frame, falling through the clouds, then the canopy opening below them.
       const hh = selfH;
-      const chute = self.fall <= DROP.chute;
+      const chute = self.canopy >= 0;
       chuteCam += ((chute ? 1 : 0) - chuteCam) * (1 - Math.exp(-5 * dt));
       // Under the canopy the camera backs off and looks at a point above the jumper, so the canopy sits in the
       // picture (not under the top of the HUD); a phone held upright backs off further. Eased, so opening never jumps.
@@ -2021,7 +2020,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         // Falling or under the canopy: your eyes are wherever your head is (lying flat in free
         // fall, hanging from the harness under the canopy), with the wind's flutter.
         rig.head.getWorldPosition(camera.position);
-        camera.position.y += 0.05 + (self.fall > DROP.chute ? Math.sin(time * 31) * 0.01 : 0);
+        camera.position.y += 0.05 + (self.canopy < 0 ? Math.sin(time * 31) * 0.01 : 0);
       }
       tmpV.set(camera.position.x + c * Math.cos(viewPitch), camera.position.y + Math.sin(viewPitch), camera.position.z + sn * Math.cos(viewPitch));
       camera.lookAt(tmpV);
@@ -2114,7 +2113,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         const o = state.players[i];
         if (i === me || !o.alive || o.stage === 'drone') continue;
         const ox = o.x - camera.position.x;
-        const oy = (o.stage === 'falling' ? fallHeight(Math.max(0, o.fall)) : 0) + 1.1 - camera.position.y;
+        const oy = (o.stage === 'falling' ? Math.max(0, o.alt) : 0) + 1.1 - camera.position.y;
         const oz = o.y - camera.position.z;
         const along = ox * dx + oy * dy + oz * dz;
         if (along <= armNow || along >= hitT) continue;
@@ -2361,7 +2360,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // Paused (offline only): the world freezes, the camera and effects keep drawing.
     acc = paused && !session.online ? 0 : acc + dt;
     while (acc >= DT) {
-      state.players.forEach((p, i) => Object.assign(prev[i], { x: p.x, y: p.y, fall: p.fall }));
+      state.players.forEach((p, i) => Object.assign(prev[i], { x: p.x, y: p.y, alt: p.alt }));
       const events = session.tick(state.players[me].alive ? readInput() : NO_INPUT);
       // A guest's state is replaced by the host's on every correction: always read it back.
       state = session.state;

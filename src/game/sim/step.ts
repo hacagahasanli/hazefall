@@ -6,7 +6,7 @@ import {
   DT,
   fenceVertical,
   LEAN,
-  fallHeight,
+  dragAt,
   ROCKET,
   ROLL,
   railSides,
@@ -274,7 +274,7 @@ export const lineOfSight = (state: GameState, x0: number, y0: number, x1: number
 /** On the ground, or hanging under an open parachute: you can be seen, aimed at and hit. */
 export const targetable = (p: Player) => p.alive && (p.stage === 'ground' || p.stage === 'falling');
 /** How high a player's chest is above the ground (in the air: on the way down). */
-export const chestHeight = (p: Player) => (p.stage === 'falling' ? fallHeight(Math.max(0, p.fall)) + 1.1 : 1.1);
+export const chestHeight = (p: Player) => (p.stage === 'falling' ? Math.max(0, p.alt) + 1.1 : 1.1);
 
 /** Where a player's body is for bullets: leaning out moves the exposed shoulder sideways. */
 export const hitPoint = (p: Player) => ({
@@ -424,7 +424,9 @@ export const createMatch = (seats: Seat[], seed = 1): GameState => {
 export const newPlayer = (id: number, name: string, fighter: FighterId, bot: boolean, x: number, y: number): Player => ({
   id, name, fighter, bot,
   stage: 'drone',
-  fall: 0,
+  alt: 0,
+  vz: 0,
+  canopy: -1,
   x, y,
   vx: 0,
   vy: 0,
@@ -486,6 +488,58 @@ export const newPlayer = (id: number, name: string, fighter: FighterId, bot: boo
 
 // ---------- the drop
 
+/** The per-match wind: from the drone's route (no random draw, so the map's dice stay as they were), across it. */
+export const windOf = (state: GameState) => {
+  const d = state.drone;
+  const a = Math.atan2(d.y1 - d.y0, d.x1 - d.x0) + 1.2;
+  return { x: Math.cos(a) * DROP.wind, y: Math.sin(a) * DROP.wind };
+};
+
+/**
+ * One tick of a jumper in the air. Vertical: gravity against quadratic drag (`dragAt`), so you speed up to terminal
+ * velocity and the canopy's opening slows you hard over about a second. Horizontal: momentum that follows the stick at
+ * the response rate (fast in free fall, floaty under the canopy), the wind once the canopy flies, and a small
+ * deterministic turbulence wobble. Space after a second of free fall pulls early; at `deployAlt` it opens by itself.
+ */
+export const updateFall = (state: GameState, p: Player, input: Input) => {
+  const out = DROP.height - p.alt;
+  const pressed = input.jump && !p.prev.jump;
+  if (p.canopy < 0 && (p.alt <= DROP.deployAlt || (pressed && out >= DROP.minFreefallDrop))) p.canopy = 0;
+  else if (p.canopy >= 0) p.canopy += DT;
+  // Vertical.
+  const k = dragAt(p.canopy, p.alt);
+  p.vz += (DROP.gravity - k * p.vz * Math.abs(p.vz)) * DT;
+  p.alt -= p.vz * DT;
+  // Horizontal: the canopy's numbers blend in as it inflates.
+  const open = p.canopy < DROP.stretch ? 0 : Math.min(1, (p.canopy - DROP.stretch) / (DROP.deployTime - DROP.stretch));
+  const speed = DROP.freefallSpeed + (DROP.chuteSpeed - DROP.freefallSpeed) * open;
+  const response = DROP.freefallResponse + (DROP.chuteResponse - DROP.freefallResponse) * open;
+  const len = Math.hypot(input.mx, input.my);
+  const s = len > 0.01 ? speed / Math.max(1, len) : 0;
+  const w = windOf(state);
+  const want = { x: input.mx * s + w.x * open, y: input.my * s + w.y * open };
+  // Turbulence: two incommensurate sines per axis, different for everyone, scaled by how fast the air rushes past.
+  const t = state.tick * DT;
+  const gust = DROP.turbulence * Math.min(1, p.vz / DROP.freefallTerminal + 0.3);
+  const ax = (Math.sin(t * 1.9 + p.id * 2.1) + 0.6 * Math.sin(t * 4.7 + p.id)) * gust;
+  const ay = (Math.sin(t * 2.3 + p.id * 1.3) + 0.6 * Math.sin(t * 5.3 + p.id * 0.7)) * gust;
+  const r = 1 - Math.exp(-response * DT);
+  p.vx += (want.x - p.vx) * r + ax * DT;
+  p.vy += (want.y - p.vy) * r + ay * DT;
+  p.x = Math.min(WORLD - 4, Math.max(4, p.x + p.vx * DT));
+  p.y = Math.min(WORLD - 4, Math.max(4, p.y + p.vy * DT));
+  if (p.canopy >= DROP.deployTime) {
+    // Under the open canopy you can aim and shoot at whoever is in the air or below.
+    p.cooldown = Math.max(0, p.cooldown - DT);
+    updateReload(p);
+    if (Math.hypot(input.aimX - p.x, input.aimY - p.y) > 0.05) p.heading = Math.atan2(input.aimY - p.y, input.aimX - p.x);
+    if (input.fire && p.cooldown <= 0) shoot(state, p, input);
+  } else if (Math.hypot(p.vx, p.vy) > 1) {
+    // Falling, you face the way you are going (the body turns to track).
+    p.heading = Math.atan2(p.vy, p.vx);
+  }
+};
+
 const updateDrop = (state: GameState, inputs: Input[]) => {
   const d = state.drone;
   d.t = Math.min(1, d.t + DT / DROP.flight);
@@ -503,32 +557,30 @@ const updateDrop = (state: GameState, inputs: Input[]) => {
       const jump = input.jump || input.fire;
       if ((jump && overCampus) || d.t >= DROP.forceJump) {
         p.stage = 'falling';
-        p.fall = DROP.freefall + DROP.chute;
+        p.alt = DROP.height;
+        p.vz = 0;
+        p.canopy = -1;
+        // Out of the door with part of the plane's speed: it bleeds off as the air takes you.
+        const throwK = (DROP.exitThrow * Math.hypot(d.x1 - d.x0, d.y1 - d.y0)) / DROP.flight;
+        const len = Math.hypot(d.x1 - d.x0, d.y1 - d.y0) || 1;
+        p.vx = ((d.x1 - d.x0) / len) * throwK;
+        p.vy = ((d.y1 - d.y0) / len) * throwK;
+        p.heading = Math.atan2(d.y1 - d.y0, d.x1 - d.x0);
         p.x = Math.min(WORLD - 4, Math.max(4, p.x));
         p.y = Math.min(WORLD - 4, Math.max(4, p.y));
         state.events.push({ type: 'jump', player: p.id });
       }
     } else if (p.stage === 'falling') {
-      // Steer on the way down: fast in free fall, gentle under the parachute.
-      const len = Math.hypot(input.mx, input.my);
-      const chute = p.fall <= DROP.chute;
-      const speed = chute ? DROP.chuteSpeed : DROP.freefallSpeed;
-      p.vx = len > 0.01 ? (input.mx / Math.max(1, len)) * speed : 0;
-      p.vy = len > 0.01 ? (input.my / Math.max(1, len)) * speed : 0;
-      p.x = Math.min(WORLD - 4, Math.max(4, p.x + p.vx * DT));
-      p.y = Math.min(WORLD - 4, Math.max(4, p.y + p.vy * DT));
-      if (chute) {
-        // Under the canopy you can aim and shoot at whoever is in the air or below.
-        p.cooldown = Math.max(0, p.cooldown - DT);
-        updateReload(p);
-        if (Math.hypot(input.aimX - p.x, input.aimY - p.y) > 0.05) p.heading = Math.atan2(input.aimY - p.y, input.aimX - p.x);
-        if (input.fire && p.cooldown <= 0) shoot(state, p, input);
-      } else if (len > 0.01) p.heading = Math.atan2(input.my, input.mx);
-      p.fall -= DT;
-      if (p.fall <= 0) {
+      updateFall(state, p, input);
+      if (p.alt <= 0) {
         const spot = freeSpot(state, p.x, p.y);
         p.x = spot.x;
         p.y = spot.y;
+        p.alt = 0;
+        p.vz = 0;
+        p.vx = 0;
+        p.vy = 0;
+        p.canopy = -1;
         p.stage = 'ground';
         state.events.push({ type: 'land', player: p.id, x: p.x, y: p.y });
       }

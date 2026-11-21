@@ -404,7 +404,7 @@ describe('the river', () => {
     const p = s.players[0];
     const x = 40;
     const c = riverCentre(x / TILE) * TILE;
-    Object.assign(p, { stage: 'ground', fall: 0, x, y: c - RIVER.half * TILE - 1.5, vx: 0, vy: 0, cooldown: 0 });
+    Object.assign(p, { stage: 'ground', alt: 0, x, y: c - RIVER.half * TILE - 1.5, vx: 0, vy: 0, cooldown: 0 });
     s.players.slice(1).forEach((o) => Object.assign(o, { x: 160, y: 20 }));
     const inputs = idle();
     inputs[0] = { ...NO_INPUT, my: 1, fire: true, aimX: p.x, aimY: p.y - 20 };
@@ -435,18 +435,18 @@ describe('the drop', () => {
     const ty = MAP.findIndex((row) => row.includes('b'));
     const tx = MAP[ty].indexOf('b');
     Object.assign(a, { stage: 'ground', x: tx * TILE + 12, y: ty * TILE + 1 });
-    Object.assign(b, { stage: 'falling', fall: DROP.chute - 1, x: tx * TILE + 1, y: ty * TILE + 1 });
+    Object.assign(b, { stage: 'falling', alt: 15, canopy: 2, x: tx * TILE + 1, y: ty * TILE + 1 });
     expect(canSee(s, a, b)).toBe(true);
   });
 
   it('under the parachute you can shoot and be shot', () => {
     const s = createGame('hotfix', 1);
     const [a, b] = s.players;
-    for (const p of [a, b]) Object.assign(p, { stage: 'falling', fall: DROP.chute - 1 });
+    for (const p of [a, b]) Object.assign(p, { stage: 'falling', alt: 15, canopy: 2 });
     // Over the open river, so nothing stands between them.
     Object.assign(a, { x: 40, y: 89, cooldown: 0 });
     Object.assign(b, { x: 46, y: 89 });
-    s.players.slice(2).forEach((p) => Object.assign(p, { stage: 'falling', fall: DROP.chute + 2, x: 10, y: 10 }));
+    s.players.slice(2).forEach((p) => Object.assign(p, { stage: 'falling', alt: 60, canopy: -1, x: 10, y: 10 }));
     s.drone.t = 1;
     const inputs = idle();
     inputs[0] = { ...NO_INPUT, fire: true, aimX: b.x, aimY: b.y };

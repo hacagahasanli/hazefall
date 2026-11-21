@@ -32,7 +32,7 @@ const stand = () =>
     }
     const x = door[0] * 2, y = door[1] * 2 + 5;
     Object.assign(me, { x, y, heading: -Math.PI / 2, hp: 100 });
-    s.players.slice(1).forEach((q, i) => Object.assign(q, { x: 6 + i, y: 6, stage: 'ground', fall: 0 }));
+    s.players.slice(1).forEach((q, i) => Object.assign(q, { x: 6 + i, y: 6, stage: 'ground', alt: 0 }));
     return door;
   });
 console.log('door', await stand());
