@@ -3,9 +3,9 @@
  * own servers and no outbound links. `npm run build:portal`, then zip the folder for CrazyGames. `npm run dev:portal`
  * serves it on port 3203; `npm run phone:portal` builds it and serves the build on port 3204 to the local network.
  */
-import { cpSync } from 'fs';
+import { cpSync, readFileSync } from 'fs';
 import path from 'path';
-import { defineConfig } from 'vite';
+import { defineConfig, transformWithEsbuild } from 'vite';
 
 import { GAME_TITLE, STUDIO_NAME } from './src/lib/studio';
 
@@ -44,6 +44,20 @@ export default defineConfig({
     {
       name: 'game-title',
       transformIndexHtml: (html) => html.replaceAll('%GAME_TITLE%', GAME_TITLE).replaceAll('%STUDIO_NAME%', STUDIO_NAME),
+    },
+    {
+      // The boot screen's progress model (src/lib/bootProgress.ts, unit-tested) inlined into the page as a plain script,
+      // window.LcsBootProgress, so the screen runs it from the first paint, before any game code has arrived.
+      name: 'boot-progress',
+      transformIndexHtml: {
+        order: 'pre',
+        async handler(html) {
+          const file = path.resolve(__dirname, 'src/lib/bootProgress.ts');
+          const { code } = await transformWithEsbuild(readFileSync(file, 'utf8'), file, { format: 'iife', globalName: 'LcsBootProgress', target: 'es2015', minify: true });
+          if (!html.includes('<!--boot-progress-->')) throw new Error('boot-progress: placeholder not found');
+          return html.replace('<!--boot-progress-->', `<script>${code.trim()}</script>`);
+        },
+      },
     },
     {
       // The boot screen's real progress (portal/index.html): the game's entry script is not left as a tag; the boot loader

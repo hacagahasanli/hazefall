@@ -140,34 +140,35 @@ export const MainMenu = ({
   const bootLive = useRef<() => void>(() => {});
   useEffect(() => {
     if (!boot.active()) return;
-    boot.step('Menu ready', 0.72);
-    boot.progress(0.72, 'Building the battleground');
+    // Checkpoints from 0.50 (menu up) to 0.97 (every model in); 100 % only when the scene's first frame is drawn too.
+    // The model count is every file asked for since the page opened, so files asked for before the menu still count.
+    const MODELS_FROM = 0.56;
+    const MODELS_TO = 0.97;
+    boot.step('Menu ready', 0.5, MODELS_FROM);
+    boot.progress(0.5, 'Building the island', MODELS_FROM);
     boot.ready();
     boot.onGone(() => setEntered(true));
-    const base = loadCount();
     let live = false;
-    let models = false;
     let finished = false;
     const check = () => {
-      if (!live || !models || finished) return;
+      const c = loadCount();
+      if (!live || finished || c.done < c.total) return;
       finished = true;
-      boot.step('First frame drawn', 1);
+      boot.step('First frame drawn', MODELS_TO);
       boot.done();
     };
     bootLive.current = () => {
       live = true;
       check();
     };
-    return onLoadCount((c) => {
-      const total = c.total - base.total;
-      const done = c.done - base.done;
-      if (total <= 0 || models) return;
-      boot.progress(0.72 + 0.26 * (done / total), `Loading models  ${done} / ${total}`);
-      if (done < total) return;
-      models = true;
-      boot.step(`Models  ${total} / ${total}`, 0.98);
+    const models = (c: { done: number; total: number }) => {
+      if (c.total <= 0) return;
+      const share = (n: number) => MODELS_FROM + (MODELS_TO - MODELS_FROM) * Math.min(1, n / c.total);
+      boot.progress(share(c.done), `Loading models  ${c.done} / ${c.total}`, share(c.done + 1));
       check();
-    });
+    };
+    models(loadCount());
+    return onLoadCount(models);
   }, []);
   useEffect(() => setUiSound(settings.master, settings.muted || platform.muted()), [settings.master, settings.muted, platform]);
 

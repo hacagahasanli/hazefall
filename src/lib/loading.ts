@@ -37,13 +37,17 @@ export const onLoadCount = (fn: (c: LoadCount) => void) => {
 
 /** The boot screen's hooks (portal/index.html defines them; on the site there is no boot screen and these do nothing). */
 interface BootApi {
-  /** A finished step: a line in the log, and the bar moves to `at` (0..1). */
-  step: (text: string, at: number) => void;
-  /** Progress inside the current step: the bar at `at`, and a live line (e.g. "models 12 / 28"). */
-  progress: (at: number, live?: string) => void;
+  /**
+   * A finished step: the bar's checkpoint moves to `at` (0..1), and `next` says where the step after it will land, so the
+   * bar may ease part of the way there meanwhile (never past it). The screen's one progress value comes from
+   * src/lib/bootProgress.ts: it never goes back and stays under 100 % until `done`.
+   */
+  step: (text: string, at: number, next?: number) => void;
+  /** Progress inside the current step: checkpoint `at`, a live line (e.g. "Loading models 12 / 28"), and the next one. */
+  progress: (at: number, live?: string, next?: number) => void;
   /** The menu is up underneath: from now on any key or tap skips the rest. */
   ready: () => void;
-  /** Everything is in: the boot screen plays its exit and goes. */
+  /** Everything is in: the number runs on to 100 %, then the boot screen plays its exit and goes. */
   done: () => void;
   /** True until the boot screen has gone. */
   active: () => boolean;
@@ -54,8 +58,8 @@ interface BootApi {
 const api = (): BootApi | undefined => (typeof window === 'undefined' ? undefined : (window as unknown as { __lcsBoot?: BootApi }).__lcsBoot);
 
 export const boot = {
-  step: (text: string, at: number) => api()?.step(text, at),
-  progress: (at: number, live?: string) => api()?.progress(at, live),
+  step: (text: string, at: number, next?: number) => api()?.step(text, at, next),
+  progress: (at: number, live?: string, next?: number) => api()?.progress(at, live, next),
   ready: () => api()?.ready(),
   done: () => api()?.done(),
   active: () => api()?.active() ?? false,

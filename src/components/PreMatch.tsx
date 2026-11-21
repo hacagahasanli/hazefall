@@ -204,7 +204,10 @@ export const PreMatch = ({
   const progress = readied ? Math.min(1, (t - readyAt) / Math.max(0.1, end.current - readyAt)) : 0;
   const joining = readied && !loaded && left <= LAUNCH + 0.7;
   /** How much of the match is loaded (real: model files in), for the strip while it waits. */
-  const mapShare = loaded ? 1 : models && models.total > 0 ? 0.15 + (0.8 * models.done) / models.total : 0.1;
+  // Never back: more files asked for later must not shrink the bar (the count's total grows as the map asks for them).
+  const mapPeak = useRef(0);
+  mapPeak.current = Math.max(mapPeak.current, loaded ? 1 : models && models.total > 0 ? 0.15 + (0.8 * models.done) / models.total : 0.1);
+  const mapShare = mapPeak.current;
   const fx = !settings.reducedMotion;
 
   return (

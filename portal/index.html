@@ -123,6 +123,7 @@
       </div>
     </div>
     <div id="root"></div>
+    <!--boot-progress-->
     <script>
       (function () {
         var el = document.getElementById('boot');
@@ -132,7 +133,7 @@
         var log = document.getElementById('bootLog');
         var tip = document.getElementById('bootTip');
         var t0 = performance.now();
-        var at = 0, shown = 0, gone = false, out = false, ready = false, waiters = [];
+        var gone = false, out = false, ready = false, completed = false, waiters = [];
         var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
         var sec = function () { return ((performance.now() - t0) / 1000).toFixed(2) + 's'; };
         var line = function (text, ok) {
@@ -142,17 +143,22 @@
           log.appendChild(p);
           while (log.children.length > 7) log.removeChild(log.firstChild);
         };
-        // The number counts up to the real value (never past it), so a jump reads as a quick count, not a teleport.
-        var draw = function () {
+        // One value drives both the bar and the number (src/lib/bootProgress.ts, inlined above): real checkpoints, a smooth
+        // ease between them, never backwards, 99 at most until everything is in. The screen leaves only once 100 is drawn.
+        var model = window.LcsBootProgress.createBootProgress(reduce ? { ease: 0.05, creep: 3 } : {});
+        var last = performance.now(), lastPct = -1;
+        var draw = function (now) {
           if (gone) return;
-          shown += (at - shown) * (reduce ? 1 : 0.22);
-          if (at - shown < 0.002) shown = at;
-          pctEl.textContent = String(Math.floor(shown * 100));
-          fill.style.transform = 'scaleX(' + shown + ')';
+          model.tick(Math.max(0, (now - last) / 1000));
+          last = now;
+          var pct = model.percent();
+          if (pct !== lastPct) { pctEl.textContent = String(pct); lastPct = pct; }
+          fill.style.transform = 'scaleX(' + model.value() + ')';
+          if (completed && model.finished()) finish();
           requestAnimationFrame(draw);
         };
         requestAnimationFrame(draw);
-        var set = function (v) { at = Math.max(at, Math.min(1, v)); };
+        var set = function (v, next) { model.reach(v, next); };
         // Gameplay tips: only things the game really does.
         var TIPS = [
           'Jump from the plane whenever you like, then steer your parachute down.',
@@ -195,8 +201,8 @@
         window.addEventListener('keydown', skip, true);
         window.addEventListener('pointerdown', skip, true);
         window.__lcsBoot = {
-          step: function (text, v) { line(text, true); set(v); },
-          progress: function (v, live) { set(v); if (live) now.textContent = live; },
+          step: function (text, v, next) { line(text, true); set(v, next); },
+          progress: function (v, live, next) { set(v, next); if (live) now.textContent = live; },
           ready: function () {
             if (ready) return;
             ready = true;
@@ -204,7 +210,8 @@
             // A slow device building the scene never keeps the player from the menu for long.
             setTimeout(finish, 6000);
           },
-          done: function () { set(1); now.textContent = 'Ready'; setTimeout(finish, reduce ? 0 : 280); },
+          // Everything is in: the number runs on to 100 and the screen goes once it shows (see draw).
+          done: function () { if (completed) return; completed = true; model.complete(); now.textContent = 'Ready'; },
           active: function () { return !gone; },
           onGone: function (fn) { if (gone) fn(); else waiters.push(fn); }
         };
@@ -212,7 +219,7 @@
         // The game code: fetched here with its bytes counted (the build gives the file and its size), then run as a module,
         // which the browser takes from its cache. Without that (the dev server) the page's own script tag loads it.
         var entry = window.__lcsEntry;
-        if (!entry) { now.textContent = 'Loading game code'; return; }
+        if (!entry) { set(0, 0.44); now.textContent = 'Loading game code'; return; }
         var kb = function (n) { return Math.round(n / 1024).toLocaleString('en-US'); };
         var started = performance.now();
         var run = function () {
@@ -222,6 +229,7 @@
           s.src = entry.src;
           document.head.appendChild(s);
         };
+        set(0, 0.4);
         now.textContent = 'Downloading game code';
         if (!window.fetch || !window.ReadableStream) { run(); return; }
         fetch(entry.src, { credentials: 'same-origin' }).then(function (r) {
@@ -232,12 +240,12 @@
             return reader.read().then(function (c) {
               if (c.done) return;
               got += c.value.length;
-              window.__lcsBoot.progress(Math.min(1, got / entry.bytes) * 0.6, 'Downloading game code  ' + kb(got) + ' / ' + kb(entry.bytes) + ' KB');
+              window.__lcsBoot.progress(Math.min(1, got / entry.bytes) * 0.4, 'Downloading game code  ' + kb(got) + ' / ' + kb(entry.bytes) + ' KB', 0.4);
               return pump();
             });
           };
           return pump().then(function () {
-            window.__lcsBoot.step('Game code  ' + kb(got) + ' KB in ' + Math.round(performance.now() - started) + ' ms', 0.6);
+            window.__lcsBoot.step('Game code  ' + kb(got) + ' KB in ' + Math.round(performance.now() - started) + ' ms', 0.4, 0.44);
             now.textContent = 'Starting the engine';
             run();
           });
