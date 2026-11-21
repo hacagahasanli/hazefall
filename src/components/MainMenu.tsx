@@ -315,7 +315,7 @@ export const MainMenu = ({
               </div>
             ))}
           </div>
-          <p className="text-sm text-cream/60">On a phone: the left thumb moves (the stick appears where you touch), FIRE aims by itself at whoever you can see.</p>
+          <p className="text-sm text-cream/60">On a phone: the left thumb moves (the stick appears where you touch), FIRE aims by itself at whoever you can see, and the small arrow button above it picks up what you stand on (a key shows over it).</p>
         </SidePanel>
       )}
       {panel === 'credits' && (

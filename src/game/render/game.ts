@@ -18,6 +18,7 @@ import { createVfx } from './vfx';
 import { createHitOverlay } from './feedback';
 import { setPeople, updateNature } from './nature';
 import { buildChute, HARNESS_BACK } from './chute';
+import { PICKUP_ICON } from './icons';
 import { paintMapImage } from './mapImage';
 import { buildPlane } from './plane';
 import { buildProps, DECK_Y, WATER_Y } from './props';
@@ -1375,6 +1376,66 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     return { sprite, life: 0, age: 0, x: 0, y: 0, h: 0, total: 0, target: -1, kind: 'dealt' as DamageKind };
   });
   let nextNum = 0;
+
+  /**
+   * The pick-up hint: a small keycap floating over the piece of loot you stand on that needs a press to take (a gun when
+   * both slots are full, say), with the pick-up key on it, or the USE button's icon on a phone. No words and no prompt.
+   */
+  const keycapCache = new Map<string, THREE.Texture>();
+  const keycapTexture = (label: string) => {
+    let tex = keycapCache.get(label);
+    if (tex) return tex;
+    const c = document.createElement('canvas');
+    c.width = c.height = 96;
+    const g = c.getContext('2d')!;
+    const box = (y: number, fill: string) => {
+      g.beginPath();
+      g.roundRect(10, y, 76, 70, 14);
+      g.fillStyle = fill;
+      g.fill();
+    };
+    box(18, 'rgba(10,13,24,0.85)');
+    box(8, '#e6ebf5');
+    g.fillStyle = g.strokeStyle = '#0a0d18';
+    if (label === 'touch') {
+      g.save();
+      g.translate(24, 19);
+      g.scale(2, 2);
+      g.lineWidth = 2.6;
+      g.lineCap = g.lineJoin = 'round';
+      g.stroke(new Path2D(PICKUP_ICON));
+      g.restore();
+    } else {
+      g.font = `900 ${label.length > 2 ? 26 : 46}px "Bungee", "Chakra Petch", system-ui, sans-serif`;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText(label, 48, 45);
+    }
+    tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    keycapCache.set(label, tex);
+    return tex;
+  };
+  const keycap = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthTest: false, depthWrite: false }));
+  keycap.renderOrder = 29;
+  keycap.visible = false;
+  keycap.scale.set(0.85, 0.85, 1);
+  scene.add(keycap);
+  const showKeycap = (k: Loot | null) => {
+    keycap.visible = !!k;
+    if (!k) return;
+    const label = touch ? 'touch' : keyLabel(settings.keys.use);
+    const m = keycap.material as THREE.SpriteMaterial;
+    if (m.map !== keycapTexture(label)) {
+      m.map = keycapTexture(label);
+      m.needsUpdate = true;
+    }
+    // At the item, drawn just to the right of it on screen (the sprite's own anchor), so your fighter standing on it never
+    // covers it; in first person low and centred, where you look down at your feet.
+    keycap.position.set(k.x, fpp ? 0.3 : 0.9, k.y);
+    keycap.center.set(fpp ? 0.5 : -0.55, 0.5);
+  };
+
   const popDamage = (target: number, x: number, y: number, damage: number, kind: DamageKind) => {
     let n = damageNums.find((d) => d.life > 0 && d.target === target && d.age < 0.35 && (d.kind === 'taken') === (kind === 'taken'));
     if (n) {
@@ -2128,6 +2189,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
             : { label: COPY.zone.final, seconds: 0, outside };
     const k = self.stage === 'ground' ? lootUnder(state, self) : null;
     const healNext = healChoice(self);
+    // Loot to take: a keycap over it in the world instead of a line of text.
+    showKeycap(self.alive && !self.using ? k : null);
     const prompt = !self.alive
       ? null
       : self.stage === 'drone'
@@ -2136,18 +2199,16 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           ? 'Swimming · no shooting in the water'
         : self.using
           ? `${HEAL_NAME[self.using]}… · shoot or roll to stop`
-        : k
-          ? `${touch ? 'USE' : 'F'} · pick up ${lootLabel(k)}`
-          : self.charging
-            ? lastThrowAim ? 'Point where it lands · let go of F to throw' : 'Hold to throw farther · let go to throw'
+        : self.charging
+            ? lastThrowAim ? `Point where it lands · let go of ${keyLabel(settings.keys.use)} to throw` : 'Hold to throw farther · let go to throw'
             : self.weapon === 'sniper' && self.mag + self.ammo > 0 && !scoped && !touch
               ? `${aimMode === 'mouse' || fpp ? 'Right click' : 'Z'} · scope`
           : self.weapon !== 'fists' && self.mag + self.ammo === 0
             ? 'Out of ammo · find an ammo box or another gun'
             : self.hp < self.maxHp * 0.6 && healNext && healNext !== 'coffee' && self.sinceCombat > 1.5
               ? `${touch ? 'HEAL' : keyLabel(settings.keys.heal)} · use ${HEAL_NAME[healNext].toLowerCase()}`
-              : self.bombs > 0 && self.sinceCombat < 4
-                ? `Hold ${touch ? 'USE' : 'F'} to throw a bomb`
+              : self.bombs > 0 && self.sinceCombat < 4 && !k
+                ? `Hold ${touch ? 'the pick-up button' : keyLabel(settings.keys.use)} to throw a bomb`
                 : null;
     opts.onHud({
       phase: state.phase,

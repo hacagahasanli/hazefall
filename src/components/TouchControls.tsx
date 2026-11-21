@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import { PICKUP_ICON, SWAP_ICON } from '~/game/render/icons';
+
 import type { TouchButton } from '~/game/render/game';
 
 type Press = (b: TouchButton, on: boolean) => void;
@@ -126,9 +128,12 @@ const Pad = ({
   ready = 1,
   accent = false,
   sub,
+  icon,
 }: {
   b: TouchButton;
   label: string;
+  /** An icon (24 × 24 path, see game/render/icons) shown instead of the label; the label stays as its accessible name. */
+  icon?: string;
   /** A small second line under the label (what the button will use or draw). */
   sub?: string;
   press: Press;
@@ -189,7 +194,13 @@ const Pad = ({
         </svg>
       )}
       <span className="relative flex flex-col items-center leading-none">
-        {label}
+        {icon ? (
+          <svg viewBox="0 0 24 24" aria-hidden className="h-[46%] w-[46%]" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+            <path d={icon} />
+          </svg>
+        ) : (
+          label
+        )}
         {sub && <span className="mt-0.5 max-w-[48px] truncate font-sans text-[8px] normal-case opacity-80">{sub}</span>}
       </span>
     </button>
@@ -198,9 +209,9 @@ const Pad = ({
 
 /**
  * Phone controls: the stick anywhere in the left half; on the right, FIRE under the thumb (it
- * aims by itself at whoever you can see; on the plane it is JUMP), ROLL beside it, USE above it
- * (pick up, hold to throw a bomb), then RELOAD, the SUPER with its charge ring, the two lean
- * buttons, SWAP (the other gun, when both slots are full), HEAL (named after what it will use), and pause.
+ * aims by itself at whoever you can see; on the plane it is JUMP), ROLL beside it, a small pick-up
+ * icon above it (pick up, hold to throw a bomb), then RELOAD, the SUPER with its charge ring, the two lean
+ * buttons, a small swap icon (the other gun, when both slots are full), HEAL (named after what it will use), and pause.
  */
 export const TouchControls = ({
   press,
@@ -266,7 +277,8 @@ export const TouchControls = ({
             ready={rollReady}
             style={{ right: 136, bottom: 14 }}
           />
-          <Pad b="use" label="Use" press={press} style={{ right: 36, bottom: 138 }} />
+          {/* Pick up (and hold to throw a bomb): a small icon button. */}
+          <Pad b="use" label="Pick up" icon={PICKUP_ICON} press={press} size={56} style={{ right: 42, bottom: 140 }} />
           {sniper && <Pad b="scope" label="Scope" press={press} size={64} accent style={{ right: 30, bottom: 218 }} />}
           <Pad
             b="reload"
@@ -284,7 +296,7 @@ export const TouchControls = ({
             accent={superReady >= 1}
             style={{ right: 118, bottom: 176 }}
           />
-          {canSwap && <Pad b="swap" label="Swap" sub={swapLabel ?? undefined} press={press} size={54} style={{ right: 204, bottom: 30 }} />}
+          {canSwap && <Pad b="swap" label={swapLabel ? `Swap to ${swapLabel}` : 'Swap guns'} icon={SWAP_ICON} press={press} size={46} style={{ right: 208, bottom: 36 }} />}
           {heal && <Pad b="heal" label="Heal" sub={heal} press={press} size={54} accent style={{ right: 196, bottom: 220 }} />}
           <Pad b="leanL" label="◀ Q" press={press} size={46} style={{ right: 200, bottom: 160 }} />
           <Pad b="leanR" label="E ▶" press={press} size={46} style={{ right: 200, bottom: 104 }} />
