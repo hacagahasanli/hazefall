@@ -1,5 +1,5 @@
 import { createBot } from './bot';
-import { BUILDINGS, DROP, DT, FIGHTERS, ITEMS, MAP, PLAYER_RADIUS, RIVER, riverCentre, SHAPES, SIZE, SWIM, TILE, treeSpot, WEAPONS, WORLD, ZONE_PHASES, ZONE_RULES, ZONE_START_RADIUS } from './constants';
+import { BUILDINGS, DROP, DT, FIGHTERS, ITEMS, MAP, PLAYER_RADIUS, RIVER, riverCentre, SHAPES, SIZE, SWIM, TILE, treeSpot, WEAPONS, WORLD, ZONE_EDGE_SPEED, ZONE_PHASES, ZONE_RULES, ZONE_START_RADIUS } from './constants';
 import { canSee, circleBlocked, createGame, falloffDamage, hitPoint, inPlant, inWater, lootUnder, solidAt, step } from './step';
 import { NO_INPUT } from './types';
 
@@ -476,12 +476,14 @@ describe('the Deadline', () => {
   const run = Math.min(...Object.values(FIGHTERS).map((f) => f.speed));
 
   it('the edge never moves faster than half running speed, nor faster than swimming after the first circle', () => {
+    expect(ZONE_EDGE_SPEED).toBeLessThanOrEqual(run / 2);
+    expect(ZONE_EDGE_SPEED).toBeLessThanOrEqual(run * SWIM.speed);
     let r = ZONE_START_RADIUS;
-    ZONE_PHASES.forEach((def, i) => {
-      // The next centre is picked up to 0.6 x the radius change away, so the far edge can move by up to 1.6 x that.
+    ZONE_PHASES.forEach((def) => {
+      // The next centre is picked up to 0.6 x the radius change away, so the far edge can move by up to 1.6 x that:
+      // the table's own shrink times already keep it under the cap, so none of them is stretched.
       const edge = ((r - def.radius) * 1.6) / def.shrink;
-      expect(edge).toBeLessThanOrEqual(run / 2);
-      if (i > 0) expect(edge).toBeLessThanOrEqual(run * SWIM.speed);
+      expect(edge).toBeLessThanOrEqual(ZONE_EDGE_SPEED);
       r = def.radius;
     });
   });
@@ -528,17 +530,62 @@ describe('the Deadline', () => {
     expect(t.zone.calm).toBeLessThan(DT * 1.5);
   });
 
-  it('with three left, every wait from then on is half as long', () => {
+  it('with five left, every wait from then on is half as long', () => {
     const s = landed();
     step(s, idle());
     const before = s.zone.timer;
-    s.players.slice(3).forEach((p) => (p.alive = false));
+    s.players.slice(ZONE_RULES.squeezeAlive).forEach((p) => (p.alive = false));
     step(s, idle());
     expect(s.zone.timer).toBeCloseTo((before - DT) / 2, 3);
     while (s.zone.phase === 0) step(s, idle());
     step(s, idle());
     // The next wait starts halved (and the quiet since landing has cut it to 10 s first).
     expect(s.zone.timer).toBeLessThanOrEqual(ZONE_RULES.lullWait / 2);
+  });
+});
+
+describe('the endgame rush', () => {
+  const rush = ZONE_RULES.rush[ZONE_RULES.rush.length - 1];
+  const run = Math.min(...Object.values(FIGHTERS).map((f) => f.speed));
+
+  it('with the last few left, an early Deadline skips to a small circle near the middle of the old one', () => {
+    const s = landed();
+    for (let i = 0; i < 60 * 100; i++) step(s, idle());
+    expect(s.zone.phase).toBe(0);
+    expect(s.zone.state).toBe('shrink');
+    const { cx, cy, r } = s.zone;
+    s.players.slice(rush.alive).forEach((p) => (p.alive = false));
+    step(s, idle());
+    expect(s.zone.phase).toBe(rush.phase);
+    expect(s.zone.state).toBe('wait');
+    expect(s.zone.timer).toBeLessThanOrEqual(ZONE_RULES.rushWait);
+    expect(s.zone.toR).toBe(ZONE_PHASES[rush.phase].radius);
+    expect(Math.hypot(s.zone.toX - cx, s.zone.toY - cy)).toBeLessThanOrEqual((r - s.zone.toR) * ZONE_RULES.rushRoom + 1e-6);
+    // It stops where it was while the new circle shows.
+    expect(s.zone.r).toBeCloseTo(r, 0);
+  });
+
+  it('the rushed shrink is fair: the edge stays under the cap and the new circle is in reach from anywhere', () => {
+    const s = landed();
+    for (let i = 0; i < 60 * 30; i++) step(s, idle());
+    s.players.slice(rush.alive).forEach((p) => (p.alive = false));
+    step(s, idle());
+    const { cx, cy, r, toX, toY, toR } = s.zone;
+    let time = s.zone.timer;
+    let fastest = 0;
+    while (s.zone.phase === rush.phase && s.phase === 'play') {
+      const before = { cx: s.zone.cx, cy: s.zone.cy, r: s.zone.r };
+      // Nobody here moves, so keep the three standing outside alive while the shrink is timed.
+      s.players.forEach((p) => (p.hp = p.maxHp));
+      step(s, idle());
+      if (s.zone.phase !== rush.phase) break;
+      time += DT;
+      fastest = Math.max(fastest, (before.r - s.zone.r + Math.hypot(s.zone.cx - before.cx, s.zone.cy - before.cy)) / DT);
+    }
+    expect(fastest).toBeLessThanOrEqual(ZONE_EDGE_SPEED + 1e-6);
+    // From the far side of the circle (inside the map) to the new one: at most a third of the time at running speed.
+    const far = Math.min(r, Math.hypot(WORLD / 2, WORLD / 2)) + Math.hypot(toX - cx, toY - cy) - toR;
+    expect(far / run).toBeLessThanOrEqual(time / 3 + DT);
   });
 });
 

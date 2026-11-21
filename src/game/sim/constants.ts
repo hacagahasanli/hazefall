@@ -814,21 +814,23 @@ export const SWIM = { speed: 0.42 };
 export const MOVE = { accel: 40, friction: 45, turn: 12 };
 
 /**
- * The Deadline: wait, then shrink, phase after phase, until nothing is left. Six phases, at most 7 min 48 s of ground
- * play (468 s) on the 176 m map; players dying, not the table, should set the real length. The radii are the 288 m plan's
+ * The Deadline: wait, then shrink, phase after phase, until nothing is left. Six phases, at most 7 min 33 s of ground
+ * play (453 s) on the 176 m map; players dying, not the table, should set the real length. The radii are the 288 m plan's
  * (110, 70, 42, 24, 12) scaled to this map and then widened (0.61x gives 67, 43, 26, 15, 7). For twenty fighters the first
  * three circles wait and shrink longer and the second and third are wider again (62 and 40 m, from 55 and 34): with the
  * ten-player table twenty bots packed into the second circle and the round was over in about 3:40 (bot-sim median); with
- * this one it is about 4:10 and the waits the lull breaker cuts keep the dead air down. Rules the sim tests hold it to:
- *  - the edge never moves faster than half the slowest running speed, nor faster than swimming once the circle is inside
- *    the map;
+ * this one it is about 4:10 and the waits the lull breaker cuts keep the dead air down. Once the bots hunted, matches
+ * ended in the first two phases (bot-sim median 3:03) with 16% dead air, mostly the last few searching a circle still
+ * drawn for twenty; the first circle now starts closing at 75 s (from 90) and the endgame rush below pulls the last
+ * three together (dead air about 6%, median about 2:46). Rules the sim tests hold it to:
+ *  - the edge never moves faster than `ZONE_EDGE_SPEED` (under half the slowest running speed and under swimming);
  *  - from anywhere inside the current circle, the next one is never more than a third of that phase's wait + shrink away
  *    at running speed;
  *  - the damage ramps from a choice (3 a second in the first phase, armor first) to fatal (35 a second at the end).
  * `ZONE_RULES` can cut a wait short, never the first one: see there.
  */
 export const ZONE_PHASES = [
-  { wait: 90, shrink: 45, radius: 80, dps: 3 },
+  { wait: 75, shrink: 40, radius: 80, dps: 3 },
   { wait: 70, shrink: 45, radius: 62, dps: 5 },
   { wait: 45, shrink: 35, radius: 40, dps: 8 },
   { wait: 30, shrink: 28, radius: 22, dps: 13 },
@@ -839,9 +841,28 @@ export const ZONE_PHASES = [
  * Waits that react to the match (decided in the sim, so online stays in sync):
  *  - lull breaker: from the second phase on, once nobody has damaged anybody for `lull` seconds, the current wait drops
  *    to at most `lullWait` seconds;
- *  - endgame squeeze: with `squeezeAlive` or fewer left alive, every remaining wait is halved.
+ *  - endgame squeeze: with `squeezeAlive` or fewer left alive, every remaining wait is halved;
+ *  - endgame rush: once `alive` or fewer are left, a Deadline still on an earlier phase skips to `phase` (its circle,
+ *    damage and timings; with three left, the 40 m circle): it stops where it is, shows the new circle (picked with
+ *    `rushRoom` instead of 0.6 of the radius change as its room, so it stays near the middle of the old one), waits at
+ *    most `rushWait` s and closes in.
+ *    The last few otherwise spend whole stretches looking for each other on a circle drawn for twenty;
+ *  - from the second phase on, with `squeezeAlive` or fewer left, the lull breaker fires after `lullLate` s of quiet.
+ * Every shrink lasts its phase's `shrink` or longer, long enough that the far edge never moves faster than
+ * `ZONE_EDGE_SPEED` (a third of the slowest running speed, so from anywhere in the circle the next one is at most a
+ * third of the shrink away at running speed, and slower than swimming).
  */
-export const ZONE_RULES = { lull: 20, lullWait: 6, squeezeAlive: 5 };
+export const ZONE_RULES = {
+  lull: 20,
+  lullWait: 6,
+  lullLate: 12,
+  squeezeAlive: 5,
+  rush: [{ alive: 3, phase: 2 }],
+  rushRoom: 0.25,
+  rushWait: 5,
+};
 export const ZONE_START_RADIUS = WORLD * 0.72;
+/** The fastest the Deadline's far edge may move (m/s): a third of the slowest running speed. */
+export const ZONE_EDGE_SPEED = Math.min(...Object.values(FIGHTERS).map((f) => f.speed)) / 3;
 
 export const BOT_NAMES = COPY.botNames;

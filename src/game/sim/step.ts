@@ -42,6 +42,7 @@ import {
   VAULT,
   WEAPONS,
   WORLD,
+  ZONE_EDGE_SPEED,
   ZONE_PHASES,
   ZONE_RULES,
   ZONE_START_RADIUS,
@@ -698,11 +699,11 @@ const land = (state: GameState, p: Player, z: number) => {
 
 // ---------- the Deadline
 
-const pickNextCircle = (state: GameState) => {
+const pickNextCircle = (state: GameState, roomShare = 0.6) => {
   const z = state.zone;
   const def = ZONE_PHASES[z.phase];
   if (!def) return;
-  const room = Math.max(0, z.r - def.radius) * 0.6;
+  const room = Math.max(0, z.r - def.radius) * roomShare;
   const a = nextRandom(state) * Math.PI * 2;
   const d = Math.sqrt(nextRandom(state)) * room;
   z.toX = Math.min(WORLD - 8, Math.max(8, z.cx + Math.cos(a) * d));
@@ -710,28 +711,56 @@ const pickNextCircle = (state: GameState) => {
   z.toR = def.radius;
 };
 
+/** How long this shrink lasts: its phase's `shrink`, or longer if the far edge would outpace `ZONE_EDGE_SPEED`. */
+export const shrinkTime = (z: GameState['zone'], shrink: number) =>
+  Math.max(shrink, (z.fromR - z.toR + Math.hypot(z.toX - z.fromX, z.toY - z.fromY)) / ZONE_EDGE_SPEED);
+
+/** The last few left: skip a Deadline still on an earlier phase ahead to a circle sized for them (see `ZONE_RULES`). */
+const rushZone = (state: GameState, alive: number) => {
+  const z = state.zone;
+  if (z.state === 'done') return;
+  let target = -1;
+  for (const r of ZONE_RULES.rush) if (alive <= r.alive) target = Math.max(target, r.phase);
+  if (target <= z.phase || target >= ZONE_PHASES.length) return;
+  const left = z.state === 'wait' ? z.timer : Infinity;
+  z.phase = target;
+  z.state = 'wait';
+  z.timer = Math.min(left, ZONE_RULES.rushWait, ZONE_PHASES[target].wait);
+  z.halved = false;
+  z.fromX = z.cx;
+  z.fromY = z.cy;
+  z.fromR = z.r;
+  pickNextCircle(state, ZONE_RULES.rushRoom);
+  state.events.push({ type: 'zone', phase: z.phase, state: 'wait' });
+};
+
 const updateZone = (state: GameState) => {
   const z = state.zone;
+  const alive = alivePlayers(state).length;
+  rushZone(state, alive);
   const def = ZONE_PHASES[Math.min(z.phase, ZONE_PHASES.length - 1)];
   z.timer -= DT;
   z.calm += DT;
   if (z.state === 'wait') {
-    // A quiet stretch brings the next squeeze forward (never in the first phase, which is for landing and gearing up).
-    if (z.phase >= 1 && z.calm >= ZONE_RULES.lull && z.timer > ZONE_RULES.lullWait) {
+    // A quiet stretch brings the next squeeze forward (never in the first phase, which is for landing and gearing up),
+    // and sooner once only a few are left.
+    const lull = alive <= ZONE_RULES.squeezeAlive ? ZONE_RULES.lullLate : ZONE_RULES.lull;
+    if (z.phase >= 1 && z.calm >= lull && z.timer > ZONE_RULES.lullWait) {
       z.timer = ZONE_RULES.lullWait;
       state.events.push({ type: 'zone', phase: z.phase, state: 'wait' });
     }
     // The last few: every wait from here on is half as long.
-    if (!z.halved && alivePlayers(state).length <= ZONE_RULES.squeezeAlive) {
+    if (!z.halved && alive <= ZONE_RULES.squeezeAlive) {
       z.halved = true;
       z.timer /= 2;
     }
   }
   if (z.state === 'wait' && z.timer <= 0) {
-    Object.assign(z, { state: 'shrink', timer: def.shrink, fromX: z.cx, fromY: z.cy, fromR: z.r, dps: def.dps });
+    Object.assign(z, { state: 'shrink', fromX: z.cx, fromY: z.cy, fromR: z.r, dps: def.dps });
+    z.timer = shrinkTime(z, def.shrink);
     state.events.push({ type: 'zone', phase: z.phase, state: 'shrink' });
   } else if (z.state === 'shrink') {
-    const k = 1 - Math.max(0, z.timer) / def.shrink;
+    const k = 1 - Math.max(0, z.timer) / shrinkTime(z, def.shrink);
     z.cx = z.fromX + (z.toX - z.fromX) * k;
     z.cy = z.fromY + (z.toY - z.fromY) * k;
     z.r = z.fromR + (z.toR - z.fromR) * k;
