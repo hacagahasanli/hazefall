@@ -1,53 +1,62 @@
 import { describe, expect, it } from 'vitest';
 
-import { doorwayInterior } from './world';
+import { BUILDINGS, MAP, TILE } from '../sim/constants';
+import { EAVE } from '../sim/roofs';
 
-const W = 128;
-const H = 96;
-const px = doorwayInterior(W, H);
-/** Average brightness (0..1) and warmth (red minus blue) of a box of pixels, u and v in 0..1 with v = 0 at the bottom. */
-const sample = (u0: number, u1: number, v0: number, v1: number) => {
-  let lum = 0;
-  let warm = 0;
-  let n = 0;
-  for (let y = Math.floor(v0 * H); y < Math.ceil(v1 * H); y++)
-    for (let x = Math.floor(u0 * W); x < Math.ceil(u1 * W); x++) {
-      const o = (y * W + x) * 4;
-      lum += (px[o] + px[o + 1] + px[o + 2]) / (3 * 255);
-      warm += (px[o] - px[o + 2]) / 255;
-      n++;
+import { DOOR_HALF, doorwayCut, findDoorways } from './world';
+
+const doors = findDoorways();
+const tileAt = (x: number, z: number) => MAP[Math.floor(z / TILE)]?.[Math.floor(x / TILE)];
+
+describe('the holes cut in the house shells at their doorways', () => {
+  it('finds a doorway in every building, each one two open tiles in its outer ring', () => {
+    BUILDINGS.forEach((_, bi) => expect(doors.some((d) => d.building === bi)).toBe(true));
+    for (const d of doors) {
+      const b = BUILDINGS[d.building];
+      // Just inside the wall line, half a tile either side of the middle: both tiles open floor in the ring.
+      const ix = d.horizontal ? [d.x - TILE / 2, d.x + TILE / 2] : [d.x - (d.out * TILE) / 2, d.x - (d.out * TILE) / 2];
+      const iz = d.horizontal ? [d.z - (d.out * TILE) / 2, d.z - (d.out * TILE) / 2] : [d.z - TILE / 2, d.z + TILE / 2];
+      for (let k = 0; k < 2; k++) {
+        expect(tileAt(ix[k], iz[k])).toBe('.');
+        const tx = Math.floor(ix[k] / TILE);
+        const ty = Math.floor(iz[k] / TILE);
+        expect(tx === b.x0 || ty === b.y0 || tx === b.x0 + b.w - 1 || ty === b.y0 + b.h - 1).toBe(true);
+      }
+      // Just outside: not the building any more.
+      const ox = d.horizontal ? d.x : d.x + d.out * 0.5;
+      const oz = d.horizontal ? d.z + d.out * 0.5 : d.z;
+      expect(ox < b.x0 * TILE || oz < b.y0 * TILE || ox >= (b.x0 + b.w) * TILE || oz >= (b.y0 + b.h) * TILE).toBe(true);
     }
-  return { lum: lum / n, warm: warm / n };
-};
-
-describe('the open doorway seen from outside', () => {
-  it('is opaque and the right size', () => {
-    expect(px.length).toBe(W * H * 4);
-    for (let i = 3; i < px.length; i += 4) expect(px[i]).toBe(255);
   });
 
-  it('is no white slab: nothing near white, and on the whole a mid-dark warm room', () => {
-    const all = sample(0, 1, 0, 1);
-    expect(all.lum).toBeGreaterThan(0.15);
-    expect(all.lum).toBeLessThan(0.45);
-    expect(all.warm).toBeGreaterThan(0.1);
-    let brightest = 0;
-    for (let i = 0; i < px.length; i += 4) brightest = Math.max(brightest, (px[i] + px[i + 1] + px[i + 2]) / 3);
-    expect(brightest).toBeLessThan(220);
+  it('cuts only the opening: no wider than the two door tiles, under the eaves, a metre deep at most', () => {
+    for (const d of doors) {
+      const { min, max } = doorwayCut(d);
+      expect(max.y).toBeLessThan(EAVE);
+      const along = d.horizontal ? [min.x, max.x] : [min.z, max.z];
+      const across = d.horizontal ? [min.z, max.z] : [min.x, max.x];
+      const mid = d.horizontal ? d.x : d.z;
+      const wall = d.horizontal ? d.z : d.x;
+      expect(along[1] - along[0]).toBeCloseTo(DOOR_HALF * 2);
+      expect(along[0]).toBeGreaterThanOrEqual(mid - TILE);
+      expect(along[1]).toBeLessThanOrEqual(mid + TILE);
+      // Inward a metre, outward less than half a metre.
+      const inward = d.out > 0 ? wall - across[0] : across[1] - wall;
+      const outward = d.out > 0 ? across[1] - wall : wall - across[0];
+      expect(inward).toBeCloseTo(1);
+      expect(outward).toBeLessThan(0.5);
+    }
   });
 
-  it('has depth: the floor is lit at the threshold and darker towards the back wall', () => {
-    const threshold = sample(0.35, 0.65, 0, 0.12);
-    const back = sample(0.35, 0.65, 0.48, 0.58);
-    const backWall = sample(0.35, 0.65, 0.7, 0.85);
-    expect(threshold.lum).toBeGreaterThan(back.lum * 1.3);
-    expect(back.lum).toBeGreaterThan(backWall.lum);
-  });
-
-  it('shows the door leaf swung open against the right-hand wall, lighter than the wall across from it', () => {
-    const leaf = sample(0.9, 0.98, 0.3, 0.7);
-    const leftWall = sample(0.02, 0.1, 0.3, 0.7);
-    expect(leaf.lum).toBeGreaterThan(leftWall.lum);
-    expect(leaf.warm).toBeGreaterThan(leftWall.warm);
+  it('never cuts into another doorway of the same house', () => {
+    BUILDINGS.forEach((_, bi) => {
+      const boxes = doors.filter((d) => d.building === bi).map(doorwayCut);
+      for (let i = 0; i < boxes.length; i++)
+        for (let j = i + 1; j < boxes.length; j++) {
+          const a = boxes[i];
+          const b = boxes[j];
+          expect(a.min.x < b.max.x && b.min.x < a.max.x && a.min.z < b.max.z && b.min.z < a.max.z).toBe(false);
+        }
+    });
   });
 });
