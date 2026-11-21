@@ -25,3 +25,9 @@ Format: `## R-001 — title` then Context, Expected deliverable, Priority (P0-P3
 - Expected deliverable: CREATIVE/ui/results-stats.md — exact visual spec (shape, background, how colour identity is carried without an edge line, number/label typography, icon treatment incl. phone, spacing, entrance animation, states like 0 kills), CSS-level values engineering can implement directly.
 - Priority: P0
 - Status: done (spec ready for implementation: CREATIVE/ui/results-stats.md, 2026-11-21)
+
+## R-005 — Review results stat stickers build (9bc1550)
+- Context: R-004 implemented in 9bc1550; deviation in LOG.md (phone number size). Shots: ~/.agents-know/personal/feedback4/shots/lcs-results-stats/ (win-desktop, win-phone 390, win-phone360, win-landscape 640x360; *-mid = mid-animation). Zero state not captured.
+- Expected deliverable: accept, or F-xxx items.
+- Priority: P0
+- Status: open
