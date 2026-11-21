@@ -20,6 +20,7 @@ import { TouchControls, useTouch } from '~/components/TouchControls';
 import { ShockRing, Streaks } from '~/components/Transitions';
 import { uiImpact } from '~/components/uiSound';
 import { capLabel, Counters, Vitals, Weapons } from '~/components/Hud';
+import { createBootProgress } from '~/lib/bootProgress';
 import { loadCount, onLoadCount } from '~/lib/loading';
 import type { Session } from '~/game/net/session';
 import type { HudState } from '~/game/render/game';
@@ -118,17 +119,41 @@ const Placement = ({ place, total, won, fx }: { place: number; total: number; wo
 const MatchLoading = ({ fx }: { fx: boolean }) => {
   const [c, setC] = useState({ done: 0, total: 0 });
   const [tip, setTip] = useState(() => Math.floor(Math.random() * COPY.tips.length));
+  // One number drives both the bar and the percent: real checkpoints move it, it eases between them on every frame, never
+  // goes back (more files asked for later only slow it down) and holds at 99 % until the round takes over.
+  const progress = useMemo(() => createBootProgress(), []);
+  const [shown, setShown] = useState({ value: 0, percent: 0 });
   useEffect(() => {
     const base = loadCount();
-    const off = onLoadCount((n) => setC({ done: n.done - base.done, total: n.total - base.total }));
+    // Building the map comes first (no files yet), then the models arrive one by one.
+    const checkpoint = (done: number, total: number) => {
+      if (total > 0) progress.reach(0.2 + (0.75 * done) / total, 0.2 + (0.75 * Math.min(total, done + 1)) / total);
+      else progress.reach(0.05, 0.2);
+    };
+    checkpoint(0, 0);
+    const off = onLoadCount((n) => {
+      const done = n.done - base.done;
+      const total = n.total - base.total;
+      setC({ done, total });
+      checkpoint(done, total);
+    });
     const t = setInterval(() => setTip((i) => i + 1), 3600);
+    let raf = 0;
+    let last = performance.now();
+    const frame = (now: number) => {
+      const value = progress.tick((now - last) / 1000);
+      last = now;
+      const percent = progress.percent();
+      setShown((s) => (s.value === value && s.percent === percent ? s : { value, percent }));
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
     return () => {
       off();
       clearInterval(t);
+      cancelAnimationFrame(raf);
     };
-  }, []);
-  // Building the map comes first (no files yet), then the models arrive one by one.
-  const share = c.total > 0 ? 0.2 + (0.75 * c.done) / c.total : 0.05;
+  }, [progress]);
   return (
     <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-6 overflow-hidden bg-[radial-gradient(ellipse_at_50%_40%,#13213a,#0a0d18_60%,#05070e)] px-6" role="status" aria-live="polite">
       <div aria-hidden className="grid-bg absolute inset-0 opacity-60" />
@@ -140,10 +165,10 @@ const MatchLoading = ({ fx }: { fx: boolean }) => {
         </div>
         <div className="flex items-baseline justify-between text-sm text-cream/70">
           <span>{c.total > 0 ? `Models ${c.done} / ${c.total}` : 'Building the battleground'}</span>
-          <span className="font-display text-xl tabular-nums text-cream">{Math.floor(share * 100)}%</span>
+          <span className="font-display text-xl tabular-nums text-cream">{shown.percent}%</span>
         </div>
         <div className="panel-cut relative h-3 overflow-hidden bg-cream/10">
-          <div className="h-full origin-left bg-[linear-gradient(90deg,#3ddc84,#ffd23f)] transition-transform duration-300" style={{ transform: `scaleX(${share})` }} />
+          <div className="h-full origin-left bg-[linear-gradient(90deg,#3ddc84,#ffd23f)]" style={{ transform: `scaleX(${shown.value})` }} />
           <div aria-hidden className="absolute inset-0 bg-[repeating-linear-gradient(90deg,transparent_0_9px,#0a0d18_9px_12px)]" />
         </div>
         <p key={tip} className="min-h-10 text-sm text-cream/80 [animation:riseIn_0.4s_ease-out]">
