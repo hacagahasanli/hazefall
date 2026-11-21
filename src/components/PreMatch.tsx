@@ -7,7 +7,7 @@
  * and a "match starting" strip counts down at the bottom. The last seconds are the launch: the camera cranes over the
  * squad to the battleground, the engines spool up, a big 3-2-1, a fade to black, and the plane scene comes straight up
  * out of the black, already loaded. If the device is still building the map, the strip says so and waits. Esc goes back
- * to the menu.
+ * to the menu. After a round, Play again skips the Ready press: the lobby is full and the countdown already running.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -17,6 +17,7 @@ import { setUiSound, startHum, uiImpact, uiTick } from '~/components/uiSound';
 import { COPY } from '~/game/copy/studio';
 import { deviceFacts } from '~/game/render/deviceFacts';
 import { resolveTier } from '~/game/render/quality';
+import { keyLabel } from '~/game/settings';
 import { FIGHTERS, PLAYERS } from '~/game/sim/constants';
 import { loadCount, onLoadCount } from '~/lib/loading';
 
@@ -56,8 +57,8 @@ export const PreMatch = ({
   quick?: boolean;
   touch: boolean;
 }) => {
-  /** Seconds from Ready to the match. */
-  const count = quick ? 7 : 9;
+  /** Seconds from Ready to the match. A rematch is ready the moment the lobby is up, so its countdown is the launch plus a breath. */
+  const count = quick ? LAUNCH + 0.8 : 9;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const staging = useRef<Staging | null>(null);
   const [live, setLive] = useState(false);
@@ -158,6 +159,11 @@ export const PreMatch = ({
     onReadyRef.current();
   }, [readied, live, t, count]);
 
+  // Play again: no Ready press, the countdown is already running.
+  useEffect(() => {
+    if (quick && live && !readied) ready();
+  }, [quick, live, readied, ready]);
+
   const left = Math.max(0, end.current - t);
   const launching = left <= LAUNCH;
   const pick = useCallback(
@@ -256,7 +262,7 @@ export const PreMatch = ({
           {f.name.toUpperCase()}
         </h1>
         <p className="max-w-md text-sm text-cream/85 sm:text-base [@media(max-height:500px)]:hidden">
-          {f.role} · <b className="text-gold">{f.superName}</b>: {f.superText}
+          {f.role} · <kbd className="mx-0.5 inline-flex min-w-5 items-center justify-center rounded-sm border border-b-2 border-cream/40 bg-cream/10 px-1 text-xs font-bold leading-5 text-cream">{touch ? 'SUPER' : keyLabel(settings.keys.super)}</kbd> <b className="text-gold">{f.superName}</b>: {f.superText}
         </p>
         <div className="mt-1 flex gap-2" role="radiogroup" aria-label="Fighter">
           {IDS.map((id, i) => {

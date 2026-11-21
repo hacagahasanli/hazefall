@@ -28,6 +28,14 @@ import type { HudState } from '~/game/render/game';
 import type { FighterId } from '~/game/sim/types';
 import type { Platform } from '~/platform/types';
 
+/** What the career adds to a round report. */
+export interface RoundReport {
+  /** One line of personal context under the stats (new best, first kill, ...). */
+  line: string | null;
+  /** After three rounds with one fighter: another to try (their name). */
+  nudge?: string | null;
+}
+
 const Key = ({ k }: { k: string }) => (
   <kbd className="inline-flex min-w-5 items-center justify-center rounded-sm border border-b-2 border-cream/30 bg-cream/10 px-1 text-[10px] font-bold leading-4 text-cream">
     {k}
@@ -291,6 +299,7 @@ const Result = ({
   Support,
   exitLabel,
   fx,
+  report,
 }: {
   hud: HudState;
   onPlayAgain: () => void;
@@ -300,6 +309,8 @@ const Result = ({
   exitLabel: string;
   /** Motion on (the game's reduced-motion setting off). */
   fx: boolean;
+  /** What the career adds to this round's report (the portal build's offline rounds). */
+  report: RoundReport | null;
 }) => {
   // The host's browser runs the round: it must stay until the round is over.
   const hostWaits = online && hud.host && hud.phase !== 'over';
@@ -368,6 +379,8 @@ const Result = ({
               <StatSticker key={st.key} stat={st} index={i} fx={fx} />
             ))}
           </div>
+          {report?.line && <p className="animate-[riseIn_0.5s_ease-out_0.7s_both] pl-2 text-lg font-semibold text-gold">{report.line}</p>}
+          {report?.nudge && <p className="animate-[riseIn_0.5s_ease-out_0.72s_both] pl-2 text-sm text-cream/75">{report.nudge}</p>}
           <p className="animate-[riseIn_0.5s_ease-out_0.75s_both] text-sm text-cream/55">
             Accuracy <b className="font-semibold text-cream/85">{hud.accuracy}%</b>
             <span className="mx-2 text-cream/25">·</span>
@@ -422,6 +435,9 @@ export const Match = ({
   exitLabel = 'Back to lobby',
   held = false,
   onLoaded,
+  rookie = false,
+  firstRound = false,
+  onRoundEnd,
 }: {
   fighter: FighterId;
   session?: Session;
@@ -439,6 +455,12 @@ export const Match = ({
   held?: boolean;
   /** The map is built and the first frames are drawn (the pre-match screen may launch). */
   onLoaded?: () => void;
+  /** A new player's first rounds: gentler bots (see `NEWBIE`). */
+  rookie?: boolean;
+  /** The very first round: no sentence on the plane's title card, no key legend (the keys show up when they matter). */
+  firstRound?: boolean;
+  /** Called once when the round report comes up (offline rounds); what it returns is shown on the report. */
+  onRoundEnd?: (hud: HudState) => RoundReport | null;
 }) => {
   const heldRef = useRef(held);
   heldRef.current = held;
@@ -475,6 +497,8 @@ export const Match = ({
         const st = settingsRef.current;
         m = startMatch(canvas, {
           fighter,
+          rookie,
+          firstRound,
           held: heldRef.current,
           name: 'you',
           aimMode: readAim(),
@@ -526,6 +550,17 @@ export const Match = ({
     !!hud && ((hud.dead && hud.deadFor > DEATH_CARD) || (hud.won && hud.phase === 'over'));
   /** Kill colour (the banner, the death card): red, or orange in colour-blind mode. */
   const killColor = settings.colorBlind ? '#ff9f1c' : '#ff3d6e';
+
+  // The round is over for you: the career takes it in once, and the report shows what it says.
+  const onRoundEndRef = useRef(onRoundEnd);
+  onRoundEndRef.current = onRoundEnd;
+  const [report, setReport] = useState<RoundReport | null>(null);
+  const reported = useRef(false);
+  useEffect(() => {
+    if (!showResult || !hud || online || reported.current) return;
+    reported.current = true;
+    setReport(onRoundEndRef.current?.(hud) ?? null);
+  }, [showResult, hud, online]);
 
   // Anonymous usage events: a no-op unless the site started counting (never on a portal build).
   useTelemetry(hud, { held, showResult, online });
@@ -670,7 +705,6 @@ export const Match = ({
                 <br />
                 {COPY.intro.title(hud.total)[1]}
               </div>
-              <div className="max-w-lg text-sm text-cream/85 [animation:fadeIn_0.8s_ease-out] sm:text-base">{COPY.intro.line}</div>
               {COPY.intro.below && (
                 <div className="font-mono text-xs tracking-[0.3em] text-orange/90 [animation:fadeIn_0.4s_ease-out]">{COPY.intro.below}</div>
               )}
@@ -875,7 +909,7 @@ export const Match = ({
           )}
 
           {/* Controls */}
-          {!touch && settings.showKeyHints && (
+          {!touch && settings.showKeyHints && !firstRound && (
             <div className="pointer-events-none absolute left-3 top-3 flex max-w-[calc(50vw-13rem)] flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-cream/50">
               <span className="flex items-center gap-1">
                 <Key k={keyLabel(settings.keys.up)} />
@@ -995,6 +1029,7 @@ export const Match = ({
               Support={Support}
               exitLabel={exitLabel}
               fx={!settings.reducedMotion}
+              report={report}
             />
           )}
         </>

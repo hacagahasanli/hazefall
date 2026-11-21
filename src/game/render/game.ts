@@ -10,6 +10,7 @@ import { ARMOR, HEALS, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITE
 import { canSee, carryCap, chestHeight, feetOf, healChoice, inPlant, inWater, lineOfSight, lootUnder, reloadTime, solidAt, superThrowTarget, throwDistance } from '../sim/step';
 import { buildingAt, roofAt } from '../sim/roofs';
 import { createOfflineSession } from '../net/session';
+import { arrowTo, LOOT_HINT } from './hints';
 import { NO_INPUT } from '../sim/types';
 
 import { buildRig, fighterLook, leaveAir, poseChute, poseDeath, poseFreefall, poseRig, poseSwim, poseTopDown } from './characters';
@@ -137,6 +138,10 @@ export interface MatchOptions {
   aimMode: AimMode;
   minimap: HTMLCanvasElement;
   onHud: (hud: HudState) => void;
+  /** An offline round for a new player (their first rounds): the bots go easy on them (see `NEWBIE`). */
+  rookie?: boolean;
+  /** The very first round: the shoot key is named once on the ground (the key legend is hidden for it). */
+  firstRound?: boolean;
   /** An online round (host or guest). Without one, an offline round with bots. */
   session?: Session;
   /** The quality tier to start with (default 'high'), and whether it was picked automatically (then a low frame rate steps it down once per step). */
@@ -254,7 +259,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 600);
 
   // Offline the match runs here with bots; online the session is the host's or a guest's.
-  const session: Session = opts.session ?? createOfflineSession(opts.fighter, opts.name);
+  const session: Session = opts.session ?? createOfflineSession(opts.fighter, opts.name, !!opts.rookie);
   let state: GameState = session.state;
   const me = session.me;
   const sfx = createSfx();
@@ -1365,6 +1370,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       case 'dryFire':
         if (e.player === me) sfx.dryFire();
         break;
+      case 'fireBlocked':
+        // Nothing fires in the air: say so the first time in a round, for a moment.
+        if (e.player === me && airHintAt < 0) airHintAt = time;
+        break;
       case 'roll':
         sfx.vault(e.x - camX(), e.player === me ? 0 : Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y));
         vfx.burst(e.x, 0.2, 8, 'dust', { z: e.y, speed: 2.5, up: 0.8, gravity: 5, life: 0.4, size: 0.7 });
@@ -1393,6 +1402,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         break;
       case 'land':
         landAt[e.player] = time;
+        if (e.player === me) lootHint = lootHintFor(e.x, e.y, time);
         vfx.burst(e.x, (e.z ?? 0) + 0.2, 12, 'dust', { z: e.y,  speed: 3, up: 1, gravity: 4, life: 0.4 });
         if (e.player === me) sfx.land();
         else {
@@ -1505,6 +1515,28 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   };
   /** When each player touched down (for the landing roll), and the canopies left on the ground. */
   const landAt: number[] = [];
+  /** When the "Land first, then shoot" hint was shown (-1: not yet this round; once per round). */
+  let airHintAt = -1;
+  /**
+   * Landing far from any loot: for a few seconds the nearest gun on the ground is pointed out (a prompt with an arrow and a
+   * ping on the minimap). Null when there is nothing to point at.
+   */
+  let lootHint: { x: number; y: number; until: number } | null = null;
+  const lootHintFor = (x: number, y: number, now: number) => {
+    let near = Infinity;
+    let gun: { x: number; y: number } | null = null;
+    let gunD = Infinity;
+    for (const k of state.loot) {
+      if (!k.active) continue;
+      const d = Math.hypot(k.x - x, k.y - y);
+      near = Math.min(near, d);
+      if (k.kind in WEAPONS && d < gunD) {
+        gunD = d;
+        gun = k;
+      }
+    }
+    return near > LOOT_HINT.radius && gun ? { x: gun.x, y: gun.y, until: now + LOOT_HINT.seconds } : null;
+  };
   const ROLL_TIME = 0.75;
   /**
    * Canopies let go: the moment a canopy stops hanging over its fighter (touchdown, or knocked out in the air) a copy is
@@ -1745,6 +1777,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       mmCtx.setLineDash([]);
     }
     const self = state.players[me];
+    // The gun to head for after a far landing: a pulsing gold ring (the plane's flight-line colour).
+    if (lootHint && time < lootHint.until && self.stage === 'ground') {
+      const pulse = 5 + 2 * Math.sin(time * 8);
+      mmCtx.strokeStyle = 'rgba(255,210,63,0.95)';
+      mmCtx.lineWidth = 2;
+      mmCtx.beginPath();
+      mmCtx.arc(lootHint.x * s, lootHint.y * s, pulse, 0, Math.PI * 2);
+      mmCtx.stroke();
+    }
     // Only you on the map: never where the others are.
     mmCtx.save();
     mmCtx.translate(self.x * s, self.y * s);
@@ -2604,8 +2645,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const healNext = healChoice(self);
     // Loot to take: a keycap over it in the world instead of a line of text.
     showKeycap(self.alive && !self.using ? k : null);
+    const hintLive = lootHint !== null && time < lootHint.until && self.stage === 'ground';
     const prompt = !self.alive
       ? null
+      : self.stage === 'falling' && airHintAt >= 0 && time - airHintAt < 1.5
+        ? 'Land first, then shoot'
+      : hintLive && !k
+        ? firstPerson() ? 'Loot nearby' : `Loot nearby ${arrowTo(lootHint!.x - self.x, lootHint!.y - self.y)}`
+      : opts.firstRound && self.stage === 'ground' && self.shots === 0 && landAt[me] !== undefined && time - landAt[me] < 10 && !k
+        ? (touch ? 'Tap FIRE · shoot' : `${keyLabel(settings.keys.fire)} · shoot`)
       : self.stage === 'drone'
         ? (touch ? 'Tap JUMP' : `${keyLabel(settings.keys.jump)} · jump`)
         : self.stage === 'falling' && self.canopy < 0 && DROP.height - self.alt >= DROP.minFreefallDrop

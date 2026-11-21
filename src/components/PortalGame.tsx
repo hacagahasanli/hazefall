@@ -5,18 +5,23 @@
  * online, no outbound links. The round report offers Play again or Main menu, straight on with no ad in between; the only
  * ad is a banner under the main menu (MenuBanner). Settings are shared by the menu and the pause menu (useSettings).
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { readAim, saveAim } from '~/components/AimChoice';
 import { FIGHTER_IDS, PICK_KEY } from '~/components/FighterSelect';
 import { MainMenu } from '~/components/MainMenu';
 import { Match } from '~/components/Match';
+import { contextLine, isRookie, loadCareer, nudgeFighter, recordRound, saveCareer } from '~/game/career';
 import { PreMatch } from '~/components/PreMatch';
+import { FIGHTERS } from '~/game/sim/constants';
 import { useWipe } from '~/components/Transitions';
 import { useTouch } from '~/components/TouchControls';
 import { useSettings } from '~/components/useSettings';
 
+import type { RoundReport } from '~/components/Match';
+import type { Career, RoundResult } from '~/game/career';
 import type { AimMode } from '~/game/render/game';
+import type { HudState } from '~/game/render/game';
 import type { FighterId } from '~/game/sim/types';
 import type { ComponentType } from 'react';
 import type { Platform } from '~/platform/types';
@@ -42,6 +47,27 @@ export const PortalGame = ({
     return saved && FIGHTER_IDS.includes(saved) ? saved : 'hotfix';
   });
   const [round, setRound] = useState(0);
+  // What the game remembers (rounds played, bests): loaded once, saved after every round. The round that is about to start
+  // reads it when Ready is pressed, so a new player's first rounds get the gentle bots and the light first-round screen.
+  const career = useRef<Career>(null as unknown as Career);
+  if (career.current === null) career.current = loadCareer(platform.storage);
+  const [roundKind, setRoundKind] = useState({ rookie: false, first: false });
+  const finishRound = (hud: HudState): RoundReport | null => {
+    const before = career.current;
+    const result: RoundResult = {
+      fighter,
+      place: hud.won ? 1 : hud.placement,
+      total: hud.total,
+      won: hud.won,
+      kills: hud.kills,
+      damage: hud.damage,
+      survived: hud.survived,
+    };
+    career.current = recordRound(before, result);
+    saveCareer(platform.storage, career.current);
+    const next = nudgeFighter(career.current) as FighterId | null;
+    return { line: contextLine(before, result), nudge: next ? `Try ${FIGHTERS[next].name} next` : null };
+  };
   /**
    * menu → lobby (fighter, lobby filling, wait for Ready) → readying (the match loads underneath, held, while the
    * countdown runs) → match. Play again goes back to the lobby with everyone already there.
@@ -89,6 +115,9 @@ export const PortalGame = ({
             support={support}
             exitLabel="Main menu"
             held={stage !== 'match'}
+            rookie={roundKind.rookie}
+            firstRound={roundKind.first}
+            onRoundEnd={finishRound}
             onLoaded={() => setLoaded(true)}
             onPlayAgain={() => toLobby(true)}
             onExit={toMenu}
@@ -105,6 +134,7 @@ export const PortalGame = ({
               touch={touch}
               loaded={loaded}
               onReady={() => {
+                setRoundKind({ rookie: isRookie(career.current), first: career.current.roundsPlayed === 0 });
                 setRound((r) => r + 1);
                 setStage('readying');
               }}
