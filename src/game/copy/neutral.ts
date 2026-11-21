@@ -8,7 +8,7 @@ export const COPY: Copy = {
   fighters: {
     hotfix: { name: 'Blaze', role: 'Runner', superName: 'Rush', superText: 'a fast dash that hits everyone in its path' },
     legacy: { name: 'Bastion', role: 'Defender', superName: 'Barricade', superText: 'drops a wall that blocks bullets' },
-    standup: { name: 'Tempo', role: 'Controller', superName: 'Slow Field', superText: 'a field that slows enemies' },
+    standup: { name: 'Tempo', role: 'Controller', superName: 'Slow Bomb', superText: 'a thrown canister that bursts and slows enemies' },
     intern: { name: 'Rookie', role: 'Brawler', superName: 'Shockwave', superText: 'a blast that throws everyone back' },
   },
   botNames: [

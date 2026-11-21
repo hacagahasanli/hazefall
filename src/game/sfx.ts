@@ -433,6 +433,7 @@ export const createSfx = () => {
       }
     },
     unlock: () => ensure(),
+    dispose: () => { const c = ctx; ctx = null; if (c && c.state !== 'closed') void c.close(); },
     /** Silence (or un-silence) everything for a reason, without touching the player's own mute or volumes. */
     setMuted: (reason: string, on: boolean) => {
       if (on) silenced.add(reason);
@@ -471,10 +472,32 @@ export const createSfx = () => {
         noise('bandpass', 1500 + Math.random() * 2500, 600, 0.04, 0.2, 4, { delay: 0.08 + Math.random() * 0.4, room: 0.6, pan: pan + (Math.random() - 0.5) * 0.4 });
       }
     },
+    /** The slow-field canister bursting: a short low thump, a glassy crack and a falling shimmer, as time drags. */
+    slowBurst: (x?: number) => {
+      if (!may('explosion')) return;
+      const pan = panOf(x);
+      duck(-6, 0.5);
+      tone('sine', 110, 40, 0.45, 0.7, { room: 0.6, pan });
+      noise('highpass', 5000, 2500, 0.06, 0.4, 1, { pan });
+      tone('triangle', 1400, 260, 0.9, 0.16, { room: 0.9, pan });
+      tone('sine', 900, 180, 1.1, 0.1, { delay: 0.05, room: 0.9, pan });
+    },
     impact: (x?: number) => noise('bandpass', 4500, 2500, 0.03, 0.12, 3, { room: 0.4, pan: panOf(x) }),
     land: (x?: number) => {
       tone('sine', 90, 50, 0.08, 0.35, { room: 0.2, pan: panOf(x) });
       noise('lowpass', 600, 200, 0.06, 0.2, 1, { room: 0.2, pan: panOf(x) });
+    },
+    /**
+     * Someone landing `dist` metres from you during the drop (the landing danger cue): their touchdown, a thud and the
+     * rustle of the canopy coming down, from their side and fading with distance. Never more than one at a time.
+     */
+    landNear: (x?: number, dist = 0) => {
+      if (!may('landNear')) return;
+      const k = 1 / (1 + dist / 15);
+      const pan = panOf(x);
+      tone('sine', 95, 50, 0.1, 0.32 * k, { room: 0.3, pan });
+      noise('lowpass', 700, 200, 0.08, 0.2 * k, 1, { room: 0.3, pan });
+      noise('bandpass', 1200, 500, 0.25, 0.08 * k, 1.2, { delay: 0.05, room: 0.3, pan });
     },
     reload: () => {
       click(0, 3000, 0.25);

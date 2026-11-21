@@ -14,7 +14,7 @@ const open = async (ctxOpts) => {
   const errs = [];
   p.on('pageerror', (e) => errs.push(e.message));
   p.on('console', (m) => m.type() === 'error' && errs.push(m.text()));
-  await p.goto('http://localhost:3203/?testBreaks');
+  await p.goto('http://localhost:3203/');
   await p.getByRole('navigation', { name: 'Main menu' }).waitFor();
   await p.waitForTimeout(3500);
   return { ctx, p, errs };
@@ -93,10 +93,8 @@ const run = async (dev, ctxOpts) => {
   await p.getByRole('button', { name: /Play again/ }).waitFor({ timeout: 15000 });
   await p.waitForTimeout(1200);
   await jpg(p, `${dev}-5-round-end`);
-  // Leaving the report: with ?testBreaks a midgame ad is due; the SDK's local mode shows its demo ad.
+  // Leaving the report goes straight on: no midgame ad (the only ad is the menu's banner).
   await p.getByRole('button', { name: /Play again/ }).click();
-  await p.waitForTimeout(1500);
-  await jpg(p, `${dev}-6-ad-break`);
   await p.waitForFunction(() => window.__lcs && window.__lcs.state().tick < 300 && window.__lcs.state().phase === 'drop', null, { timeout: 60000 }).catch(() => errs.push('next round never started'));
   await p.waitForTimeout(1500);
   await jpg(p, `${dev}-7-next-round`);

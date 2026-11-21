@@ -88,3 +88,35 @@ Implemented as planned. Numbers:
 
 Not done: the canopy has no cloth simulation (its deformation is procedural), lines are 1-pixel GL lines, and the
 landing still uses the existing forward roll.
+
+## Feedback 5: a longer, steerable canopy (Nov 2026)
+
+Reis: descent a little too quick; more time floating; smoother, more natural steering with momentum; choose a landing
+spot and spot the others before the ground; not slow or unresponsive; a sense of danger when landing.
+
+- **Sink** (`constants.ts`): the canopy floats at 3.7 m/s (was 5.7) up to its steering speed, and the automatic pull
+  moved from 40 m to 44 m, just under the clouds. Door to ground hands off: 8.15 s -> 11.6 s (`glide`), of which the
+  canopy 5.07 s -> 8.7 s (1.7x). Free fall is unchanged apart from ending 4 m higher (3.1 s -> 2.85 s).
+- **The canopy always flies**: hands off it glides on at 3 m/s the way it was going (it no longer stops dead in the air);
+  steered it flies at up to 8 m/s (was 7) and follows the stick faster (response 1.1 -> 1.6 /s), so a 90 degree turn comes
+  round in under a second without stalling. Opening a little longer (1.1 s -> 1.25 s) so the lower canopy sink keeps the
+  opening shock near 3 g.
+- **Dive** (`input.roll`: Shift, or the roll button, labelled Dive in the air): 14 m/s, sinking up to 5.6 m/s (the old
+  canopy rate). Glide ratio about 2.2 steering, 2.5 diving, so the dive reaches farther and gets there sooner, at the cost
+  of time in the air. The sink follows the airspeed (`chuteSink`), so it eases in and out with the momentum.
+- **Reach**: about 100 m from the door steering in a straight line with the automatic pull, 111 m diving (was about
+  68 m); pulling early and diving goes well past 150 m.
+- **Bots** use the same rules: they steer at the same speeds and hold the dive when their spot is farther than a plain
+  glide still reaches. They land closer to their planned spot than before (median 1.1 m -> 0.1 m).
+- **Seeing the others** (`game.ts`): high under the canopy the camera backs off up to 30 % more, closing back to the
+  normal canopy framing by 12 m up, so more open sky (and the canopies in it) is in view. Nothing reveals anyone you
+  could not see yourself: no minimap dots, markers or arrows.
+- **Landing danger**: someone landing within 30 m of you while you are in the air or in your first 8 s on the ground is
+  heard, a thud and the canopy's rustle from their side, fading with distance (`sfx.landNear`). Sound only.
+- **Look**: the canopy's yaw spring is quicker (2.4 -> 3.2 rad/s) and it banks harder into turns (up to 0.7 rad).
+- A hint under the canopy: `Hold Shift · dive to go farther, faster`.
+- **bot-sim, 40 matches, seeds 1-40, before -> after**: match length median 3:49 -> 3:55 (avg 240.0 -> 236.9 s), dead air
+  15.5 % -> 14.7 %, Deadline starts 24.5 -> 27.9 s after Play (it starts when the last jumper lands, so it always
+  follows the landings; the first wait is unchanged), bots in distinct buildings 19/19 both, first fight 40.2 -> 40.6 s
+  after landing. Bots door to ground median 8.15 -> 11.6 s, canopy 5.07 -> 8.7 s.
+- Frames and mp4s: `~/.agents-know/personal/feedback4/shots/lcs5-drop-*` (`lcs5-drop-compare.mp4` side by side).

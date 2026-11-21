@@ -12,7 +12,7 @@
 import { createBot } from '../src/game/sim/bot';
 import { loadoutScore, lootValue } from '../src/game/sim/bot-params';
 import { BUILDINGS, DT, PLAYERS, TILE, WEAPONS } from '../src/game/sim/constants';
-import { canSee, createGame, lineOfSight, step } from '../src/game/sim/step';
+import { canSee, createGame, seesBody, step } from '../src/game/sim/step';
 import { NO_INPUT } from '../src/game/sim/types';
 
 import type { GameState, Input, Player } from '../src/game/sim/types';
@@ -72,7 +72,7 @@ const passive = (s: GameState): Input => {
   for (const o of s.players) {
     if (o.id === 0 || !canSee(s, me, o)) continue;
     const od = Math.hypot(o.x - me.x, o.y - me.y);
-    if (od < best && lineOfSight(s, me.x, me.y, o.x, o.y)) {
+    if (od < best && seesBody(s, me, o)) {
       best = od;
       out.aimX = o.x;
       out.aimY = o.y;

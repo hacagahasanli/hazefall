@@ -1,9 +1,10 @@
 import {
-  aimError, bestLoot, campSpot, CLOSE, coverPoint, EARSHOT, ENGAGE_AT, engageScore, fallbackPersona, fightCover, FIRE_RANGE, guessFromSound, gunScore,
-  isAutomatic, landingPlan, lightAt, makePersona, mulberry32, NEAR, PREFERRED, LANDING_GRACE, reactionDelay, spotTime, stagePace, tierOf, VIEW,
+  aimError, bestLoot, botSight, campSpot, CLOSE, coverPoint, EARSHOT, ENGAGE_AT, engageScore, fallbackPersona, fightCover, FIRE_RANGE, guessFromSound,
+  gunScore, isAutomatic, landingPlan, lightAt, makePersona, mulberry32, NEAR, PREFERRED, LANDING_GRACE, reactionDelay, spotTime, stagePace, tierOf, VIEW,
 } from './bot-params';
-import { DROP, DT, FIGHTERS, HEALS, magOf, WEAPONS, WORLD } from './constants';
-import { canSee, healChoice, hitPoint, inPlant, lineOfSight, lootUnder, targetable } from './step';
+import { DROP, DT, FIGHTERS, HEALS, magOf, SUPERS, WEAPONS, WORLD } from './constants';
+import { buildingAt, doorstep, ROOF_LAYER } from './roofs';
+import { canSee, chestHeight, healChoice, hitPoint, inPlant, lootUnder, targetable } from './step';
 import { NO_INPUT } from './types';
 
 import type { Persona } from './bot-params';
@@ -45,13 +46,15 @@ const THINK_DT = 8 * DT;
 /**
  * Can this bot see (and so shoot at) that player? The one question every bot decision about seeing or shooting someone
  * goes through: they must be up to be seen, not hidden in a bush, and in a clear line from the bot's eyes (leaning out
- * moves the eyes and the exposed shoulder). Line of sight through roofs and floors will be swapped in here.
+ * moves the eyes and the exposed shoulder), chest to chest in 3D through walls, roofs and floors (`botSight`).
  */
 export const botCanSee = (state: GameState, viewer: Player, target: Player) => {
   if (!targetable(target) || !canSee(state, viewer, target)) return false;
   const eye = hitPoint(viewer);
   const body = hitPoint(target);
-  return lineOfSight(state, eye.x, eye.y, body.x, body.y) || (Math.abs(target.lean) > 0.05 && lineOfSight(state, eye.x, eye.y, target.x, target.y));
+  const h0 = chestHeight(viewer);
+  const h1 = chestHeight(target);
+  return botSight(state, eye.x, eye.y, body.x, body.y, h0, h1) || (Math.abs(target.lean) > 0.05 && botSight(state, eye.x, eye.y, target.x, target.y, h0, h1));
 };
 /** Reaction time and aim error against a person, relative to against a bot. */
 export const VS_HUMAN = 1.45;
@@ -138,6 +141,9 @@ export const createBot = (id: number, seed: number) => {
     if (mine) spot = { x: mine.x, y: mine.y, t: mine.t };
     // The unsure heal up fuller before they go back out.
     healTo = 0.55 + 0.2 * (1 - p.confidence);
+    // Aim for the doorstep, not the roof: land beside the house and walk straight in.
+    const b = buildingAt(spot.x, spot.y);
+    if (b >= 0) spot = { ...doorstep(b, spot.x, spot.y), t: spot.t };
   };
 
   /** Hits and shots from the last tick: being shot wakes me up; gunfire tells me roughly which way to look. */
@@ -345,7 +351,7 @@ export const createBot = (id: number, seed: number) => {
         if (!engaged) mode = 'roam';
         else {
           // Fight from cover when that suits me and there is some (and they are not already on top of me).
-          if (wantsCover && td > 6 && (!post || lineOfSight(state, target.x, target.y, post.x, post.y))) post = fightCover(state, me, target.x, target.y, post);
+          if (wantsCover && td > 6 && (!post || botSight(state, target.x, target.y, post.x, post.y, chestHeight(target)))) post = fightCover(state, me, target.x, target.y, post);
           mode = wantsCover && td > 6 && post ? 'cover' : 'engage';
         }
       }
@@ -372,7 +378,7 @@ export const createBot = (id: number, seed: number) => {
       wantX = z.toX;
       wantY = z.toY;
     } else if (mode === 'retreat' || mode === 'heal') {
-      if (!cover || (target && lineOfSight(state, target.x, target.y, cover.x, cover.y))) cover = coverPoint(state, me, lastTX, lastTY, p!.name === 'camper');
+      if (!cover || (target && botSight(state, target.x, target.y, cover.x, cover.y, chestHeight(target)))) cover = coverPoint(state, me, lastTX, lastTY, p!.name === 'camper');
       if (cover) {
         wantX = cover.x;
         wantY = cover.y;
@@ -447,7 +453,7 @@ export const createBot = (id: number, seed: number) => {
       // Off the line of fire: behind something between me and where the shots came from, or zigzag away.
       const from = heard && now - heard.t < 3 ? heard : { x: me.x + Math.cos(me.heading) * 10, y: me.y + Math.sin(me.heading) * 10 };
       lookAt = from;
-      if (!cover || lineOfSight(state, from.x, from.y, cover.x, cover.y)) cover = coverPoint(state, me, from.x, from.y, p!.name === 'camper');
+      if (!cover || botSight(state, from.x, from.y, cover.x, cover.y)) cover = coverPoint(state, me, from.x, from.y, p!.name === 'camper');
       if (cover) {
         wantX = cover.x;
         wantY = cover.y;
@@ -492,6 +498,16 @@ export const createBot = (id: number, seed: number) => {
       dodgeSeen = hitAt;
       if (rand() < p!.dodge && me.rollCooldown <= 0 && !me.using && mode !== 'cover') out.roll = true;
     }
+    // Up on a roof with nobody to fight from it: walk off the edge the way I want to go (if what I
+    // want is in the house under me: the edge by its door), rather than stand over it.
+    if (me.z >= ROOF_LAYER && !(engaged && target)) {
+      const b = buildingAt(me.x, me.y);
+      if (b >= 0 && buildingAt(wantX, wantY) === b) {
+        const out = doorstep(b, me.x, me.y);
+        wantX = out.x;
+        wantY = out.y;
+      }
+    }
 
     const moved = Math.hypot(me.x - lastX, me.y - lastY);
     lastX = me.x;
@@ -524,7 +540,9 @@ export const createBot = (id: number, seed: number) => {
     out.aimY = look.y;
     wobble = rand() * 2 - 1;
     if (target && engaged) {
-      out.super = me.superCharge >= 1 && td < 9;
+      // The slow-field canister is thrown (up to its range, at the aim point, which is on the target): use it on anyone
+      // in throwing range; the other supers work up close.
+      out.super = me.superCharge >= 1 && (me.fighter === 'standup' ? td < SUPERS.timebox.range - 2 && td > 2.5 && botCanSee(state, me, target) : td < 9);
       out.use = me.bombs > 0 && td < 11 && td > 4;
     } else if (mode !== 'heal' && !me.using && !target && !out.use && wantsHeal(me, mode)) out.heal = true;
     else if (!me.using && !target && me.coffees > 0 && me.buzz <= 0 && (me.hp < me.maxHp * 0.85 || mustRun)) out.coffee = true;
@@ -622,17 +640,25 @@ export const createBot = (id: number, seed: number) => {
     if (me.stage === 'falling') {
       // Steer for my landing spot. The body has momentum, so ask for a velocity that shrinks as the spot comes
       // closer (gain = response / 2: damped to ~0.7, a few per cent of overshoot at most) instead of flying at it flat out and overshooting.
+      // Under the open canopy, dive (as a player would) when the spot is farther than a plain glide still reaches.
       const open = me.canopy >= DROP.stretch;
-      const speed = open ? DROP.chuteSpeed : DROP.freefallSpeed;
+      const dx = spot.x - me.x;
+      const dy = spot.y - me.y;
+      const dist = Math.hypot(dx, dy);
+      const reach = (Math.max(0, me.alt) / DROP.chuteTerminal) * DROP.chuteSpeed * 0.85;
+      const dive = me.canopy >= DROP.deployTime && dist > reach;
+      const speed = !open ? DROP.freefallSpeed : dive ? DROP.chuteDiveSpeed : DROP.chuteSpeed;
       const gain = (open ? DROP.chuteResponse : DROP.freefallResponse) / 2;
-      let mx = ((spot.x - me.x) * gain) / speed;
-      let my = ((spot.y - me.y) * gain) / speed;
+      let mx = (dx * gain) / speed;
+      let my = (dy * gain) / speed;
       const len = Math.hypot(mx, my);
       if (len > 1) {
         mx /= len;
         my /= len;
       }
-      return len < 0.01 ? NO_INPUT : { ...NO_INPUT, mx, my };
+      // The canopy never hovers: right over the spot, keep a light touch towards it so it circles there.
+      if (open && len < 0.01 && dist > 0.05) return { ...NO_INPUT, mx: (dx / dist) * 0.02, my: (dy / dist) * 0.02, roll: dive };
+      return len < 0.01 ? NO_INPUT : { ...NO_INPUT, mx, my, roll: dive };
     }
     if (mode === 'drop') {
       mode = 'roam';

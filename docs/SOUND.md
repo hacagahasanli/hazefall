@@ -39,6 +39,7 @@ menu ticks, wipes, impacts, pre-match bed ─> their own gain (Master level, mut
 | explosion | 90 ms | 2 | ducks the bed 12 dB |
 | glass / push / KO | 150 / 120 / 150 ms | 1 / 2 / 2 | |
 | canopy opening | 80 ms | 3 | fabric flagging, then the crack and whump; within 60 m |
+| someone landing near you | 400 ms | 1 | the drop only: a landing within 30 m while you are in the air or just down; their thud and the canopy's rustle, positional, no visual marker |
 | falling wind | - | 1 (a loop) | only while you are in the air; low-passed under 900 Hz, gusting, level and pitch follow the speed |
 | menu tick | 45 ms | 2 | a select always ticks |
 | screen wipe whoosh | 250 ms | 1 | filtered noise, ~300 ms, menu / lobby / report wipes |

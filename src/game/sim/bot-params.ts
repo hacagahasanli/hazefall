@@ -2,9 +2,17 @@
 // worth, and where to hide. Everything is a function of the match and the bot's own seed, so a
 // host replays the same bots.
 import { BUILDINGS, DROP, HEALS, magOf, MAP, PLAYERS, TILE, WORLD } from './constants';
-import { carried, carryCap, circleBlocked, inPlant, lineOfSight, solidAt, spareCap, vestPoints } from './step';
+import { carried, carryCap, chestHeight, circleBlocked, inPlant, lineOfSight, solidAt, spareCap, vestPoints } from './step';
 
 import type { Drone, GameState, Gun, HealKind, Loot, LootKind, Player, WeaponKind } from './types';
+
+/**
+ * The one line-of-sight check every bot decision goes through: a clear straight 3D line (walls, trunks and roofs block
+ * it, doorways and windows do not) from one point to another at the given heights, chest height on the ground by default.
+ */
+export const botSight = (state: GameState, ax: number, ay: number, bx: number, by: number, ah = 1.1, bh = 1.1) => lineOfSight(state, ax, ay, bx, by, ah, bh);
+/** Can bot `a` see fighter `b`: chest to chest, through the same check. */
+export const botSees = (state: GameState, a: Player, b: Player) => botSight(state, a.x, a.y, b.x, b.y, chestHeight(a), chestHeight(b));
 
 export const mulberry32 = (seed: number) => () => {
   seed |= 0;
@@ -398,7 +406,7 @@ export const coverPoint = (state: GameState, me: Player, tx: number, ty: number,
     const y = me.y + Math.sin(a) * r;
     if (circleBlocked(state, x, y, 0.7) || solidAt(state, x, y)) continue;
     if (Math.hypot(x - z.toX, y - z.toY) > Math.max(z.toR, 6) && Math.hypot(x - z.cx, y - z.cy) > z.r) continue;
-    const hidden = !lineOfSight(state, tx, ty, x, y) || (plants && inPlant(x, y) && Math.hypot(x - tx, y - ty) > 4);
+    const hidden = !botSight(state, tx, ty, x, y) || (plants && inPlant(x, y) && Math.hypot(x - tx, y - ty) > 4);
     if (!hidden) continue;
     const score = -r + 0.5 * Math.hypot(x - tx, y - ty);
     if (score > bestScore) {
@@ -437,8 +445,8 @@ export const peekFrom = (state: GameState, x: number, y: number, tx: number, ty:
     const qx = x + px * s;
     const qy = y + py * s;
     if (circleBlocked(state, qx, qy, 0.45)) continue;
-    if (!lineOfSight(state, x, y, qx, qy)) continue;
-    if (lineOfSight(state, qx, qy, tx, ty)) return { x: qx, y: qy, side: Math.sign(s) };
+    if (!botSight(state, x, y, qx, qy)) continue;
+    if (botSight(state, qx, qy, tx, ty)) return { x: qx, y: qy, side: Math.sign(s) };
   }
   return null;
 };
@@ -466,7 +474,7 @@ export const fightCover = (state: GameState, me: Player, tx: number, ty: number,
     // Hidden with a body's width to spare on either side, not just its middle.
     const px = -(ty - y) / dt;
     const py = (tx - x) / dt;
-    if ([0, 0.45, -0.45].some((k) => lineOfSight(state, tx, ty, x + px * k, y + py * k))) continue;
+    if ([0, 0.45, -0.45].some((k) => botSight(state, tx, ty, x + px * k, y + py * k))) continue;
     const peek = peekFrom(state, x, y, tx, ty);
     if (!peek) continue;
     const score = -r - (avoid && Math.hypot(x - avoid.x, y - avoid.y) < 2 ? 6 : 0);
