@@ -31,3 +31,9 @@ Format: `## R-001 — title` then Context, Expected deliverable, Priority (P0-P3
 - Expected deliverable: accept, or F-xxx items.
 - Priority: P0
 - Status: done (reviewed 2026-11-21: direction and finals accepted; phone 1.9rem deviation accepted; F-002 band stretch during count-up, F-003 phone gaps, both P1. Zero state still unverified: capture one 0-kill/0-damage frame with the F-002/F-003 fix.)
+
+## R-006 — CrazyGames Basic Launch KPI plan
+- Context: Reis (urgent): LCS goes to CrazyGames Basic Launch after Parking Lot's review. Full Launch needs avg playtime 10+ min, D1 10-15 %, conversion (1+ min played) 80 %+, CTR top 20 % of Shooting. Online is not in the portal build. Judge the cold-start build, covers (docs/portal/covers/) and preview videos.
+- Expected deliverable: CREATIVE/specifications/basic-launch-kpi.md — at most 8 ranked changes, each tied to one KPI, impact, effort, exact spec; top 3 doable in 1-2 days.
+- Priority: P0
+- Status: done (CD 2026-11-22): spec ready. Top 3: safe first drop (no firing in the air, 24 spare pistol rounds, gentler bots for the first 3 rounds), career level with canopy unlocks saved via platform.storage, new covers + recut preview video.
