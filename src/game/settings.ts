@@ -8,7 +8,7 @@ import { COPY } from './copy/studio';
 import type { QualitySetting } from './render/quality';
 
 export type Action =
-  | 'up' | 'down' | 'left' | 'right' | 'fire' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR' | 'scope'
+  | 'up' | 'down' | 'left' | 'right' | 'fire' | 'jump' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR' | 'scope'
   | 'slot1' | 'slot2' | 'swap' | 'heal' | 'coffee' | 'aim' | 'mute' | 'pause';
 
 /** In the order the Controls tab lists them, with the words it shows. */
@@ -18,6 +18,7 @@ export const ACTIONS: [Action, string][] = [
   ['left', 'Move left'],
   ['right', 'Move right'],
   ['fire', 'Shoot / jump'],
+  ['jump', 'Jump (on foot)'],
   ['use', 'Pick up / use'],
   ['super', 'Super'],
   ['roll', 'Roll'],
@@ -41,6 +42,7 @@ export const DEFAULT_KEYS: Record<Action, string> = {
   left: 'KeyA',
   right: 'KeyD',
   fire: 'Space',
+  jump: 'KeyB',
   use: 'KeyF',
   super: 'KeyG',
   roll: 'ShiftLeft',

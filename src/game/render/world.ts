@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { assetUrl } from '../../lib/assets';
 import { trackLoad } from '../../lib/loading';
 import { BUILDINGS, fenceVertical, MAP, SIZE, TILE, tileHash, treeSpot, WORLD } from '../sim/constants';
+import { EAVE, ridgeHeight, roofRise, ROOF_LAYER } from '../sim/roofs';
 
 import { buildFurniture, buildRugs } from './furniture';
 import { cloneMaterial, collectParts, mergeParts, mergeRigid, mergeStatic } from './merge';
@@ -51,14 +52,13 @@ const roofMats = {
   ceiling: new THREE.MeshBasicMaterial({ color: 0xa8a092 }),
 };
 
-const buildRoof = (x0: number, z0: number, w: number, d: number, barn: boolean, i: number) => {
+const buildRoof = (x0: number, z0: number, w: number, d: number, barn: boolean, i: number, rise: number) => {
   const g = new THREE.Group();
   const H = 2.6;
   const o = 0.4;
   const alongX = w >= d;
   const L = (alongX ? w : d) + o * 2;
   const S = (alongX ? d : w) + o * 2;
-  const rise = Math.min(barn ? 3.2 : 2.2, S * (barn ? 0.42 : 0.32));
   const pos = (u: number, v: number, y: number) => (alongX ? [x0 - o + u, y, z0 - o + v] : [x0 - o + v, y, z0 - o + u]);
   const quad = (a: number[], b: number[], c: number[], e: number[]) => [...a, ...b, ...c, ...a, ...c, ...e];
   const slopes = new THREE.BufferGeometry();
@@ -148,30 +148,30 @@ const place = (x: number, y: number, scale: number, rotY = 0, h = 0) =>
 
 const insideBuilding = (tx: number, ty: number) => BUILDINGS.some((b) => tx >= b.x0 && ty >= b.y0 && tx < b.x0 + b.w && ty < b.y0 + b.h);
 
-/** A red barn with white trim and a gable roof, built to the footprint. */
-const buildBarn = (w: number, d: number) => {
+/** A red barn with white trim and a gable roof, built to the footprint: walls `eave` high, the roof rising `rise` more. */
+const buildBarn = (w: number, d: number, eave = 4.2, rise = 3.2) => {
   const g = new THREE.Group();
   const red = new THREE.MeshStandardMaterial({ color: 0xb23b3b, flatShading: true, roughness: 0.85 });
   const white = new THREE.MeshStandardMaterial({ color: 0xf4f0e6, flatShading: true });
   const roofMat = new THREE.MeshStandardMaterial({ color: 0x4a3a36, flatShading: true, side: THREE.DoubleSide });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(w, 4.2, d), red);
-  body.position.y = 2.1;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, eave, d), red);
+  body.position.y = eave / 2;
   g.add(body);
   for (const [x, z] of [[-w / 2, -d / 2], [w / 2, -d / 2], [-w / 2, d / 2], [w / 2, d / 2]]) {
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.35, 4.3, 0.35), white);
-    post.position.set(x, 2.15, z);
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.35, eave + 0.1, 0.35), white);
+    post.position.set(x, (eave + 0.1) / 2, z);
     g.add(post);
   }
   const roof = new THREE.Shape();
   roof.moveTo(-d / 2 - 0.4, 0);
-  roof.lineTo(0, 3.2);
+  roof.lineTo(0, rise);
   roof.lineTo(d / 2 + 0.4, 0);
   roof.lineTo(-d / 2 - 0.4, 0);
   const geo = new THREE.ExtrudeGeometry(roof, { depth: w + 0.8, bevelEnabled: false });
   geo.translate(0, 0, -(w + 0.8) / 2);
   const roofMesh = new THREE.Mesh(geo, roofMat);
   roofMesh.rotation.y = Math.PI / 2;
-  roofMesh.position.y = 4.2;
+  roofMesh.position.y = eave;
   g.add(roofMesh);
   // Its colours baked into the vertices: one or two draw calls instead of one per board.
   g.traverse((o) => o instanceof THREE.Mesh && (o.castShadow = true));
@@ -203,7 +203,8 @@ export interface World {
   track: (set: { update: (v: ChunkView) => void }) => void;
   /** Hide the house you're standing in, swap crates for broken ones. */
   /** `firstPerson`: walls stay full height inside and the tree canopies are never cut away. */
-  update: (state: GameState, selfX: number, selfY: number, firstPerson?: boolean) => void;
+  /** `selfZ`: your feet's height (on a roof you are not inside the house under you). */
+  update: (state: GameState, selfX: number, selfY: number, firstPerson?: boolean, selfZ?: number) => void;
 }
 
 /**
@@ -445,7 +446,8 @@ export const buildWorld = (scene: THREE.Scene): World => {
   const roofs = mergeStatic(
     (() => {
       const g = new THREE.Group();
-      BUILDINGS.forEach((b, i) => g.add(buildRoof(b.x0 * TILE, b.y0 * TILE, b.w * TILE, b.h * TILE, b.barn, i)));
+      // The rise the sim walks on (sim/roofs.ts): a gable, or flat for the flat-roofed models.
+      BUILDINGS.forEach((b, i) => g.add(buildRoof(b.x0 * TILE, b.y0 * TILE, b.w * TILE, b.h * TILE, b.barn, i, roofRise(b))));
       return g;
     })(),
     { bake: true },
@@ -473,7 +475,8 @@ export const buildWorld = (scene: THREE.Scene): World => {
     if (turn) holder.rotation.y = Math.PI / 2;
     const fx = (turn ? d : w) / size.x;
     const fz = (turn ? w : d) / size.z;
-    holder.scale.set(fx, Math.min(fx, fz) * 0.85, fz);
+    // As tall as the roof you can stand on (sim/roofs.ts): its ridge is the model's top, so feet sit on the tiles.
+    holder.scale.set(fx, ridgeHeight(b) / size.y, fz);
     wrap.add(holder);
     wrap.position.set(b.x0 * TILE + w / 2, 0, b.y0 * TILE + d / 2);
     wrap.traverse((o) => {
@@ -495,7 +498,8 @@ export const buildWorld = (scene: THREE.Scene): World => {
   };
   BUILDINGS.forEach((b, i) => {
     if (!b.barn) return;
-    const barn = buildBarn(b.w * TILE, b.h * TILE);
+    // Built to the walkable roof (sim/roofs.ts): walls to the eaves, the roof up to the ridge, so feet sit on it.
+    const barn = buildBarn(b.w * TILE, b.h * TILE, EAVE, ridgeHeight(b) - EAVE);
     barn.position.set(b.x0 * TILE + (b.w * TILE) / 2, 0, b.y0 * TILE + (b.h * TILE) / 2);
     ownFadingMaterials(barn);
     barn.name = 'barn';
@@ -568,10 +572,10 @@ export const buildWorld = (scene: THREE.Scene): World => {
       natureUniforms.uReach.value = o.reach;
       nature.forEach((n) => n.update(view));
     },
-    update: (state, selfX, selfY, firstPerson = false) => {
+    update: (state, selfX, selfY, firstPerson = false, selfZ = 0) => {
       // Wind, and the canopy cut-out around you (4.5 m) so trees never hide your fighter.
       updateNature(performance.now() / 1000, selfX, selfY, firstPerson ? 0 : 4.5);
-      const inside = inBuilding(selfX, selfY);
+      const inside = selfZ >= ROOF_LAYER ? -1 : inBuilding(selfX, selfY);
       furniture.visible = rugs.visible = firstPerson || fade.some((f) => f < 0.98) || inside >= 0;
       roofs.visible = firstPerson;
       allInteriors.visible = firstPerson;

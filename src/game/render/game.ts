@@ -7,7 +7,8 @@ import { actionFor, DEFAULT_SETTINGS, keyLabel, keyMap } from '../settings';
 import type { VolumeKind } from '../sfx';
 import type { Action, Settings } from '../settings';
 import { ARMOR, HEALS, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITEMS, MAP, PLAYERS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
-import { canSee, carryCap, healChoice, inPlant, inWater, lineOfSight, lootUnder, reloadTime, solidAt, throwDistance } from '../sim/step';
+import { canSee, carryCap, chestHeight, feetOf, healChoice, inPlant, inWater, lineOfSight, lootUnder, reloadTime, solidAt, throwDistance } from '../sim/step';
+import { buildingAt, roofAt } from '../sim/roofs';
 import { createOfflineSession } from '../net/session';
 import { NO_INPUT } from '../sim/types';
 
@@ -27,6 +28,7 @@ import { mergeRigid } from './merge';
 import { createPerfOverlay, PERF_KEY, perfRequested } from './perfOverlay';
 import { FpsGuard, lowerTier, TIERS } from './quality';
 import { buildWorld } from './world';
+import { buildLadders } from './ladders';
 
 import type { Rig } from './characters';
 import type { GunKind } from './guns';
@@ -120,7 +122,7 @@ export interface HudState {
 }
 
 export type AimMode = 'auto' | 'mouse';
-export type TouchButton = 'fire' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR' | 'scope' | 'swap' | 'heal';
+export type TouchButton = 'fire' | 'jump' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR' | 'scope' | 'swap' | 'heal';
 
 export interface MatchOptions {
   fighter: FighterId;
@@ -276,6 +278,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   // ---------- the world: ground, houses, trees, bushes, rocks, fences, crates
   const buildT0 = performance.now();
   const world = buildWorld(scene);
+  scene.add(buildLadders());
   const buildMs = performance.now() - buildT0;
   // Cars, containers, tents, the windmill, the pond, animals and birds.
   const props = buildProps(scene);
@@ -488,13 +491,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     };
     const m = new THREE.Matrix4();
     const c = new THREE.Color();
-    type Fx = { x: number; y: number; id: number; color: THREE.Color; beam: number; beamH: number; glowS: number };
+    type Fx = { x: number; y: number; z: number; id: number; color: THREE.Color; beam: number; beamH: number; glowS: number };
     return (list: Fx[]) => {
       grow(list.length);
       if (!glows || !beams) return;
       list.forEach((l, i) => {
-        glows!.setMatrixAt(i, m.makeScale(l.glowS, 1, l.glowS).setPosition(l.x, 0, l.y));
-        beams!.setMatrixAt(i, m.makeScale(1, l.beamH, 1).setPosition(l.x, 0, l.y));
+        glows!.setMatrixAt(i, m.makeScale(l.glowS, 1, l.glowS).setPosition(l.x, l.z, l.y));
+        beams!.setMatrixAt(i, m.makeScale(1, l.beamH, 1).setPosition(l.x, l.z, l.y));
         glows!.setColorAt(i, c.copy(l.color).multiplyScalar(0.6 + Math.sin(time * 3 + l.id) * 0.2));
         // Additive: the beam's opacity is its colour scaled.
         beams!.setColorAt(i, c.copy(l.color).multiplyScalar(l.beam));
@@ -616,8 +619,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     for (; d < 160; d += 0.5) {
       const px = x + Math.cos(angle) * d;
       const py = y + Math.sin(angle) * d;
-      if (h < 3 && solidAt(state, px, py)) break;
-      if (state.players.some((o) => o.alive && o.stage !== 'drone' && Math.hypot(o.x - px, o.y - py) < 0.6 && Math.hypot(o.x - x, o.y - y) > 1)) break;
+      if (solidAt(state, px, py, h)) break;
+      if (state.players.some((o) => o.alive && o.stage !== 'drone' && Math.hypot(o.x - px, o.y - py) < 0.6 && Math.hypot(o.x - x, o.y - y) > 1 && Math.abs(chestHeight(o) - h) < 1)) break;
     }
     const m = contrails[nextContrail++ % contrails.length];
     m.position.set(x + Math.cos(angle) * 0.8, h, y + Math.sin(angle) * 0.8);
@@ -773,8 +776,22 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** Where the mouse points on the battlefield, at chest height. */
   const mouseAim = () => {
     raycaster.setFromCamera(mouse, camera);
-    return raycaster.ray.intersectPlane(aimPlane, aimHit) ? { x: aimHit.x, y: aimHit.z } : null;
+    // Someone up high (on a roof, a ladder) under the cursor: aim at them, not at the ground far behind them.
+    const r = raycaster.ray;
+    let best: { x: number; y: number } | null = null;
+    let bd = 1;
+    for (const o of state.players) {
+      if (o.id === me || !o.alive || o.stage !== 'ground' || o.z < 0.5) continue;
+      const d = r.distanceToPoint(tmpAim.set(o.x, chestHeight(o), o.y));
+      if (d < bd) {
+        bd = d;
+        best = { x: o.x, y: o.y };
+      }
+    }
+    if (best) return best;
+    return r.intersectPlane(aimPlane, aimHit) ? { x: aimHit.x, y: aimHit.z } : null;
   };
+  const tmpAim = new THREE.Vector3();
   let muted = sfx.muted;
   const onDown = (e: KeyboardEvent) => {
     sfx.unlock();
@@ -828,6 +845,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   let armNow = 3.2;
   /** Where the crosshair points on the map this frame (the shoulder view aims there, not straight ahead of you). */
   const crossAim = { x: 0, y: 0 };
+  /** First person: the fighter under the crosshair (in 3D, so someone on a roof or below one), else none (aim straight ahead). */
+  const fpAim = { x: 0, y: 0, on: false };
   const onLockChange = () => {
     locked = document.pointerLockElement === canvas;
   };
@@ -966,7 +985,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const d = Math.hypot(o.x - p.x, o.y - p.y) || 1;
     const sx = (-(o.y - p.y) / d) * 0.45;
     const sy = ((o.x - p.x) / d) * 0.45;
-    return [0, 1, -1].some((k) => lineOfSight(state, p.x, p.y, o.x + sx * k, o.y + sy * k));
+    return [0, 1, -1].some((k) => lineOfSight(state, p.x, p.y, o.x + sx * k, o.y + sy * k, chestHeight(p), chestHeight(o)));
   };
   let aimTarget: Player | null = null;
   const autoAim = (p: Player) => {
@@ -1012,6 +1031,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   let lastMove = { x: 1, y: 0 };
   /** Is any key bound to this action held? */
   const held = (a: Action) => bound[a].some((k) => keys.has(k) || tapped.has(k));
+  /** The jump key on your feet (a hop; up on a roof too); on the plane and in the air the fire key jumps and pulls the canopy as before, and so does the jump key. */
+  const hopKey = (p: Player) => held('jump') || btn('jump') || (p.stage !== 'ground' && (held('fire') || btn('fire')));
   const readInput = (): Input => {
     const p = state.players[me];
     if (mouseLook()) {
@@ -1035,7 +1056,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const input: Input = {
         mx, my,
         fire: held('fire') || mouseDown || btn('fire'),
-        jump: held('fire') || btn('fire'),
+        jump: hopKey(p),
         super: held('super') || btn('super'),
         use: held('use') || btn('use'),
         lean: (held('leanR') || btn('leanR') ? 1 : 0) - (held('leanL') || btn('leanL') ? 1 : 0),
@@ -1045,8 +1066,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         snap: true,
         scope: scopeHeld(p),
         pitch: viewPitch,
-        aimX: shoulder ? crossAim.x : p.x + c * 30,
-        aimY: shoulder ? crossAim.y : p.y + sn * 30,
+        aimX: shoulder ? crossAim.x : fpAim.on ? fpAim.x : p.x + c * 30,
+        aimY: shoulder ? crossAim.y : fpAim.on ? fpAim.y : p.y + sn * 30,
       };
       lastThrowAim = null;
       touchLatched.clear();
@@ -1070,7 +1091,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const input = {
       mx, my,
       fire: held('fire') || (aimMode === 'mouse' && mouseDown) || btn('fire'),
-      jump: held('fire') || btn('fire'),
+      jump: hopKey(p),
       // Battle-royale keys: Q / E lean, F picks up or uses, G is the super.
       super: held('super') || btn('super'),
       use: held('use') || btn('use'),
@@ -1159,11 +1180,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           else sfx.gunshot(SOUND[e.weapon], e.x - camX(), d);
         }
         if (e.owner === me && (e.weapon === 'shotgun' || e.weapon === 'sniper')) trauma = Math.min(1, trauma + 0.2);
-        if (e.weapon === 'sniper') contrail(e.x, e.y, e.angle, 1.15);
+        if (e.weapon === 'sniper') contrail(e.x, e.y, e.angle, chestHeight(state.players[e.owner]) + 0.05);
         break;
       }
       case 'hit':
-        vfx.burst(e.x, 1.1, 5 + Math.round(e.damage / 60), e.armor ? 'guard' : 'spark', { z: e.y, speed: 3, life: 0.3 });
+        vfx.burst(e.x, chestHeight(state.players[e.target]), 5 + Math.round(e.damage / 60), e.armor ? 'guard' : 'spark', { z: e.y, speed: 3, life: 0.3 });
         // Damage numbers for the hits you land, and for the ones you take.
         if (e.by === me || e.target === me) popDamage(e.target, e.x, e.y, e.damage, e.target === me ? 'taken' : e.ko ? 'ko' : e.armor ? 'armor' : 'dealt');
         if (e.target === me) trauma = Math.min(1, trauma + 0.25);
@@ -1190,11 +1211,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         }
         break;
       case 'impact':
-        vfx.burst(e.x, 1, 3, 'dust', { z: e.y,  speed: 2, up: 1, gravity: 6, life: 0.25, size: 0.7 });
+        vfx.burst(e.x, e.z ?? 1, 3, 'dust', { z: e.y,  speed: 2, up: 1, gravity: 6, life: 0.25, size: 0.7 });
         break;
       case 'explosion':
-        vfx.burst(e.x, 1, 40, 'hot', { z: e.y,  speed: 9, up: 4, life: 0.6, size: 1.6 });
-        vfx.burst(e.x, 1, 18, 'dust', { z: e.y,  speed: 4, up: 2, gravity: -1, life: 1, size: 2.4 });
+        vfx.burst(e.x, (e.z ?? 0) + 1, 40, 'hot', { z: e.y,  speed: 9, up: 4, life: 0.6, size: 1.6 });
+        vfx.burst(e.x, (e.z ?? 0) + 1, 18, 'dust', { z: e.y,  speed: 4, up: 2, gravity: -1, life: 1, size: 2.4 });
         if (Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y) < 20) trauma = Math.min(1, trauma + 0.5);
         sfx.explosion(e.x - camX());
         break;
@@ -1236,9 +1257,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       case 'heal':
         if (e.player === me && e.done) sfx.pickup();
         break;
+      case 'thud':
+        vfx.burst(e.x, (e.z ?? 0) + 0.15, 8, 'dust', { z: e.y, speed: 2.4, up: 0.8, gravity: 4, life: 0.35 });
+        if (e.player === me) sfx.land();
+        break;
       case 'land':
         landAt[e.player] = time;
-        vfx.burst(e.x, 0.2, 12, 'dust', { z: e.y,  speed: 3, up: 1, gravity: 4, life: 0.4 });
+        vfx.burst(e.x, (e.z ?? 0) + 0.2, 12, 'dust', { z: e.y,  speed: 3, up: 1, gravity: 4, life: 0.4 });
         if (e.player === me) sfx.land();
         break;
       case 'ko': {
@@ -1606,7 +1631,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     }
   };
 
-  const prev = state.players.map((p) => ({ x: p.x, y: p.y, alt: p.alt }));
+  const prev = state.players.map((p) => ({ x: p.x, y: p.y, alt: p.alt, z: p.z }));
   let fallTime = 0;
   /** The opening's camera dip: offset (m) and its rate, and last frame's descent speed. */
   const camDip = { o: 0, v: 0 };
@@ -1718,7 +1743,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       if (hadChute && !chutes[i].visible) releaseChute(i, p.stage === 'falling');
       // Free fall from the plane down to chute height, then drift slowly under the canopy.
       // Height interpolated between ticks like x and y, so the fall is smooth at any frame rate.
-      let h = p.stage === 'falling' ? Math.max(0, prev[i].alt + (p.alt - prev[i].alt) * alpha) : 0;
+      // On the ground: the feet's height (a roof, a hop, a ladder), interpolated the same way.
+      let h = p.stage === 'falling' ? Math.max(0, prev[i].alt + (p.alt - prev[i].alt) * alpha) : (prev[i].z ?? 0) + ((p.z ?? 0) - (prev[i].z ?? 0)) * alpha;
       // Standing on a bridge or the pier lifts you onto its deck, smoothly at its ends.
       const onDeck = p.stage === 'ground' && MAP[Math.floor(y / TILE)]?.[Math.floor(x / TILE)] === 'd' ? DECK_Y : 0;
       deck[i] += (onDeck - deck[i]) * Math.min(1, dt * 14);
@@ -1785,7 +1811,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         }
       } else if (p.stage === 'ground') {
         poseTopDown(rig, {
-          dt, time, vx: p.vx, vy: p.vy, yaw: yw.a, yawRate: yw.v, onGround: true, dashing: p.dashTime > 0,
+          dt, time, vx: p.vx, vy: p.vy, yaw: yw.a, yawRate: yw.v, onGround: !p.jz, dashing: p.dashTime > 0,
           gun: p.weapon, sinceShot,
           reload: p.reload > 0 ? 1 - p.reload / reloadTime(p) : null,
           lean: p.lean,
@@ -1895,8 +1921,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
       // Health bar over the head, facing the camera.
       const bar = bars[i];
-      bar.g.visible = visible && p.alive && p.stage === 'ground' && !(i === me && mouseLook());
-      bar.g.position.set(x, 2.7, y);
+      // The bars draw over everything: at eye level (first person, over the shoulder) only for people you have a clear
+      // line to, so a bar never shows someone behind a wall or under a roof.
+      const barSeen = i === me || !mouseLook() || (p.stage === 'ground' && lineOfSight(state, self.x, self.y, p.x, p.y, chestHeight(self) + 0.5, chestHeight(p) + 0.6));
+      bar.g.visible = visible && p.alive && p.stage === 'ground' && !(i === me && mouseLook()) && barSeen;
+      bar.g.position.set(x, 2.7 + (p.stage === 'ground' ? (p.z ?? 0) : 0), y);
       bar.g.quaternion.copy(camera.quaternion);
       const k = Math.max(0.001, p.hp / p.maxHp);
       bar.fill.scale.x = k;
@@ -1907,14 +1936,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       bar.armor.visible = p.armor > 0;
     });
     // Over the shoulder the camera can be indoors with you: buildings are drawn as in first person (ceilings, no lifted roofs).
-    world.update(state, self.x, self.y, firstPerson() || shoulderView());
+    world.update(state, self.x, self.y, firstPerson() || shoulderView(), self.stage === 'ground' ? self.z : 0);
     updateThrowPreview(self, selfX, selfY);
     // By id: online the state object is replaced on every correction from the host.
     const tgt = aimMode === 'auto' && self.alive && self.stage !== 'drone' && aimTarget ? state.players[aimTarget.id] : null;
     reticle.visible = !!tgt && tgt.alive && !mouseLook();
     if (tgt) {
       const ti = tgt.id;
-      reticle.position.set(prev[ti].x + (tgt.x - prev[ti].x) * alpha, 0.1, prev[ti].y + (tgt.y - prev[ti].y) * alpha);
+      reticle.position.set(prev[ti].x + (tgt.x - prev[ti].x) * alpha, 0.1 + feetOf(tgt), prev[ti].y + (tgt.y - prev[ti].y) * alpha);
       reticle.rotation.y = time * 1.5;
       reticle.scale.setScalar(1 + Math.sin(time * 8) * 0.05);
     }
@@ -1923,12 +1952,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // Loot: every item floats and turns; all items of a kind are drawn together (see lootDraw).
     for (const l of state.loot) {
       const look = lootLook(l);
-      lootFxList.push({ x: l.x, y: l.y, id: l.id, color: look.color, beam: look.beam, beamH: look.beamH, glowS: look.glowS });
+      const lz = l.z ?? 0;
+      // Indoors the beam stops under the ceiling, so it never pokes up through the roof.
+      const beamH = lz === 0 && buildingAt(l.x, l.y) >= 0 ? Math.min(look.beamH, 0.85) : look.beamH;
+      lootFxList.push({ x: l.x, y: l.y, z: lz, id: l.id, color: look.color, beam: look.beam, beamH, glowS: look.glowS });
       // Off screen (last frame's view, with a margin): not drawn.
-      lootPos.set(l.x, 0.8, l.y);
+      lootPos.set(l.x, 0.8 + lz, l.y);
       if (lootFrustum.planes.some((pl) => pl.distanceToPoint(lootPos) < -3)) continue;
       lootEuler.set(look.tilt.x, time * 0.9 + l.id, look.tilt.z, look.tilt.order);
-      lootM.compose(lootPos.set(l.x, 0.75 + Math.sin(time * 2.6 + l.id) * 0.1, l.y), lootQ.setFromEuler(lootEuler), lootOne);
+      lootM.compose(lootPos.set(l.x, lz + 0.75 + Math.sin(time * 2.6 + l.id) * 0.1, l.y), lootQ.setFromEuler(lootEuler), lootOne);
       look.add(lootM);
     }
     lootDraw();
@@ -2083,8 +2115,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       ahead.y += ((still ? 0 : ly * cap) - ahead.y) * ka;
       const ax0 = settings.reducedMotion ? 0 : ahead.x;
       const ay0 = settings.reducedMotion ? 0 : ahead.y;
-      want = camNear < 1 ? new THREE.Vector3(selfX + 2, 3.2, selfY + 4) : new THREE.Vector3(selfX + ax0, 36 * k, selfY + ay0 + 22 * k);
-      look = camNear < 1 ? new THREE.Vector3(selfX, 1.1, selfY) : new THREE.Vector3(selfX + ax0, 0, selfY + ay0 + 1);
+      // Up on a roof the whole view rises with you (not with a hop), so you stay in the middle of the screen.
+      const lift = self.z >= 1.5 ? selfH : 0;
+      want = camNear < 1 ? new THREE.Vector3(selfX + 2, 3.2 + lift, selfY + 4) : new THREE.Vector3(selfX + ax0, 36 * k + lift, selfY + ay0 + 22 * k);
+      look = camNear < 1 ? new THREE.Vector3(selfX, 1.1 + lift, selfY) : new THREE.Vector3(selfX + ax0, lift, selfY + ay0 + 1);
       if (scoped && camNear >= 1) {
         // Through the scope from above: the view slides far out the way you aim and pulls up,
         // so you see (and auto-aim reaches) people well past the normal screen.
@@ -2154,6 +2188,27 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       tmpV.set(camera.position.x + c * Math.cos(viewPitch), camera.position.y + Math.sin(viewPitch), camera.position.z + sn * Math.cos(viewPitch));
       camera.lookAt(tmpV);
       camera.rotateZ(-self.lean * 0.3);
+      {
+        // Who is under the crosshair (chest within 0.9 m of the view ray): rounds go to them, up or down.
+        const dx = c * Math.cos(viewPitch);
+        const dy = Math.sin(viewPitch);
+        const dz = sn * Math.cos(viewPitch);
+        let best = 60;
+        fpAim.on = false;
+        for (let i = 0; i < state.players.length; i++) {
+          const o = state.players[i];
+          if (i === me || !o.alive || o.stage === 'drone') continue;
+          const ox = o.x - camera.position.x;
+          const oy = chestHeight(o) - camera.position.y;
+          const oz = o.y - camera.position.z;
+          const along = ox * dx + oy * dy + oz * dz;
+          if (along <= 0.5 || along >= best) continue;
+          if (Math.hypot(ox - dx * along, oy - dy * along, oz - dz * along) < 0.9) {
+            best = along;
+            Object.assign(fpAim, { x: o.x, y: o.y, on: true });
+          }
+        }
+      }
       // The shake in first person turns the view a little (about a degree at most) instead of
       // moving your eyes: a jolt, not a slide. Only the view: where you aim does not move.
       camera.rotateY(n(13, 5) * 0.02 * shake);
@@ -2200,18 +2255,21 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const px = selfX - sn * side;
       const pz = selfY + c * side;
       const wantArm = air ? 7 : scoped ? 1.4 : 3.2;
-      // Walls and ceilings: march out along the arm and stop short of the first wall (2D walls, the 2.6 m ceiling indoors).
+      // Walls, ceilings and roofs: march out along the arm and stop short of the first solid (walls to their tops, the roof
+      // slab over a house from its ceiling to its roof surface, so indoors the camera stays under the ceiling and up on a
+      // roof it stays above the tiles).
       const bx = -c * cp;
       const bz = -sn * cp;
       const by = -Math.sin(viewPitch);
       let reach = wantArm;
       if (!air) {
-        const indoor = tileAt(Math.floor(selfX / TILE), Math.floor(selfY / TILE)) === '.';
         for (let d = 0.25; d <= wantArm; d += 0.25) {
           const x = px + bx * d;
           const z = pz + bz * d;
           const y = pivotY + by * d;
-          if (solidAt(state, x, z) || y < 0.25 || (indoor && y > 2.35)) {
+          const r = roofAt(x, z);
+          const underRoof = r >= 0 && selfH < 1.5 && buildingAt(x, z) === buildingAt(selfX, selfY);
+          if (solidAt(state, x, z, y) || solidAt(state, x, z, y + 0.12) || y < 0.25 || (r >= 0 && !underRoof && y < r + 0.25 && y > 2.2) || (underRoof && y > 2.33)) {
             reach = Math.max(0.35, d - 0.3);
             break;
           }
@@ -2242,7 +2300,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         const o = state.players[i];
         if (i === me || !o.alive || o.stage === 'drone') continue;
         const ox = o.x - camera.position.x;
-        const oy = (o.stage === 'falling' ? Math.max(0, o.alt) : 0) + 1.1 - camera.position.y;
+        const oy = chestHeight(o) - camera.position.y;
         const oz = o.y - camera.position.z;
         const along = ox * dx + oy * dy + oz * dz;
         if (along <= armNow || along >= hitT) continue;
@@ -2495,7 +2553,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // Paused (offline only): the world freezes, the camera and effects keep drawing.
     acc = paused && !session.online ? 0 : acc + dt;
     while (acc >= DT) {
-      state.players.forEach((p, i) => Object.assign(prev[i], { x: p.x, y: p.y, alt: p.alt }));
+      state.players.forEach((p, i) => Object.assign(prev[i], { x: p.x, y: p.y, alt: p.alt, z: p.z }));
       const events = session.tick(state.players[me].alive ? readInput() : NO_INPUT);
       // A guest's state is replaced by the host's on every correction: always read it back.
       state = session.state;
