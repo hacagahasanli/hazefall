@@ -717,29 +717,72 @@ export const SUPERS = {
 // ---------------------------------------------------------------------------
 
 /**
- * The plane flies slowly, above the clouds. You free-fall through the cloud layer, the parachute
- * opens once you're below it, and you drift down. Heights are in metres, times in seconds.
+ * The plane flies slowly, above the clouds. You jump, fall through the cloud layer with real gravity and drag, the
+ * canopy deploys below it (or earlier, on Space) and slows you hard over about a second, then you glide down under it.
+ * Heights in metres, speeds in m/s, times in seconds. Tuned so a whole drop still takes about 8.2 s (`glide`), the
+ * length the match pacing was balanced on: about 3.1 s of free fall to 40 m, 1.1 s of opening, 4 s under the canopy.
  */
 export const DROP = {
   flight: 20,
   /** Past this point of the route everyone still aboard is pushed out. */
   forceJump: 0.85,
-  freefall: 3.2,
-  chute: 5,
-  freefallSpeed: 14,
-  chuteSpeed: 7,
+  /** Total seconds from the door to the ground with the canopy opened at `deployAlt` (what the sim tests hold it to). */
   glide: 8.2,
   height: 75,
-  chuteHeight: 30,
   cloudLow: 44,
   cloudHigh: 58,
+  gravity: 9.8,
+  /** Terminal speed falling belly to earth, and under the open canopy. */
+  freefallTerminal: 20,
+  chuteTerminal: 5.7,
+  /** The canopy opens by itself at this height; Space opens it earlier, once you have fallen this far (about a second). */
+  deployAlt: 40,
+  minFreefallDrop: 5,
+  /**
+   * The opening, in seconds since the pull: the bag leaves the pack and the lines pay out (drag up by 60 %) until
+   * `stretch`, then the cells inflate (drag ramps to the canopy's on a smoothstep) until `deployTime`.
+   */
+  stretch: 0.5,
+  deployTime: 1.1,
+  /** The last metres: the jumper flares (both toggles down) and the descent eases off for the touchdown. */
+  flareAlt: 2.5,
+  flareTerminal: 3.4,
+  /** Top steering speeds, and how fast the body's momentum follows the stick (1/s): brisk in free fall, floaty under the canopy. */
+  freefallSpeed: 14,
+  chuteSpeed: 7,
+  freefallResponse: 1.8,
+  chuteResponse: 1.1,
+  /** Share of the plane's speed you leave the door with (it bleeds off with the momentum response). */
+  exitThrow: 0.5,
+  /** The wind's drift (m/s), felt under the canopy, and the turbulence wobble (m/s^2) at full speed. */
+  wind: 0.6,
+  turbulence: 0.5,
+  /** Legacy: below this height (m) the canopy is open, for anything that still asks by height. */
+  chuteHeight: 40,
 };
 
-/** How high a falling player is, from the seconds of descent they have left. */
-export const fallHeight = (fall: number) =>
-  fall <= DROP.chute
-    ? 1 + (DROP.chuteHeight - 1) * (fall / DROP.chute)
-    : DROP.chuteHeight + (DROP.height - DROP.chuteHeight) * Math.min(1, (fall - DROP.chute) / DROP.freefall);
+/** Seconds the canopy has been opening, 0..1 of the way (0 before the pull). */
+export const deployProgress = (canopy: number) => (canopy < 0 ? 0 : Math.min(1, canopy / DROP.deployTime));
+
+/**
+ * The drag coefficient (per metre) at a moment of the opening: free fall's before the pull, up by 60 % while the bag
+ * and lines pay out, then a smoothstep up to the canopy's while the cells inflate, and the flare's near the ground.
+ */
+export const dragAt = (canopy: number, alt: number) => {
+  const g = DROP.gravity;
+  const kF = g / (DROP.freefallTerminal * DROP.freefallTerminal);
+  if (canopy < 0) return kF;
+  if (canopy < DROP.stretch) return kF * (1 + 0.6 * (canopy / DROP.stretch));
+  const s = Math.min(1, (canopy - DROP.stretch) / (DROP.deployTime - DROP.stretch));
+  const kC = g / (DROP.chuteTerminal * DROP.chuteTerminal);
+  const k = kF * 1.6 + (kC - kF * 1.6) * s * s * (3 - 2 * s);
+  if (s < 1 || alt > DROP.flareAlt) return k;
+  const kL = g / (DROP.flareTerminal * DROP.flareTerminal);
+  return k + (kL - k) * Math.min(1, (DROP.flareAlt - alt) / DROP.flareAlt * 2);
+};
+
+/** Under an open (or opening) canopy: steering is gentle and you can shoot. */
+export const underCanopy = (p: { stage: string; canopy: number }) => p.stage === 'falling' && p.canopy >= 0;
 
 /** Swimming: a little under half running speed (a good swimmer's ~2 m/s). */
 export const SWIM = { speed: 0.42 };

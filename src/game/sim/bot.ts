@@ -1,5 +1,5 @@
 import { aimError, bestLoot, campSpot, CLOSE, coverPoint, ENGAGE_AT, engageScore, fallbackPersona, FIRE_RANGE, gunScore, isAutomatic, landingPlan, makePersona, mulberry32, PREFERRED, LANDING_GRACE, stagePace, tierOf } from './bot-params';
-import { DT, HEALS, magOf, WEAPONS, WORLD } from './constants';
+import { DROP, DT, HEALS, magOf, WEAPONS, WORLD } from './constants';
 import { canSee, healChoice, lineOfSight, lootUnder } from './step';
 import { NO_INPUT } from './types';
 
@@ -373,11 +373,19 @@ export const createBot = (id: number, seed: number) => {
     listen(state, me, now);
     if (me.stage === 'drone') return { ...NO_INPUT, jump: state.drone.t >= spot.t };
     if (me.stage === 'falling') {
-      // Steer straight for my landing spot.
-      const dx = spot.x - me.x;
-      const dy = spot.y - me.y;
-      const len = Math.hypot(dx, dy);
-      return len < 0.6 ? NO_INPUT : { ...NO_INPUT, mx: dx / len, my: dy / len };
+      // Steer for my landing spot. The body has momentum, so ask for a velocity that shrinks as the spot comes
+      // closer (gain = response / 2: damped to ~0.7, a few per cent of overshoot at most) instead of flying at it flat out and overshooting.
+      const open = me.canopy >= DROP.stretch;
+      const speed = open ? DROP.chuteSpeed : DROP.freefallSpeed;
+      const gain = (open ? DROP.chuteResponse : DROP.freefallResponse) / 2;
+      let mx = ((spot.x - me.x) * gain) / speed;
+      let my = ((spot.y - me.y) * gain) / speed;
+      const len = Math.hypot(mx, my);
+      if (len > 1) {
+        mx /= len;
+        my /= len;
+      }
+      return len < 0.01 ? NO_INPUT : { ...NO_INPUT, mx, my };
     }
     if (mode === 'drop') {
       mode = 'roam';

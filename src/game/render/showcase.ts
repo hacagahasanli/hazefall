@@ -4,7 +4,7 @@ import { DROP, FIGHTERS, WORLD } from '../sim/constants';
 import { createGame } from '../sim/step';
 
 import { buildRig, poseChute, poseTopDown } from './characters';
-import { buildChute, HARNESS_BACK } from './chute';
+import { buildChute, chuteQuaternion, hangChute, newChuteMotion } from './chute';
 import { buildGun } from './guns';
 import { buildPlane } from './plane';
 import { buildProps } from './props';
@@ -66,7 +66,7 @@ export const startShowcase = (canvas: HTMLCanvasElement, onReady: () => void, op
     const chute = buildChute(FIGHTERS[id].color);
     scene.add(rig.root, chute);
     // Spread over the right of the view, clear of the title on the left.
-    return { rig, chute, i, offset: [2, 11, 20, 29][i], depth: [6, -4, 10, -1][i], phase: i * 0.27 };
+    return { rig, chute, motion: newChuteMotion(0), q: new THREE.Quaternion(), i, offset: [2, 11, 20, 29][i], depth: [6, -4, 10, -1][i], phase: i * 0.27 };
   });
 
   const resize = () => {
@@ -115,12 +115,15 @@ export const startShowcase = (canvas: HTMLCanvasElement, onReady: () => void, op
       const h = 44 - f * 32;
       const x = look.x + j.offset + Math.sin(time * 0.4 + j.i) * 1.5;
       const z = look.z + 24 + j.depth;
-      poseChute(j.rig, { dt, time, seed: j.i, steerX: Math.sin(time * 0.4 + j.i) * 2, steerZ: 0, shooting: false });
+      const turn = Math.sin(time * 0.4 + j.i) * 0.5;
       j.rig.root.position.set(x, h, z);
       j.rig.root.rotation.y = Math.PI + Math.sin(time * 0.3 + j.i) * 0.4; // facing the camera, turning a little
+      j.motion.yaw = Math.PI / 2 - j.rig.root.rotation.y;
+      j.motion.bank = turn * 0.3;
+      j.motion.pitch = Math.sin(time * 0.9 + j.i) * 0.03;
+      poseChute(j.rig, { dt, time, seed: j.i, canopy: 9, brakeL: Math.max(0, turn), brakeR: Math.max(0, -turn), turn, bank: j.motion.bank, pitch: j.motion.pitch, flare: 0, shooting: false });
       j.rig.root.updateMatrixWorld(true);
-      j.rig.root.localToWorld(j.chute.position.set(0, j.rig.shoulderL.y, HARNESS_BACK));
-      j.chute.rotation.set(0, j.rig.root.rotation.y, Math.sin(time * 1.1 + j.i) * 0.06);
+      hangChute(j.chute, j.rig, chuteQuaternion(j.motion, j.q), { canopy: 9, time, seed: j.i, brakeL: Math.max(0, turn), brakeR: Math.max(0, -turn) });
     }
     world.update(state, -999, -999);
     props.update(time, dt);

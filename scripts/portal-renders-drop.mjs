@@ -31,7 +31,7 @@ for (const z of ['0.55', '0.75']) await shot(`B-fight-${z}`, `zoom=${z}`, async 
   await p.evaluate(() => {
     const s = window.__lcs.state(), me = s.players[0];
     Object.assign(me, { weapon: 'rifle', mag: 25, ammo: 75 });
-    [[5, 2], [-4, 4], [2, -6]].forEach(([dx, dy], i) => Object.assign(s.players[i + 1], { stage: 'ground', fall: 0, x: me.x + dx, y: me.y + dy, weapon: ['shotgun', 'smg', 'sniper'][i], mag: 6, ammo: 20 }));
+    [[5, 2], [-4, 4], [2, -6]].forEach(([dx, dy], i) => Object.assign(s.players[i + 1], { stage: 'ground', alt: 0, x: me.x + dx, y: me.y + dy, weapon: ['shotgun', 'smg', 'sniper'][i], mag: 6, ammo: 20 }));
   });
   await p.keyboard.down('Space');
   await p.waitForTimeout(1300);
@@ -42,7 +42,7 @@ await shot('C-storm', 'zoom=0.8', async (p) => {
   await p.evaluate(() => {
     const s = window.__lcs.state(), me = s.players[0];
     Object.assign(s.zone, { cx: me.x + 6, cy: me.y - 4, r: 11 });
-    [[4, 3], [-3, -2]].forEach(([dx, dy], i) => Object.assign(s.players[i + 1], { stage: 'ground', fall: 0, x: me.x + dx, y: me.y + dy, weapon: 'rifle', mag: 25, ammo: 50 }));
+    [[4, 3], [-3, -2]].forEach(([dx, dy], i) => Object.assign(s.players[i + 1], { stage: 'ground', alt: 0, x: me.x + dx, y: me.y + dy, weapon: 'rifle', mag: 25, ammo: 50 }));
   });
   await p.waitForTimeout(1500);
 });

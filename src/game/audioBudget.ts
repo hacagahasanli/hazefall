@@ -27,6 +27,8 @@ export const BUDGET = {
   glass: { cooldownMs: 150, maxVoices: 1, lengthMs: 400 },
   push: { cooldownMs: 120, maxVoices: 2, lengthMs: 300 },
   ko: { cooldownMs: 150, maxVoices: 2, lengthMs: 700 },
+  // Canopies opening: twenty jumpers open within a few seconds of each other; three at a time is plenty.
+  chute: { cooldownMs: 80, maxVoices: 3, lengthMs: 950 },
   // Menu ticks: holding an arrow key repeats ~30 times a second; a tick every 45 ms at most.
   uiTick: { cooldownMs: 45, maxVoices: 2, lengthMs: 120 },
   // Screen wipes: one at a time; a burst of transitions (skipping through) makes one whoosh, not a roar.

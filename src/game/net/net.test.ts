@@ -87,13 +87,13 @@ const OPEN = (() => {
 
 /** Everyone lands on the meadow at once, in a row (player 1 out in front), so the test can get to the fighting. */
 const landAll = (
-  states: { players: { stage: string; fall: number; x: number; y: number }[] }[],
+  states: { players: { stage: string; alt: number; x: number; y: number }[] }[],
 ) => {
   for (const s of states)
     s.players.forEach((p, i) =>
       Object.assign(p, {
         stage: 'ground',
-        fall: 0,
+        alt: 0,
         x: OPEN.x + (i === 1 ? 12 : i * 1.2),
         y: OPEN.y,
       }),

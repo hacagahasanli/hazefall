@@ -6,18 +6,18 @@ import { actionFor, DEFAULT_SETTINGS, keyLabel, keyMap } from '../settings';
 
 import type { VolumeKind } from '../sfx';
 import type { Action, Settings } from '../settings';
-import { ARMOR, HEALS, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, ITEMS, MAP, PLAYERS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
+import { ARMOR, HEALS, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITEMS, MAP, PLAYERS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
 import { canSee, carryCap, healChoice, inPlant, inWater, lineOfSight, lootUnder, reloadTime, solidAt, throwDistance } from '../sim/step';
 import { createOfflineSession } from '../net/session';
 import { NO_INPUT } from '../sim/types';
 
-import { buildRig, fighterLook, poseChute, poseDeath, poseFreefall, poseRig, poseSwim, poseTopDown } from './characters';
+import { buildRig, fighterLook, leaveAir, poseChute, poseDeath, poseFreefall, poseRig, poseSwim, poseTopDown } from './characters';
 import { buildGun } from './guns';
 import { mat, mesh, PALETTE } from './palette';
 import { createVfx } from './vfx';
 import { createHitOverlay, flinchCurve, hitstopFor } from './feedback';
 import { setPeople, updateNature } from './nature';
-import { buildChute, HARNESS_BACK } from './chute';
+import { buildChute, chuteQuaternion, hangChute, moveChute, newChuteMotion } from './chute';
 import { PICKUP_ICON } from './icons';
 import { paintMapImage } from './mapImage';
 import { buildPlane } from './plane';
@@ -1063,7 +1063,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     if (sp > 0.8) lastMove = { x: p.vx / sp, y: p.vy / sp };
     else if (mx || my) lastMove = { x: mx, y: my };
     // On the ground or under the parachute you aim (and auto-aim) at people.
-    const canAim = p.stage === 'ground' || (p.stage === 'falling' && p.fall <= DROP.chute);
+    const canAim = p.stage === 'ground' || (p.stage === 'falling' && p.canopy >= DROP.deployTime);
     const pointed = aimMode === 'mouse' && !touch && canAim ? mouseAim() : null;
     const target = canAim && !pointed ? autoAim(p) : null;
     const aim = pointed ?? (target ? { x: target.x, y: target.y } : { x: p.x + lastMove.x * 6, y: p.y + lastMove.y * 6 });
@@ -1284,8 +1284,62 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const yaw = state.players.map((p) => ({ a: p.heading, v: 0 }));
   const lastShot: number[] = [];
   const deadAt: number[] = [];
-  const chuteAt: number[] = [];
-  const harness = new THREE.Vector3();
+  /**
+   * Per fighter in the air (render only, rebuilt from the sim state, so it works the same for bots and online):
+   * when they left the plane, the canopy's own motion, its last toggle pulls, and the canopy's orientation.
+   */
+  const air = state.players.map(() => ({ jumpAt: -1, pulled: false, motion: null as ReturnType<typeof newChuteMotion> | null, brakeL: 0, brakeR: 0, turn: 0, q: new THREE.Quaternion() }));
+  let airFrame = 0;
+  /**
+   * Wind streaks: thin lines rushing up past you in free fall (one draw call), longer and brighter the faster you fall,
+   * gone once the canopy flies. Offsets live in a box around the jumper and wrap round as they stream past.
+   */
+  const STREAKS = 70;
+  const streakOff = new Float32Array(STREAKS * 3);
+  for (let k = 0; k < STREAKS; k++) {
+    streakOff[k * 3] = (Math.random() - 0.5) * 26;
+    streakOff[k * 3 + 1] = (Math.random() - 0.5) * 26;
+    streakOff[k * 3 + 2] = (Math.random() - 0.5) * 26;
+  }
+  const streakGeo = new THREE.BufferGeometry();
+  streakGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(STREAKS * 6), 3).setUsage(THREE.DynamicDrawUsage));
+  const streakMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false });
+  const streaks = new THREE.LineSegments(streakGeo, streakMat);
+  streaks.frustumCulled = false;
+  streaks.visible = false;
+  streaks.name = 'wind streaks';
+  scene.add(streaks);
+  const updateStreaks = (dt: number, p: Player, x: number, h: number, y: number) => {
+    const speed = p.stage === 'falling' && p.canopy < DROP.stretch ? Math.min(1, Math.max(0, p.vz) / DROP.freefallTerminal) : 0;
+    streakMat.opacity = THREE.MathUtils.damp(streakMat.opacity, settings.reducedMotion ? 0 : speed * 0.45, 6, dt);
+    streaks.visible = streakMat.opacity > 0.01;
+    if (!streaks.visible) return;
+    const a = streakGeo.attributes.position as THREE.BufferAttribute;
+    const arr = a.array as Float32Array;
+    // The air moves up past you at your fall speed, and against your drift.
+    const ux = -p.vx;
+    const uy = Math.max(0, p.vz);
+    const uz = -p.vy;
+    const len = Math.hypot(ux, uy, uz) || 1;
+    const sl = 0.3 + 1.7 * speed;
+    const wrapC = (v: number) => ((((v + 13) % 26) + 26) % 26) - 13;
+    for (let k = 0; k < STREAKS; k++) {
+      const o = k * 3;
+      streakOff[o] = wrapC(streakOff[o] + ux * dt * 1.4);
+      streakOff[o + 1] = wrapC(streakOff[o + 1] + uy * dt * 1.4);
+      streakOff[o + 2] = wrapC(streakOff[o + 2] + uz * dt * 1.4);
+      const bx = x + streakOff[o];
+      const by = h + streakOff[o + 1];
+      const bz = y + streakOff[o + 2];
+      arr[k * 6] = bx;
+      arr[k * 6 + 1] = by;
+      arr[k * 6 + 2] = bz;
+      arr[k * 6 + 3] = bx - (ux / len) * sl;
+      arr[k * 6 + 4] = by - (uy / len) * sl;
+      arr[k * 6 + 5] = bz - (uz / len) * sl;
+    }
+    a.needsUpdate = true;
+  };
   /** When each player touched down (for the landing roll), and the canopies left on the ground. */
   const landAt: number[] = [];
   const ROLL_TIME = 0.75;
@@ -1303,19 +1357,23 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const src = chutes[i];
     // userData.deploy is a scene node: keep it out of the clone (Object3D.clone serialises userData to JSON).
     const deploy = src.userData.deploy as THREE.Object3D;
+    const parts = src.userData.parts as unknown;
     delete src.userData.deploy;
+    delete src.userData.parts;
     const g = src.clone(true);
     src.userData.deploy = deploy;
+    src.userData.parts = parts;
     g.name = 'chute (collapsing)';
     g.traverse((o) => {
-      if (!(o instanceof THREE.Mesh)) return;
-      // Lines and risers go at once; the fabric gets its own material so it can fade alone.
-      if (o.userData.line) o.visible = false;
-      else {
-        const m = (o.material as THREE.Material).clone();
-        m.transparent = true;
-        o.material = m;
+      // Lines, risers, the bag and the pilot chute go at once; the fabric gets its own material so it can fade alone.
+      if (o.userData.line) {
+        o.visible = false;
+        return;
       }
+      if (!(o instanceof THREE.Mesh)) return;
+      const m = (o.material as THREE.Material).clone();
+      m.transparent = true;
+      o.material = m;
     });
     g.visible = true;
     scene.add(g);
@@ -1548,8 +1606,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     }
   };
 
-  const prev = state.players.map((p) => ({ x: p.x, y: p.y, fall: p.fall }));
+  const prev = state.players.map((p) => ({ x: p.x, y: p.y, alt: p.alt }));
   let fallTime = 0;
+  /** The opening's camera dip: offset (m) and its rate, and last frame's descent speed. */
+  const camDip = { o: 0, v: 0 };
+  let camVz = 0;
   /** 0 in free fall, eases to 1 once the canopy is open: the camera backs off and tilts up to keep the canopy in view. */
   let chuteCam = 0;
   /** The high camera leans ahead: a few metres the way you move and aim, eased (half-life ~0.35 s). */
@@ -1611,8 +1672,21 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     });
   };
 
+  /**
+   * The lens in the air: it opens up with the speed of the fall (up to 6 degrees at terminal velocity) and kicks out a
+   * little more as the canopy bites, then settles to the normal lens under the canopy.
+   */
+  const airFov = (p: Player) => {
+    if (p.stage !== 'falling' || settings.reducedMotion) return 0;
+    const speed = Math.min(1, Math.max(0, p.vz) / DROP.freefallTerminal);
+    const open = p.canopy < DROP.stretch ? 0 : Math.min(1, (p.canopy - DROP.stretch) / (DROP.deployTime - DROP.stretch));
+    const bite = p.canopy < DROP.stretch ? 0 : Math.sin(Math.PI * Math.min(1, (p.canopy - DROP.stretch) / 0.9)) * 3;
+    return speed * 6 * (1 - open) + bite;
+  };
+
   const renderFrame = (dt: number, alpha: number) => {
     resize();
+    airFrame++;
     const self = state.players[me];
     const frozen = hitstop > 0;
     hitstop = Math.max(0, hitstop - dt);
@@ -1637,15 +1711,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const fallen = !p.alive && p.stage === 'ground' && deadAt[i] !== undefined;
       const visible = fallen || (p.alive && p.stage !== 'drone' && (i === me || p.stage === 'falling' || canSee(state, self, p)));
       rig.root.visible = visible && !(i === me && firstPerson());
-      const chuteOpen = p.stage === 'falling' && p.fall <= DROP.chute;
+      const chuteOpen = p.stage === 'falling' && p.canopy >= 0;
       const hadChute = chutes[i].visible;
       chutes[i].visible = visible && chuteOpen;
       // The canopy stops hanging over this fighter (landed, or knocked out in the air): it collapses where it was.
       if (hadChute && !chutes[i].visible) releaseChute(i, p.stage === 'falling');
       // Free fall from the plane down to chute height, then drift slowly under the canopy.
       // Height interpolated between ticks like x and y, so the fall is smooth at any frame rate.
-      const fall = prev[i].fall + (p.fall - prev[i].fall) * alpha;
-      let h = p.stage === 'falling' ? fallHeight(Math.max(0, fall)) : 0;
+      let h = p.stage === 'falling' ? Math.max(0, prev[i].alt + (p.alt - prev[i].alt) * alpha) : 0;
       // Standing on a bridge or the pier lifts you onto its deck, smoothly at its ends.
       const onDeck = p.stage === 'ground' && MAP[Math.floor(y / TILE)]?.[Math.floor(x / TILE)] === 'd' ? DECK_Y : 0;
       deck[i] += (onDeck - deck[i]) * Math.min(1, dt * 14);
@@ -1681,9 +1754,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         yw.v = 0;
       } else {
         // A spring a little under critical damping: the body swings into a turn and settles with a
-        // touch of overshoot, like a person, not a turret.
-        const d = Math.atan2(Math.sin(p.heading - yw.a), Math.cos(p.heading - yw.a));
-        const w = 13;
+        // touch of overshoot, like a person, not a turret. In the air the body turns slower (it has the air to turn
+        // against), and under the canopy it faces the way the canopy flies unless it is shooting.
+        const ai = air[i];
+        const shootingAir = p.stage === 'falling' && lastShot[i] !== undefined && time - lastShot[i] < 1.5;
+        const want = p.stage === 'falling' && ai.motion && p.canopy >= 0.5 && !shootingAir ? ai.motion.yaw : p.heading;
+        const d = Math.atan2(Math.sin(want - yw.a), Math.cos(want - yw.a));
+        const w = p.stage === 'falling' ? (ai.motion ? 9 : 5) : 13;
         const zeta = 0.72;
         yw.v += (w * w * d - 2 * zeta * w * yw.v) * dt;
         yw.a += yw.v * dt;
@@ -1717,12 +1794,39 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           roll: p.rolling > 0 ? 1 - p.rolling / ROLL.time : sinceLand < ROLL_TIME ? sinceLand / ROLL_TIME : null,
         });
       } else if (chuteOpen) {
-        // Steering tilts you, in the body's own frame.
+        // The canopy flies on its own springs (heading, bank, pitch); the body hangs from it.
+        const ai = air[i];
+        ai.motion ??= newChuteMotion(yw.a);
+        if (!ai.pulled) {
+          ai.pulled = true;
+          sfx.chute(p.x - camX(), i === me ? 0 : Math.hypot(p.x - self.x, p.y - self.y, h - selfH));
+        }
+        const canopyT = p.canopy + alpha * DT;
+        const m = moveChute(ai.motion, dt, { vx: p.vx, vy: p.vy, canopy: canopyT, time, seed: i });
+        // Near the ground both toggles come down: the flare.
+        const flare = canopyT >= DROP.deployTime ? Math.min(1, Math.max(0, (DROP.flareAlt + 2 - h) / (DROP.flareAlt + 1))) : 0;
+        ai.brakeL = Math.min(1, m.brakeL + flare);
+        ai.brakeR = Math.min(1, m.brakeR + flare);
+        ai.turn = m.turn;
+        poseChute(rig, {
+          dt, time, seed: i, canopy: canopyT, brakeL: m.brakeL, brakeR: m.brakeR, turn: m.turn,
+          bank: ai.motion.bank, pitch: ai.motion.pitch, flare, shooting: sinceShot < 1.5,
+        });
+      } else if (p.stage === 'falling') {
+        // Free fall: the stick in the body's own frame (track forward / back off, slide), the turn from the yaw spring.
+        const ai = air[i];
+        if (ai.jumpAt < 0) ai.jumpAt = time;
         const c = Math.cos(yw.a);
         const sn = Math.sin(yw.a);
-        poseChute(rig, { dt, time, seed: i, steerX: -p.vx * sn + p.vy * c, steerZ: p.vx * c + p.vy * sn, shooting: sinceShot < 1.5 });
-      } else if (p.stage === 'falling') {
-        poseFreefall(rig, { dt, time, seed: i });
+        const fs = DROP.freefallSpeed;
+        poseFreefall(rig, {
+          dt, time, seed: i,
+          track: Math.max(-1, Math.min(1, (p.vx * c + p.vy * sn) / fs)),
+          side: Math.max(-1, Math.min(1, (p.vx * sn - p.vy * c) / fs)),
+          turn: yw.v,
+          speed: Math.min(1, p.vz / DROP.freefallTerminal),
+          sinceJump: time - ai.jumpAt,
+        });
       } else {
         poseRig(rig, {
           dt, time, vx: 0, vy: 0, onGround: false, facing: 1, aim: 0, sideways: false, wall: 0, dashing: false, stunned: false,
@@ -1759,18 +1863,18 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       hitFlash[i] = Math.max(0, hitFlash[i] - dt);
       setFlash(rig, hitFlash[i] > 0);
       rig.root.updateMatrixWorld(true);
-      if (chutes[i].visible) {
-        // Rigidly attached to the top of the backpack: the rig hangs from the canopy, so the canopy
-        // takes the body's own position and tilt (its swing and its banking into turns), and the
-        // risers always leave from the shoulder straps, through the hands, to the lines. The
-        // canopy unfolds out of the pack over 0.7 s when it opens.
-        rig.body.localToWorld(harness.set(0, rig.shoulderL.y, HARNESS_BACK));
-        chutes[i].position.copy(harness);
-        rig.body.getWorldQuaternion(chutes[i].quaternion);
-        if (chuteAt[i] === undefined) chuteAt[i] = time;
-        const k = Math.min(1, (time - chuteAt[i]) / 0.7);
-        const open = 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2); // ease out with a little overshoot
-        (chutes[i].userData.deploy as THREE.Group).scale.setScalar(Math.max(0.08, open));
+      if (chutes[i].visible && air[i].motion) {
+        // On the harness at the top of the backpack, flying with the canopy's own orientation; the lines are restrung
+        // to the straps and hands every frame. Far canopies (others, beyond 55 m) reshape every third frame.
+        const ai = air[i];
+        const far = i !== me && Math.hypot(x - camera.position.x, h - camera.position.y, y - camera.position.z) > 55;
+        hangChute(chutes[i], rig, chuteQuaternion(ai.motion!, ai.q), { canopy: p.canopy + alpha * DT, time, seed: i, brakeL: ai.brakeL, brakeR: ai.brakeR }, !far || (airFrame + i) % 3 === 0);
+      }
+      if (p.stage !== 'falling') {
+        if (air[i].motion || air[i].jumpAt >= 0) leaveAir(rig);
+        air[i].motion = null;
+        air[i].jumpAt = -1;
+        air[i].pulled = false;
       }
 
       // Gun in hand.
@@ -1929,16 +2033,36 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     } else if (self.stage === 'falling') {
       // Stay close above and behind the jumper the whole way down, so you see yourself from the
       // first frame, falling through the clouds, then the canopy opening below them.
-      const hh = selfH;
-      const chute = self.fall <= DROP.chute;
-      chuteCam += ((chute ? 1 : 0) - chuteCam) * (1 - Math.exp(-5 * dt));
-      // Under the canopy the camera backs off and looks at a point above the jumper, so the canopy sits in the
-      // picture (not under the top of the HUD); a phone held upright backs off further. Eased, so opening never jumps.
+      // The opening bites: the camera carries on down for a moment on a spring (you rise in the frame and settle),
+      // then the camera backs off and lowers behind the canopy. The spring is driven by the jumper's vertical
+      // acceleration only, so at a steady fall the camera sits exactly where it should.
+      const vzNow = self.vz;
+      const accel = dt > 0 ? (camVz - vzNow) / dt : 0; // upward acceleration of the jumper (m/s^2)
+      camVz = vzNow;
+      if (!settings.reducedMotion && fallTime > 0.1) {
+        const w = 4;
+        camDip.v += (-w * w * camDip.o - 2 * 0.65 * w * camDip.v - Math.max(-40, Math.min(40, accel))) * dt;
+        camDip.o = Math.max(-2.5, Math.min(2.5, camDip.o + camDip.v * dt));
+      } else camDip.o = camDip.v = 0;
+      const hh = selfH + camDip.o;
+      const chute = self.canopy >= DROP.stretch;
+      chuteCam += ((chute ? 1 : 0) - chuteCam) * (1 - Math.exp(-2.6 * dt));
+      // Under the canopy the camera backs off, lowers and looks at a point above the jumper, so the canopy sits in the
+      // picture and the jumper hangs clear of it (not hidden under the wing); a phone held upright backs off further.
+      // Eased, so the opening never jumps.
       const back = camera.aspect < 1.3 ? Math.min(1.5, 1.3 / camera.aspect) : 1;
       const c = chuteCam;
-      // Looking steeply down past the jumper: you see yourself in the middle and the ground below.
-      want = new THREE.Vector3(selfX, hh + 12 + (17 * back - 12) * c, selfY + 7 + (15 * back - 7) * c);
-      look = new THREE.Vector3(selfX, hh - 4 + 5.5 * c, selfY);
+      // Free fall: looking steeply down past the jumper, the ground rushing up below.
+      const fb = 1 + (back - 1) * 0.6;
+      want = new THREE.Vector3(selfX, hh + 8.5 * fb + (14.5 * back - 8.5 * fb) * c, selfY + 5.5 * fb + (17.5 * back - 5.5 * fb) * c);
+      look = new THREE.Vector3(selfX, hh - 2 + 3.8 * c, selfY);
+      // The wind: a small, speed-scaled buffet in free fall (three unrelated rates, so it never reads as a loop).
+      if (!settings.reducedMotion) {
+        const buffet = Math.min(1, Math.max(0, self.vz) / DROP.freefallTerminal) * (1 - c) * 0.09;
+        want.x += n(11.3, 1.7) * buffet;
+        want.y += n(9.1, 0.4) * buffet * 0.6;
+        want.z += n(13.7, 2.9) * buffet;
+      }
       if (camNear < 1) {
         // Dev close-up: beside and a little below the jumper, looking up at body, risers and canopy.
         want = new THREE.Vector3(selfX + camOrbit.x, hh + camOrbit.y, selfY + camOrbit.z);
@@ -1973,7 +2097,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // Falling: blend in from the plane view for a moment, then stay locked to the jumper (no lag,
     // no wobble). Ground: a soft follow.
     fallTime = self.stage === 'falling' ? fallTime + dt : 0;
-    if (self.stage !== 'falling') chuteCam = 0;
+    if (self.stage !== 'falling') {
+      chuteCam = 0;
+      camDip.o = camDip.v = 0;
+      camVz = 0;
+    }
     const follow =
       self.stage === 'ground' ? 1 - Math.exp(-6 * dt) : self.stage === 'falling' ? (fallTime > 0.9 ? 1 : 1 - Math.exp(-6 * dt)) : kf;
     camPos.lerp(want, follow);
@@ -1986,7 +2114,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       ? THREE.MathUtils.damp(camera.fov, scoped ? 16 : settings.fov, 18, dt)
       : sv
         ? THREE.MathUtils.damp(camera.fov, scoped ? 30 : Math.min(settings.fov, 78), 14, dt)
-        : THREE.MathUtils.damp(camera.fov, overview ? 52 : 42, 3, dt);
+        : THREE.MathUtils.damp(camera.fov, overview ? 52 : 42 + airFov(self), 3, dt);
     // Far away above the map, a nearer near-plane wastes depth precision and the ground and the
     // roads fight (flicker); push it out while in the overview.
     const near = overview ? 4 : camNear < 1 || fp || sv ? 0.05 : 0.5;
@@ -2021,7 +2149,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         // Falling or under the canopy: your eyes are wherever your head is (lying flat in free
         // fall, hanging from the harness under the canopy), with the wind's flutter.
         rig.head.getWorldPosition(camera.position);
-        camera.position.y += 0.05 + (self.fall > DROP.chute ? Math.sin(time * 31) * 0.01 : 0);
+        camera.position.y += 0.05 + (self.canopy < 0 ? Math.sin(time * 31) * 0.01 : 0);
       }
       tmpV.set(camera.position.x + c * Math.cos(viewPitch), camera.position.y + Math.sin(viewPitch), camera.position.z + sn * Math.cos(viewPitch));
       camera.lookAt(tmpV);
@@ -2114,7 +2242,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         const o = state.players[i];
         if (i === me || !o.alive || o.stage === 'drone') continue;
         const ox = o.x - camera.position.x;
-        const oy = (o.stage === 'falling' ? fallHeight(Math.max(0, o.fall)) : 0) + 1.1 - camera.position.y;
+        const oy = (o.stage === 'falling' ? Math.max(0, o.alt) : 0) + 1.1 - camera.position.y;
         const oz = o.y - camera.position.z;
         const along = ox * dx + oy * dy + oz * dz;
         if (along <= armNow || along >= hitT) continue;
@@ -2156,6 +2284,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     vfx.update(frozen ? 0 : dt);
     updateDamage(dt);
     updateHitFx(dt, selfX, selfH, selfY);
+    updateStreaks(dt, self, selfX, selfH, selfY);
+    // The wind while you are in the air: loud in free fall, a soft breeze under the canopy.
+    const fallSpeed = Math.min(1, Math.max(0, self.vz) / DROP.freefallTerminal);
+    sfx.wind(self.alive && self.stage === 'falling' && !paused ? (self.canopy < DROP.stretch ? 0.25 + 0.75 * fallSpeed : 0.22) : 0);
     updateCollapsing(dt);
     props.update(time, dt);
     // Trees, bushes, rocks and grass: only the chunks this camera sees, the far ones cheaper, shadows only near the box.
@@ -2221,6 +2353,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       ? null
       : self.stage === 'drone'
         ? (touch ? 'Tap JUMP' : 'Space · jump')
+        : self.stage === 'falling' && self.canopy < 0 && DROP.height - self.alt >= DROP.minFreefallDrop
+          ? (touch ? 'Tap FIRE · open the parachute' : `${keyLabel(settings.keys.fire)} · open the parachute`)
         : self.stage === 'ground' && inWater(self.x, self.y)
           ? 'Swimming · no shooting in the water'
         : self.using
@@ -2361,7 +2495,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // Paused (offline only): the world freezes, the camera and effects keep drawing.
     acc = paused && !session.online ? 0 : acc + dt;
     while (acc >= DT) {
-      state.players.forEach((p, i) => Object.assign(prev[i], { x: p.x, y: p.y, fall: p.fall }));
+      state.players.forEach((p, i) => Object.assign(prev[i], { x: p.x, y: p.y, alt: p.alt }));
       const events = session.tick(state.players[me].alive ? readInput() : NO_INPUT);
       // A guest's state is replaced by the host's on every correction: always read it back.
       state = session.state;

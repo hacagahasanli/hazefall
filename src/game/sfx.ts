@@ -7,7 +7,8 @@
  * - every voice gets random detune and gain, and a stereo pan from its world x;
  * - rapid fire has a voice budget; mute is remembered;
  * - every other repeatable sound asks the budget gate (audioBudget.ts, docs/SOUND.md); a limiter sits after the master.
- * No ambience bed: a noise loop read as old-TV static, so the room stays quiet between fights.
+ * No ambience bed: a noise loop read as old-TV static, so the room stays quiet between fights. The one loop is the
+ * wind while you fall (low-passed, gusting, only in the air).
  */
 import { assetUrl } from '../lib/assets';
 
@@ -56,6 +57,8 @@ export const createSfx = () => {
   let wet: GainNode | null = null;
   const buses: Partial<Record<Bus, GainNode>> = {};
   let noiseBuf: AudioBuffer | null = null;
+  /** The falling wind's voice while it plays. */
+  let wind: { src: AudioBufferSourceNode; bp: BiquadFilterNode; g: GainNode; quiet: number } | null = null;
   let muted = typeof window !== 'undefined' ? readMuted() : false;
   /** Reasons the game is silenced on top of the player's own mute ('ad' while a video ad plays, 'portal' for the portal's mute). */
   const silenced = new Set<string>();
@@ -491,6 +494,56 @@ export const createSfx = () => {
       for (let i = 0; i < 6; i++) tone('sine', 2200 + Math.random() * 3200, 1600 + Math.random() * 2000, 0.3, 0.07, { delay: Math.random() * 0.15, pan: panOf(x) });
     },
     jump: (x?: number) => tone('sine', 300, 520, 0.08, 0.1, { room: 0, pan: panOf(x) }),
+    /**
+     * The air rushing past while you fall, 0..1 (call every frame; 0 lets it fade and stop). Band-passed and
+     * low-passed noise whose pitch and level rise with the speed, with slow gusts, so it reads as wind and not hiss.
+     * Only ever playing while you are in the air (a few seconds a round).
+     */
+    wind: (level: number) => {
+      const c = ctx;
+      if (!c || !noiseBuf || !buses.sfx) return;
+      if (!wind) {
+        if (level <= 0.001) return;
+        const src = c.createBufferSource();
+        src.buffer = noiseBuf;
+        src.loop = true;
+        const bp = c.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.Q.value = 0.6;
+        bp.frequency.value = 300;
+        const lp = c.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = 900;
+        const g = c.createGain();
+        g.gain.value = 0.0001;
+        src.connect(bp).connect(lp).connect(g).connect(buses.sfx);
+        src.start();
+        wind = { src, bp, g, quiet: 0 };
+      }
+      const t = c.currentTime;
+      const gustK = 0.72 + 0.28 * Math.sin(t * 0.93) * Math.sin(t * 0.37 + 1);
+      wind.g.gain.setTargetAtTime(Math.max(0.0001, level * 0.13 * gustK), t, 0.25);
+      wind.bp.frequency.setTargetAtTime(220 + 560 * level * gustK, t, 0.3);
+      if (level > 0.001) wind.quiet = t;
+      else if (t - wind.quiet > 2) {
+        wind.src.stop();
+        wind.src.disconnect();
+        wind = null;
+      }
+    },
+    /**
+     * A canopy opening `dist` metres away: the fabric flagging out of the bag as the lines pay out, then the crack and
+     * the whump as it bites half a second later.
+     */
+    chute: (x?: number, dist = 0) => {
+      if (dist > 60 || !may('chute')) return;
+      const k = 1 / (1 + dist / 12);
+      const pan = panOf(x);
+      for (let i = 0; i < 5; i++) noise('bandpass', 1500 - i * 120, 700, 0.09, 0.1 * k, 1.4, { delay: i * 0.085, room: 0.1, pan });
+      noise('highpass', 3200, 1800, 0.05, 0.22 * k, 0.8, { delay: 0.56, room: 0.2, pan });
+      tone('sine', 150, 55, 0.34, 0.3 * k, { delay: 0.58, room: 0.25, pan });
+      noise('lowpass', 800, 160, 0.3, 0.22 * k, 0.9, { delay: 0.57, room: 0.25, pan });
+    },
     dash: (x?: number) => noise('bandpass', 700, 2800, 0.13, 0.22, 1.2, { room: 0.2, pan: panOf(x) }),
     pickup: () => {
       click(0, 2600, 0.3);
