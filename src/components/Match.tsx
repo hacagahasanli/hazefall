@@ -800,6 +800,7 @@ export const Match = ({
               onMove={(x, y) => gameRef.current?.setStick(x, y)}
               onPause={() => setMenuOpen(true)}
               onPlane={hud.stage === 'drone'}
+              inAir={hud.stage === 'falling'}
               superReady={hud.superCharge}
               rollReady={Math.min(1, hud.roll)}
               sniper={hud.sniper}

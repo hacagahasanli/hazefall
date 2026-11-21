@@ -486,6 +486,18 @@ export const createSfx = () => {
       tone('sine', 90, 50, 0.08, 0.35, { room: 0.2, pan: panOf(x) });
       noise('lowpass', 600, 200, 0.06, 0.2, 1, { room: 0.2, pan: panOf(x) });
     },
+    /**
+     * Someone landing `dist` metres from you during the drop (the landing danger cue): their touchdown, a thud and the
+     * rustle of the canopy coming down, from their side and fading with distance. Never more than one at a time.
+     */
+    landNear: (x?: number, dist = 0) => {
+      if (!may('landNear')) return;
+      const k = 1 / (1 + dist / 15);
+      const pan = panOf(x);
+      tone('sine', 95, 50, 0.1, 0.32 * k, { room: 0.3, pan });
+      noise('lowpass', 700, 200, 0.08, 0.2 * k, 1, { room: 0.3, pan });
+      noise('bandpass', 1200, 500, 0.25, 0.08 * k, 1.2, { delay: 0.05, room: 0.3, pan });
+    },
     reload: () => {
       click(0, 3000, 0.25);
       click(0.18, 2200, 0.3);

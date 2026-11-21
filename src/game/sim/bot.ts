@@ -392,17 +392,25 @@ export const createBot = (id: number, seed: number) => {
     if (me.stage === 'falling') {
       // Steer for my landing spot. The body has momentum, so ask for a velocity that shrinks as the spot comes
       // closer (gain = response / 2: damped to ~0.7, a few per cent of overshoot at most) instead of flying at it flat out and overshooting.
+      // Under the open canopy, dive (as a player would) when the spot is farther than a plain glide still reaches.
       const open = me.canopy >= DROP.stretch;
-      const speed = open ? DROP.chuteSpeed : DROP.freefallSpeed;
+      const dx = spot.x - me.x;
+      const dy = spot.y - me.y;
+      const dist = Math.hypot(dx, dy);
+      const reach = (Math.max(0, me.alt) / DROP.chuteTerminal) * DROP.chuteSpeed * 0.85;
+      const dive = me.canopy >= DROP.deployTime && dist > reach;
+      const speed = !open ? DROP.freefallSpeed : dive ? DROP.chuteDiveSpeed : DROP.chuteSpeed;
       const gain = (open ? DROP.chuteResponse : DROP.freefallResponse) / 2;
-      let mx = ((spot.x - me.x) * gain) / speed;
-      let my = ((spot.y - me.y) * gain) / speed;
+      let mx = (dx * gain) / speed;
+      let my = (dy * gain) / speed;
       const len = Math.hypot(mx, my);
       if (len > 1) {
         mx /= len;
         my /= len;
       }
-      return len < 0.01 ? NO_INPUT : { ...NO_INPUT, mx, my };
+      // The canopy never hovers: right over the spot, keep a light touch towards it so it circles there.
+      if (open && len < 0.01 && dist > 0.05) return { ...NO_INPUT, mx: (dx / dist) * 0.02, my: (dy / dist) * 0.02, roll: dive };
+      return len < 0.01 ? NO_INPUT : { ...NO_INPUT, mx, my, roll: dive };
     }
     if (mode === 'drop') {
       mode = 'roam';

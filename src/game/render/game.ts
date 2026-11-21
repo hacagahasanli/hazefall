@@ -160,6 +160,8 @@ const GUN_MODEL: Record<Exclude<WeaponKind, 'fists'>, GunKind> = {
 export const GRADE_COLOR = [0xe8eef7, 0x3ec5ff, 0xffb020];
 export const GRADE_CSS = ['#e8eef7', '#3ec5ff', '#ffb020'];
 const SUPPLY_COLOR = 0x3ddc84;
+/** Landing danger: a landing within this many metres of you, while you are in the air or just down, is heard (sound only). */
+const NEAR_LANDING = 30;
 /** 0 common, 1 tuned / Vest II / Backpack II, 2 prime / Vest III; null for supplies. */
 const lootGrade = (l: Pick<Loot, 'kind' | 'tier'>): number | null =>
   l.kind in WEAPONS ? Math.min(2, l.tier ?? 0) : l.kind === 'armor' ? Math.max(0, (l.tier ?? 3) - 1) : l.kind === 'backpack' ? Math.max(0, (l.tier ?? 1) - 1) : null;
@@ -1389,6 +1391,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         landAt[e.player] = time;
         vfx.burst(e.x, (e.z ?? 0) + 0.2, 12, 'dust', { z: e.y,  speed: 3, up: 1, gravity: 4, life: 0.4 });
         if (e.player === me) sfx.land();
+        else {
+          // Landing danger: someone touching down close by while you are still in the air (or just down) is heard, a
+          // thud from their side. Sound only: nothing on the screen or the minimap gives them away.
+          const self = state.players[me];
+          const d = Math.hypot(e.x - self.x, e.y - self.y);
+          const exposed = self.stage === 'falling' || (self.stage === 'ground' && landAt[me] !== undefined && time - landAt[me] < 8);
+          if (self.alive && exposed && d < NEAR_LANDING) sfx.landNear(e.x - camX(), d);
+        }
         break;
       case 'ko': {
         deadAt[e.victim] = time;
@@ -2243,7 +2253,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // Under the canopy the camera backs off, lowers and looks at a point above the jumper, so the canopy sits in the
       // picture and the jumper hangs clear of it (not hidden under the wing); a phone held upright backs off further.
       // Eased, so the opening never jumps.
-      const back = camera.aspect < 1.3 ? Math.min(1.5, 1.3 / camera.aspect) : 1;
+      // High under the canopy it backs off a little further still, to look over the map for a spot and the others in
+      // the air; it closes back to the normal canopy framing by about 12 m up.
+      const high = 1 + 0.3 * Math.min(1, Math.max(0, (selfH - 12) / 24));
+      const back = (camera.aspect < 1.3 ? Math.min(1.5, 1.3 / camera.aspect) : 1) * (1 + (high - 1) * chuteCam);
       const c = chuteCam;
       // Free fall: looking steeply down past the jumper, the ground rushing up below.
       const fb = 1 + (back - 1) * 0.6;
@@ -2576,6 +2589,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         ? (touch ? 'Tap JUMP' : 'Space · jump')
         : self.stage === 'falling' && self.canopy < 0 && DROP.height - self.alt >= DROP.minFreefallDrop
           ? (touch ? 'Tap FIRE · open the parachute' : `${keyLabel(settings.keys.fire)} · open the parachute`)
+        : self.stage === 'falling' && self.canopy >= DROP.deployTime && self.alt > DROP.flareAlt + 4
+          ? (touch ? 'Hold DIVE · dive to go farther, faster' : `Hold ${keyLabel(settings.keys.roll)} · dive to go farther, faster`)
         : self.stage === 'ground' && inWater(self.x, self.y)
           ? 'Swimming · no shooting in the water'
         : self.using

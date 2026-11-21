@@ -6,6 +6,7 @@ import {
   DT,
   fenceVertical,
   LEAN,
+  chuteSink,
   dragAt,
   ROCKET,
   ROLL,
@@ -569,27 +570,41 @@ export const windOf = (state: GameState) => {
 
 /**
  * One tick of a jumper in the air. Vertical: gravity against quadratic drag (`dragAt`), so you speed up to terminal
- * velocity and the canopy's opening slows you hard over about a second. Horizontal: momentum that follows the stick at
- * the response rate (fast in free fall, floaty under the canopy), the wind once the canopy flies, and a small
- * deterministic turbulence wobble. Space after a second of free fall pulls early; at `deployAlt` it opens by itself.
+ * velocity and the canopy's opening slows you hard over about a second; the open canopy sinks faster the faster it
+ * flies (`chuteSink`). Horizontal: momentum that follows the stick at the response rate, the wind once the canopy
+ * flies, and a small deterministic turbulence wobble. The open canopy never stops in the air: hands off it glides on
+ * the way it was going, and holding the dive (the roll key) it speeds up and drops faster. Space after a second of
+ * free fall pulls early; at `deployAlt` it opens by itself.
  */
 export const updateFall = (state: GameState, p: Player, input: Input) => {
   const out = DROP.height - p.alt;
   const pressed = input.jump && !p.prev.jump;
   if (p.canopy < 0 && (p.alt <= DROP.deployAlt || (pressed && out >= DROP.minFreefallDrop))) p.canopy = 0;
   else if (p.canopy >= 0) p.canopy += DT;
+  // How far the canopy has inflated (its numbers blend in), and its speed through the air (relative to the wind).
+  const open = p.canopy < DROP.stretch ? 0 : Math.min(1, (p.canopy - DROP.stretch) / (DROP.deployTime - DROP.stretch));
+  const w = windOf(state);
+  const ux = p.vx - w.x * open;
+  const uy = p.vy - w.y * open;
+  const air = Math.hypot(ux, uy);
   // Vertical.
-  const k = dragAt(p.canopy, p.alt);
+  const k = dragAt(p.canopy, p.alt, chuteSink(air));
   p.vz += (DROP.gravity - k * p.vz * Math.abs(p.vz)) * DT;
   p.alt -= p.vz * DT;
-  // Horizontal: the canopy's numbers blend in as it inflates.
-  const open = p.canopy < DROP.stretch ? 0 : Math.min(1, (p.canopy - DROP.stretch) / (DROP.deployTime - DROP.stretch));
-  const speed = DROP.freefallSpeed + (DROP.chuteSpeed - DROP.freefallSpeed) * open;
+  // Horizontal. Free fall: the stick asks for a velocity. Canopy: the stick (or, hands off, the way it already flies)
+  // gives the direction, never slower than trim; the dive asks for its top speed.
   const response = DROP.freefallResponse + (DROP.chuteResponse - DROP.freefallResponse) * open;
   const len = Math.hypot(input.mx, input.my);
-  const s = len > 0.01 ? speed / Math.max(1, len) : 0;
-  const w = windOf(state);
-  const want = { x: input.mx * s + w.x * open, y: input.my * s + w.y * open };
+  const m = Math.min(1, len);
+  const steered = len > 0.01;
+  const fs = steered ? DROP.freefallSpeed / Math.max(1, len) : 0;
+  const diving = input.roll && open >= 1;
+  const dir = steered ? { x: input.mx / len, y: input.my / len } : air > 0.3 ? { x: ux / air, y: uy / air } : { x: 0, y: 0 };
+  const cs = diving ? DROP.chuteDiveSpeed * (steered ? Math.max(m, 0.5) : 1) : Math.max(DROP.chuteTrim, steered ? DROP.chuteSpeed * m : 0);
+  const want = {
+    x: input.mx * fs * (1 - open) + (dir.x * cs + w.x) * open,
+    y: input.my * fs * (1 - open) + (dir.y * cs + w.y) * open,
+  };
   // Turbulence: two incommensurate sines per axis, different for everyone, scaled by how fast the air rushes past.
   const t = state.tick * DT;
   const gust = DROP.turbulence * Math.min(1, p.vz / DROP.freefallTerminal + 0.3);
