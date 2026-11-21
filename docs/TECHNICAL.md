@@ -168,15 +168,17 @@ Games usually do not "check, then refuse the move". They move first, then push t
 
 Stats are in `WEAPONS` (`constants.ts:414`): damage, bullets per shot, spread, speed, range, fire interval, `ammo` found in the gun, `mag` and `reload` seconds.
 
-| Weapon | Damage x bullets | Mag / spare when found | Reload (s) | Range (m) |
+| Weapon | Damage x bullets | Mag / spare when found | Reload (s) | Between shots (s) |
 |---|---|---|---|---|
-| Fists | 110 | infinite | none | 1.6 |
-| Pistol | 140 | 12 / 36 total | 1.1 | 13 |
-| SMG | 75 | 30 / 90 total | 1.7 | 12 |
-| Shotgun | 70 x 7 | 6 / 18 total | 2.2 | 7 |
-| Rifle | 120 | 25 / 75 total | 1.9 | 20 |
-| Sniper | 700 | 5 / 10 total | 2.6 | 34 |
-| Rockets | 900, radius 3 m | 1 / 4 total | 2.4 | 16 (lobbed) |
+| Fists | 15 | infinite | none | 0.467 (reach 1.6 m) |
+| Pistol | 34 | 12 / 36 total | 1.1 | 0.367 |
+| SMG | 22 | 30 / 90 total | 1.7 | 0.100 |
+| Shotgun | 13 x 8 | 6 / 18 total | 2.2 | 0.800 |
+| Rifle | 28 | 25 / 75 total | 1.9 | 0.167 |
+| Sniper | 80 | 5 / 10 total | 2.6 | 1.500 |
+| Rockets | 125, blast radius 3 m | 1 / 4 total | 2.4 | 1.200 |
+
+Falloff, spread, the roles each gun is tuned for and time-to-kill tables are in `docs/BALANCE.md`; `balance.test.ts` holds the roles.
 
 ("Total" is `ammo`, magazine plus spare; the gun starts with a full magazine and the rest as spare.)
 

@@ -572,22 +572,24 @@ export interface WeaponStats {
 }
 
 export const WEAPONS: Record<WeaponKind, WeaponStats> = {
-  // Damage is out of 100 HP (+ up to 100 armor): about three hits kill.
+  // Damage is out of 100 HP (+ up to 100 armor). Each gun owns a distance (docs/BALANCE.md, held by balance.test.ts):
+  // shotgun inside 6 m (one pump bare, two geared), SMG to 12 m, rifle 15-50 m, sniper beyond (2 hits bare, 3 geared at
+  // any range); the pistol is the baseline and rockets the rare power weapon (a direct hit downs a bare fighter).
   fists: { name: 'Fists', damage: 15, bullets: 1, spread: 0, speed: 30, range: 1.6, rate: 0.45, ammo: Infinity, mag: Infinity, reload: 0, falloff: { start: 9, end: 9, min: 1 } },
   pistol: { name: 'Pistol', damage: 34, bullets: 1, spread: 0.03, speed: 34, range: 90, rate: 0.35, ammo: 36, mag: 12, reload: 1.1, falloff: { start: 12, end: 40, min: 0.4 } },
-  smg: { name: 'SMG', damage: 22, bullets: 1, spread: 0.1, speed: 36, range: 90, rate: 0.09, ammo: 90, mag: 30, reload: 1.7, falloff: { start: 10, end: 35, min: 0.35 } },
-  shotgun: { name: 'Shotgun', damage: 14, bullets: 7, spread: 0.5, speed: 28, range: 45, rate: 0.85, ammo: 18, mag: 6, reload: 2.2, falloff: { start: 5, end: 18, min: 0.15 } },
-  rifle: { name: 'Rifle', damage: 30, bullets: 1, spread: 0.04, speed: 48, range: 120, rate: 0.16, ammo: 75, mag: 25, reload: 1.9, falloff: { start: 20, end: 60, min: 0.5 } },
-  sniper: { name: 'Sniper', damage: 80, bullets: 1, spread: 0, speed: 80, range: 160, rate: 1.4, ammo: 10, mag: 5, reload: 2.6, falloff: { start: 40, end: 100, min: 0.7 } },
+  smg: { name: 'SMG', damage: 22, bullets: 1, spread: 0.1, speed: 36, range: 90, rate: 0.09, ammo: 90, mag: 30, reload: 1.7, falloff: { start: 12, end: 30, min: 0.25 } },
+  shotgun: { name: 'Shotgun', damage: 13, bullets: 8, spread: 0.22, speed: 28, range: 30, rate: 0.8, ammo: 18, mag: 6, reload: 2.2, falloff: { start: 6, end: 15, min: 0.1 } },
+  rifle: { name: 'Rifle', damage: 28, bullets: 1, spread: 0.035, speed: 48, range: 120, rate: 0.16, ammo: 75, mag: 25, reload: 1.9, falloff: { start: 25, end: 70, min: 0.55 } },
+  sniper: { name: 'Sniper', damage: 80, bullets: 1, spread: 0, speed: 80, range: 160, rate: 1.5, ammo: 10, mag: 5, reload: 2.6, falloff: { start: 60, end: 120, min: 0.85 } },
   // A rocket flies straight where you aim at 16 m/s (you see it coming), drops a little over long
   // distances, and explodes on whatever it meets.
-  rockets: { name: 'Rockets', damage: 110, bullets: 1, spread: 0, speed: 16, range: 70, rate: 1.2, ammo: 4, mag: 1, reload: 2.4, lob: { radius: 3 }, falloff: { start: 999, end: 999, min: 1 } },
+  rockets: { name: 'Rockets', damage: 125, bullets: 1, spread: 0, speed: 16, range: 70, rate: 1.2, ammo: 4, mag: 1, reload: 2.4, lob: { radius: 3 }, falloff: { start: 999, end: 999, min: 1 } },
 };
 
 /**
  * Rarity: the same gun in three grades, shown by the colour of its loot beam and its name. A modest step, so a well-played
  * common gun still wins against a badly played prime one: damage x1 / 1.06 / 1.12 (no gun needs a hit fewer on bare health
- * except the rifle at prime, 4 to 3), magazine x1 / 1.25 / 1.5, reload time x1 / 0.93 / 0.86.
+ * up close), magazine x1 / 1.25 / 1.5, reload time x1 / 0.93 / 0.86.
  */
 export const RARITY = { damage: [1, 1.06, 1.12], mag: [1, 1.25, 1.5], reload: [1, 0.93, 0.86] };
 /** Magazine size of a gun at a rarity (Infinity for fists). */

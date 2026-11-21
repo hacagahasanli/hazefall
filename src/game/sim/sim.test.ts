@@ -178,7 +178,7 @@ describe('loot and fighting', () => {
 
   it('bullets have no range limit, they just hit softer far away; about three hits kill', () => {
     expect(falloffDamage('rifle', 30, 5)).toBe(30);
-    expect(falloffDamage('rifle', 30, 80)).toBeCloseTo(15);
+    expect(falloffDamage('rifle', 30, 80)).toBeCloseTo(30 * WEAPONS.rifle.falloff.min);
     expect(falloffDamage('pistol', 34, 25)).toBeLessThan(34);
     expect(Math.ceil(100 / WEAPONS.pistol.damage)).toBe(3);
     expect(WEAPONS.rifle.range).toBeGreaterThan(100);
