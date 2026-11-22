@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 import { COPY } from '../copy/studio';
 import { isTouchUi } from '../../lib/device';
+import { autoAimReach, cameraProfile, inAutoAimReach } from '../../lib/phoneUi';
 import { createSfx } from '../sfx';
 import { actionFor, DEFAULT_SETTINGS, keyLabel, keyMap } from '../settings';
 
@@ -1151,6 +1152,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
    * plants, no.
    */
   const onScreen = new THREE.Vector3();
+  /** Touch auto-aim reach (m): the farthest ground point of the desktop view, from the same numbers as its camera. */
+  const AUTO_AIM_REACH = autoAimReach();
   /** A clear shot at any part of them: the centre or either shoulder (a trunk or a car corner
    * on the centre line shouldn't hide someone whose body you can see). */
   const clearShot = (p: Player, o: Player) => {
@@ -1165,9 +1168,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     let bd = Infinity;
     for (const o of state.players) {
       if (o.id === p.id || !canSee(state, p, o)) continue;
-      // Anywhere on your screen, and a little past its edges.
-      onScreen.set(o.x, 1, o.y).project(camera);
-      if (Math.abs(onScreen.x) > 1.25 || Math.abs(onScreen.y) > 1.25 || onScreen.z > 1) continue;
+      if (touch) {
+        // Touch: by distance in the world (the desktop view's footprint), so a closer phone camera does not shorten the reach.
+        if (!inAutoAimReach(o.x - p.x, o.y - p.y, AUTO_AIM_REACH)) continue;
+      } else {
+        // Anywhere on your screen, and a little past its edges.
+        onScreen.set(o.x, 1, o.y).project(camera);
+        if (Math.abs(onScreen.x) > 1.25 || Math.abs(onScreen.y) > 1.25 || onScreen.z > 1) continue;
+      }
       const d = Math.hypot(o.x - p.x, o.y - p.y);
       if (d < bd && clearShot(p, o)) {
         best = o;
@@ -1938,6 +1946,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** The high camera leans ahead: a few metres the way you move and aim, eased (half-life ~0.35 s). */
   const ahead = new THREE.Vector2();
   let shadowHalf = 0;
+  /** The phone camera's projection offset (fractions of the screen): wanted, and what the camera has now. */
+  const viewOff = { x: 0, y: 0, sx: 0, sy: 0 };
   /** Dev only: ?zoom=0.6 brings the top-down camera that much closer (for trailer clips). */
   const camZoom = process.env.NODE_ENV !== 'production' ? Number(new URLSearchParams(window.location.search).get('zoom') ?? 1) || 1 : 1;
   /** Dev only: ?cam=near brings the camera close to check animation. */
@@ -2421,6 +2431,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     let want: THREE.Vector3;
     /** On the ground, how much wider than normal the lens opens on a narrow screen (1 on a wide one). */
     let lensWiden = 1;
+    /** The ground camera profile for this screen (desktop, tablet or phone). */
+    const camProfile = cameraProfile(touch, canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight);
     let look: THREE.Vector3;
     if (self.stage === 'drone' && state.phase === 'drop') {
       // High above the plane, looking down over most of the map, so you can choose where to jump.
@@ -2475,13 +2487,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // Narrow screens (a phone held upright) see as far around you as a wide one by opening the lens wider, not by pulling
       // the camera up: pulled up it sat above the cloud layer (DROP.cloudLow) and the screen was mostly cloud.
       lensWiden = camera.aspect < 1.3 ? Math.min(1.75, 1.3 / camera.aspect) : 1;
-      const k = camZoom;
-      // Look-ahead: 0.35 s of your velocity plus 2.5 m the way you face, capped at 4 m, so more of the screen shows where
-      // you are going and shooting. Off while standing still and aiming nowhere in particular: the view settles on you.
-      const lx = self.vx * 0.35 + Math.cos(self.heading) * 2.5;
-      const ly = self.vy * 0.35 + Math.sin(self.heading) * 2.5;
+      // The ground camera profile: the desktop view is 1; a phone or tablet sits closer so the fighter is big enough to read.
+      const k = camZoom * camProfile.k;
+      // Look-ahead: 0.35 s of your velocity plus 2.5 m the way you face (3 m on touch), capped at 4 m (5 m on touch), so more
+      // of the screen shows where you are going and shooting. Off while standing still and aiming nowhere in particular.
+      const lx = self.vx * 0.35 + Math.cos(self.heading) * camProfile.face;
+      const ly = self.vy * 0.35 + Math.sin(self.heading) * camProfile.face;
       const ll = Math.hypot(lx, ly);
-      const cap = ll > 4 ? 4 / ll : 1;
+      const cap = ll > camProfile.cap ? camProfile.cap / ll : 1;
       const still = Math.hypot(self.vx, self.vy) < 0.5 && !(mouseDown || held('fire'));
       const ka = 1 - Math.exp(-2 * dt);
       ahead.x += ((still ? 0 : lx * cap) - ahead.x) * ka;
@@ -2497,7 +2510,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         // so you see (and auto-aim reaches) people well past the normal screen.
         const ax = Math.cos(self.heading) * 30;
         const ay = Math.sin(self.heading) * 30;
-        want.set(selfX + ax, 54 * k, selfY + ay + 33 * k);
+        want.set(selfX + ax, 54 * camZoom, selfY + ay + 33 * camZoom);
         look.set(selfX + ax, 0, selfY + ay + 1);
       }
     }
@@ -2526,9 +2539,21 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // Far away above the map, a nearer near-plane wastes depth precision and the ground and the
     // roads fight (flicker); push it out while in the overview.
     const near = overview ? 4 : camNear < 1 || fp || sv ? 0.05 : 0.5;
-    if (Math.abs(fov - camera.fov) > 0.001 || camera.near !== near) {
+    // On a phone the fighter sits a little up and left of the middle, away from the buttons: the view is shifted by easing a
+    // projection offset (in the air and scoped it eases back to the middle).
+    const offOn = camProfile.kind !== 'desktop' && self.stage === 'ground' && !fp && !sv && !scoped;
+    viewOff.x = THREE.MathUtils.damp(viewOff.x, offOn ? 0.5 - camProfile.fx : 0, 6, dt);
+    viewOff.y = THREE.MathUtils.damp(viewOff.y, offOn ? 0.5 - camProfile.fy : 0, 6, dt);
+    const offChanged = Math.abs(viewOff.x - viewOff.sx) > 0.0005 || Math.abs(viewOff.y - viewOff.sy) > 0.0005;
+    if (Math.abs(fov - camera.fov) > 0.001 || camera.near !== near || offChanged) {
       camera.fov = fov;
       camera.near = near;
+      if (offChanged) {
+        viewOff.sx = viewOff.x;
+        viewOff.sy = viewOff.y;
+        if (Math.abs(viewOff.x) < 0.0005 && Math.abs(viewOff.y) < 0.0005) camera.clearViewOffset();
+        else camera.setViewOffset(1, 1, viewOff.x, viewOff.y, 1, 1);
+      }
       camera.updateProjectionMatrix();
     }
     if (fp || sv) {
@@ -3026,7 +3051,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     raf = requestAnimationFrame(frame);
   };
   raf = requestAnimationFrame(frame);
-  if (process.env.NODE_ENV !== 'production') (window as unknown as { __lcs?: unknown }).__lcs = { state: () => state, buildings: BUILDINGS, map: MAP, animals: props.animals, preview: () => ({ ring: landRing.visible, x: landRing.position.x, y: landRing.position.y, z: landRing.position.z, s: landRing.scale.x, parent: !!landRing.parent, op: (landRing.material as THREE.MeshBasicMaterial).opacity, dots: arcDots.filter((d) => d.visible).length, aim: lastThrowAim }) };
+  if (process.env.NODE_ENV !== 'production') (window as unknown as { __lcs?: unknown }).__lcs = { fighter: () => {
+    // Dev only: the fighter's box on screen (projected corners of its rig, CSS px) and the shoulder arm, for the camera checks.
+    const box = new THREE.Box3().setFromObject(rigs[me].root);
+    const pts = [0, 1].flatMap((i) => [0, 1].flatMap((j) => [0, 1].map((l) => new THREE.Vector3(i ? box.max.x : box.min.x, j ? box.max.y : box.min.y, l ? box.max.z : box.min.z).project(camera))));
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    const xs = pts.map((v) => ((v.x + 1) / 2) * w), ys = pts.map((v) => ((1 - v.y) / 2) * h);
+    return { w, h, x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys), height: Math.max(...ys) - Math.min(...ys), arm: armNow, shoulder: shoulderView(), cam: camera.position.toArray() };
+  }, state: () => state, buildings: BUILDINGS, map: MAP, animals: props.animals, preview: () => ({ ring: landRing.visible, x: landRing.position.x, y: landRing.position.y, z: landRing.position.z, s: landRing.scale.x, parent: !!landRing.parent, op: (landRing.material as THREE.MeshBasicMaterial).opacity, dots: arcDots.filter((d) => d.visible).length, aim: lastThrowAim }) };
 
   // Measuring (?perf only, any build): draw calls and triangles of the last frame, the world's build time, a synchronous
   // render benchmark, and a way to put the player at a fixed spot with the sim frozen, so before/after shots match.
