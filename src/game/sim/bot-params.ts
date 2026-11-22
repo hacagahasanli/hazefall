@@ -1,7 +1,7 @@
 // Bot tuning and the pure helpers behind it: personalities, where each bot lands, what loot is
 // worth, and where to hide. Everything is a function of the match and the bot's own seed, so a
 // host replays the same bots.
-import { BUILDINGS, DROP, HEALS, magOf, MAP, PLAYERS, TILE, WORLD } from './constants';
+import { BUILDINGS, DROP, HEALS, magOf, MAP, PLACE_TIER, placeAt, PLAYERS, TILE, WORLD } from './constants';
 import { carried, carryCap, chestHeight, circleBlocked, inPlant, lineOfSight, solidAt, spareCap, vestPoints } from './step';
 
 import type { Drone, GameState, Gun, HealKind, Loot, LootKind, Player, WeaponKind } from './types';
@@ -267,7 +267,7 @@ export const HUNT_ALIVE = 4;
  * the field does not all start at once and empty in a minute), and with a person, sooner: the player is who the match is
  * for, and a quiet first minute is what makes it boring. Long enough to grab the gun by the door.
  */
-export const LANDING_GRACE = { bot: 32, human: 18 };
+export const LANDING_GRACE = { bot: 90, human: 18 };
 export const GRACE_BY_PERSONA: Record<PersonaName, number> = { rusher: 0.6, tactical: 0.8, camper: 1, looter: 1.1 };
 /**
  * A crowd holds back: with more than `from` alive, every bot is less ready to fight another bot (never a person), walks
@@ -330,18 +330,26 @@ export const LOW_HP = 0.35;
 const CENTRES = BUILDINGS.map((b) => {
   let loot = 0;
   for (let y = b.y0; y < b.y0 + b.h; y++) for (let x = b.x0; x < b.x0 + b.w; x++) if (MAP[y]?.[x] === 'l') loot += 1;
-  return { x: (b.x0 + b.w / 2) * TILE, y: (b.y0 + b.h / 2) * TILE, loot };
+  const x = (b.x0 + b.w / 2) * TILE;
+  const y = (b.y0 + b.h / 2) * TILE;
+  return { x, y, loot, place: placeAt(x, y)?.name ?? null };
 });
+
+/** The most bots that land in one place: the hot places hold the crowd (Old Town 5, the Yard and the Campus 4), the quiet ones few. */
+const PLACE_CAPS: Record<string, number> = { 'Old Town': 5, 'Container Yard': 4, 'The Campus': 4, 'Mast Hill': 2 };
+export const placeCap = (name: string | null) => (name === null ? 2 : PLACE_CAPS[name] ?? ((PLACE_TIER[name] ?? 1) >= 2 ? 3 : 2));
+/** Places within reach of the route that get no bot at all, so a person who wants quiet can find it. */
+export const QUIET_PLACES = 3;
 
 const droneAt = (d: Drone, t: number) => ({ x: d.x0 + (d.x1 - d.x0) * t, y: d.y0 + (d.y1 - d.y0) * t });
 const overCampus = (p: { x: number; y: number }) => p.x > 4 && p.y > 4 && p.x < WORLD - 4 && p.y < WORLD - 4;
 /** Bots jump by this point of the route at the latest (the drone forces everyone out a little later). */
 export const LAST_JUMP = DROP.forceJump - 0.03;
 /** How far a bot can steer on the way down (free fall plus parachute, with some margin). */
-const REACH = 68;
+const REACH = 90;
 
 /** How far from the middle of the route the player's two or three neighbours land (m): far enough to loot in peace first. */
-export const NEAR_BAND = { min: 24, max: 50 };
+export const NEAR_BAND = { min: 33, max: 68 };
 
 export interface Landing {
   x: number;
@@ -369,6 +377,13 @@ export const landingPlan = (state: GameState): Map<number, Landing> => {
     const p = droneAt(d, t);
     return { ...c, i, t, off: Math.hypot(c.x - p.x, c.y - p.y), n: 0 };
   }).filter((c) => c.off < REACH);
+  // Keep QUIET_PLACES of the places the route reaches empty (never the two big drops): chosen the same way by every bot.
+  const reachable = [...new Set(cands.map((c) => c.place).filter((n): n is string => n !== null))].filter((n) => n !== 'Old Town' && n !== 'Container Yard').sort();
+  const quiet = new Set<string>();
+  for (let i = 0; i < QUIET_PLACES && reachable.length > 0; i++) quiet.add(reachable.splice(Math.floor(rand() * reachable.length), 1)[0]);
+  const open = cands.filter((c) => c.place === null || !quiet.has(c.place));
+  const used = new Map<string, number>();
+  const roomIn = (c: { place: string | null }) => c.place === null || (used.get(c.place) ?? 0) < placeCap(c.place);
   const bots = state.players.filter((p) => p.bot).map((p) => p.id);
   for (let i = bots.length - 1; i > 0; i--) {
     const j = Math.floor(rand() * (i + 1));
@@ -377,17 +392,17 @@ export const landingPlan = (state: GameState): Map<number, Landing> => {
   const mid = droneAt(d, tOf(WORLD / 2, WORLD / 2));
   // Neighbours for the player: near the route's middle, but not on top of it.
   const fromMid = (c: { x: number; y: number }) => Math.hypot(c.x - mid.x, c.y - mid.y);
-  const near = cands.filter((c) => fromMid(c) > NEAR_BAND.min && fromMid(c) < NEAR_BAND.max).sort((a, b) => fromMid(a) - fromMid(b));
+  const near = open.filter((c) => fromMid(c) > NEAR_BAND.min && fromMid(c) < NEAR_BAND.max).sort((a, b) => fromMid(a) - fromMid(b));
   const nNear = 2 + (hash & 1);
   const chosen: { x: number; y: number }[] = [];
   const plan = new Map<number, Landing>();
   bots.forEach((id, k) => {
     const persona = ROSTER[k % ROSTER.length];
-    let pick = k < nNear ? near.find((c) => c.n === 0 && chosen.every((o) => Math.hypot(o.x - c.x, o.y - c.y) > 20)) : undefined;
+    let pick = k < nNear ? near.find((c) => c.n === 0 && roomIn(c) && chosen.every((o) => Math.hypot(o.x - c.x, o.y - c.y) > 20)) : undefined;
     if (!pick) {
       let best = -Infinity;
-      for (const c of cands) {
-        if (c.n >= 2) continue;
+      for (const c of open) {
+        if (c.n >= 2 || !roomIn(c)) continue;
         const gap = chosen.length ? Math.min(60, ...chosen.map((o) => Math.hypot(o.x - c.x, o.y - c.y))) : 30;
         const score = gap + BASE[persona].hot * c.loot * 3 + rand() * 20 - c.n * 80;
         if (score > best) {
@@ -396,12 +411,15 @@ export const landingPlan = (state: GameState): Map<number, Landing> => {
         }
       }
     }
+    // Every allowed place is full (rare, on a short route): any building still under two bots.
+    if (!pick) pick = open.find((c) => c.n < 2) ?? cands.find((c) => c.n < 2);
     if (!pick) {
       // Nothing reachable (cannot happen on this map): land under the route's middle.
       plan.set(id, { x: mid.x, y: mid.y, t: 0.5, persona });
       return;
     }
     pick.n += 1;
+    if (pick.place !== null) used.set(pick.place, (used.get(pick.place) ?? 0) + 1);
     const x = pick.x + (pick.n === 2 ? 3 : 0);
     chosen.push({ x, y: pick.y });
     plan.set(id, { x, y: pick.y, t: pick.t, persona });

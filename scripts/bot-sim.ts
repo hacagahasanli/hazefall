@@ -235,7 +235,10 @@ for (let m = 0; m < matches; m++) {
   let deadWindows = 0;
   for (let w = playStart + 60; w + DEAD_WINDOW <= end; w += DEAD_WINDOW) {
     windows += 1;
-    if (!damageAt.some((d) => d >= w && d < w + DEAD_WINDOW)) deadWindows += 1;
+    if (!damageAt.some((d) => d >= w && d < w + DEAD_WINDOW)) {
+      deadWindows += 1;
+      if (process.env.AIR) console.log(`dead window seed ${seed} at ${(w - playStart).toFixed(0)} s of ground time (match ${end.toFixed(0)} s)`);
+    }
   }
   rows.push({
     buildings: new Set(blds.filter((b) => b >= 0)).size,

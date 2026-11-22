@@ -465,7 +465,7 @@ export const createMatch = (seats: Seat[], seed = 1): GameState => {
 
   // The drone flies a random line across the campus.
   const a = nextRandom(state) * Math.PI * 2;
-  const off = (nextRandom(state) - 0.5) * WORLD * 0.3;
+  const off = (nextRandom(state) - 0.5) * WORLD * 0.24;
   const reach = WORLD * 0.62;
   state.drone = {
     x0: CENTER - Math.cos(a) * reach - Math.sin(a) * off,

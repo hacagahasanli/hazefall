@@ -65,7 +65,7 @@ export const sparedRookie = (state: GameState, o: Player) =>
 /** After breaking off to heal, a bot goes back to where it last saw its enemy for this long (s). */
 export const COMEBACK = 15;
 /** How far below the fight threshold a bot still takes shots at someone `POKE_FROM` m or more off, without pushing in. */
-export const POKE = 0.3;
+export const POKE = 0.33;
 export const POKE_FROM = 14;
 /** Running footsteps are heard this far (m), as a direction only. */
 export const FOOTSTEPS = 10;
@@ -82,6 +82,10 @@ export const FACE_OFF = 1;
  * carries, and runs from the Deadline. Now and then it slips up. Thinks every 8 ticks; aims and fires every tick. Uses
  * only its own seeded random numbers, so a host replay matches.
  */
+/** How far a bot wanders its own patch while the first circle waits (x 12-28 m): the map is bigger now, and they should meet. */
+const WANDER = 3.5;
+/** How widely the landing grace spreads round its personality's share (+- this much), so the field does not all start at once. */
+const GJ = 0.5;
 export const createBot = (id: number, seed: number) => {
   const rand = mulberry32(seed);
   const between = (a: number, b: number) => a + rand() * (b - a);
@@ -165,7 +169,7 @@ export const createBot = (id: number, seed: number) => {
     if (mine) spot = { x: mine.x, y: mine.y, t: mine.t };
     // The unsure heal up fuller before they go back out.
     healTo = 0.5 + 0.15 * (1 - p.confidence);
-    botGrace = LANDING_GRACE.bot * GRACE_BY_PERSONA[p.name] * between(0.8, 1.2);
+    botGrace = LANDING_GRACE.bot * GRACE_BY_PERSONA[p.name] * between(1 - GJ, 1 + GJ);
     // Aim for the doorstep, not the roof: land beside the house and walk straight in.
     const b = buildingAt(spot.x, spot.y);
     if (b >= 0) spot = { ...doorstep(b, spot.x, spot.y), t: spot.t };
@@ -313,7 +317,7 @@ export const createBot = (id: number, seed: number) => {
     if (z.phase === 0 && z.state === 'wait' && Math.hypot(me.x - z.toX, me.y - z.toY) < z.toR * 0.8) {
       // Already inside the first circle while it waits: wander my own patch of it rather than head for the middle.
       const a = between(0, Math.PI * 2);
-      const r = between(12, 28);
+      const r = between(12 * WANDER, 28 * WANDER);
       let x = me.x + Math.cos(a) * r;
       let y = me.y + Math.sin(a) * r;
       const d = Math.hypot(x - z.toX, y - z.toY);
