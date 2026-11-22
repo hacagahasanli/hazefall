@@ -1,13 +1,26 @@
 import type { AimMode } from '~/game/render/game';
 
-/** Auto-aim stays the default; mouse aim is a choice kept in this browser. */
+/**
+ * Mouse aim is the default with a mouse; a touch screen has no pointer to aim with and starts on auto-aim. A choice made in
+ * the menu is kept in this browser and wins.
+ */
 export const AIM_KEY = 'lcs:aim';
 
-export const readAim = (): AimMode => {
+const touchDevice = () => {
   try {
-    return window.localStorage.getItem(AIM_KEY) === 'mouse' ? 'mouse' : 'auto';
+    return !!window.matchMedia?.('(pointer: coarse)').matches || 'ontouchstart' in window;
   } catch {
-    return 'auto';
+    return false;
+  }
+};
+
+export const readAim = (): AimMode => {
+  const fallback: AimMode = touchDevice() ? 'auto' : 'mouse';
+  try {
+    const v = window.localStorage.getItem(AIM_KEY);
+    return v === 'mouse' || v === 'auto' ? v : fallback;
+  } catch {
+    return fallback;
   }
 };
 

@@ -970,7 +970,7 @@ export const Match = ({
               </div>
               {!hud.mouseLocked && !touch && (
                 <div className="pointer-events-none absolute inset-x-0 top-[58%] flex justify-center">
-                  <span className="panel-cut bg-ink-deep/85 px-4 py-2 text-sm text-cream">Click to look around with the mouse · Esc lets it go</span>
+                  <span className="panel-cut bg-ink-deep/85 px-4 py-2 text-sm text-cream">Click to look around with the mouse · Esc pauses</span>
                 </div>
               )}
             </>
@@ -1171,7 +1171,7 @@ export const Match = ({
                 <Key k={keyLabel(settings.keys.scope)} /> / right click · scope
               </span>
               <span className="flex items-center gap-1">
-                <Key k={keyLabel(settings.keys.aim)} /> {hud.aimMode === 'mouse' ? 'mouse aim' : 'auto-aim'}
+                <Key k={keyLabel(settings.keys.aim)} /> {hud.aimMode === 'mouse' || hud.firstPerson || hud.shoulder ? 'mouse aim' : 'auto-aim'}
               </span>
               <span className="flex items-center gap-1">
                 <Key k={keyLabel(settings.keys.mute)} /> mute

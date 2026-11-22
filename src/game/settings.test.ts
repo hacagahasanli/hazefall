@@ -8,12 +8,21 @@ const mem = () => {
 };
 
 describe('settings store', () => {
-  it('starts from sane defaults: every action bound to its own key, auto graphics, third person', () => {
+  it('starts from sane defaults: every action bound to its own key, auto graphics, mouse-aim (over the shoulder) camera', () => {
     const s = loadSettings(mem());
     expect(s).toEqual(DEFAULT_SETTINGS);
     expect(new Set(Object.values(s.keys)).size).toBe(ACTIONS.length);
     expect(s.quality).toBe('auto');
-    expect(s.camera).toBe('third');
+    expect(s.camera).toBe('shoulder');
+  });
+
+  it('a new player gets the mouse-aim view, a saved camera choice is never overridden', () => {
+    expect(normalize({}).camera).toBe('shoulder');
+    expect(normalize({ fov: 80 }).camera).toBe('shoulder'); // a save with no camera in it
+    for (const camera of ['third', 'shoulder', 'first'] as const) expect(normalize({ camera }).camera).toBe(camera);
+    const st = mem();
+    saveSettings(st, { ...DEFAULT_SETTINGS, camera: 'third' });
+    expect(loadSettings(st).camera).toBe('third');
   });
 
   it('saves and loads back the same settings', () => {
@@ -32,7 +41,7 @@ describe('settings store', () => {
     expect(s.sensitivity).toBe(0.2);
     expect(s.resolution).toBe(1);
     expect(s.quality).toBe('auto');
-    expect(s.camera).toBe('third');
+    expect(s.camera).toBe('shoulder');
     expect(s.keys.up).toBe('KeyW'); // Esc can never be bound
     expect('extra' in s).toBe(false);
     // Two actions on one key in an old save: back to the default keys.

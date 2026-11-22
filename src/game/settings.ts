@@ -74,7 +74,11 @@ export const FIXED_KEYS: Partial<Record<Action, string[]>> = {
 /** Keys that can never be bound (menus, the browser, the portal's fullscreen). */
 export const RESERVED = new Set(['Escape', 'Tab', 'F11', 'F5', 'MetaLeft', 'MetaRight', ...Object.values(FIXED_KEYS).flat()]);
 
-/** 'third' is the high follow view (auto-aim, phones), 'shoulder' the over-the-shoulder view, 'first' your eyes. */
+/**
+ * 'third' is the high follow view (auto-aim, phones), 'shoulder' the over-the-shoulder view (mouse aim), 'first' your eyes.
+ * The default is 'shoulder': a mouse and keyboard player starts aiming with the mouse. A touch screen never uses it (the round
+ * and the settings panel keep the high view there), so phones are on 'third' whatever this says.
+ */
 export type CameraView = 'third' | 'shoulder' | 'first';
 
 export interface Settings {
@@ -118,7 +122,7 @@ export const DEFAULT_SETTINGS: Settings = {
   touchSize: 1,
   touchOpacity: 0.9,
   leftHanded: false,
-  camera: 'third',
+  camera: 'shoulder',
   fov: 74,
   quality: 'auto',
   shadows: true,
@@ -180,7 +184,8 @@ export const normalize = (raw: unknown): Settings => {
     touchSize: clamp(r.touchSize, 0.7, 1.4, d.touchSize),
     touchOpacity: clamp(r.touchOpacity, 0.3, 1, d.touchOpacity),
     leftHanded: bool(r.leftHanded, d.leftHanded),
-    camera: r.camera === 'first' || r.camera === 'shoulder' ? r.camera : 'third',
+    // An old save keeps its own choice (a saved 'third' cannot be told from a chosen one); a missing or broken one gets the default.
+    camera: r.camera === 'first' || r.camera === 'shoulder' || r.camera === 'third' ? r.camera : d.camera,
     fov: clamp(r.fov, 60, 100, d.fov),
     quality: r.quality === 'low' || r.quality === 'medium' || r.quality === 'high' ? r.quality : 'auto',
     shadows: bool(r.shadows, d.shadows),
