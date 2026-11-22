@@ -7,3 +7,5 @@
 export const PICKUP_ICON = 'M4 14v5h16v-5M12 15V4M7.5 8.5 12 4l4.5 4.5';
 /** Swap guns: two arrows passing each other. */
 export const SWAP_ICON = 'M5 8h13M14.5 4.5 18 8l-3.5 3.5M19 16H6M9.5 12.5 6 16l3.5 3.5';
+/** Reload: an arrow running round a circle. */
+export const RELOAD_ICON = 'M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4v4.8h-4.8';
