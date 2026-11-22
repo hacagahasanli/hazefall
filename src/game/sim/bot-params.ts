@@ -265,9 +265,10 @@ export const HUNT_ALIVE = 4;
 /**
  * Seconds after landing before a bot picks a fight: with another bot (x its personality's share, `GRACE_BY_PERSONA`, so
  * the field does not all start at once and empty in a minute), and with a person, sooner: the player is who the match is
- * for, and a quiet first minute is what makes it boring. Long enough to grab the gun by the door.
+ * for, and a quiet first minute is what makes it boring. Long enough to grab the gun by the door. 50 s for bots (each bot's
+ * own +-40 %, see `GJ` in bot.ts): at 90 s some bots could not start a fight until 2:15, which is dead air by construction.
  */
-export const LANDING_GRACE = { bot: 90, human: 18 };
+export const LANDING_GRACE = { bot: 50, human: 18 };
 export const GRACE_BY_PERSONA: Record<PersonaName, number> = { rusher: 0.6, tactical: 0.8, camper: 1, looter: 1.1 };
 /**
  * A crowd holds back: with more than `from` alive, every bot is less ready to fight another bot (never a person), walks

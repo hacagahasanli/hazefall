@@ -64,8 +64,12 @@ export const sparedRookie = (state: GameState, o: Player) =>
   !!state.rookie && !o.bot && (o.stage !== 'ground' || state.tick - (o.landedTick ?? 0) < NEWBIE.spareSeconds / DT);
 /** After breaking off to heal, a bot goes back to where it last saw its enemy for this long (s). */
 export const COMEBACK = 15;
-/** How far below the fight threshold a bot still takes shots at someone `POKE_FROM` m or more off, without pushing in. */
-export const POKE = 0.33;
+/**
+ * How far below the fight threshold a bot still takes shots at someone `POKE_FROM` m or more off, without pushing in.
+ * 0.33 -> 0.55: more of the long-range chip damage that fills the quiet stretches (dead air 14 % -> 4.5 % over 50 matches;
+ * 0.40 to 0.50 did not move it under 10 %), at the cost of rounds about 25 s shorter.
+ */
+export const POKE = 0.55;
 export const POKE_FROM = 14;
 /** Running footsteps are heard this far (m), as a direction only. */
 export const FOOTSTEPS = 10;
@@ -85,7 +89,7 @@ export const FACE_OFF = 1;
 /** How far a bot wanders its own patch while the first circle waits (x 12-28 m): the map is bigger now, and they should meet. */
 const WANDER = 3.5;
 /** How widely the landing grace spreads round its personality's share (+- this much), so the field does not all start at once. */
-const GJ = 0.5;
+const GJ = 0.4;
 export const createBot = (id: number, seed: number) => {
   const rand = mulberry32(seed);
   const between = (a: number, b: number) => a + rand() * (b - a);

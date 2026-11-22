@@ -107,6 +107,8 @@ type Row = {
   placement: number;
   crowd: number;
   playerLife: number;
+  /** Seconds from 30 s after the stand-in lands to the first enemy within 40 m or the first hit on it (0 if already so). */
+  quiet: number;
   attackers: number;
   firstAbs: number;
   kills: Record<string, number>;
@@ -149,6 +151,7 @@ for (let m = 0; m < matches; m++) {
   let crowd = 0;
   const attackers = new Set<number>();
   let playerFirstShot = -1;
+  let quietAt = -1;
   const alive: number[] = [];
   const fightLast = new Map<number, number>();
   const fightStarts: number[] = [];
@@ -202,6 +205,12 @@ for (let m = 0; m < matches; m++) {
         if (e.target === 0) attackers.add(e.by);
         if (e.target !== 0 && firstBvB < 0) firstBvB = t;
       }
+    }
+    if (playerLanded >= 0 && quietAt < 0 && t >= playerLanded + 30) {
+      const me = s.players[0];
+      const hit = s.events.some((e) => e.type === 'hit' && e.target === 0);
+      const near = me.alive && s.players.some((p) => p.id !== 0 && p.alive && p.stage === 'ground' && Math.hypot(p.x - me.x, p.y - me.y) < 40);
+      if (hit || near || !me.alive) quietAt = t;
     }
     if (s.phase === 'play' && playStart < 0) playStart = t;
     if (s.tick % 30 === 0) for (const p of s.players) {
@@ -257,6 +266,7 @@ for (let m = 0; m < matches; m++) {
     zoneDeaths: s.players.filter((p) => !p.alive && p.killedWith === 'zone').length,
     placement: s.players[0].placement,
     playerLife: (s.players[0].alive ? s.tick : s.players[0].diedAt) * DT - playerLanded,
+    quiet: playerLanded < 0 ? NaN : Math.max(0, (quietAt < 0 ? s.tick * DT : quietAt) - (playerLanded + 30)),
     attackers: attackers.size,
     firstAbs: Math.min(...[firstBvB, firstBvP].filter((v) => v >= 0)),
     crowd,
@@ -294,6 +304,7 @@ console.log(`spread 60 s after everyone landed: mean pairwise distance ${f1(avg(
 console.log(`first fight after the player lands (s): any avg ${f1(avg((r) => r.firstAny))} / median ${f1(med((r) => r.firstAny))}; bot-vs-bot avg ${f1(avg((r) => r.firstBvB))} median ${f1(med((r) => r.firstBvB))}; bot-vs-player avg ${f1(avg((r) => r.firstBvP))} median ${f1(med((r) => r.firstBvP))} (never in ${rows.filter((r) => !Number.isFinite(r.firstBvP)).length})`);
 console.log(`first fight after Play is pressed (s): avg ${f1(avg((r) => r.firstAbs))}`);
 console.log(`match length (from Play): avg ${f1(avg((r) => r.length))} s, min ${f1(Math.min(...rows.map((r) => r.length)))}, max ${f1(Math.max(...rows.map((r) => r.length)))}`);
+console.log(`human seat's quiet time (from 30 s after landing to the first enemy within 40 m or first hit taken; report only): avg ${f1(avg((r) => r.quiet))} s, median ${f1(med((r) => r.quiet))}, p90 ${f1(rows.map((r) => r.quiet).filter(Number.isFinite).sort((a, b) => a - b)[Math.floor(rows.length * 0.9)])}`);
 console.log(`killed by the Deadline (bots and stand-in): ${f1(avg((r) => r.zoneDeaths))} per match, max ${Math.max(...rows.map((r) => r.zoneDeaths))}`);
 console.log(`passive player: avg placement ${f1(avg((r) => r.placement))}, survives ${f1(avg((r) => r.playerLife))} s after landing (median ${f1(med((r) => r.playerLife))}), shot at by ${f1(avg((r) => r.attackers))} different bots, won ${rows.filter((r) => r.placement === 1).length}, most bots within 30 m in first 60 s: avg ${f1(avg((r) => r.crowd))}, max ${Math.max(...rows.map((r) => r.crowd))}`);
 const totals: Record<string, [number, number]> = {};

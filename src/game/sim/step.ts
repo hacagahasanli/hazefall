@@ -704,15 +704,64 @@ const land = (state: GameState, p: Player, z: number) => {
 
 // ---------- the Deadline
 
+/** Tiles that stop a bullet or hide you: rocks, crates, props, walls, fences and trees (a house wall counts). */
+const COVER_TILES = 'krv#ftw';
+
+/**
+ * Does a circle centred here pass the centre rules (map-v2.md section 7)? `phase` counts from 0 (the first circle is phase 0):
+ *  1. the centre is not water, not a prop and not inside a building;
+ *  2. from the third circle on, at most a quarter of its area is water (the river must not eat the late game);
+ *  3. from the fourth on, at least 6 cover tiles lie within 15 m of the centre, and the centre is not on a bridge deck or the Weir;
+ *  (rule 4, 12 m inside the edge tree ring, is applied when the centre is drawn).
+ */
+export const circleCentreOk = (x: number, y: number, radius: number, phase: number) => {
+  const t = tileAt(toTile(x), toTile(y));
+  if (t === 'o' || t === 'd' || t === 'v' || buildingAt(x, y) >= 0) return false;
+  if (phase >= 2) {
+    // Sample the disc on a grid (at most 8 per radius): the share of samples that are water.
+    let wet = 0;
+    let all = 0;
+    const step = Math.max(TILE, radius / 8);
+    for (let dy = -radius; dy <= radius; dy += step) {
+      for (let dx = -radius; dx <= radius; dx += step) {
+        if (dx * dx + dy * dy > radius * radius) continue;
+        all += 1;
+        if (tileAt(toTile(x + dx), toTile(y + dy)) === 'o') wet += 1;
+      }
+    }
+    if (all && wet / all > 0.25) return false;
+  }
+  if (phase >= 3) {
+    let cover = 0;
+    for (let ty = toTile(y - 15); ty <= toTile(y + 15); ty++) {
+      for (let tx = toTile(x - 15); tx <= toTile(x + 15); tx++) {
+        if (COVER_TILES.includes(tileAt(tx, ty)) && Math.hypot((tx + 0.5) * TILE - x, (ty + 0.5) * TILE - y) <= 15) cover += 1;
+      }
+    }
+    if (cover < 6) return false;
+  }
+  return true;
+};
+
 const pickNextCircle = (state: GameState, roomShare = 0.6) => {
   const z = state.zone;
   const def = ZONE_PHASES[z.phase];
   if (!def) return;
   const room = Math.max(0, z.r - def.radius) * roomShare;
-  const a = nextRandom(state) * Math.PI * 2;
-  const d = Math.sqrt(nextRandom(state)) * room;
-  z.toX = Math.min(WORLD - 8, Math.max(8, z.cx + Math.cos(a) * d));
-  z.toY = Math.min(WORLD - 8, Math.max(8, z.cy + Math.sin(a) * d));
+  // Up to 8 draws; the first centre that passes the rules wins, else the last one drawn.
+  const lo = def.radius + 12;
+  const hi = WORLD - def.radius - 12;
+  for (let draw = 0; draw < 8; draw++) {
+    const a = nextRandom(state) * Math.PI * 2;
+    const d = Math.sqrt(nextRandom(state)) * room;
+    const x = z.cx + Math.cos(a) * d;
+    const y = z.cy + Math.sin(a) * d;
+    // The circle stays 12 m inside the edge tree ring (the first circle is too big for that and keeps the old 8 m margin).
+    const [min, max] = lo <= hi ? [lo, hi] : [8, WORLD - 8];
+    z.toX = Math.min(max, Math.max(min, x));
+    z.toY = Math.min(max, Math.max(min, y));
+    if (circleCentreOk(z.toX, z.toY, def.radius, z.phase)) break;
+  }
   z.toR = def.radius;
 };
 

@@ -11,6 +11,8 @@ export const SIZE = 120;
 const S = 16;
 const HEART = 88;
 const O = 12;
+/** The Market Square in tiles (the old town's 40,31 to 50,37 in the frame shifted by 16): one paved rectangle that Route 1 crosses. */
+export const MARKET_SQUARE = { x0: 56, y0: 47, w: 10, h: 6 };
 export const WORLD = TILE * SIZE;
 export const PLAYER_RADIUS = 0.55;
 /** Fighters in a match: you and nineteen bots offline, or people plus bots online. */
@@ -792,6 +794,25 @@ const buildMap = () => {
   for (let y = 87; y < 90; y++) for (let x = 62; x < 106; x++) if ('tbkhcfsr'.includes(get(x, y))) set(x, y, 'g');
   for (const y of [85, 86, 90, 91]) for (let x = 62; x < 106; x += 3) if (get(x, y) === 'g' && !nearHouse[y * SIZE + x]) set(x, y, rr() < 0.4 ? 't' : rr() < 0.5 ? 'k' : 'b');
   for (const [x, y] of [[71, 86], [75, 86], [79, 86], [71, 88], [75, 88], [79, 88]]) set(x, y, 'k'); // boulders by the row's middle
+  // Every crossing gets hard cover at both ends (section 6): two rocks 2 to 4 tiles to either side of the deck's axis and 2 to 3 tiles
+  // short of the deck, on open grass only (never on the lane, the road or the deck).
+  for (const [bx, bw] of RIVER.bridges) {
+    let y0 = SIZE;
+    let y1 = -1;
+    for (let y = 0; y < SIZE; y++) if (get(bx, y) === 'd') [y0, y1] = [Math.min(y0, y), Math.max(y1, y)];
+    if (y1 < 0) continue;
+    const axis = bx + Math.floor(bw / 2);
+    for (const rows of [[y0 - 2, y0 - 3], [y1 + 2, y1 + 3]]) {
+      const open = [2, 3, 4]
+        .flatMap((dx) => [-1, 1].flatMap((side) => rows.map((y) => [axis + side * dx, y] as [number, number])))
+        .filter(([x, y]) => 'gbth'.includes(get(x, y)) && (x < bx - 1 || x > bx + bw));
+      // Two pieces, on opposite sides of the axis when both have room.
+      const first = open[0];
+      const second = open.find(([x]) => first && Math.sign(x - axis) !== Math.sign(first[0] - axis)) ?? open[1];
+      for (const spot of [first, second]) if (spot) set(spot[0], spot[1], 'k');
+    }
+  }
+
   // Mast Hill is exposed: nothing taller than grass for ten tiles round the fence, three blobs of tall grass and six rocks.
   for (let y = 7 - 10; y < 20 + 10; y++) for (let x = 8 - 10; x < 23 + 10; x++) if (x > 1 && y > 1 && 'tb'.includes(get(x, y))) set(x, y, 'g');
   for (const [cx, cy] of [[30, 12], [4, 22], [14, 27]]) for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 2; x++) if (get(x, y) === 'g') set(x, y, 'h');
@@ -1234,12 +1255,12 @@ export const MOVE = { accel: 40, friction: 45, turn: 12 };
 
 /**
  * The Deadline: wait, then shrink, phase after phase, until nothing is left. Six phases on the 240 m map. The radii are the 176 m
- * map's (80, 62, 40, 22, 9) times 1.36 (109, 84, 54, 30, 12); the start radius stays 0.72 of the map. The waits and shrinks were
- * tuned with the bot-sim (50 matches) to the map-v2 gates: round length median 4:30-5:30 from Play, p10 over 3:30, p90 under
- * 6:30, dead air about 10% after the first ground minute, at most one Deadline death a match. What the bot-sim showed: the first
- * circle waits long (150 s) because bots only start trading about two minutes in (their landing grace is 90 s and the field
- * is wide), then every circle closes slowly (70 to 120 s) so there is always a line to walk and fights keep coming; players
- * dying, not the table, set the real length (the endgame rules below cut the end short). Rules the sim tests hold it to:
+ * map's (80, 62, 40, 22, 9) times 1.36 (109, 84, 54, 30, 12); the start radius stays 0.72 of the map. The gates (50 bot-sim
+ * matches): dead air after the first ground minute at most 10 % (the hard one), round length median 4:00-5:30, p10 over 3:00,
+ * p90 under 6:30, at most one Deadline death a match. What the bot-sim showed: the first circle is shown early (waits 110 s,
+ * then closes over 90 s) so the field starts converging during the quiet stretch; the circles after it close slowly (up to
+ * 120 s) so there is always a line to walk; players dying, not the table, set the real length (nothing after the third phase
+ * changed a round's length in any run). Rules the sim tests hold it to:
  *  - the edge never moves faster than `ZONE_EDGE_SPEED` (under half the slowest running speed and under swimming);
  *  - from anywhere inside the current circle, the next one is never more than a third of that phase's wait + shrink away
  *    at running speed;
@@ -1247,7 +1268,7 @@ export const MOVE = { accel: 40, friction: 45, turn: 12 };
  * `ZONE_RULES` can cut a wait short, never the first one: see there.
  */
 export const ZONE_PHASES = [
-  { wait: 150, shrink: 70, radius: 109, dps: 3 },
+  { wait: 110, shrink: 90, radius: 109, dps: 3 },
   { wait: 20, shrink: 120, radius: 84, dps: 5 },
   { wait: 20, shrink: 80, radius: 54, dps: 8 },
   { wait: 30, shrink: 45, radius: 30, dps: 13 },
@@ -1270,7 +1291,7 @@ export const ZONE_PHASES = [
  * third of the shrink away at running speed, and slower than swimming).
  */
 export const ZONE_RULES = {
-  lull: 20,
+  lull: 15,
   lullWait: 6,
   lullLate: 8,
   squeezeAlive: 6,
