@@ -398,13 +398,13 @@ export const PreMatch = ({
       {/* After Ready: the match-starting strip, bottom centre. */}
       {readied && !launching && (
         <div
-          className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] flex justify-center px-4 max-sm:bottom-auto max-sm:top-28 [@media(max-height:640px)_and_(min-width:640px)]:justify-end [@media(max-height:640px)_and_(min-width:640px)]:px-6 [@media(max-height:500px)_and_(min-width:640px)]:bottom-3"
+          className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] flex justify-center px-4 max-sm:bottom-auto max-sm:top-28 [@media(max-height:640px)_and_(min-width:640px)]:justify-end [@media(max-height:640px)_and_(min-width:640px)]:px-6 [@media(max-height:500px)]:bottom-[max(0.5rem,env(safe-area-inset-bottom))] [@media(max-height:500px)]:top-auto [@media(max-height:500px)]:justify-end [@media(max-height:500px)]:px-3"
           aria-live="polite"
         >
-          <div className="panel-cut flex w-[min(420px,92vw)] flex-col gap-2 bg-ink-deep/85 px-5 py-3 backdrop-blur [animation:riseIn_0.35s_ease-out] [@media(max-height:640px)_and_(min-width:640px)]:w-[min(300px,44vw)] [@media(max-height:640px)_and_(min-width:640px)]:gap-1.5 [@media(max-height:640px)_and_(min-width:640px)]:py-2">
+          <div className="panel-cut flex w-[min(420px,92vw)] flex-col gap-2 bg-ink-deep/85 px-5 py-3 backdrop-blur [animation:riseIn_0.35s_ease-out] [@media(max-height:640px)_and_(min-width:640px)]:w-[min(300px,44vw)] [@media(max-height:640px)_and_(min-width:640px)]:gap-1.5 [@media(max-height:640px)_and_(min-width:640px)]:py-2 [@media(max-height:500px)]:w-[min(200px,38vw)] [@media(max-height:500px)]:gap-1 [@media(max-height:500px)]:px-3 [@media(max-height:500px)]:py-1.5">
             <div className="flex items-baseline justify-between gap-4">
-              <span className="font-display text-base uppercase tracking-wide text-cream">{joining ? 'Joining match' : 'Match starting'}</span>
-              <span className="font-display text-3xl leading-none tabular-nums text-gold">
+              <span className="font-display text-base uppercase tracking-wide text-cream [@media(max-height:500px)]:text-xs">{joining ? 'Joining match' : 'Match starting'}</span>
+              <span className="font-display text-3xl leading-none tabular-nums text-gold [@media(max-height:500px)]:text-xl">
                 {joining ? '…' : `0:${String(Math.max(0, secs)).padStart(2, '0')}`}
               </span>
             </div>
@@ -414,7 +414,7 @@ export const PreMatch = ({
                 style={{ width: `${(joining ? mapShare : progress) * 100}%` }}
               />
             </div>
-            <span className="text-xs tabular-nums text-cream/60">
+            <span className="text-xs tabular-nums text-cream/60 [@media(max-height:500px)]:hidden">
               {PLAYERS}/{PLAYERS} ready · {loaded ? 'map ready' : models && models.total > 0 ? `loading the map · ${models.done}/${models.total} models` : 'building the map'}
             </span>
           </div>
