@@ -22,7 +22,7 @@ export const COPY: Copy = {
     closing: 'Storm closing',
     final: 'Final Storm',
     outside: 'Outside the safe zone!',
-    caught: (who) => `${who} was caught by the Storm`,
+    caught: (who, you) => (you ? 'You were caught by the Storm' : `${who} was caught by the Storm`),
   },
   result: { won: 'LAST ONE STANDING', lost: 'KNOCKED OUT', wonLine: (n) => `${n} down, one standing. The win is yours.` },
   intro: {

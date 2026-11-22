@@ -1464,7 +1464,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         deadAt[e.victim] = time;
         const v = state.players[e.victim];
         const by = e.by !== null ? state.players[e.by] : null;
-        feed.push({ id: feedId++, text: by ? `${by.name} ⟶ ${v.name}` : COPY.zone.caught(v.name), at: time });
+        feed.push({ id: feedId++, text: by ? `${by.name} ⟶ ${v.name}` : COPY.zone.caught(v.name, e.victim === me), at: time });
         vfx.burst(e.x, 1, 30, 'ko', { z: e.y,  speed: 7, up: 4, life: 0.8 });
         sfx.ko(e.x - camX());
         if (e.victim === me) {

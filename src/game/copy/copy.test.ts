@@ -18,6 +18,7 @@ const strings = (c: Copy): string[] => [
   c.zone.final,
   c.zone.outside,
   c.zone.caught('Kiwi'),
+  c.zone.caught('you', true),
   c.result.won,
   c.result.lost,
   c.result.wonLine(9),
@@ -42,6 +43,14 @@ describe('portal copy', () => {
     expect(NEUTRAL.botNames).toHaveLength(STUDIO.botNames.length);
     expect(NEUTRAL.howTo.map(([t]) => t)).toEqual(STUDIO.howTo.map(([t]) => t));
     expect(NEUTRAL.tips).toHaveLength(STUDIO.tips.length);
+  });
+
+  it('words the zone knock-out line for you and for others', () => {
+    expect(NEUTRAL.zone.caught('Kiwi')).toBe('Kiwi was caught by the Storm');
+    expect(NEUTRAL.zone.caught('you', true)).toBe('You were caught by the Storm');
+    expect(STUDIO.zone.caught('dev_1')).toBe('dev_1 missed the Deadline');
+    expect(STUDIO.zone.caught('you', true)).toBe('You missed the Deadline');
+    for (const c of [NEUTRAL, STUDIO]) expect(c.zone.caught('you', true)).not.toMatch(/\byou\b/);
   });
 
   it('carries none of the developer jokes', () => {

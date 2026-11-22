@@ -19,7 +19,7 @@ export const COPY: Copy = {
     closing: 'Deadline closing',
     final: 'Final Deadline',
     outside: 'Outside the Deadline!',
-    caught: (who) => `${who} missed the Deadline`,
+    caught: (who, you) => (you ? 'You missed the Deadline' : `${who} missed the Deadline`),
   },
   result: { won: 'MERGED TO MAIN', lost: 'YOUR COMMIT WAS REVERTED', wonLine: (n) => `${n} down, one standing. You shipped it.` },
   intro: {

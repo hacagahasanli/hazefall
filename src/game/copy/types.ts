@@ -26,7 +26,8 @@ export interface Copy {
     final: string;
     outside: string;
     /** Kill feed line for a player the zone took. */
-    caught: (who: string) => string;
+    /** The feed line when the zone knocks someone out; `you` is true for the player ("You were caught", not "you was caught"). */
+    caught: (who: string, you?: boolean) => string;
   };
   result: { won: string; lost: string; wonLine: (others: number) => string };
   /** The title card on the plane: optional lines above and below, two title lines, one sentence. */
