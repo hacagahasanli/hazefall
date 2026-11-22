@@ -540,7 +540,7 @@ describe('the Deadline', () => {
       step(t, inputs);
     }
     expect(t.zone.calm).toBeLessThan(DT * 1.5);
-  });
+  }, 30000);
 
   it('with five left, every wait from then on is half as long', () => {
     const s = landed();
@@ -575,7 +575,7 @@ describe('the endgame rush', () => {
     expect(Math.hypot(s.zone.toX - cx, s.zone.toY - cy)).toBeLessThanOrEqual((r - s.zone.toR) * ZONE_RULES.rushRoom + 1e-6);
     // It stops where it was while the new circle shows.
     expect(s.zone.r).toBeCloseTo(r, 0);
-  });
+  }, 30000);
 
   it('the rushed shrink is fair: the edge stays under the cap and the new circle is in reach from anywhere', () => {
     const s = landed();

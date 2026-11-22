@@ -412,7 +412,9 @@ export const createBot = (id: number, seed: number) => {
         // poke), which starts a trade without a rush.
         // Face to face nobody walks on by: anyone armed and not badly hurt fights whoever it meets this close.
         const faceOff = armed && !landing && td < FACE_OFF && (me.hp + me.armor) / me.maxHp >= LOW_HP;
-        poking = !(score >= ENGAGE_AT || ambush || faceOff) && armed && far >= ENGAGE_AT - POKE;
+        // (Nobody starts a trade from afar while badly hurt: that is for healing, not for shooting first.)
+        const fit = (me.hp + me.armor) / me.maxHp >= LOW_HP;
+        poking = !(score >= ENGAGE_AT || ambush || faceOff) && armed && fit && far >= ENGAGE_AT - POKE;
         engaged = score >= ENGAGE_AT || ambush || faceOff || poking;
         if (engaged) foughtId = target.id;
         if (!engaged) mode = 'roam';

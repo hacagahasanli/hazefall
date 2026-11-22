@@ -61,7 +61,7 @@ places. Deviations in LOG 2026-11-22 are all accepted (see F-010 for two conditi
   hidden for more than 0.2 s; s2-canopy-campus-390 re-shot shows the jumper and the plaza through a ghosted tower.
 - Related spec: map-v2.md section 5 (HQ height updated), section 11 (phones first-class).
 - Priority: P0 (blocks Basic Launch)
-- Status: open
+- Status: done (engineering, 2026-11-22), see LOG; R-010 for the re-review
 
 ## F-005 — Dead air vs round length: dead air wins
 - What is wrong: dead air after 1:00 is 13.4 % (gate 10 %); p10 round length is 3:26 (gate 3:30). In the bot-sim they
@@ -85,7 +85,7 @@ places. Deviations in LOG 2026-11-22 are all accepted (see F-010 for two conditi
 - Expected result: one 50-match run meeting all five gates, numbers in LOG.
 - Related spec: map-v2.md section 10 slice 2 gates; basic-launch-kpi.md.
 - Priority: P0
-- Status: open
+- Status: dead air met (5.2 %, gate 10 %), median 3:24 and p10 2:43 NOT met (gates 4:00-5:30 and 3:00); see LOG and R-010
 
 ## F-006 — Plane view is over any budget (high: 468 calls / 1.26M tris)
 - What is wrong: plane-centre-1280x720 high tier: 468 calls, 1257k tris, 50 fps, worst frame 100 ms (s2-plane-* 381-501
@@ -105,7 +105,7 @@ places. Deviations in LOG 2026-11-22 are all accepted (see F-010 for two conditi
   run, and one throttled run (Chrome 4x CPU, 390x844, low) logged before Basic Launch.
 - Related spec: map-v2.md section 9.
 - Priority: P1
-- Status: open
+- Status: done (engineering, 2026-11-22), see LOG; R-010 for the re-review
 
 ## F-007 — HUD in the air: weapon card covers the drop minimap; canopy names collide
 - What is wrong: (a) desktop plane shots: the weapon card (pistol 12/24 and slot 2) sits on the enlarged minimap and hides
@@ -125,7 +125,7 @@ places. Deviations in LOG 2026-11-22 are all accepted (see F-010 for two conditi
   another label or a HUD element.
 - Related spec: map-v2.md section 9 (minimap), slice 1 item 6.
 - Priority: P1
-- Status: open
+- Status: done (engineering, 2026-11-22), see LOG; R-010 for the re-review
 
 ## F-008 — Market Square reads as a road with two gravel patches
 - What is wrong: after the shift, Route 1 (asphalt with edge lines and yellow dashes) runs straight through the square
@@ -139,7 +139,7 @@ places. Deviations in LOG 2026-11-22 are all accepted (see F-010 for two conditi
   north-east quarter; Route 1 visibly enters and leaves it.
 - Related spec: map-v2.md section 4, Old Town.
 - Priority: P1
-- Status: open
+- Status: done (engineering, 2026-11-22), see LOG; R-010 for the re-review
 
 ## F-009 — Clouds cover the places in the plane view
 - What is wrong: low cloud puffs (opacity 0.92) sit between the plane camera and the map interior: over the Yard and the
@@ -150,7 +150,7 @@ places. Deviations in LOG 2026-11-22 are all accepted (see F-010 for two conditi
 - Expected result: no landmark is covered by a cloud in any of the plane shots.
 - Related spec: map-v2.md section 2 (name places from the plane).
 - Priority: P2
-- Status: open
+- Status: done (engineering, 2026-11-22), see LOG; R-010 for the re-review
 
 ## F-010 — Slice 3 dressing order and two conditions on accepted deviations
 - Deviations accepted: lone houses 3 tiles from places, cabin at 5,49, conveyor at 78,48, motel 2-tile gaps, port
@@ -169,4 +169,4 @@ places. Deviations in LOG 2026-11-22 are all accepted (see F-010 for two conditi
   identifiable, mast included.
 - Related spec: map-v2.md sections 4-8, slice 3.
 - Priority: P1
-- Status: open
+- Status: partly done (engineering, 2026-11-22): both conditions, items 1 to 4 (mast, windmill, crossings, Deadline centre rules with sim tests). Items 5 (story props) and 6 (cover pass and the plain-grass share) are not started; see LOG and R-010.

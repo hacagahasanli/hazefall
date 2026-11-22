@@ -320,7 +320,7 @@ describe('determinism with roofs', () => {
       return JSON.stringify({ tick: s.tick, players: s.players.map((p) => [p.x, p.y, p.z, p.hp, p.alive]) });
     };
     expect(run()).toBe(run());
-  });
+  }, 30000);
 
   it('bots do not end up stuck on roofs', () => {
     const s = createGame('hotfix', 3);

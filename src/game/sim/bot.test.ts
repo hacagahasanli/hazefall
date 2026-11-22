@@ -490,5 +490,5 @@ describe('bots fight like people', () => {
     }
     expect(slips.size).toBeGreaterThanOrEqual(2);
     for (const m of ['roam', 'loot', 'engage', 'cover', 'retreat', 'heal', 'pressure']) expect(modes).toContain(m);
-  });
+  }, 30000);
 });

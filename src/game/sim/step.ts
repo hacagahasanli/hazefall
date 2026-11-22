@@ -751,9 +751,19 @@ const pickNextCircle = (state: GameState, roomShare = 0.6) => {
   // Up to 8 draws; the first centre that passes the rules wins, else the last one drawn.
   const lo = def.radius + 12;
   const hi = WORLD - def.radius - 12;
-  for (let draw = 0; draw < 8; draw++) {
-    const a = nextRandom(state) * Math.PI * 2;
-    const d = Math.sqrt(nextRandom(state)) * room;
+  // The first draw is the match's own random stream (as before, two numbers); the redraws come from a stream of their own, so
+  // a rejected centre does not shift every other random number of the match.
+  let redraw = (state.seed ^ 0x9e3779b9) | 0;
+  const again = () => {
+    let t = (redraw = (redraw + 0x6d2b79f5) | 0);
+    t = Math.imul(t ^ (t >>> 15), 1 | t);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  // (The first circle, drawn when the match is made, is 109 m wide and its centre is within 38 m of the map's middle: it keeps its one draw.)
+  for (let draw = 0; draw < (z.phase === 0 ? 1 : 8); draw++) {
+    const a = (draw === 0 ? nextRandom(state) : again()) * Math.PI * 2;
+    const d = Math.sqrt(draw === 0 ? nextRandom(state) : again()) * room;
     const x = z.cx + Math.cos(a) * d;
     const y = z.cy + Math.sin(a) * d;
     // The circle stays 12 m inside the edge tree ring (the first circle is too big for that and keeps the old 8 m margin).
