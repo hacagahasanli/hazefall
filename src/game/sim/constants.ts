@@ -1117,7 +1117,7 @@ export const LOOT_SPOTS = { second: 1, supply: 0.9 };
 export const AMMO_BOX_MAGS = 2;
 
 /** The dodge roll (Shift): metres, seconds, bullet-proof for the first `iframes` s, recharge. */
-export const ROLL = { distance: 4, time: 0.5, iframes: 0.3, cooldown: 3 };
+export const ROLL = { distance: 4, time: 0.5, iframes: 0.3, cooldown: 1.5 };
 
 /** Vaulting: how long you push into a fence or sill before you climb over, and how long the climb takes. */
 export const VAULT = { after: 0.15, time: 0.55, reach: 3.2 };

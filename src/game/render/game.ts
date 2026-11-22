@@ -25,7 +25,7 @@ import { buildGun } from './guns';
 import { mat, mesh, PALETTE } from './palette';
 import { createVfx } from './vfx';
 import { createHitOverlay, flinchCurve, hitstopFor } from './feedback';
-import { setPeople, updateNature } from './nature';
+import { setFoliageFade, setPeople, updateNature } from './nature';
 import { buildChute, chuteQuaternion, hangChute, moveChute, newChuteMotion } from './chute';
 import { PICKUP_ICON } from './icons';
 import { paintMapImage } from './mapImage';
@@ -2711,6 +2711,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // Tree canopies: the dithered cut-out sits on the line from the camera to you (not on you), so leaves never come
       // between you and the lens, under the canopy on the way down or walking through the woods.
       updateNature(performance.now() / 1000, (camera.position.x + selfX) / 2, (camera.position.z + selfY) / 2, armNow / 2 + 3);
+      setFoliageFade(camera.position.x, camera.position.y, camera.position.z, selfX, selfH + 1.2, selfY);
       // Where the crosshair lands: the first fighter near the ray, else the ground, else 60 m out. Shots go from you
       // to that point, so what is under the crosshair is what you hit even though the camera is off to the side.
       const dx = c * cp;
