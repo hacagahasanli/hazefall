@@ -333,7 +333,9 @@ export const createSfx = () => {
         setTimeout(() => (shotVoices = Math.max(0, shotVoices - 1)), 90);
       }
       if (kind === 'shotgun') sample('pump', { pan: panOf(x), gain: gain * 0.8, delay: 0.45, bus: 'guns' });
-      if (kind === 'sniper') sample('bolt', { pan: panOf(x), gain: gain * 0.8, delay: 0.6, bus: 'guns' });
+      // The sniper's punch: the shotgun's body under the crack, low-passed to a thump (the limiter after the master catches the sum).
+      if (kind === 'sniper' && ok && distance < 40) sample('shotgun', { pan: panOf(x), gain: gain * 0.45, room: 0.2, bus: 'guns', lowpass: 900 });
+      if (kind === 'sniper') sample('bolt', { pan: panOf(x), gain: gain * 0.8, delay: 0.42, bus: 'guns' });
     },
     /** The reload of that gun (each has its own recording), panned and quieter with distance. */
     reloadAt: (weapon: string, x = 0, distance = 0) => {
