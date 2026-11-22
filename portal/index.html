@@ -82,6 +82,14 @@
       @keyframes bPulse{50%{opacity:.45}}
       @media (max-width:640px){#boot .pct{font-size:34px}#boot .now{font-size:13px}#boot .tip{font-size:13px}}
       @media (max-height:460px){#boot .logo{width:min(320px,48vw);top:16px}#boot .foot{gap:6px;bottom:max(32px,calc(env(safe-area-inset-bottom) + 24px))}#boot .pct{font-size:30px}#boot .tip{min-height:0;font-size:12px}#boot .go{font-size:12px;bottom:max(6px,env(safe-area-inset-bottom))}#boot .plane{top:30%;width:clamp(120px,16vw,200px)}}
+      /* Rotate card: a touch screen held upright shows only this, from the first paint (src/lib/orientation.ts pauses a running round). */
+      #rotate{display:none;position:fixed;inset:0;z-index:2000;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center;background:radial-gradient(ellipse at 50% 40%,#13213a,#0a0d18 65%,#05070e);color:#e6ebf5;font:600 18px/1.35 'BootChakra',system-ui,sans-serif}
+      #rotate svg{width:96px;height:96px;transform-origin:50% 50%;animation:rTurn 2.6s ease-in-out infinite}
+      #rotate b{display:block;font:400 28px/1 'BootBungee','BootChakra',Impact,sans-serif;color:#ffd23f;letter-spacing:.02em}
+      #rotate span{display:block;margin-top:8px;font-size:15px;font-weight:500;color:rgba(230,235,245,.75)}
+      @keyframes rTurn{0%,18%{transform:rotate(0)}52%,78%{transform:rotate(-90deg)}100%{transform:rotate(0)}}
+      @media (orientation:portrait) and (pointer:coarse){#rotate{display:flex}}
+      @media (prefers-reduced-motion:reduce){#rotate svg{animation:none;transform:rotate(-90deg)}}
       @media (prefers-reduced-motion:reduce){#boot *,#boot *::before,#boot *::after{animation:none!important}#boot.out,#boot.out .all{transition:none!important}#boot .plane{left:56%;transform:none}#boot .jp{transform:translateY(44vh)}#boot .jp.j2{transform:translateY(52vh)}#boot .jp.j3,#boot .jp.j4{display:none}}
     </style>
   </head>
@@ -126,6 +134,14 @@
         <div class="tip"><q id="bootTip"></q></div>
       </div>
       <div class="go" id="bootGo">Tap or press any key</div>
+    </div>
+    <div id="rotate" role="alert">
+      <svg viewBox="0 0 96 96" aria-hidden="true" fill="none" stroke="#e6ebf5" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="28" y="8" width="40" height="80" rx="8"/>
+        <path d="M44 78h8" stroke="#ffd23f"/>
+        <path d="M76 30c6 5 6 31 0 36M72 62l4 4 5-5" stroke="#3ddc84" stroke-width="3.5"/>
+      </svg>
+      <div><b>Rotate your phone</b><span>Last Commit Standing is played in landscape</span></div>
     </div>
     <div id="root"></div>
     <!--boot-progress-->

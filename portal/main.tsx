@@ -9,12 +9,16 @@ import { createRoot } from 'react-dom/client';
 import { PortalGame } from '~/components/PortalGame';
 import { disableAutoFullscreen } from '~/components/TouchControls';
 import { boot } from '~/lib/loading';
+import { lockViewport } from '~/lib/lockViewport';
+import { installPhoneUi } from '~/lib/phoneUi';
 import { STUDIO_NAME } from '~/lib/studio';
 import { detectPlatform } from '~/platform';
 
 import './portal.css';
 
 disableAutoFullscreen();
+lockViewport();
+installPhoneUi();
 
 // Boot checkpoints (0..1): game code 0.40, engine 0.44, platform 0.47, menu 0.50, then the menu's scene and models up
 // to 0.97 (MainMenu), and 100 % once its first frame is drawn with every model in.

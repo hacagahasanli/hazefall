@@ -3,6 +3,12 @@
 @import '../src/app/globals.css';
 @source '../src';
 
+/* Landscape phones are 568 px wide and up: they get the same layouts as a desktop window, only tighter (the compact rules
+   key off the window's height). Portrait on a touch screen never reaches the game: the rotate card covers it. */
+@theme {
+  --breakpoint-sm: 30rem;
+}
+
 @font-face {
   font-family: 'Bungee';
   font-weight: 400;
@@ -39,13 +45,24 @@
   --font-chakra: 'Chakra Petch';
 }
 
+html {
+  /* Set by src/lib/phoneUi.ts: 1 on a desktop and on an 844 x 390 phone, smaller on smaller phones. */
+  --ui: 1;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  touch-action: none;
+}
+
 html,
 body,
 #root {
   height: 100%;
+  width: 100%;
   margin: 0;
   overflow: hidden;
   overscroll-behavior: none;
+  position: fixed;
+  inset: 0;
 }
 
 body {
