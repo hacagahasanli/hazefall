@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-import { BUILDINGS, MAP, SIZE, TILE, tileHash, WORLD } from '../sim/constants';
+import { BUILDINGS, MAP, MARKET_SQUARE, SIZE, TILE, tileHash, WORLD } from '../sim/constants';
 
 import { chunkedInstances } from './chunks';
 import { routeDistance } from './roads';
@@ -141,6 +141,15 @@ export const paintTerrain = () => {
       // Under the road strip (roads.ts): packed gravel, which shows only as a soft shoulder.
       const wRoad = sstep(0.3, 0.6, sampleGrid(road, tx, ty) + e);
       if (wRoad > 0) col = mix(col, [ASPHALT[0] + grain * 0.5, ASPHALT[1] + grain * 0.5, ASPHALT[2] + grain * 0.5], wRoad);
+      // The Market Square's kerb: one tile of darker paving round its outline, left open where Route 1 comes in and goes out.
+      {
+        const q = MARKET_SQUARE;
+        if (tx >= q.x0 && tx < q.x0 + q.w && ty >= q.y0 && ty < q.y0 + q.h) {
+          const ring = tx < q.x0 + 1 || tx >= q.x0 + q.w - 1 || ty < q.y0 + 1 || ty >= q.y0 + q.h - 1;
+          const roadGap = tx >= 60 && tx < 62 && (ty < q.y0 + 1 || ty >= q.y0 + q.h - 1);
+          if (ring && !roadGap) col = [col[0] * 0.8, col[1] * 0.8, col[2] * 0.8];
+        }
+      }
       // Floors inside buildings: hard-edged planks.
       const ftx = Math.floor(tx);
       const fty = Math.floor(ty);
@@ -392,13 +401,39 @@ const conifer = (seed: number, far = false): THREE.BufferGeometry => {
   return merge(parts);
 };
 
+/**
+ * The tree from far away (past 90 m from the camera, and always for the outer forest): one flattened lump with no trunk
+ * (a 20-face icosahedron, the broadleaf's colour) or one 6-sided cone (12 faces, the conifer's colour). At most 20 triangles.
+ */
+const lowTree = (kind: 'broadleaf' | 'conifer', hue: number, seed: number): THREE.BufferGeometry => {
+  const g: THREE.BufferGeometry = kind === 'conifer' ? new THREE.ConeGeometry(2.3, 8.2, 6, 1) : new THREE.IcosahedronGeometry(2.6, 0);
+  if (kind === 'conifer') g.translate(0, 4.6, 0);
+  else {
+    g.scale(1.15, 0.85, 1.15);
+    g.translate(0, 5.1, 0);
+  }
+  const ng = g.toNonIndexed();
+  g.dispose();
+  ng.deleteAttribute('uv');
+  const n = ng.getAttribute('position').count;
+  const col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const y = ng.getAttribute('position').getY(i);
+    const c = kind === 'conifer' ? hsl(0.36, 0.42, 0.14 + (y / 9) * 0.12 + tileHash(Math.floor(i / 3), seed, 3) * 0.05) : hsl(hue, 0.45, 0.17 + (y / 8) * 0.14 + tileHash(Math.floor(i / 3), seed, 3) * 0.05);
+    col.set([c.r, c.g, c.b], i * 3);
+  }
+  ng.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  ng.computeVertexNormals();
+  return ng;
+};
+
 const TREE_KINDS = (): TreeKind[] => [
-  { geo: broadleaf(11, 0.27, false), far: broadleaf(11, 0.27, false, true), weight: 3 },
-  { geo: broadleaf(23, 0.24, false), far: broadleaf(23, 0.24, false, true), weight: 3 },
-  { geo: broadleaf(37, 0.3, false), far: broadleaf(37, 0.3, false, true), weight: 2 },
-  { geo: broadleaf(41, 0.2, true), far: broadleaf(41, 0.2, true, true), weight: 1 },
-  { geo: conifer(53), far: conifer(53, true), weight: 2 },
-  { geo: conifer(67), far: conifer(67, true), weight: 2 },
+  { geo: broadleaf(11, 0.27, false), far: lowTree('broadleaf', 0.27, 11), weight: 3 },
+  { geo: broadleaf(23, 0.24, false), far: lowTree('broadleaf', 0.24, 23), weight: 3 },
+  { geo: broadleaf(37, 0.3, false), far: lowTree('broadleaf', 0.3, 37), weight: 2 },
+  { geo: broadleaf(41, 0.2, true), far: lowTree('broadleaf', 0.2, 41), weight: 1 },
+  { geo: conifer(53), far: lowTree('conifer', 0.36, 53), weight: 2 },
+  { geo: conifer(67), far: lowTree('conifer', 0.36, 67), weight: 2 },
 ];
 
 const leafMaterial = () => windy(new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 }), 0.035, 2.4, true);
@@ -428,7 +463,8 @@ const item = (m: THREE.Matrix4, color?: THREE.Color): InstanceData => ({ x: m.el
 const placeMatrix = (x: number, y: number, s: number, rot: number, sy = s) =>
   new THREE.Matrix4().compose(new THREE.Vector3(x, 0, y), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rot, 0)), new THREE.Vector3(s, sy, s));
 
-export const buildTrees = (spots: Placement[]) => {
+/** `lowOnly`: every tree is the cheap far variant (the outer forest, which is never seen close), one draw call per kind. */
+export const buildTrees = (spots: Placement[], lowOnly = false) => {
   const kinds = TREE_KINDS();
   const total = kinds.reduce((a, k) => a + k.weight, 0);
   const lists = kinds.map(() => [] as THREE.Matrix4[]);
@@ -440,7 +476,7 @@ export const buildTrees = (spots: Placement[]) => {
     lists[i].push(placeMatrix(p.x, p.y, s, p.seed * 40, s * (0.9 + p.seed * 0.25)));
   }
   const m = leafMaterial();
-  return natureSet(kinds.map((k, i) => chunkedInstances(k.geo, m, lists[i].map((mm) => item(mm)), { height: 12, radius: 4, farGeo: k.far })));
+  return natureSet(kinds.map((k, i) => (lowOnly ? chunkedInstances(k.far, m, lists[i].map((mm) => item(mm)), { height: 12, radius: 4 }) : chunkedInstances(k.geo, m, lists[i].map((mm) => item(mm)), { height: 12, radius: 4, farGeo: k.far }))));
 };
 
 // ---------------------------------------------------------------------------

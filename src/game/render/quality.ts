@@ -34,8 +34,8 @@ export interface TierSpec {
 }
 
 export const TIERS: Record<Tier, TierSpec> = {
-  high: { dprCap: 2, shadows: true, shadowMap: 2048, antialias: true, fogNear: 120, fogFar: 300, reach: 1, lodNear: 120 },
-  medium: { dprCap: 1.5, shadows: true, shadowMap: 1024, antialias: true, fogNear: 120, fogFar: 290, reach: 0.9, lodNear: 110 },
+  high: { dprCap: 2, shadows: true, shadowMap: 2048, antialias: true, fogNear: 120, fogFar: 300, reach: 1, lodNear: 90 },
+  medium: { dprCap: 1.5, shadows: true, shadowMap: 1024, antialias: true, fogNear: 120, fogFar: 290, reach: 0.9, lodNear: 90 },
   low: { dprCap: 1, shadows: false, shadowMap: 512, antialias: false, fogNear: 120, fogFar: 260, reach: 0.75, lodNear: 90, eye: { fogNear: 70, fogFar: 180, lodNear: 75, reach: 0.6 } },
 };
 

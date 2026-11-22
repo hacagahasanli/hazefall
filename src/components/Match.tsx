@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import type { ComponentType } from 'react';
 
@@ -531,14 +531,38 @@ export const Match = ({
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** Larger HUD text (accessibility): the HUD blocks are zoomed as a whole, so nothing reflows. */
   const hudZoom = settings.largeHud ? 1.25 : 1;
+
   const [game, setGame] = useState<ReturnType<typeof startMatch> | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mapRef = useRef<HTMLCanvasElement>(null);
+  /** The health bar's box, so the big drop minimap on a phone can sit 8 px below it. */
+  const vitalsRef = useRef<HTMLDivElement>(null);
+  const [mapTop, setMapTop] = useState<number | null>(null);
+  /** Where the Deadline pill goes on a phone while the big drop map is up: 8 px under it. */
+  const [pillTop, setPillTop] = useState<number | null>(null);
+  const mapBoxRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<ReturnType<typeof startMatch> | null>(null);
   const [hud, setHud] = useState<HudState | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const lastEsc = useRef(0);
   const touch = useTouch();
+  const inPlane = hud?.stage === 'drone';
+  useLayoutEffect(() => {
+    // On a phone the big drop map starts 8 px under the health bar (it used to run underneath it).
+    const el = vitalsRef.current;
+    if (!touch || !inPlane || !el) {
+      setMapTop(null);
+      return;
+    }
+    const measure = () => setMapTop(Math.round(el.getBoundingClientRect().bottom + 8));
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [touch, inPlane, hudZoom, hud != null]);
+  useLayoutEffect(() => {
+    const el = mapBoxRef.current;
+    setPillTop(touch && inPlane && el && mapTop !== null && window.innerWidth < 640 ? Math.round(el.getBoundingClientRect().bottom + 8) : null);
+  }, [touch, inPlane, mapTop]);
 
   // Building the map takes a moment and blocks the page: let the loading screen paint first
   // (two animation frames), then build. The screen goes when the first HUD update arrives.
@@ -703,8 +727,9 @@ export const Match = ({
       {/* Minimap */}
       {/* On phones it sits top right, out of the thumbs' way. */}
       <div
-        className={`panel-cut absolute bg-ink-deep/80 p-1.5 ${touch ? 'right-2 top-2' : 'bottom-3 right-3'}`}
-        style={touch ? { marginRight: 'env(safe-area-inset-right)' } : undefined}
+        ref={mapBoxRef}
+        className={`panel-cut absolute bg-ink-deep/80 p-1.5 ${touch ? `right-2 ${mapTop === null ? 'top-2' : ''}` : 'bottom-3 right-3'}`}
+        style={touch ? { marginRight: 'env(safe-area-inset-right)', ...(mapTop !== null ? { top: mapTop } : {}) } : undefined}
       >
         {/* Big while you're on the plane choosing where to jump. */}
         <canvas
@@ -730,17 +755,28 @@ export const Match = ({
             className={`pointer-events-none absolute flex flex-col gap-1.5 ${touch ? 'left-3 top-2' : 'bottom-4 left-4'}`}
             style={{ ...(touch ? { marginLeft: 'env(safe-area-inset-left)' } : {}), zoom: hudZoom }}
           >
-            <Vitals
-              hud={hud}
-              colorBlind={settings.colorBlind}
-              rings={!touch}
-              keys={settings.showKeyHints ? { super: capLabel(settings.keys.super), roll: capLabel(settings.keys.roll) } : null}
-            />
-            {touch && <Weapons hud={hud} keys={null} compact />}
+            <div ref={vitalsRef}>
+              <Vitals
+                hud={hud}
+                colorBlind={settings.colorBlind}
+                rings={!touch}
+                keys={settings.showKeyHints ? { super: capLabel(settings.keys.super), roll: capLabel(settings.keys.roll) } : null}
+              />
+            </div>
+            {/* The guns are put away in the plane, in free fall and under the canopy (nobody can fire there): they fade in over 0.2 s on touchdown. */}
+            {touch && (
+              <div className={`transition-opacity duration-200 motion-reduce:transition-none ${hud.stage === 'ground' ? 'opacity-100' : 'opacity-0'}`} aria-hidden={hud.stage !== 'ground'}>
+                <Weapons hud={hud} keys={null} compact />
+              </div>
+            )}
           </div>
           {/* Your guns, over the minimap (bottom right). */}
           {!touch && (
-            <div className="pointer-events-none absolute bottom-[222px] right-3 w-[204px]" style={{ zoom: hudZoom }}>
+            <div
+              className={`pointer-events-none absolute bottom-[222px] right-3 w-[204px] transition-opacity duration-200 motion-reduce:transition-none ${hud.stage === 'ground' ? 'opacity-100' : 'opacity-0'}`}
+              style={{ zoom: hudZoom }}
+              aria-hidden={hud.stage !== 'ground'}
+            >
               <Weapons hud={hud} keys={settings.showKeyHints ? [capLabel(settings.keys.slot1), capLabel(settings.keys.slot2)] : null} compact={false} />
             </div>
           )}
@@ -773,7 +809,8 @@ export const Match = ({
 
           {/* Deadline and players left */}
           <div
-            className={`pointer-events-none absolute inset-x-0 flex justify-center ${touch ? 'top-[124px] sm:top-3' : 'top-3'}`}
+            className={`pointer-events-none absolute inset-x-0 flex justify-center ${touch ? `${pillTop === null ? 'top-[124px]' : ''} sm:top-3` : 'top-3'}`}
+            style={pillTop !== null ? { top: pillTop } : undefined}
           >
             <div className="panel-cut flex items-center gap-3 bg-ink-deep/85 px-3 py-1 sm:gap-4 sm:px-4 sm:py-1.5" style={{ zoom: hudZoom }}>
               {touch && (

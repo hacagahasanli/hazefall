@@ -1,6 +1,21 @@
 import * as THREE from 'three';
 
-import { ROUTES, TILE } from '../sim/constants';
+import { MARKET_SQUARE, ROUTES, TILE } from '../sim/constants';
+
+import type { Route } from '../sim/constants';
+
+/**
+ * The roads as they are painted: Route 1 (and any road along the map's y axis) stops at the Market Square's north edge and starts again
+ * at its south edge, so the square's paving runs across unbroken. (The tiles, the collision and the walking speed are unchanged.)
+ */
+const PAINTED: Route[] = ROUTES.flatMap((r) => {
+  const [a, b] = r.points;
+  const q = MARKET_SQUARE;
+  const north = q.y0 * TILE;
+  const south = (q.y0 + q.h) * TILE;
+  if (r.kind !== 'asphalt' || a.x !== b.x || a.x < q.x0 * TILE || a.x > (q.x0 + q.w) * TILE || a.y >= north || b.y <= south) return [r];
+  return [{ kind: r.kind, points: [a, { x: a.x, y: north }] }, { kind: r.kind, points: [{ x: a.x, y: south }, b] }];
+});
 
 /**
  * Roads and dirt paths as real geometry, not painted into the terrain texture: the asphalt has
@@ -104,7 +119,7 @@ export const buildRoads = () => {
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
     });
   const asphaltMap = asphaltTexture();
-  for (const r of ROUTES) {
+  for (const r of PAINTED) {
     if (r.kind === 'asphalt') {
       const fr = frames(r.points, 0.5);
       const wobble = (f: Frame) => 0.92 + 0.08 * Math.sin(f.s * 0.37) * Math.sin(f.s * 0.11);

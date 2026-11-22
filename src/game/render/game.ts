@@ -6,7 +6,7 @@ import { actionFor, DEFAULT_SETTINGS, keyLabel, keyMap } from '../settings';
 
 import type { VolumeKind } from '../sfx';
 import type { Action, Settings } from '../settings';
-import { ARMOR, HEALS, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITEMS, MAP, PLACE_TIER, placeAt, PLAYERS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
+import { ARMOR, HEALS, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITEMS, MAP, PLACE_TIER, placeAt, PLAYERS, PROPS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
 import { canSee, carryCap, chestHeight, feetOf, healChoice, inPlant, inWater, lineOfSight, lootUnder, reloadTime, solidAt, superThrowTarget, throwDistance } from '../sim/step';
 import { buildingAt, roofAt } from '../sim/roofs';
 import { createOfflineSession } from '../net/session';
@@ -324,12 +324,23 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       return () => ((k = (k * 16807) % 2147483647) - 1) / 2147483646;
     })();
     const parts: THREE.Matrix4[] = [];
+    // Clouds stay off the inner 70 % of the map square (over the edge forest and beyond), so no place is covered from the plane.
+    const inner = WORLD * 0.35;
+    const landmarks = PROPS.filter((p) => ['tower', 'crane', 'sign', 'mast', 'hq', 'lookout', 'windmill'].includes(p.kind)).map((p) => ({ x: (p.x0 + p.w / 2) * TILE, y: (p.y0 + p.h / 2) * TILE }));
     for (let c = 0; c < 70; c++) {
       // Spread wider than the map so the edges don't show from the plane.
-      const cx = -60 + rnd() * (WORLD + 120);
-      const cz = -60 + rnd() * (WORLD + 120);
+      let cx = -60 + rnd() * (WORLD + 120);
+      let cz = -60 + rnd() * (WORLD + 120);
+      const size0 = 5 + rnd() * 7;
+      // The puffs of a cloud reach about 1.3 x its size from its centre: keep the whole cloud outside the inner square.
+      // ...and 30 m clear of every landmark (the mast and the lookout stand in the edge band).
+      const coversLandmark = () => landmarks.some((l) => Math.hypot(cx - l.x, cz - l.y) < size0 * 1.3 + 30);
+      for (let tries = 0; tries < 50 && ((Math.abs(cx - WORLD / 2) < inner + size0 * 1.3 && Math.abs(cz - WORLD / 2) < inner + size0 * 1.3) || coversLandmark()); tries++) {
+        cx = -60 + rnd() * (WORLD + 120);
+        cz = -60 + rnd() * (WORLD + 120);
+      }
       const cy = DROP.cloudLow + 3 + rnd() * (DROP.cloudHigh - DROP.cloudLow - 6);
-      const size = 5 + rnd() * 7;
+      const size = size0;
       for (let i = 0; i < 7; i++) {
         const s = size * (0.45 + rnd() * 0.55);
         parts.push(
@@ -538,6 +549,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
    * frame each item's place, bob and turn go into that kind's instances. Loot costs a draw call or two per kind on
    * screen, not per item.
    */
+  /** From the plane nothing can be picked up: the loot models are not drawn (the glows and beams still are). */
+  let lootHidden = false;
   const lootLooks = new Map<string, { tilt: THREE.Euler; color: THREE.Color; beam: number; beamH: number; glowS: number; add: (m: THREE.Matrix4) => void; flush: () => void }>();
   const lootLook = (l: Pick<Loot, 'kind' | 'tier'>) => {
     const key = `${l.kind}|${l.tier ?? ''}`;
@@ -590,7 +603,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       flush: () => {
         for (const im of meshes) {
           im.count = n;
-          im.visible = n > 0;
+          im.visible = n > 0 && !lootHidden;
           im.instanceMatrix.needsUpdate = true;
         }
         n = 0;
@@ -1812,7 +1825,18 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // ground. White with a dark edge in the display face, about 9 CSS px tall whatever size the map is drawn at; a name that
     // would cover a better one is left out.
     {
-      const shown = self.stage === 'ground' ? (inPlace ? DISTRICTS.filter((d) => d.name === inPlace) : []) : [...DISTRICTS];
+      // The big map in the plane shows every name; the small one under the canopy only the (at most) 3 nearest the jumper within 60 m.
+      const away = (d: (typeof DISTRICTS)[number]) => Math.hypot(Math.max(d.x0 - self.x, 0, self.x - d.x1), Math.max(d.y0 - self.y, 0, self.y - d.y1));
+      const shown =
+        self.stage === 'ground'
+          ? inPlace
+            ? DISTRICTS.filter((d) => d.name === inPlace)
+            : []
+          : self.stage === 'drone'
+            ? [...DISTRICTS]
+            : DISTRICTS.filter((d) => away(d) <= 60)
+                .sort((a, b) => away(a) - away(b))
+                .slice(0, 3);
       if (shown.length) {
         const css = mm.clientWidth || mm.width;
         const px = Math.round((9 * mm.width) / css);
@@ -1824,13 +1848,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         mmCtx.strokeStyle = 'rgba(10,13,24,0.9)';
         mmCtx.fillStyle = '#ffffff';
         const taken: { x0: number; y0: number; x1: number; y1: number }[] = [];
-        shown.sort((a, b) => (PLACE_TIER[b.name] ?? 1) - (PLACE_TIER[a.name] ?? 1));
+        shown.sort((a, b) => (PLACE_TIER[b.name] ?? 1) - (PLACE_TIER[a.name] ?? 1) || away(a) - away(b));
         for (const d of shown) {
-          const x = ((d.x0 + d.x1) / 2) * s;
-          const y = ((d.y0 + d.y1) / 2) * s;
           const w = mmCtx.measureText(d.name).width + 4;
+          // A name that would run off the edge slides in (the nearest place must never lose its name to the map's edge).
+          const x = Math.min(mm.width - 1 - w / 2, Math.max(1 + w / 2, ((d.x0 + d.x1) / 2) * s));
+          const y = ((d.y0 + d.y1) / 2) * s;
           const box = { x0: x - w / 2, y0: y - px * 0.6, x1: x + w / 2, y1: y + px * 0.6 };
-          if (box.x0 < 1 || box.x1 > mm.width - 1 || taken.some((t) => box.x0 < t.x1 && box.x1 > t.x0 && box.y0 < t.y1 && box.y1 > t.y0)) continue;
+          if (w > mm.width - 2 || taken.some((t) => box.x0 < t.x1 && box.x1 > t.x0 && box.y0 < t.y1 && box.y1 > t.y0)) continue;
           taken.push(box);
           mmCtx.strokeText(d.name, x, y);
           mmCtx.fillText(d.name, x, y);
@@ -2608,22 +2633,23 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       camera.lookAt(camLook);
       camFocus.set(camLook.x, 0, camLook.z);
     }
+    // Tall landmarks (the HQ, cranes, water tower, mast, lookout) ghost when they stand between the camera and your chest.
+    props.fade(camera.position, tmpV.set(selfX, selfH + 1.2, selfY), dt, tier === 'low', self.stage !== 'drone');
     trauma = Math.max(0, trauma - dt * 1.5);
-    // Shadows: from the plane one fixed box over the whole map (a box that followed the camera made
-    // shadows pop in and out across the map: the flicker); on the ground a box around you that
-    // moves in steps of one shadow texel, so edges don't shimmer.
+    // Shadows: a box around the point the camera looks at (120 m across from the plane, 80 m on the ground, 48 m in first
+    // person) that moves in steps of one shadow texel, so edges don't shimmer. Trees outside it skip the shadow pass.
     // First person: a tighter box, so the shadows at your feet are crisp.
     const wide = overview;
-    const half = wide ? WORLD * 0.62 : fp ? 24 : 40;
+    const half = wide ? 60 : fp ? 24 : 40;
     if (half !== shadowHalf) {
       shadowHalf = half;
-      Object.assign(sun.shadow.camera, { left: -half, right: half, top: half, bottom: -half, far: wide ? 400 : 160 });
+      Object.assign(sun.shadow.camera, { left: -half, right: half, top: half, bottom: -half, far: 160 });
       sun.shadow.camera.updateProjectionMatrix();
     }
     const texel = (half * 2) / 2048;
-    const fxs = wide ? WORLD / 2 : Math.round(camFocus.x / texel) * texel;
-    const fzs = wide ? WORLD / 2 : Math.round(camFocus.z / texel) * texel;
-    sun.position.set(fxs - 20, wide ? 160 : 60, fzs + 14);
+    const fxs = Math.round(camFocus.x / texel) * texel;
+    const fzs = Math.round(camFocus.z / texel) * texel;
+    sun.position.set(fxs - 20, 60, fzs + 14);
     sun.target.position.set(fxs, 0, fzs);
 
     vfx.update(frozen ? 0 : dt);
@@ -2634,6 +2660,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const fallSpeed = Math.min(1, Math.max(0, self.vz) / DROP.freefallTerminal);
     sfx.wind(self.alive && self.stage === 'falling' && !paused ? (self.canopy < DROP.stretch ? 0.25 + 0.75 * fallSpeed : 0.22) : 0);
     updateCollapsing(dt);
+    props.setPlaneView(overview);
+    world.setOverview(overview);
+    lootHidden = overview;
     props.update(time, dt);
     // Trees, bushes, rocks and grass: only the chunks this camera sees, the far ones cheaper, shadows only near the box.
     const spec = TIERS[tier];
@@ -2644,7 +2673,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       scene.fog.far = THREE.MathUtils.damp(scene.fog.far, eye ? eye.fogFar : spec.fogFar, 2, dt);
     }
     world.cull(camera, {
-      shadow: shadowsOn() ? { x: fxs, z: fzs, half: wide ? WORLD : half * 1.15 + 5 } : null,
+      shadow: shadowsOn() ? { x: fxs, z: fzs, half: half * 1.15 + 5 } : null,
       // From above (the high camera) the view itself is small: grass is drawn wherever the frustum reaches. At eye level
       // (first person, over the shoulder) and from the plane it thins out with distance, per tier.
       reach: eye ? eye.reach : fp || sv || overview ? spec.reach : 4,
@@ -2915,6 +2944,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   if (perfRequested()) {
     (window as unknown as { __lcsPerf?: unknown }).__lcsPerf = {
       buildMs,
+      tall: props.tallState,
       scene,
       camera,
       tier: () => tier,

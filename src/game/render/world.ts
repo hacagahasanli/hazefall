@@ -200,6 +200,8 @@ export interface CullOptions {
 }
 
 export interface World {
+  /** From the plane (choosing where to jump) the door frames, too small to see, are not drawn: fewer draw calls. */
+  setOverview: (on: boolean) => void;
   /** Before each render: draw only the chunks of trees, bushes, rocks and grass this camera can see. */
   cull: (camera: THREE.Camera, o: CullOptions) => void;
   /** Another chunked set (the clouds) to cull with the rest. */
@@ -406,7 +408,9 @@ export const buildWorld = (scene: THREE.Scene): World => {
   // ---------- nature built in code: trees, bushes, rocks, grass (see nature.ts)
   const spot = (t: { tx: number; ty: number; x: number; y: number }) => ({ x: t.x, y: t.y, seed: tileHash(t.tx, t.ty, 1) });
   const nature: { group: THREE.Object3D; update: (v: ChunkView) => void }[] = [
-    buildTrees([...tilesOf('t').map((t) => ({ ...treeSpot(t.tx, t.ty), seed: tileHash(t.tx, t.ty, 1) })), ...outerForest()]),
+    buildTrees(tilesOf('t').map((t) => ({ ...treeSpot(t.tx, t.ty), seed: tileHash(t.tx, t.ty, 1) }))),
+    // The forest beyond the map's edge is never seen close: only the cheap far variant.
+    buildTrees(outerForest(), true),
     buildBushes(tilesOf('b').map(spot)),
     buildRocks(tilesOf('k').map(spot)),
     buildGrass(),
@@ -700,6 +704,9 @@ export const buildWorld = (scene: THREE.Scene): World => {
   roofs.visible = false;
   scene.add(roofs);
 
+  /** The door frames drawn on each house's walls: tiny meshes, one call each, hidden from the plane. */
+  const jamberMeshes: THREE.Mesh[] = [];
+
   // ---------- from above, a ceiling over every room that only casts a shadow (nothing drawn): the shells' one-sided roofs
   // let the sun in through their far slopes, and a room seen through its doorway should lie in the shade of its roof,
   // lit by its own lamps. At eye level the real roofs and ceilings above do this.
@@ -771,6 +778,7 @@ export const buildWorld = (scene: THREE.Scene): World => {
     mat.transparent = true;
     const jambs = new THREE.Mesh(geo, mat);
     jambs.name = 'doorway sides';
+    jamberMeshes.push(jambs);
     root.add(jambs);
   };
 
@@ -876,6 +884,9 @@ export const buildWorld = (scene: THREE.Scene): World => {
   const projView = new THREE.Matrix4();
   const camAt = new THREE.Vector3();
   return {
+    setOverview: (on) => {
+      for (const m of jamberMeshes) m.visible = !on;
+    },
     track: (set) => nature.push(set as (typeof nature)[number]),
     cull: (camera, o) => {
       camera.updateMatrixWorld();
