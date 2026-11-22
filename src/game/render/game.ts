@@ -12,6 +12,8 @@ import { buildingAt, roofAt } from '../sim/roofs';
 import { createOfflineSession } from '../net/session';
 import { arrowTo, LOOT_HINT } from './hints';
 import { canopyById, CLASSIC } from '../canopies';
+import { botLook, DEFAULT_LOOK } from '../cosmetics';
+import { createDropSmoke, MAX_JUMPERS, smokeColor } from './smoke';
 import type { RoundFacts } from '../progress';
 import { NO_INPUT } from '../sim/types';
 
@@ -36,6 +38,7 @@ import { buildLadders } from './ladders';
 
 import type { Rig } from './characters';
 import type { GunKind } from './guns';
+import type { Look } from '../cosmetics';
 import type { Tier } from './quality';
 import type { NetStatus, Session } from '../net/session';
 import type { FighterId, GameEvent, GameState, HealKind, Input, Loot, LootKind, Player, WeaponKind } from '../sim/types';
@@ -148,8 +151,8 @@ export interface MatchOptions {
   rookie?: boolean;
   /** The very first round: the shoot key is named once on the ground (the key legend is hidden for it). */
   firstRound?: boolean;
-  /** The id of the canopy colours to fly (see canopies.ts); the default is the fighter's own. */
-  canopy?: string;
+  /** What you wear (outfit per fighter, gun finish, canopy, smoke; see cosmetics.ts). Offline, the bots wear seeded looks; online everyone shows the default. */
+  look?: Look;
   /** An online round (host or guest). Without one, an offline round with bots. */
   session?: Session;
   /** The quality tier to start with (default 'high'), and whether it was picked automatically (then a low frame rate steps it down once per step). */
@@ -270,6 +273,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const session: Session = opts.session ?? createOfflineSession(opts.fighter, opts.name, !!opts.rookie);
   let state: GameState = session.state;
   const me = session.me;
+  // Who wears what. You wear what you picked; offline the bots wear looks picked from the match seed and their id (render only:
+  // the sim never sees them); online everyone shows the default until look ids go in the join message.
+  const matchSeed = state.seed;
+  const looks: Look[] = state.players.map((_, i) => (opts.session ? DEFAULT_LOOK : i === me ? (opts.look ?? DEFAULT_LOOK) : botLook(matchSeed, i)));
   const sfx = createSfx();
   if (opts.settings) {
     // The settings own the sound levels and the mute (the old per-sound mute key is cleared once).
@@ -280,6 +287,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     sfx.setMuted('player', settings.muted);
   }
   const vfx = createVfx(scene);
+  /** Drop Smoke: the coloured trails of jumpers who have it (one instanced mesh, one draw call). */
+  const dropSmoke = createDropSmoke(scene, tier);
+  const smokeFeet = new THREE.Vector3();
+  const smokeA = new THREE.Vector3();
+  const smokeB = new THREE.Vector3();
   /** The hitmarker and the damage-direction arcs, on a DOM layer over the canvas. */
   const hitFx = canvas.parentElement ? createHitOverlay(canvas.parentElement) : null;
 
@@ -369,15 +381,16 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
   // ---------- players
   const rigs: Rig[] = state.players.map((p) => {
-    const r = buildRig(p.fighter);
+    const r = buildRig(p.fighter, looks[p.id]?.outfit[p.fighter] ?? 'standard');
     r.root.name = 'rig';
     scene.add(r.root);
     return r;
   });
   // Parachutes hang from a point at the jumper's raised hands (see chute.ts).
   const chutes = state.players.map((p) => {
-    // Your own canopy is the one you unlocked and picked; everyone else flies their fighter's colours.
-    const g = buildChute(FIGHTERS[p.fighter].color, p.id === me ? canopyById(opts.canopy ?? CLASSIC) : undefined);
+    // Your own canopy is the one you unlocked and picked; a bot may fly a seeded one, otherwise their fighter's colours.
+    const own = looks[p.id]?.canopy ?? CLASSIC;
+    const g = buildChute(FIGHTERS[p.fighter].color, own === CLASSIC ? undefined : canopyById(own));
     g.name = 'chute';
     g.visible = false;
     scene.add(g);
@@ -998,7 +1011,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const viewmodel = new THREE.Group();
   viewmodel.visible = false;
   camera.add(viewmodel);
-  const look = fighterLook(opts.session ? state.players[me].fighter : opts.fighter);
+  const look = fighterLook(opts.session ? state.players[me].fighter : opts.fighter, looks[me].outfit[opts.session ? state.players[me].fighter : opts.fighter]);
   const vmMat = (c: number) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.8, flatShading: true });
   const vmLimb = (from: THREE.Vector3, to: THREE.Vector3, r: number, c: number) => {
     const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.1, from.distanceTo(to), 8), vmMat(c));
@@ -1987,6 +2000,16 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     let selfX = self.x;
     let selfY = self.y;
     let selfH = 0;
+    // Who leaves a trail this frame: you, plus the three nearest bots that have smoke (low tier: only you).
+    const trails = new Set<number>();
+    if (looks[me].smoke !== 'off') trails.add(me);
+    if (tier !== 'low') {
+      state.players
+        .filter((o, i) => i !== me && looks[i].smoke !== 'off' && o.alive && o.stage === 'falling')
+        .sort((a, b) => Math.hypot(a.x - self.x, a.y - self.y) - Math.hypot(b.x - self.x, b.y - self.y))
+        .slice(0, MAX_JUMPERS - 1)
+        .forEach((o) => trails.add(o.id));
+    }
     state.players.forEach((p, i) => {
       const rig = rigs[i];
       const x = prev[i].x + (p.x - prev[i].x) * alpha;
@@ -2162,10 +2185,19 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         air[i].pulled = false;
       }
 
+      // Drop Smoke: from the feet, in free fall and under the canopy only; it stops the moment they touch down.
+      if (trails.has(i) && p.alive && p.stage === 'falling' && visible && !frozen) {
+        rig.root.updateMatrixWorld(true);
+        rig.shinL.localToWorld(smokeA.set(0, -rig.legLen / 2, 0));
+        rig.shinR.localToWorld(smokeB.set(0, -rig.legLen / 2, 0));
+        smokeFeet.addVectors(smokeA, smokeB).multiplyScalar(0.5);
+        dropSmoke.emit(i, smokeFeet, smokeColor(looks[i].smoke, looks[i].canopy, Number.parseInt(FIGHTERS[p.fighter].color.slice(1), 16), time), p.canopy < 0, dt, camera);
+      }
+
       // Gun in hand.
       if (gunKinds[i] !== p.weapon) {
         if (guns[i]) scene.remove(guns[i]!);
-        guns[i] = p.weapon === 'fists' ? null : buildGun(GUN_MODEL[p.weapon]).root;
+        guns[i] = p.weapon === 'fists' ? null : buildGun(GUN_MODEL[p.weapon], looks[i].finish).root;
         if (guns[i]) scene.add(Object.assign(guns[i]!, { name: 'gun' }));
         gunKinds[i] = p.weapon;
       }
@@ -2532,7 +2564,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // The arms and gun: they sway with the stride, kick back by the gun's weight, dip to reload.
       if (vmGunKind !== self.weapon) {
         if (vmGun) viewmodel.remove(vmGun);
-        const built = self.weapon === 'fists' ? null : buildGun(GUN_MODEL[self.weapon]);
+        const built = self.weapon === 'fists' ? null : buildGun(GUN_MODEL[self.weapon], looks[me].finish);
         vmGun = built?.root ?? null;
         if (vmGun && built) {
           vmMuzzle.position.set(0, 0.03, built.length);
@@ -2653,6 +2685,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     sun.target.position.set(fxs, 0, fzs);
 
     vfx.update(frozen ? 0 : dt);
+    dropSmoke.update(frozen ? 0 : dt, camera);
     updateDamage(dt);
     updateHitFx(dt, selfX, selfH, selfY);
     updateStreaks(dt, self, selfX, selfH, selfY);
@@ -3042,6 +3075,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     },
     dispose: () => {
       cancelAnimationFrame(raf);
+      dropSmoke.dispose();
       hitFx?.dispose();
       document.removeEventListener('pointerlockchange', onLockChange);
       document.removeEventListener('mousemove', onLook);

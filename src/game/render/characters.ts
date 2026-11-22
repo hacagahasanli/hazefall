@@ -5,6 +5,9 @@ import { skinRig } from './merge';
 import { BODY_ROLL, BODY_ROLL_MAX, HARNESS_BACK, swingSpring, toggleGrip } from './chute';
 import { mat, mesh, PALETTE } from './palette';
 
+import { GLOW_MATERIAL, GOLD_MATERIAL, outfitParts } from '../cosmetics';
+
+import type { OutfitParts, PartColor } from '../cosmetics';
 import type { FighterId as CharacterId, WeaponKind } from '../sim/types';
 
 /**
@@ -61,7 +64,7 @@ interface Spec {
   top: number;
   pants: number;
   shoes: number;
-  extras: (ctx: { head: THREE.Group; torso: THREE.Group; spec: Spec }) => void;
+  extras: (ctx: { head: THREE.Group; torso: THREE.Group; spec: Spec; c: (part: string) => THREE.Material }) => void;
 }
 
 const ico = (r: number, detail = 1) => new THREE.IcosahedronGeometry(r, detail);
@@ -90,39 +93,39 @@ const SPECS: Record<CharacterId, Spec> = {
     top: PALETTE.orange,
     pants: PALETTE.ink,
     shoes: PALETTE.white,
-    extras: ({ head, torso, spec }) => {
+    extras: ({ head, torso, spec, c }) => {
       // Hood: a shell open at the face.
       const hood = mesh(
         new THREE.SphereGeometry(spec.headR * 1.32, 8, 6, Math.PI / 2 + 0.7, Math.PI * 2 - 1.4, 0, Math.PI * 0.72),
-        mat(PALETTE.orange),
+        c('hood').clone(),
       );
       (hood.material as THREE.Material).side = THREE.DoubleSide;
       hood.position.y = 0.02;
       head.add(hood);
       // On-call headset with a gold mic.
-      const band = mesh(new THREE.TorusGeometry(spec.headR * 1.38, 0.022, 4, 10, Math.PI), mat(PALETTE.ink));
+      const band = mesh(new THREE.TorusGeometry(spec.headR * 1.38, 0.022, 4, 10, Math.PI), c('headset'));
       band.position.y = 0.02;
       head.add(band);
       for (const sx of [-1, 1]) {
-        const cup = mesh(cyl(0.07, 0.06, 8), mat(PALETTE.ink));
+        const cup = mesh(cyl(0.07, 0.06, 8), c('headset'));
         cup.rotation.z = Math.PI / 2;
         cup.position.set(sx * spec.headR * 1.36, 0.0, 0);
         head.add(cup);
       }
-      const boom = mesh(box(0.02, 0.02, 0.22), mat(PALETTE.ink));
+      const boom = mesh(box(0.02, 0.02, 0.22), c('headset'));
       boom.position.set(-spec.headR * 1.2, -0.08, 0.1);
       boom.rotation.y = -0.5;
       head.add(boom);
-      const mic = mesh(ico(0.03, 0), mat(PALETTE.gold, { emissive: 0x3a2a00 }));
+      const mic = mesh(ico(0.03, 0), c('mic'));
       mic.position.set(-spec.headR * 0.75, -0.11, 0.2);
       head.add(mic);
       // Hoodie strings and pocket.
       for (const sx of [-1, 1]) {
-        const s = mesh(cyl(0.012, 0.2, 4), mat(PALETTE.white), false);
+        const s = mesh(cyl(0.012, 0.2, 4), c('strings'), false);
         s.position.set(sx * 0.07, spec.torsoH - 0.14, spec.torsoD / 2 + 0.01);
         torso.add(s);
       }
-      const pocket = mesh(box(0.34, 0.14, 0.03), mat(0xb8441f));
+      const pocket = mesh(box(0.34, 0.14, 0.03), c('pocket'));
       pocket.position.set(0, 0.16, spec.torsoD / 2);
       torso.add(pocket);
     },
@@ -140,12 +143,12 @@ const SPECS: Record<CharacterId, Spec> = {
     top: PALETTE.green,
     pants: 0x5a4a3a,
     shoes: 0x4a3426,
-    extras: ({ head, torso, spec }) => {
-      const shirt = mesh(box(0.3, spec.torsoH * 0.92, 0.04), mat(PALETTE.paper));
+    extras: ({ head, torso, spec, c }) => {
+      const shirt = mesh(box(0.3, spec.torsoH * 0.92, 0.04), c('shirt'));
       shirt.position.set(0, spec.torsoH / 2, spec.torsoD / 2);
       torso.add(shirt);
       for (let i = 0; i < 3; i++) {
-        const b = mesh(cyl(0.025, 0.02, 6), mat(PALETTE.ink), false);
+        const b = mesh(cyl(0.025, 0.02, 6), c('buttons'), false);
         b.rotation.x = Math.PI / 2;
         b.position.set(0.19, 0.18 + i * 0.18, spec.torsoD / 2 + 0.01);
         torso.add(b);
@@ -162,7 +165,7 @@ const SPECS: Record<CharacterId, Spec> = {
         const side = mesh(box(0.08, 0.14, 0.24), mat(0xb8b0a4));
         side.position.set(sx * spec.headR * 0.95, 0.02, -0.03);
         head.add(side);
-        const lens = mesh(new THREE.TorusGeometry(0.065, 0.016, 4, 10), mat(PALETTE.ink), false);
+        const lens = mesh(new THREE.TorusGeometry(0.065, 0.016, 4, 10), c('lens'), false);
         lens.position.set(sx * 0.085, 0.05, spec.headR * 0.98);
         head.add(lens);
       }
@@ -181,7 +184,7 @@ const SPECS: Record<CharacterId, Spec> = {
     top: PALETTE.blue,
     pants: PALETTE.ink,
     shoes: PALETTE.gold,
-    extras: ({ head, torso, spec }) => {
+    extras: ({ head, torso, spec, c }) => {
       // The hair cloud is the silhouette.
       const puffs: [number, number, number, number][] = [
         [0, 0.2, -0.04, 0.2],
@@ -201,12 +204,12 @@ const SPECS: Record<CharacterId, Spec> = {
       }
       // Lanyard and badge.
       for (const sx of [-1, 1]) {
-        const strap = mesh(cyl(0.012, 0.3, 4), mat(PALETTE.red), false);
+        const strap = mesh(cyl(0.012, 0.3, 4), c('lanyard'), false);
         strap.position.set(sx * 0.07, spec.torsoH - 0.12, spec.torsoD / 2 + 0.01);
         strap.rotation.z = sx * 0.4;
         torso.add(strap);
       }
-      const badge = mesh(box(0.11, 0.14, 0.02), mat(PALETTE.gold));
+      const badge = mesh(box(0.11, 0.14, 0.02), c('badge'));
       badge.position.set(0, spec.torsoH - 0.3, spec.torsoD / 2 + 0.02);
       torso.add(badge);
     },
@@ -224,32 +227,32 @@ const SPECS: Record<CharacterId, Spec> = {
     top: PALETTE.paper,
     pants: PALETTE.blue,
     shoes: PALETTE.red,
-    extras: ({ head, torso, spec }) => {
-      const stripe = mesh(box(spec.torsoW + 0.01, 0.08, spec.torsoD + 0.01), mat(PALETTE.red));
+    extras: ({ head, torso, spec, c }) => {
+      const stripe = mesh(box(spec.torsoW + 0.01, 0.08, spec.torsoD + 0.01), c('stripe'));
       stripe.position.y = spec.torsoH * 0.55;
       torso.add(stripe);
       // Beanie with a pompom.
       const beanie = mesh(
         new THREE.SphereGeometry(spec.headR * 1.08, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2),
-        mat(PALETTE.red),
+        c('beanie'),
       );
       beanie.position.y = 0.04;
       head.add(beanie);
-      const cuff = mesh(cyl(spec.headR * 1.1, 0.07, 9), mat(0xa82e2e));
+      const cuff = mesh(cyl(spec.headR * 1.1, 0.07, 9), c('cuff'));
       cuff.position.y = 0.05;
       head.add(cuff);
-      const pom = mesh(ico(0.07, 0), mat(PALETTE.gold));
+      const pom = mesh(ico(0.07, 0), c('pom'));
       pom.position.y = spec.headR * 1.15;
       head.add(pom);
       // The backpack, bigger than it should be.
-      const pack = mesh(box(0.62, 0.74, 0.4), mat(PALETTE.gold));
+      const pack = mesh(box(0.62, 0.74, 0.4), c('bag'));
       pack.position.set(0, spec.torsoH * 0.5, -spec.torsoD / 2 - 0.2);
       torso.add(pack);
-      const flap = mesh(box(0.5, 0.26, 0.06), mat(0xc98a1b));
+      const flap = mesh(box(0.5, 0.26, 0.06), c('bagTrim'));
       flap.position.set(0, spec.torsoH * 0.36, -spec.torsoD / 2 - 0.42);
       torso.add(flap);
       for (const sx of [-1, 1]) {
-        const strap = mesh(box(0.06, spec.torsoH * 0.95, 0.04), mat(0xc98a1b), false);
+        const strap = mesh(box(0.06, spec.torsoH * 0.95, 0.04), c('bagTrim'), false);
         strap.position.set(sx * 0.15, spec.torsoH * 0.5, spec.torsoD / 2 + 0.01);
         torso.add(strap);
       }
@@ -283,15 +286,36 @@ const withRim = (m: THREE.Material) => {
   return c;
 };
 
-export const buildRig = (id: CharacterId): Rig => {
+/** The two shared special materials, one each: Terminal's glow and Legend's polished gold. Both bake into the rig's one draw call. */
+const SPECIAL = (() => {
+  const flat = { flatShading: true };
+  return {
+    gold: new THREE.MeshStandardMaterial({ ...flat, color: GOLD_MATERIAL.color, metalness: GOLD_MATERIAL.metalness, roughness: GOLD_MATERIAL.roughness, emissive: GOLD_MATERIAL.emissive }),
+    glow: new THREE.MeshStandardMaterial({ ...flat, color: GLOW_MATERIAL.color, roughness: 0.6, emissive: GLOW_MATERIAL.emissive, emissiveIntensity: GLOW_MATERIAL.emissiveIntensity }),
+  };
+})();
+
+/** The mic's own look in the Standard outfit: gold with a faint glow (it keeps it in Legend). */
+const MIC_STANDARD = mat(PALETTE.gold, { emissive: 0x3a2a00 });
+const partMat = (p: OutfitParts, part: string): THREE.Material => {
+  const col: PartColor = p[part];
+  if (col === 'gold' || col === 'glow') return SPECIAL[col];
+  if (part === 'mic' && col === 0xffc93c) return MIC_STANDARD;
+  return mat(col);
+};
+
+/** `outfit` is a key from cosmetics.ts (`standard` by default): it recolours parts only, never the shapes. */
+export const buildRig = (id: CharacterId, outfit = 'standard'): Rig => {
   const s = SPECS[id];
+  const parts = outfitParts(outfit, id);
+  const c = (part: string) => partMat(parts, part);
   const root = new THREE.Group();
   const body = new THREE.Group();
   root.add(body);
 
   const torso = new THREE.Group();
   torso.position.y = s.legLen;
-  const torsoMesh = mesh(box(s.torsoW, s.torsoH, s.torsoD), mat(s.top));
+  const torsoMesh = mesh(box(s.torsoW, s.torsoH, s.torsoD), c('top'));
   torsoMesh.position.y = s.torsoH / 2;
   torso.add(torsoMesh);
   body.add(torso);
@@ -302,24 +326,27 @@ export const buildRig = (id: CharacterId): Rig => {
   addEyes(head, s.headR);
   body.add(head);
 
-  s.extras({ head, torso, spec: s });
+  s.extras({ head, torso, spec: s, c });
 
   // ---- kit: everyone is dressed for a fight (the Intern brought their own huge backpack).
   const olive = mat(0x4f5638);
   const oliveDark = mat(0x3b412a);
   const strapMat = mat(0x2a2d24);
-  const tan = mat(0xa08c64);
+  // The shared pack, its flap and pouches and the roll take the outfit's kit colours; holster, belt pouches and vest stay.
+  const packMat = id === 'intern' ? olive : c('pack');
+  const flapMat = id === 'intern' ? oliveDark : c('flap');
+  const rollMat = id === 'intern' ? mat(0xa08c64) : c('roll');
   const back = -s.torsoD / 2;
   if (id !== 'intern') {
-    const pack = mesh(box(s.torsoW * 0.78, s.torsoH * 0.72, 0.26), olive);
+    const pack = mesh(box(s.torsoW * 0.78, s.torsoH * 0.72, 0.26), packMat);
     pack.position.set(0, s.torsoH * 0.52, back - 0.13);
-    const flap = mesh(box(s.torsoW * 0.7, s.torsoH * 0.22, 0.05), oliveDark);
+    const flap = mesh(box(s.torsoW * 0.7, s.torsoH * 0.22, 0.05), flapMat);
     flap.position.set(0, s.torsoH * 0.78, back - 0.27);
-    const pouchL = mesh(box(0.1, s.torsoH * 0.36, 0.18), oliveDark);
+    const pouchL = mesh(box(0.1, s.torsoH * 0.36, 0.18), flapMat);
     pouchL.position.set(-s.torsoW * 0.44, s.torsoH * 0.42, back - 0.12);
     const pouchR = pouchL.clone();
     pouchR.position.x = s.torsoW * 0.44;
-    const roll = mesh(new THREE.CylinderGeometry(0.09, 0.09, s.torsoW * 0.82, 10).rotateZ(Math.PI / 2), tan);
+    const roll = mesh(new THREE.CylinderGeometry(0.09, 0.09, s.torsoW * 0.82, 10).rotateZ(Math.PI / 2), rollMat);
     roll.position.set(0, s.torsoH * 0.93, back - 0.13);
     torso.add(pack, flap, pouchL, pouchR, roll);
   }
@@ -329,9 +356,9 @@ export const buildRig = (id: CharacterId): Rig => {
     strap.position.set(sx * s.torsoW * 0.26, s.torsoH * 0.62, s.torsoD / 2 + 0.012);
     torso.add(strap);
   }
-  const belt = mesh(box(s.torsoW + 0.04, 0.08, s.torsoD + 0.04), strapMat);
+  const belt = mesh(box(s.torsoW + 0.04, 0.08, s.torsoD + 0.04), c('belt'));
   belt.position.y = 0.05;
-  const buckle = mesh(box(0.07, 0.06, 0.02), mat(0x9a9a8a), false);
+  const buckle = mesh(box(0.07, 0.06, 0.02), c('buckle'), false);
   buckle.position.set(0, 0.05, s.torsoD / 2 + 0.03);
   const holster = mesh(box(0.08, 0.2, 0.13), oliveDark);
   holster.position.set(s.torsoW / 2 + 0.05, -0.05, 0.02);
@@ -368,15 +395,15 @@ export const buildRig = (id: CharacterId): Rig => {
   const makeArm = () => {
     const half = s.armLen / 2;
     const upper = new THREE.Group();
-    const u = mesh(cyl(s.armR, half + 0.02), mat(s.top));
+    const u = mesh(cyl(s.armR, half + 0.02), c('top'));
     u.position.y = -half / 2;
     upper.add(u);
-    const elbow = mesh(ico(s.armR * 1.02, 0), mat(s.top));
+    const elbow = mesh(ico(s.armR * 1.02, 0), c('top'));
     elbow.position.y = -half;
     upper.add(elbow);
     const fore = new THREE.Group();
     fore.position.y = -half;
-    const f = mesh(cyl(s.armR * 0.92, half), mat(s.top));
+    const f = mesh(cyl(s.armR * 0.92, half), c('top'));
     f.position.y = -half / 2;
     fore.add(f);
     const hand = mesh(ico(s.armR * 1.15, 0), mat(s.skin));
@@ -398,18 +425,18 @@ export const buildRig = (id: CharacterId): Rig => {
   const makeLeg = () => {
     const half = s.legLen / 2;
     const thigh = new THREE.Group();
-    const t = mesh(cyl(s.legR * 1.08, half + 0.02), mat(s.pants));
+    const t = mesh(cyl(s.legR * 1.08, half + 0.02), c('pants'));
     t.position.y = -half / 2;
     thigh.add(t);
-    const knee = mesh(ico(s.legR * 1.05, 0), mat(s.pants));
+    const knee = mesh(ico(s.legR * 1.05, 0), c('pants'));
     knee.position.y = -half;
     thigh.add(knee);
     const shin = new THREE.Group();
     shin.position.y = -half;
-    const sh = mesh(cyl(s.legR * 0.95, half), mat(s.pants));
+    const sh = mesh(cyl(s.legR * 0.95, half), c('pants'));
     sh.position.y = -half / 2;
     shin.add(sh);
-    const shoe = mesh(box(s.legR * 2.2, s.legR * 1.2, s.legR * 3.2), mat(s.shoes));
+    const shoe = mesh(box(s.legR * 2.2, s.legR * 1.2, s.legR * 3.2), c('shoes'));
     // The sole, not the middle of the shoe, sits at the end of the leg: on a bridge deck the
     // feet rest on the planks instead of sinking into them.
     shoe.position.set(0, -half + s.legR * 0.6, s.legR * 0.7);
@@ -1145,4 +1172,8 @@ export const poseSwim = (rig: Rig, p: { dt: number; time: number; speed: number;
 };
 
 /** A fighter's skin and sleeve colours (the first-person arms wear them). */
-export const fighterLook = (id: CharacterId) => ({ skin: SPECS[id].skin, top: SPECS[id].top });
+/** The skin and sleeve colours (first-person arms): the sleeve follows the outfit's top. */
+export const fighterLook = (id: CharacterId, outfit = 'standard') => {
+  const top = outfitParts(outfit, id).top;
+  return { skin: SPECS[id].skin, top: typeof top === 'number' ? top : SPECS[id].top };
+};
