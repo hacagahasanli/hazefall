@@ -31,6 +31,8 @@ const load = (name: string) => trackLoad(loader.loadAsync(assetUrl(`models/${nam
 const TINTS = [0xffffff, 0xffc9b0, 0xc8dcff, 0xfff0b8, 0xe0ffd0, 0xffd6e8, 0xd8d0ff];
 /** Siding colours for the houses in first person, and their roofs. */
 const FACADES = [0xd9c8a8, 0xb9c8d6, 0xe4d7c1, 0xc9a98a, 0xa9b996, 0xd8b8a4, 0xc4c0b6];
+/** With the metal gone the pack's pale colours read washed out next to the old look; this brings them back to it. */
+const HOUSE_DIFFUSE = 0.6;
 const ROOFS = [0x7a3a2e, 0x4a5560, 0x5a6b45, 0x6b4a32, 0x3f4650];
 
 /**
@@ -814,6 +816,10 @@ export const buildWorld = (scene: THREE.Scene): World => {
         // A tint per house so the rooftops don't all read the same from above.
         const m = o.material as THREE.MeshStandardMaterial;
         if (m.color) m.color.multiply(new THREE.Color(TINTS[i % TINTS.length]));
+        // The pack's materials are fully metallic and the scene has no environment map: a metal with nothing to reflect is
+        // black wherever the sun's highlight does not reach (every slope and wall facing away from it).
+        m.metalness = 0;
+        m.color.multiplyScalar(HOUSE_DIFFUSE);
       }
     });
     // The model's colours go into its vertices: one draw call per house. Its material is its own, so it can fade.
