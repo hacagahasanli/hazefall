@@ -221,6 +221,7 @@ const beamGeometry = (() => {
   return g;
 })();
 /** The lens through the sniper's scope (degrees), and the widest the over-the-shoulder view goes. */
+const SHOULDER_ARM_MIN = 2.2;
 const SCOPE_FOV = { first: 16, shoulder: 30 } as const;
 const SHOULDER_FOV_MAX = 78;
 
@@ -2686,7 +2687,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           const r = roofAt(x, z);
           const underRoof = r >= 0 && selfH < 1.5 && buildingAt(x, z) === buildingAt(selfX, selfY);
           if (solidAt(state, x, z, y) || solidAt(state, x, z, y + 0.12) || y < 0.25 || (r >= 0 && !underRoof && y < r + 0.25 && y > 2.2) || (underRoof && y > 2.33)) {
-            reach = Math.max(0.35, d - 0.3);
+            // A trunk is the only tree part the arm bumps into (leaves are not walls, and solidAt ignores crowns), and a trunk
+            // beside the landing spot must not drag the lens into the fighter's back: the arm stays at least 2.2 m (the camera
+            // may then sit inside the trunk, which draws nothing from the inside). Walls, roofs and the ground can still pull it in.
+            const trunk = tileAt(Math.floor(x / TILE), Math.floor(z / TILE)) === 't' && !(r >= 0) && y >= 0.25;
+            reach = Math.max(trunk ? Math.min(SHOULDER_ARM_MIN, wantArm) : 0.35, d - 0.3);
             break;
           }
         }
