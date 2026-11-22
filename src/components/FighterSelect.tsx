@@ -45,8 +45,34 @@ type Portraits = Record<FighterId, string> | null;
  * The fighters' portraits, rendered after the page has painted (null until then, or while `skip`). With a `look` they wear it,
  * and are drawn again when it changes (the Fighter screen's Style tray).
  */
+/** The portraits drawn for the default look, kept for the rest of the visit: the menu draws them while it idles, so the lobby
+ *  and the Fighter screen show them on their first frame instead of drawing four WebGL pictures after they open. */
+let warmed: Portraits = null;
+let warming: Promise<void> | null = null;
+
+/** Draws the default-look portraits (and fetches the lobby's scene code) while the page is idle. Safe to call again. */
+export const warmLobby = (): Promise<void> => {
+  warming ??= new Promise<void>((resolve) => {
+    const run = () =>
+      void Promise.all([import('~/game/render/showcase'), import('~/game/render/staging')])
+        .then(([{ renderPortraits }]) => {
+          warmed ??= renderPortraits();
+        })
+        .catch(() => undefined)
+        .finally(resolve);
+    const idle = (window as unknown as { requestIdleCallback?: (fn: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
+    if (idle) idle(run, { timeout: 1500 });
+    else setTimeout(run, 300);
+  });
+  return warming;
+};
+
+/**
+ * The fighters' portraits, rendered after the page has painted (null until then, or while `skip`). With a `look` they wear it,
+ * and are drawn again when it changes (the Fighter screen's Style tray). The default look is served from the warm cache.
+ */
 export const usePortraits = (skip = false, look?: Look): Portraits => {
-  const [portraits, setPortraits] = useState<Portraits>(null);
+  const [portraits, setPortraits] = useState<Portraits>(warmed);
   const lookKey = look ? JSON.stringify(look.outfit) + look.finish : '';
   const lookRef = useRef(look);
   lookRef.current = look;

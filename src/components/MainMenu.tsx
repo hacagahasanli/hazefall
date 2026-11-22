@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { FighterCard, FighterGrid, HowTo, usePortraits } from '~/components/FighterSelect';
+import { FighterCard, FighterGrid, HowTo, usePortraits, warmLobby } from '~/components/FighterSelect';
 import { MenuBanner } from '~/components/MenuBanner';
 import { SettingsPanel } from '~/components/SettingsPanel';
 import { setUiSound, uiTick } from '~/components/uiSound';
@@ -146,7 +146,7 @@ const LevelBar = ({ career }: { career: Career }) => {
         <div className="h-full bg-gold" style={{ width: `${Math.min(100, Math.round((career.xp / need) * 100))}%` }} />
       </div>
       {next && (
-        <p className={`flex items-center gap-2 text-sm ${next.milestone ? 'font-semibold text-gold' : 'text-cream/65'}`}>
+        <p className={`flex items-center gap-2 text-sm [@media(max-height:360px)]:hidden ${next.milestone ? 'font-semibold text-gold' : 'text-cream/65'}`}>
           <span>{next.text}</span>
           <Chip item={next.item} fighter="hotfix" w={24} h={14} />
         </p>
@@ -328,7 +328,11 @@ export const MainMenu = ({
 
   return (
     <main className="relative h-[100dvh] w-screen select-none overflow-hidden bg-ink-deep text-cream">
-      <Backdrop settings={settings} platform={platform} onLive={() => bootLive.current()} />
+      <Backdrop settings={settings} platform={platform} onLive={() => {
+          bootLive.current();
+          void warmLobby();
+        }}
+      />
       {/* Dark on the left for the menu, a vignette round the edges, and on phones a floor of shade under the buttons. */}
       <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(90deg,rgba(10,13,24,0.94)_0%,rgba(10,13,24,0.78)_26%,rgba(10,13,24,0.15)_48%,rgba(10,13,24,0)_70%)] max-sm:bg-[linear-gradient(0deg,rgba(10,13,24,0.96)_0%,rgba(10,13,24,0.75)_45%,rgba(10,13,24,0.1)_75%)]" />
       <div className="pointer-events-none fixed inset-0 shadow-[inset_0_0_180px_rgba(0,0,0,0.55)]" />
@@ -348,7 +352,7 @@ export const MainMenu = ({
               alt={GAME_TITLE}
               width={1130}
               height={306}
-              className={`h-auto w-full max-w-[400px] drop-shadow-[0_6px_28px_rgba(0,0,0,0.65)] [@media(max-height:640px)]:sm:max-w-[240px] [@media(max-height:500px)]:max-w-[200px] ${settings.reducedMotion ? '' : 'lcs-glitch-in'}`}
+              className={`h-auto w-full max-w-[400px] drop-shadow-[0_6px_28px_rgba(0,0,0,0.65)] [@media(max-height:640px)]:sm:max-w-[240px] [@media(max-height:500px)]:max-w-[200px] [@media(max-height:360px)]:max-w-[150px] ${settings.reducedMotion ? '' : 'lcs-glitch-in'}`}
             />
           </h1>
           {career && <LevelBar career={career} />}
@@ -384,7 +388,7 @@ export const MainMenu = ({
                 {/* The accent bar slides in from the left on hover and focus. */}
                 <span className={`absolute left-0 top-1/2 h-[70%] w-1.5 -translate-y-1/2 -skew-x-12 bg-green transition-all duration-200 ${focus === i ? 'translate-x-0 opacity-100' : '-translate-x-3 opacity-0'}`} />
                 <span
-                  className={`font-display uppercase italic leading-none transition-all duration-200 ${it.soon ? 'text-cream/35' : focus === i ? 'translate-x-5 text-green' : 'text-cream/85'} ${it.primary ? 'text-5xl sm:text-6xl [@media(max-height:640px)]:sm:text-5xl [@media(max-height:500px)]:text-4xl' : 'text-2xl sm:text-3xl [@media(max-height:640px)]:sm:text-2xl [@media(max-height:500px)]:text-xl'}`}
+                  className={`font-display uppercase italic leading-none transition-all duration-200 ${it.soon ? 'text-cream/35' : focus === i ? 'translate-x-5 text-green' : 'text-cream/85'} ${it.primary ? 'text-5xl sm:text-6xl [@media(max-height:640px)]:sm:text-5xl [@media(max-height:500px)]:text-4xl [@media(max-height:360px)]:text-3xl' : 'text-2xl sm:text-3xl [@media(max-height:640px)]:sm:text-2xl [@media(max-height:500px)]:text-xl [@media(max-height:360px)]:text-lg'}`}
                 >
                   {it.label}
                 </span>

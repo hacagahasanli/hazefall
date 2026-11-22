@@ -13,6 +13,8 @@ import { buildWorld } from './world';
 
 import type { Look } from '../cosmetics';
 import type { Rig } from './characters';
+import { phoneRatio, sceneTier } from './quality';
+
 import type { Tier } from './quality';
 import type { FighterId } from '../sim/types';
 
@@ -55,7 +57,13 @@ export const startStaging = (
 ): Staging => {
   const low = opts.tier === 'low';
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !low, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(low ? Math.min(window.devicePixelRatio, 1) * 0.75 : Math.min(window.devicePixelRatio, opts.tier === 'medium' ? 1.25 : 1.5));
+  // Phones: a fixed pixel budget (phoneRatio), so the backdrop is sharp; elsewhere the low tier draws lighter still.
+  const coarse = !!window.matchMedia?.('(pointer: coarse)').matches;
+  renderer.setPixelRatio(
+    coarse
+      ? phoneRatio(sceneTier(opts.tier ?? 'medium'), canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, window.devicePixelRatio)
+      : low ? Math.min(window.devicePixelRatio, 1) * 0.75 : Math.min(window.devicePixelRatio, opts.tier === 'medium' ? 1.25 : 1.5),
+  );
   renderer.shadowMap.enabled = !low;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -84,8 +92,12 @@ export const startStaging = (
   rim.target.position.set(C, 1, Z0);
   scene.add(rim, rim.target);
 
-  const world = buildWorld(scene);
-  const props = buildProps(scene);
+  // The town and the forest on the horizon are built after the first frame (they are the heavy part: on a phone they take
+  // the better part of a second, and it stops the fade-in), so the squad is on screen and faded in first and the scenery arrives
+  // behind it, in the fog.
+  let world: ReturnType<typeof buildWorld> | null = null;
+  let props: ReturnType<typeof buildProps> | null = null;
+  let scenery = 0;
   const state = createGame(fighter, 7);
 
   // The apron: asphalt, painted lines, a few crates and two light masts.
@@ -174,7 +186,9 @@ export const startStaging = (
   };
   /** A new squad was built: a still scene draws once more to show it. */
   let redraw = false;
-  const buildSquad = () => {
+  /** The three behind you: added after the first frame on the first build, so you are on screen sooner. */
+  const addBack = () => IDS.filter((id) => id !== hero).forEach((id, i) => addMember(id, BACK[i][0], BACK[i][1], BACK[i][2], i + 1));
+  const buildSquad = (withBack = true) => {
     redraw = true;
     for (const m of members) {
       scene.remove(m.rig.root, m.gun);
@@ -183,10 +197,10 @@ export const startStaging = (
     }
     members.length = 0;
     addMember(hero, 0, 0, 0.18, 0);
-    IDS.filter((id) => id !== hero).forEach((id, i) => addMember(id, BACK[i][0], BACK[i][1], BACK[i][2], i + 1));
+    if (withBack) addBack();
     rim.color.set(FIGHTERS[hero].color);
   };
-  buildSquad();
+  buildSquad(false);
 
   const resize = () => {
     const w = canvas.clientWidth;
@@ -280,13 +294,20 @@ export const startStaging = (
     }
     for (const l of lamps) l.intensity = 6 + Math.sin(time * 23) * 0.15;
 
-    world.update(state, -999, -999);
-    props.update(time, dt);
+    world?.update(state, -999, -999);
+    props?.update(time, dt);
     renderer.render(scene, camera);
     redraw = false;
     if (!ready) {
       ready = true;
       onReady();
+      scenery = window.setTimeout(() => {
+        if (members.length === 1) addBack();
+        world = buildWorld(scene);
+        props = buildProps(scene);
+        redraw = true;
+        // After the canvas has faded in (300 ms): building the town blocks the page, and a fade cannot run through that.
+      }, 500);
     }
     raf = requestAnimationFrame(frame);
   };
@@ -309,6 +330,7 @@ export const startStaging = (
     },
     dispose: () => {
       cancelAnimationFrame(raf);
+      clearTimeout(scenery);
       scene.traverse((o) => {
         if (o instanceof THREE.Mesh || o instanceof THREE.Points) {
           o.geometry.dispose();

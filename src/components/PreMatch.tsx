@@ -261,7 +261,7 @@ export const PreMatch = ({
 
   return (
     <main className="relative h-[100dvh] w-screen select-none overflow-hidden bg-ink-deep text-cream">
-      <canvas ref={canvasRef} aria-hidden className={`fixed inset-0 h-full w-full transition-opacity duration-700 ${live ? 'opacity-100' : 'opacity-0'}`} />
+      <canvas ref={canvasRef} aria-hidden className={`fixed inset-0 h-full w-full transition-opacity duration-300 ${live ? 'opacity-100' : 'opacity-0'}`} />
       {/* Letterbox bars slide in for the launch: the cinema cue that the match is about to start. */}
       <div className="pointer-events-none fixed inset-x-0 top-0 bg-black transition-[height] duration-700 ease-out" style={{ height: launching ? '9vh' : 0 }} />
       <div className="pointer-events-none fixed inset-x-0 bottom-0 bg-black transition-[height] duration-700 ease-out" style={{ height: launching ? '9vh' : 0 }} />
