@@ -182,7 +182,7 @@ Each one is designed for the view from above first. Height in metres; footprint 
 | Water tower (Old Town) | 2 x 2 | 16 m | **Red disc** (tank lid `0xe23d5c`) on a cream drum, 4 thin legs | Cylinder tank Ø6 m, 8 sides, cone lid; 4 box legs with X braces |
 | Twin cranes (Yard) | 3 x 2 each | 20 m | **Two long gold bars** over the water (`0xffc93c`) | Portal: 4 legs, top beam, boom 22 m out over the river, cab box; no collision on the boom |
 | Radio mast (Mast Hill) | 2 x 2 | 30 m | Thin, so the read is its **long shadow** plus a **blinking red light** (1 Hz, emissive) and a light gravel pad | Tapered 3-sided lattice from boxes, red/white bands every 5 m, 3 guy lines (thin lines, decor) |
-| HQ tower (Campus) | 6 x 6 | 18 m | **Green ring on a blue roof** (`0x2ec27e` ring, `0x3e7bfa` roof) | Box with 4 emissive window bands per side, roof slab, torus-like ring of 12 boxes (flat ring, 8 m across) |
+| HQ tower (Campus) | 6 x 6 | 12 m (was 18, F-004) | **Green ring on a blue roof** (`0x2ec27e` ring, `0x3e7bfa` roof) | Box with 4 emissive window bands per side, roof slab, torus-like ring of 12 boxes (flat ring, 8 m across) |
 | Windmill (exists) | 2 x 2 | 10 m | White tower, turning sails | Keep |
 | Fire lookout (Deadwood) | 2 x 2 | 14 m | **Orange square** in dark green (`0xf2542d` roof) | 4 legs, cabin box, pyramid roof, a zig-zag stair (decor) |
 | Pole sign (Truck Stop) | 1 x 1 | 12 m | **Gold disc** with a dark rim | Pole + a round board on top, faced up 20° so the disc shows from above; emissive rim at night palette |
@@ -276,6 +276,7 @@ else the last):
 **Frame budgets** (measure with `?perf&tier=low|high` at 6 fixed views: plane over the centre, canopy at 40 m over Old
 Town, ground in the Market Square, ground in the Yard, ground at the Campus plaza, ground on Route 1 in the fields):
 
+- Plane / free-fall view (added in R-009, F-006): low <= **275 calls / 500k tris**, high <= **460 calls / 950k tris**.
 - Low tier: canopy view <= **250 calls / 450k tris**; worst ground view <= **380 calls / 580k tris**.
 - High tier: canopy <= 420 calls / 850k tris; worst ground <= 560 calls / 1.05M tris.
 - That is about +15 % over today's worst. If the canopy view goes over, instance the house models per type before
@@ -314,8 +315,8 @@ Everything goes where it will stay after the shift (today's coordinates; slice 2
 buildings, loot and tiers (Campus with a plain HQ box, Mast Hill with a plain mast, Deadwood NE, Railyard tracks and
 boxcars, Motel, Orchard, Lakeside cabins), lone houses by roads, Deadline radii, plane offset, landing plan
 (`REACH`, `NEAR_BAND`, caps), outer forest ring and shadow box sized from `WORLD`, terrain paint, minimap, Home map.
-Gates: flood fill (every walkable tile and every door reachable); bot-sim 50 matches **median 4:30-5:30 from Play,
-p10 >= 3:30, p90 <= 6:30, dead air <= 10 % after 1:00, zone deaths <= 1 per match, first fight after landing <= 45 s
+Gates: flood fill (every walkable tile and every door reachable); bot-sim 50 matches **median 4:00-5:30 from Play,
+p10 >= 3:00, p90 <= 6:30, dead air <= 10 % after 1:00 (the hard gate; R-009/F-005 ranks it above round length), zone deaths <= 1 per match, first fight after landing <= 45 s
 median**; perf within section 9 budgets; map gen <= 150 ms; load time not worse than today +10 %.
 
 ### Slice 3: dress and tune (1-2 days)
@@ -329,6 +330,9 @@ fly-over contact sheet (plane, 40 m canopy over each hot place) where each landm
 
 Windowed minimap and a big map with names, a ford tile (`q`, 0.7x speed), supply drops and events from the
 br-proposal (Patch Drop, Cold Storage vault).
+
+Slice 3 also carries the R-009 fixes: F-004 (tall landmarks fade over the local player, HQ 12 m), F-005 (dead air),
+F-006 (plane-view perf), F-007 (HUD in the air), F-008 (Market Square across Route 1), F-009 (clouds), F-010 (dressing order).
 
 ## 11. Must not change
 
