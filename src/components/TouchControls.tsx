@@ -306,6 +306,9 @@ export const TouchControls = ({
   const stage = onPlane ? 'plane' : inAir ? (chute ? 'canopy' : 'fall') : 'ground';
   const ids = visiblePads({ stage, canReload, canHeal: !!heal, canUse, canSwap, sniper });
   const boxes = layoutPads(ids, ui, size, w, h);
+  // On the plane and in free fall the big JUMP / OPEN sits low, as the old one did, clear of the big drop map above it.
+  const lowFire = boxes.fire && stage !== 'ground' && stage !== 'canopy' ? { ...boxes.fire, y: Math.min(boxes.fire.y, boxes.fire.size / 2 + 8) } : null;
+  if (lowFire) boxes.fire = lowFire;
   const show = (id: PadId) => boxes[id];
   const box = (id: PadId) => boxes[id]!;
   const zone = layoutZone(ui, w, h);
@@ -343,7 +346,7 @@ export const TouchControls = ({
           {show('scope') && <Pad b="scope" label="Scope" press={press} box={box('scope')} right={leftHanded} accent />}
         </span>
       </div>
-      {/* Pause: just left of the minimap (hidden on the plane, where the big map takes the corner). */}
+      {/* Pause: just under the minimap (hidden on the plane, where the big map takes the corner). */}
       {!onPlane && (
         <button
           type="button"
@@ -353,8 +356,10 @@ export const TouchControls = ({
           style={{
             width: padSize(40, ui, 1),
             height: padSize(40, ui, 1),
-            right: 'calc(124px * var(--ui, 1) + 16px + env(safe-area-inset-right))',
-            top: 8,
+            // Just under the minimap (a 44 px button no longer fits between the phase pill and the minimap on a small phone):
+            // the minimap box is 112 * ui px of map in 4 px of padding, 8 px from the top and right edges.
+            right: 'calc(12px + env(safe-area-inset-right))',
+            top: `${8 + 112 * ui + 8 + 6}px`,
             minWidth: TOUCH_FLOOR,
             minHeight: TOUCH_FLOOR,
           }}
