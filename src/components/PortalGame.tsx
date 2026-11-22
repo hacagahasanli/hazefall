@@ -21,6 +21,7 @@ import { useSettings } from '~/components/useSettings';
 
 import type { RoundReport } from '~/components/Match';
 import type { Career, RoundResult } from '~/game/career';
+import type { Look } from '~/game/cosmetics';
 import type { AimMode } from '~/game/render/game';
 import type { HudState } from '~/game/render/game';
 import type { FighterId } from '~/game/sim/types';
@@ -53,7 +54,7 @@ export const PortalGame = ({
   // screen. `careerRef` is what the next round reads, the state is what the menu and the lobby show.
   const [career, setCareer] = useState<Career>(() => loadCareer(platform.storage));
   const careerRef = useRef(career);
-  const [roundKind, setRoundKind] = useState({ rookie: false, first: false, canopy: 'classic' });
+  const [roundKind, setRoundKind] = useState<{ rookie: boolean; first: boolean; look: Look }>({ rookie: false, first: false, look: career.look });
   const keepCareer = (c: Career) => {
     careerRef.current = c;
     saveCareer(platform.storage, c);
@@ -71,12 +72,14 @@ export const PortalGame = ({
       survived: hud.survived,
     };
     const { career: played, summary } = applyRound(before, result, hud.facts, new Date());
-    // A canopy just unlocked goes on for the next drop (change it in the lobby).
-    keepCareer(summary.newCanopies.length > 0 ? { ...played, canopy: summary.newCanopies[summary.newCanopies.length - 1] } : played);
+    // Anything just unlocked is already worn for the next drop (applyRound equips it; change it in the lobby).
+    keepCareer(played);
     const next = nudgeFighter(played) as FighterId | null;
     return { line: contextLine(before, result), nudge: next ? `Try ${FIGHTERS[next].name} next` : null, summary };
   };
-  const pickCanopy = (id: string) => keepCareer({ ...careerRef.current, canopy: id });
+  const pickLook = (look: Look) => keepCareer({ ...careerRef.current, look });
+  /** The player opened a category in Style: what it held is no longer new. */
+  const markSeen = (ids: string[]) => keepCareer({ ...careerRef.current, seen: [...new Set([...careerRef.current.seen, ...ids])] });
   /**
    * menu → lobby (fighter, lobby filling, wait for Ready) → readying (the match loads underneath, held, while the
    * countdown runs) → match. Play again goes back to the lobby with everyone already there.
@@ -126,7 +129,7 @@ export const PortalGame = ({
             held={stage !== 'match'}
             rookie={roundKind.rookie}
             firstRound={roundKind.first}
-            canopy={roundKind.canopy}
+            look={roundKind.look}
             onRoundEnd={finishRound}
             onLoaded={() => setLoaded(true)}
             onPlayAgain={() => toLobby(true)}
@@ -144,12 +147,13 @@ export const PortalGame = ({
               touch={touch}
               loaded={loaded}
               onReady={() => {
-                setRoundKind({ rookie: isRookie(careerRef.current), first: careerRef.current.roundsPlayed === 0, canopy: careerRef.current.canopy });
+                setRoundKind({ rookie: isRookie(careerRef.current), first: careerRef.current.roundsPlayed === 0, look: careerRef.current.look });
                 setRound((r) => r + 1);
                 setStage('readying');
               }}
               career={career}
-              onCanopy={pickCanopy}
+              onLook={pickLook}
+              onSeen={markSeen}
               onBack={toMenu}
               onLaunch={() => setStage('match')}
             />

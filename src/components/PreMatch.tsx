@@ -17,12 +17,14 @@ import { setUiSound, startHum, uiImpact, uiTick } from '~/components/uiSound';
 import { COPY } from '~/game/copy/studio';
 import { deviceFacts } from '~/game/render/deviceFacts';
 import { resolveTier } from '~/game/render/quality';
-import { CANOPIES, canopySwatch } from '~/game/canopies';
 import { keyLabel } from '~/game/settings';
 import { FIGHTERS, PLAYERS } from '~/game/sim/constants';
+import { previewed, StyleRow } from '~/components/StyleRow';
 import { loadCount, onLoadCount } from '~/lib/loading';
 
+import type { StylePreview } from '~/components/StyleRow';
 import type { Career } from '~/game/career';
+import type { Look } from '~/game/cosmetics';
 import type { Staging } from '~/game/render/staging';
 import type { Settings } from '~/game/settings';
 import type { FighterId } from '~/game/sim/types';
@@ -45,7 +47,8 @@ export const PreMatch = ({
   quick = false,
   touch,
   career,
-  onCanopy,
+  onLook,
+  onSeen,
 }: {
   platform: Platform;
   settings: Settings;
@@ -60,14 +63,22 @@ export const PreMatch = ({
   /** Play again: a shorter wait, the lobby already full. */
   quick?: boolean;
   touch: boolean;
-  /** What the game remembers: the canopies unlocked and the one picked (the portal build). */
+  /** What the game remembers: what is unlocked and worn (the portal build). */
   career?: Career;
-  onCanopy?: (id: string) => void;
+  /** A different look was picked in the Style row. */
+  onLook?: (look: Look) => void;
+  /** The player opened a category: these ids are no longer new. */
+  onSeen?: (ids: string[]) => void;
 }) => {
   /** Seconds from Ready to the match. A rematch is ready the moment the lobby is up, so its countdown is the launch plus a breath. */
   const count = quick ? LAUNCH + 0.8 : 9;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const staging = useRef<Staging | null>(null);
+  // A locked outfit or finish being looked at in the Style tray: shown on the fighter, never worn.
+  const [preview, setPreview] = useState<StylePreview>(null);
+  const trayOpen = useRef(false);
+  const shownLook = useRef<Look | undefined>(undefined);
+  shownLook.current = career ? previewed(career.look, fighter, preview) : undefined;
   const [live, setLive] = useState(false);
   const [t, setT] = useState(0);
   const end = useRef(Infinity);
@@ -96,7 +107,7 @@ export const PreMatch = ({
     let cancelled = false;
     void import('~/game/render/staging').then(({ startStaging }) => {
       if (cancelled) return;
-      staging.current = startStaging(canvas, fighter, () => setLive(true), { tier, still: settings.reducedMotion });
+      staging.current = startStaging(canvas, fighter, () => setLive(true), { tier, still: settings.reducedMotion, look: shownLook.current });
     });
     return () => {
       cancelled = true;
@@ -107,6 +118,11 @@ export const PreMatch = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tier, settings.reducedMotion]);
   useEffect(() => staging.current?.setFighter(fighter), [fighter]);
+  // What the fighter on the airstrip wears: the look worn, or the locked one being previewed.
+  const lookKey = shownLook.current ? JSON.stringify(shownLook.current) : '';
+  useEffect(() => {
+    if (shownLook.current) staging.current?.setLook(shownLook.current);
+  }, [lookKey, live]);
 
   useEffect(() => {
     hum.current = startHum();
@@ -187,6 +203,9 @@ export const PreMatch = ({
     const onKey = (e: KeyboardEvent) => {
       // The key that pressed Play (or a held one) must not also ready up on arrival.
       if (e.repeat || performance.now() - mountedAt.current < 600) return;
+      // Keys on the Style row belong to the row (Space presses a slot, Esc closes its tray).
+      if ((e.target as HTMLElement | null)?.closest?.('[data-style]')) return;
+      if (e.code === 'Escape' && trayOpen.current) return;
       if (e.code === 'Escape' && !launching) {
         e.preventDefault();
         uiTick(true);
@@ -297,34 +316,18 @@ export const PreMatch = ({
             );
           })}
         </div>
-        {career && onCanopy && (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5" role="radiogroup" aria-label="Canopy">
-            <span className="text-sm font-semibold text-cream/70">Canopy</span>
-            {CANOPIES.map((c) => {
-              const open = career.unlocked.includes(c.id);
-              const on = career.canopy === c.id;
-              const lock = 'level' in c.from ? `Lv ${c.from.level}` : `Streak ${c.from.streak}`;
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={on}
-                  aria-label={open ? c.name : `${c.name}, locked: ${lock}`}
-                  title={open ? c.name : lock}
-                  disabled={!open || readied}
-                  onClick={() => {
-                    uiTick(false);
-                    onCanopy(c.id);
-                  }}
-                  className={`relative flex h-8 w-8 items-center justify-center overflow-hidden border-2 transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream ${on ? 'border-cream' : 'border-cream/15'} ${open ? (readied && !on ? 'opacity-30' : 'opacity-100') : 'opacity-60'}`}
-                  style={{ background: open ? canopySwatch(c, Number.parseInt(f.color.slice(1), 16)) : '#3a4054' }}
-                >
-                  {!open && <span className="text-[9px] font-bold leading-none text-cream/80">{lock.replace('Streak ', 'S')}</span>}
-                </button>
-              );
-            })}
-          </div>
+        {career && onLook && (
+          <StyleRow
+            career={career}
+            fighter={fighter}
+            disabled={readied}
+            onLook={onLook}
+            onSeen={(ids) => onSeen?.(ids)}
+            onPreview={setPreview}
+            onOpen={(o) => {
+              trayOpen.current = o;
+            }}
+          />
         )}
         <button
           type="button"

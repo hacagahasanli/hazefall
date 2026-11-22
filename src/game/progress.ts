@@ -109,6 +109,9 @@ const clock = (secs: number) => `${Math.floor(secs / 60)}:${String(Math.floor(se
 /** The streak as it stands on this day: a streak whose last day was before yesterday has already ended. */
 export const liveStreak = (c: Career, now: Date): number => (c.streak.lastDay === dayKey(now) || c.streak.lastDay === yesterdayKey(now) ? c.streak.days : 0);
 
+/** The line under the goals while a streak runs. */
+export const streakLine = (days: number) => (days < 7 ? `${days}-day streak. Day 7 unlocks Ember.` : `${days}-day streak.`);
+
 /** The XP lines a round earns before the daily goals add theirs. `streak` is the days in a row going into the round. */
 export const roundLines = (r: RoundResult, firstOfDay: boolean, streak = 0): XpLine[] => {
   const lines: XpLine[] = [

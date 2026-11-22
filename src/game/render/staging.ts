@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 
+import { DEFAULT_LOOK } from '../cosmetics';
 import { FIGHTERS, WORLD } from '../sim/constants';
 import { createGame } from '../sim/step';
 
@@ -10,6 +11,7 @@ import { buildPlane } from './plane';
 import { buildProps } from './props';
 import { buildWorld } from './world';
 
+import type { Look } from '../cosmetics';
 import type { Rig } from './characters';
 import type { Tier } from './quality';
 import type { FighterId } from '../sim/types';
@@ -22,6 +24,8 @@ import type { FighterId } from '../sim/types';
  */
 export interface Staging {
   setFighter: (id: FighterId) => void;
+  /** What the squad wears: each fighter's outfit and the gun finish. Rebuilds only when it changed. */
+  setLook: (look: Look) => void;
   /** The last seconds: crane up and turn to the battleground. `seconds` is how long the move takes. */
   launch: (seconds: number) => void;
   dispose: () => void;
@@ -47,7 +51,7 @@ export const startStaging = (
   canvas: HTMLCanvasElement,
   fighter: FighterId,
   onReady: () => void,
-  opts: { tier?: Tier; still?: boolean } = {},
+  opts: { tier?: Tier; still?: boolean; look?: Look } = {},
 ): Staging => {
   const low = opts.tier === 'low';
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !low, powerPreference: 'high-performance' });
@@ -155,18 +159,23 @@ export const startStaging = (
   scene.add(motes);
 
   // The squad: you in front, the others behind. Each keeps its own gun in hand.
+  let worn: Look = opts.look ?? DEFAULT_LOOK;
+  let hero = fighter;
   type Member = { rig: Rig; gun: THREE.Object3D; x: number; z: number; turn: number; seed: number };
   const members: Member[] = [];
   const addMember = (id: FighterId, x: number, z: number, turn: number, seed: number) => {
-    const rig = buildRig(id);
+    const rig = buildRig(id, worn.outfit[id]);
     rig.vest.visible = true;
-    const gun = buildGun(seed === 0 ? 'rifle' : (['shotgun', 'sniper', 'smg'] as const)[(seed - 1) % 3]).root;
+    const gun = buildGun(seed === 0 ? 'rifle' : (['shotgun', 'sniper', 'smg'] as const)[(seed - 1) % 3], worn.finish).root;
     rig.root.traverse((o) => o instanceof THREE.Mesh && (o.castShadow = true));
     gun.traverse((o) => o instanceof THREE.Mesh && (o.castShadow = true));
     scene.add(rig.root, gun);
     members.push({ rig, gun, x, z, turn, seed });
   };
-  const buildSquad = (hero: FighterId) => {
+  /** A new squad was built: a still scene draws once more to show it. */
+  let redraw = false;
+  const buildSquad = () => {
+    redraw = true;
     for (const m of members) {
       scene.remove(m.rig.root, m.gun);
       disposeObject(m.rig.root);
@@ -177,7 +186,7 @@ export const startStaging = (
     IDS.filter((id) => id !== hero).forEach((id, i) => addMember(id, BACK[i][0], BACK[i][1], BACK[i][2], i + 1));
     rim.color.set(FIGHTERS[hero].color);
   };
-  buildSquad(fighter);
+  buildSquad();
 
   const resize = () => {
     const w = canvas.clientWidth;
@@ -208,7 +217,7 @@ export const startStaging = (
   let ready = false;
   const frame = (now: number) => {
     frames++;
-    if (opts.still && frames > 20 && launchAt < 0) {
+    if (opts.still && frames > 20 && launchAt < 0 && !redraw) {
       raf = requestAnimationFrame(frame);
       return;
     }
@@ -274,6 +283,7 @@ export const startStaging = (
     world.update(state, -999, -999);
     props.update(time, dt);
     renderer.render(scene, camera);
+    redraw = false;
     if (!ready) {
       ready = true;
       onReady();
@@ -283,7 +293,15 @@ export const startStaging = (
   raf = requestAnimationFrame(frame);
 
   return {
-    setFighter: (id) => buildSquad(id),
+    setFighter: (id) => {
+      hero = id;
+      buildSquad();
+    },
+    setLook: (look) => {
+      if (JSON.stringify(look) === JSON.stringify(worn)) return;
+      worn = look;
+      buildSquad();
+    },
     launch: (seconds) => {
       if (launchAt >= 0) return;
       launchAt = time;

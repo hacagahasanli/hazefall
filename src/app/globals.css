@@ -336,3 +336,37 @@
   from { transform: translateX(-120%) skewX(-20deg); }
   to { transform: translateX(260%) skewX(-20deg); }
 }
+
+/* Progression: the level number pops, a white band sweeps over a reward chip, squares burst from a milestone chip. */
+@keyframes levelPop {
+  from {
+    transform: scale(1.25);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+@keyframes chipSweep {
+  from {
+    transform: translateX(-160%);
+  }
+  to {
+    transform: translateX(260%);
+  }
+}
+@keyframes burstOut {
+  from {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(var(--bx), var(--by)) scale(0.4);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lcs-sweep,
+  .lcs-burst {
+    display: none;
+  }
+}

@@ -12,7 +12,9 @@ import { FighterCard, FighterGrid, HowTo, usePortraits } from '~/components/Figh
 import { MenuBanner } from '~/components/MenuBanner';
 import { SettingsPanel } from '~/components/SettingsPanel';
 import { setUiSound, uiTick } from '~/components/uiSound';
-import { dailyFor, goalDef, hoursToReset, xpToNext } from '~/game/progress';
+import { Chip } from '~/components/Chip';
+import { nextReward } from '~/game/cosmetics';
+import { dailyFor, goalDef, hoursToReset, liveStreak, streakLine, xpToNext } from '~/game/progress';
 import { deviceFacts } from '~/game/render/deviceFacts';
 import { resolveTier } from '~/game/render/quality';
 import { keyLabel } from '~/game/settings';
@@ -110,6 +112,7 @@ const SidePanel = ({ title, onClose, children }: { title: string; onClose: () =>
 /** The career level under the logo: cream text, a thin gold bar, nothing above it. */
 const LevelBar = ({ career }: { career: Career }) => {
   const need = xpToNext(career.level);
+  const next = nextReward(career.level);
   return (
     <div className="flex max-w-[400px] flex-col gap-1 [@media(max-height:500px)]:max-w-[260px]" aria-label={`Level ${career.level}, ${career.xp} of ${need} XP`}>
       <span className="text-sm font-semibold text-cream/85">
@@ -118,6 +121,12 @@ const LevelBar = ({ career }: { career: Career }) => {
       <div className="h-1.5 overflow-hidden bg-cream/10">
         <div className="h-full bg-gold" style={{ width: `${Math.min(100, Math.round((career.xp / need) * 100))}%` }} />
       </div>
+      {next && (
+        <p className={`flex items-center gap-2 text-sm ${next.milestone ? 'font-semibold text-gold' : 'text-cream/65'}`}>
+          <span>{next.text}</span>
+          <Chip item={next.item} fighter="hotfix" w={24} h={14} />
+        </p>
+      )}
     </div>
   );
 };
@@ -127,6 +136,7 @@ const TodayCard = ({ career }: { career: Career }) => {
   const now = useMemo(() => new Date(), []);
   const daily = dailyFor(career, now);
   const done = daily.done.length;
+  const streak = liveStreak(career, now);
   return (
     <section aria-label="Today" className="panel-cut flex flex-col gap-1.5 bg-ink-deep/70 px-4 py-3 backdrop-blur [animation:slideIn_0.45s_ease-out_0.3s_both] [@media(max-height:500px)]:hidden">
       <div className="flex items-baseline justify-between gap-4">
@@ -148,6 +158,7 @@ const TodayCard = ({ career }: { career: Career }) => {
           );
         })}
       </ul>
+      {streak > 0 && <p className="text-xs text-cream/60">{streakLine(streak)}</p>}
       {done === daily.goals.length && <p className="text-xs text-cream/60">New goals in {hoursToReset(now)} h</p>}
     </section>
   );

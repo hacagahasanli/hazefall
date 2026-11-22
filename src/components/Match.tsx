@@ -6,7 +6,8 @@ import type { ComponentType } from 'react';
 
 import { COPY } from '~/game/copy/studio';
 import { GRADE_CSS, startMatch } from '~/game/render/game';
-import { canopyById, canopySwatch } from '~/game/canopies';
+import { accentCss, headlineAt, itemById, MILESTONE_LINE, MILESTONES, nextReward, rewardLabel } from '~/game/cosmetics';
+import { Chip, fighterHex } from '~/components/Chip';
 import { xpToNext } from '~/game/progress';
 import { FIGHTERS } from '~/game/sim/constants';
 
@@ -21,10 +22,11 @@ import { useSettings } from '~/components/useSettings';
 import { createWebPlatform } from '~/platform/web';
 import { TouchControls, useTouch } from '~/components/TouchControls';
 import { ShockRing, Streaks } from '~/components/Transitions';
-import { uiImpact } from '~/components/uiSound';
+import { uiImpact, uiTick, uiWhoosh } from '~/components/uiSound';
 import { capLabel, Counters, Vitals, Weapons } from '~/components/Hud';
 import { createBootProgress } from '~/lib/bootProgress';
 import { loadCount, onLoadCount } from '~/lib/loading';
+import type { Look } from '~/game/cosmetics';
 import type { Session } from '~/game/net/session';
 import type { HudState } from '~/game/render/game';
 import type { FighterId } from '~/game/sim/types';
@@ -292,19 +294,104 @@ const STAT_ICON = {
   survived: 'M8 2.5a6 6 0 1 0 0 12 6 6 0 1 0 0-12M8 5.5v3.2l2.2 1.4M6.4 1h3.2',
 };
 
+/** A reward card on the round report: the chip, the item's name and kind, and a line on when it is on. Milestones (5, 10, 20) are bigger and gold. */
+const RewardCard = ({ id, fighter, level, fx, first }: { id: string; fighter: FighterId; level: number | null; fx: boolean; first: boolean }) => {
+  const item = itemById(id);
+  if (!item) return null;
+  const big = level !== null;
+  const border = big ? '#ffc23d' : accentCss(item, fighter, fighterHex(fighter));
+  return (
+    <div className={`panel-cut flex flex-col gap-1 bg-ink-deep px-3 py-2.5 ${big ? 'w-full' : ''}`} style={{ border: `2px solid ${border}`, animation: fx ? 'riseIn 0.3s ease-out both' : undefined }}>
+      {big && <p className="font-display text-sm text-gold">Level {level} reward</p>}
+      <div className="flex items-center gap-3">
+        <span className="relative">
+          <Chip item={item} fighter={fighter} w={big ? 96 : 64} h={big ? 56 : 40} sweep={fx} />
+          {big && fx && (
+            <span aria-hidden className="pointer-events-none absolute inset-0">
+              {Array.from({ length: 14 }, (_, i) => {
+                const a = (i / 14) * Math.PI * 2;
+                const d = 52 + (i % 3) * 14;
+                return (
+                  <span
+                    key={i}
+                    className="lcs-burst absolute left-1/2 top-1/2 h-1.5 w-1.5"
+                    style={{ background: i % 2 ? '#ffc23d' : FIGHTERS[fighter].color, ['--bx' as string]: `${Math.cos(a) * d}px`, ['--by' as string]: `${Math.sin(a) * d}px`, animation: 'burstOut 0.8s ease-out both' }}
+                  />
+                );
+              })}
+            </span>
+          )}
+        </span>
+        <div className="flex min-w-0 flex-col">
+          <span className="font-display text-xl leading-tight text-cream">{big ? MILESTONE_LINE[level] : rewardLabel(item)}</span>
+          <span className="text-sm text-cream/70">On for your next drop.</span>
+          {first && <span className="text-sm text-cream/70">Everyone can see it. Nobody gets stronger.</span>}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 /**
- * What the round earned: one line per source of XP counting in (0.15 s apart), the level's bar filling, and a new canopy
- * showing when a level or a streak unlocks one. A finished daily goal is gold. Without motion it is all simply there.
+ * What the round earned: one line per source of XP counting in (0.15 s apart), then the level's bar. On a level-up the bar
+ * fills to full, flashes, refills from 0, the level number pops and the reward card rises in (milestones get a bigger gold
+ * one). Without a level-up a line under the bar names the next reward. Without motion it is all simply there.
  */
-const XpPanel = ({ summary, fx }: { summary: RoundSummary; fx: boolean }) => {
-  const { lines, before, after, levelUps, newCanopies } = summary;
-  const [fill, setFill] = useState(fx ? (levelUps.length > 0 ? 0 : before.xp / xpToNext(before.level)) : after.xp / xpToNext(after.level));
+const XpPanel = ({ summary, fx, fighter }: { summary: RoundSummary; fx: boolean; fighter: FighterId }) => {
+  const { lines, before, after, levelUps, newItems } = summary;
+  const leveled = levelUps.length > 0;
+  const need = xpToNext(after.level);
+  const [fill, setFill] = useState(fx ? before.xp / xpToNext(before.level) : after.xp / need);
+  const [level, setLevel] = useState(fx && leveled ? before.level : after.level);
+  const [flash, setFlash] = useState(false);
+  const [snap, setSnap] = useState(false);
+  const [pop, setPop] = useState(false);
+  const [cards, setCards] = useState(!fx);
+  const milestone = levelUps.find((l) => MILESTONES.includes(l)) ?? null;
   useEffect(() => {
-    if (!fx) return;
-    const t = window.setTimeout(() => setFill(after.xp / xpToNext(after.level)), 150 * lines.length + 900);
-    return () => window.clearTimeout(t);
+    const timers: number[] = [];
+    const at = (ms: number, f: () => void) => timers.push(window.setTimeout(f, ms));
+    const showCards = () => {
+      setCards(true);
+      if (milestone !== null) {
+        uiWhoosh();
+        window.setTimeout(() => uiImpact(0.8), 120);
+      } else if (newItems.length > 0) uiImpact(0.4);
+    };
+    if (!fx) {
+      if (newItems.length > 0) showCards();
+      return;
+    }
+    const t0 = 150 * lines.length + 900;
+    if (!leveled) {
+      at(t0, () => setFill(after.xp / need));
+      if (newItems.length > 0) at(t0 + 700, showCards);
+    } else {
+      at(t0, () => setFill(1));
+      at(t0 + 700, () => setFlash(true));
+      at(t0 + 850, () => {
+        setFlash(false);
+        setSnap(true);
+        setFill(0);
+        setLevel(after.level);
+        setPop(true);
+        uiTick(true);
+      });
+      at(t0 + 900, () => {
+        setSnap(false);
+        setFill(after.xp / need);
+      });
+      at(t0 + 1150, showCards);
+    }
+    return () => timers.forEach((t) => window.clearTimeout(t));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const at = (i: number) => (fx ? { animation: `riseIn 0.3s ease-out ${0.85 + i * 0.15}s both` } : undefined);
+
+  // The cards: a milestone's headline first, at most two, then how many are left in Style.
+  const head = milestone !== null ? headlineAt(milestone)?.id : undefined;
+  const ordered = head && newItems.includes(head) ? [head, ...newItems.filter((id) => id !== head)] : newItems;
+  const shown = ordered.slice(0, 2);
+  const next = !leveled ? nextReward(after.level) : null;
   return (
     <div className="flex max-w-sm flex-col gap-1 pl-2" aria-label="Experience earned">
       <ul className="flex flex-col gap-0.5 text-sm">
@@ -316,26 +403,26 @@ const XpPanel = ({ summary, fx }: { summary: RoundSummary; fx: boolean }) => {
         ))}
       </ul>
       <div className="mt-1 flex items-center gap-3 text-sm text-cream/80" style={at(lines.length)}>
-        <span className="whitespace-nowrap font-display">Level {after.level}</span>
+        <span className={`inline-block whitespace-nowrap font-display ${pop ? 'text-gold' : ''}`} style={pop && fx ? { animation: 'levelPop 0.25s ease-out both' } : undefined}>
+          Level {level}
+        </span>
         <div className="h-2 flex-1 overflow-hidden bg-cream/10">
-          <div className="h-full bg-gold transition-[width] duration-700 ease-out" style={{ width: `${Math.round(fill * 100)}%` }} />
+          <div className={`h-full ${snap ? '' : 'transition-[width] duration-700 ease-out'}`} style={{ width: `${Math.round(fill * 100)}%`, background: flash ? '#fff0b0' : 'var(--color-gold)' }} />
         </div>
-        <span className="whitespace-nowrap tabular-nums text-cream/60">{after.xp}/{xpToNext(after.level)} XP</span>
+        <span className="whitespace-nowrap tabular-nums text-cream/60">{after.xp}/{need} XP</span>
       </div>
-      {levelUps.length > 0 && (
-        <p className="font-display text-lg text-gold" style={at(lines.length + 1)}>
-          Level up!
+      {next && (
+        <p className={`text-sm ${next.milestone ? 'text-gold' : 'text-cream/60'}`} style={at(lines.length + 1)}>
+          {next.text}
         </p>
       )}
-      {newCanopies.map((id) => {
-        const c = canopyById(id);
-        return (
-          <div key={id} className="flex items-center gap-3 text-sm font-semibold text-cream" style={at(lines.length + 2)}>
-            <span aria-hidden className="h-5 w-9 -skew-x-12" style={{ background: canopySwatch(c) }} />
-            New canopy: {c.name}
-          </div>
-        );
-      })}
+      <div className="flex flex-col gap-2" aria-live="polite">
+        {cards &&
+          shown.map((id) => (
+            <RewardCard key={id} id={id} fighter={fighter} level={id === head ? milestone : null} fx={fx} first={before.level === 1 && id === shown[0]} />
+          ))}
+        {cards && ordered.length > 2 && <p className="text-sm text-cream/70">+{ordered.length - 2} more in Style</p>}
+      </div>
     </div>
   );
 };
@@ -346,6 +433,7 @@ const XpPanel = ({ summary, fx }: { summary: RoundSummary; fx: boolean }) => {
  */
 const Result = ({
   hud,
+  fighter,
   onPlayAgain,
   onExit,
   online,
@@ -355,6 +443,8 @@ const Result = ({
   report,
 }: {
   hud: HudState;
+  /** The fighter played (an outfit reward is shown on them). */
+  fighter: FighterId;
   onPlayAgain: () => void;
   onExit: () => void;
   online: boolean;
@@ -432,7 +522,7 @@ const Result = ({
               <StatSticker key={st.key} stat={st} index={i} fx={fx} />
             ))}
           </div>
-          {report?.summary && <XpPanel summary={report.summary} fx={fx} />}
+          {report?.summary && <XpPanel summary={report.summary} fx={fx} fighter={fighter} />}
           {report?.line && <p className="animate-[riseIn_0.5s_ease-out_0.7s_both] pl-2 text-lg font-semibold text-gold">{report.line}</p>}
           {report?.nudge && <p className="animate-[riseIn_0.5s_ease-out_0.72s_both] pl-2 text-sm text-cream/75">{report.nudge}</p>}
           <p className="animate-[riseIn_0.5s_ease-out_0.75s_both] text-sm text-cream/55">
@@ -491,7 +581,7 @@ export const Match = ({
   onLoaded,
   rookie = false,
   firstRound = false,
-  canopy,
+  look,
   onRoundEnd,
 }: {
   fighter: FighterId;
@@ -514,8 +604,8 @@ export const Match = ({
   rookie?: boolean;
   /** The very first round: no sentence on the plane's title card, no key legend (the keys show up when they matter). */
   firstRound?: boolean;
-  /** The canopy colours picked in the lobby (an id from canopies.ts). */
-  canopy?: string;
+  /** What you wear, picked in the lobby (outfit, gun finish, canopy, smoke). */
+  look?: Look;
   /** Called once when the round report comes up (offline rounds); what it returns is shown on the report. */
   onRoundEnd?: (hud: HudState) => RoundReport | null;
 }) => {
@@ -580,7 +670,7 @@ export const Match = ({
           fighter,
           rookie,
           firstRound,
-          canopy,
+          look,
           held: heldRef.current,
           name: 'you',
           aimMode: readAim(),
@@ -1133,6 +1223,7 @@ export const Match = ({
           {showResult && (
             <Result
               hud={hud}
+              fighter={fighter}
               onPlayAgain={onPlayAgain}
               onExit={onExit}
               online={online}

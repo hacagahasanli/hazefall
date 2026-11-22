@@ -153,6 +153,21 @@ export const saveCareer = (store: KeyValue, c: Career) => {
   }
 };
 
+/**
+ * The web build's `?career=reset`: wipes the saved career (and the old rounds counter) so the curve can be replayed from
+ * Level 1. Returns true when it did. Never called by the portal build.
+ */
+export const resetCareerIfAsked = (store: KeyValue, search: string): boolean => {
+  if (new URLSearchParams(search).get('career') !== 'reset') return false;
+  try {
+    store.setItem(CAREER_KEY, '');
+    store.setItem(LEGACY_ROUNDS_KEY, '0');
+  } catch {
+    /* nothing to wipe */
+  }
+  return true;
+};
+
 /** A new player's first rounds get the gentler bots (see `NEWBIE` in the sim). */
 export const isRookie = (c: Career) => c.roundsPlayed < NEWBIE_ROUNDS;
 

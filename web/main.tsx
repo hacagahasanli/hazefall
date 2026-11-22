@@ -8,6 +8,7 @@
 import { createRoot } from 'react-dom/client';
 
 import { GAME_VERSION } from '~/components/MainMenu';
+import { resetCareerIfAsked } from '~/game/career';
 import { OnlineInterest } from '~/components/OnlineInterest';
 import { PortalGame } from '~/components/PortalGame';
 import { SupportLink } from '~/components/SupportLink';
@@ -45,6 +46,12 @@ boot.step('Engine running', 0.44, 0.47);
 const platform = createWebPlatform();
 boot.step('Platform ready', 0.47, 0.5);
 platform.loadingStart();
+// ?career=reset (web build only, for testing): start again from Level 1, then drop the flag so a reload does not wipe it again.
+if (!crazy && resetCareerIfAsked(platform.storage, location.search)) {
+  const url = new URL(location.href);
+  url.searchParams.delete('career');
+  history.replaceState(null, '', url);
+}
 createRoot(document.getElementById('root')!).render(
   <PortalGame platform={platform} credit={STUDIO_NAME} support={crazy ? undefined : SupportLink} onlineInterest={crazy ? undefined : OnlineInterest} />,
 );

@@ -89,3 +89,16 @@ describe('the nudge to try another fighter', () => {
     expect(nudgeFighter(c)).toBe('standup');
   });
 });
+
+describe('?career=reset (web build only)', () => {
+  it('wipes the career and the old counter only for career=reset', async () => {
+    const { resetCareerIfAsked } = await import('./career');
+    const s = memoryStore();
+    saveCareer(s, { ...defaultCareer(), level: 9, roundsPlayed: 40 });
+    expect(resetCareerIfAsked(s, '?career=other')).toBe(false);
+    expect(resetCareerIfAsked(s, '')).toBe(false);
+    expect(loadCareer(s).level).toBe(9);
+    expect(resetCareerIfAsked(s, '?x=1&career=reset')).toBe(true);
+    expect(loadCareer(s)).toMatchObject({ level: 1, roundsPlayed: 0 });
+  });
+});

@@ -299,6 +299,12 @@ export interface NextReward {
   item: Item;
 }
 
+/** The item that stands for a level: a bundle's big one (Gold Build, Legend), or the first on the track. */
+export const headlineAt = (level: number): Item | undefined => {
+  const items = rewardsAtLevel(level);
+  return items.find((i) => i.kind === 'finish' && level === 10) ?? items.find((i) => i.kind === 'outfit' && level === 20) ?? items[0];
+};
+
 const MILESTONE_NAME: Record<number, string> = { 5: 'Drop Smoke', 10: 'Gold Build', 20: 'Legend outfits' };
 
 /** The next reward after `level`: a milestone within two levels first (in gold), else the next one on the track. Null from Level 20. */
@@ -307,9 +313,7 @@ export const nextReward = (level: number): NextReward | null => {
   if (!ahead.length) return null;
   const star = MILESTONES.find((m) => m > level && m <= level + 2);
   const at = star ?? ahead[0];
-  const items = rewardsAtLevel(at);
-  // The first item carries the chip; a bundle's headline is the big one (Gold Build, Legend), and the smoke is the Level 5 headline.
-  const head = items.find((i) => i.kind === 'finish' && at === 10) ?? items.find((i) => i.kind === 'outfit' && at === 20) ?? items[0];
+  const head = headlineAt(at)!;
   if (star) return { level: at, milestone: true, text: `Level ${at}: ${MILESTONE_NAME[at]}`, item: head };
   return { level: at, milestone: false, text: `Next at Level ${at}: ${rewardLabel(head)}`, item: head };
 };
