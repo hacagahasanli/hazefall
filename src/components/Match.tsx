@@ -986,7 +986,7 @@ export const Match = ({
                 <span className="absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold" />
               </div>
               {!hud.mouseLocked && !touch && (
-                <div className="pointer-events-none absolute inset-x-0 top-[58%] flex justify-center">
+                <div className="pointer-events-none absolute inset-x-0 top-[84px] flex justify-center">
                   <span className="panel-cut bg-ink-deep/85 px-4 py-2 text-sm text-cream">Click to look around with the mouse · Esc pauses</span>
                 </div>
               )}
@@ -1096,7 +1096,7 @@ export const Match = ({
           {/* Prompt */}
           {hud.prompt && !over && (
             <div
-              className={`pointer-events-none absolute inset-x-0 flex justify-center ${touch ? 'bottom-[150px] sm:bottom-6' : 'bottom-24'}`}
+              className={`pointer-events-none absolute inset-x-0 flex justify-center ${touch ? 'bottom-[150px] sm:bottom-6' : 'bottom-16'}`}
             >
               <span
                 className="panel-cut bg-ink-deep/85 px-4 py-1.5 text-sm text-cream"
@@ -1109,7 +1109,7 @@ export const Match = ({
 
           {/* A heal in progress: what, and how far along. */}
           {hud.using && !over && (
-            <div className={`pointer-events-none absolute inset-x-0 flex justify-center ${touch ? 'bottom-[190px] sm:bottom-16' : 'bottom-36'}`}>
+            <div className={`pointer-events-none absolute inset-x-0 flex justify-center ${touch ? 'bottom-[190px] sm:bottom-16' : 'bottom-24'}`}>
               <div className="flex w-52 flex-col items-center gap-1" style={{ zoom: hudZoom }}>
                 <span className="text-xs font-bold tracking-wider text-green">{hud.using.name}</span>
                 <span className="panel-cut h-2 w-full overflow-hidden bg-ink-deep/80">
