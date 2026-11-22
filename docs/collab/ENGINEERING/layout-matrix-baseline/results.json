@@ -1,0 +1,7787 @@
+{
+ "date": "2026-11-22T18:15:01.884Z",
+ "specs": [
+  "568x320:p",
+  "640x360:p",
+  "667x375:p",
+  "844x390:p",
+  "915x412:p",
+  "932x430:p",
+  "800x450:p",
+  "390x844:p",
+  "1024x768:t",
+  "1080x607:t",
+  "1180x820:t",
+  "768x1024:t",
+  "860x484:d",
+  "907x510:d",
+  "1020x540:d",
+  "1216x684:d",
+  "1280x720:d",
+  "1366x768:d",
+  "1440x900:d",
+  "1920x1080:d",
+  "1366x768:l"
+ ],
+ "failures": [
+  "568x320|menu|target|FighterBlaze",
+  "568x320|menu|target|Settings",
+  "568x320|menu|target|How to play",
+  "568x320|menu|target|Credits",
+  "568x320|panel-fighter|target|Outfit: Standard",
+  "568x320|panel-fighter|target|Gun: Factory",
+  "568x320|panel-fighter|target|Canopy: Classic",
+  "568x320|panel-fighter|target|Smoke: Off",
+  "568x320|panel-fighter|target|Back",
+  "568x320|panel-settings|target|Controls",
+  "568x320|panel-settings|target|Camera",
+  "568x320|panel-settings|target|Graphics",
+  "568x320|panel-settings|target|Audio",
+  "568x320|panel-settings|target|Accessibility",
+  "568x320|panel-settings|target|Invert Y",
+  "568x320|panel-settings|target|Reset all",
+  "568x320|panel-settings|target|Back",
+  "568x320|panel-settings-camera|target|Controls",
+  "568x320|panel-settings-camera|target|Camera",
+  "568x320|panel-settings-camera|target|Graphics",
+  "568x320|panel-settings-camera|target|Audio",
+  "568x320|panel-settings-camera|target|Accessibility",
+  "568x320|panel-settings-camera|target|Third person",
+  "568x320|panel-settings-camera|target|Reset all",
+  "568x320|panel-settings-camera|target|Back",
+  "568x320|panel-settings-graphics|target|Controls",
+  "568x320|panel-settings-graphics|target|Camera",
+  "568x320|panel-settings-graphics|target|Graphics",
+  "568x320|panel-settings-graphics|target|Audio",
+  "568x320|panel-settings-graphics|target|Accessibility",
+  "568x320|panel-settings-graphics|target|Auto",
+  "568x320|panel-settings-graphics|target|Low",
+  "568x320|panel-settings-graphics|target|Med",
+  "568x320|panel-settings-graphics|target|High",
+  "568x320|panel-settings-graphics|target|Shadows",
+  "568x320|panel-settings-graphics|target|Reset all",
+  "568x320|panel-settings-graphics|target|Back",
+  "568x320|panel-settings-audio|target|Controls",
+  "568x320|panel-settings-audio|target|Camera",
+  "568x320|panel-settings-audio|target|Graphics",
+  "568x320|panel-settings-audio|target|Audio",
+  "568x320|panel-settings-audio|target|Accessibility",
+  "568x320|panel-settings-audio|target|Mute",
+  "568x320|panel-settings-audio|target|Reset all",
+  "568x320|panel-settings-audio|target|Back",
+  "568x320|panel-settings-accessibility|target|Controls",
+  "568x320|panel-settings-accessibility|target|Camera",
+  "568x320|panel-settings-accessibility|target|Graphics",
+  "568x320|panel-settings-accessibility|target|Audio",
+  "568x320|panel-settings-accessibility|target|Accessibility",
+  "568x320|panel-settings-accessibility|target|Reduced motion",
+  "568x320|panel-settings-accessibility|target|Colour-blind friendly",
+  "568x320|panel-settings-accessibility|target|Show key hints",
+  "568x320|panel-settings-accessibility|target|Reset all",
+  "568x320|panel-settings-accessibility|target|Back",
+  "568x320|panel-how|target|Back",
+  "568x320|panel-credits|target|Back",
+  "568x320|lobby-pre|target|← Menu",
+  "568x320|lobby-pre|clearance|← Menu|You drop as",
+  "568x320|lobby-pre|clearance|← Menu|BLAZE",
+  "568x320|lobby-pre|clearance|Level 1, 0 of 230 XP|You drop as",
+  "568x320|lobby-pre|clearance|Level 1, 0 of 230 XP|BLAZE",
+  "568x320|lobby-ready|target|← Menu",
+  "568x320|lobby-ready|clearance|← Menu|You drop as",
+  "568x320|lobby-ready|clearance|← Menu|BLAZE",
+  "568x320|lobby-ready|clearance|Level 1, 0 of 230 XP|You drop as",
+  "568x320|lobby-ready|clearance|Level 1, 0 of 230 XP|BLAZE",
+  "568x320|freefall|target|Fire",
+  "568x320|freefall|target|Dive",
+  "568x320|freefall|target|Jump",
+  "568x320|freefall|target|Reload",
+  "568x320|freefall|target|Pick up",
+  "568x320|freefall|target|◀ Q",
+  "568x320|freefall|target|E ▶",
+  "568x320|freefall|target|Pause",
+  "568x320|canopy|target|Fire",
+  "568x320|canopy|target|Dive",
+  "568x320|canopy|target|Jump",
+  "568x320|canopy|target|Reload",
+  "568x320|canopy|target|Pick up",
+  "568x320|canopy|target|◀ Q",
+  "568x320|canopy|target|E ▶",
+  "568x320|canopy|target|Pause",
+  "568x320|ground|target|Fire",
+  "568x320|ground|target|Roll",
+  "568x320|ground|target|Jump",
+  "568x320|ground|target|Reload",
+  "568x320|ground|target|Pick up",
+  "568x320|ground|target|◀ Q",
+  "568x320|ground|target|E ▶",
+  "568x320|ground|target|Pause",
+  "568x320|ground-full|target|Fire",
+  "568x320|ground-full|target|Roll",
+  "568x320|ground-full|target|Jump",
+  "568x320|ground-full|target|Reload",
+  "568x320|ground-full|target|Pick up",
+  "568x320|ground-full|target|Scope",
+  "568x320|ground-full|target|Swap to SMG",
+  "568x320|ground-full|target|Heal",
+  "568x320|ground-full|target|◀ Q",
+  "568x320|ground-full|target|E ▶",
+  "568x320|ground-full|target|Pause",
+  "568x320|ground-full|zones|vitals|stick zone",
+  "568x320|pause|target|Resume",
+  "568x320|pause|target|Settings",
+  "568x320|pause|target|Quit to menu",
+  "568x320|report|in-view|/^Play again$/",
+  "568x320|report|in-view|/^(Main menu|Back to lobby)$/",
+  "640x360|menu|target|FighterBlaze",
+  "640x360|menu|target|Settings",
+  "640x360|menu|target|How to play",
+  "640x360|menu|target|Credits",
+  "640x360|panel-fighter|target|Back",
+  "640x360|panel-settings|target|Controls",
+  "640x360|panel-settings|target|Camera",
+  "640x360|panel-settings|target|Graphics",
+  "640x360|panel-settings|target|Audio",
+  "640x360|panel-settings|target|Accessibility",
+  "640x360|panel-settings|target|Invert Y",
+  "640x360|panel-settings|target|Reset all",
+  "640x360|panel-settings|target|Back",
+  "640x360|panel-settings-camera|target|Controls",
+  "640x360|panel-settings-camera|target|Camera",
+  "640x360|panel-settings-camera|target|Graphics",
+  "640x360|panel-settings-camera|target|Audio",
+  "640x360|panel-settings-camera|target|Accessibility",
+  "640x360|panel-settings-camera|target|Third person",
+  "640x360|panel-settings-camera|target|Reset all",
+  "640x360|panel-settings-camera|target|Back",
+  "640x360|panel-settings-graphics|target|Controls",
+  "640x360|panel-settings-graphics|target|Camera",
+  "640x360|panel-settings-graphics|target|Graphics",
+  "640x360|panel-settings-graphics|target|Audio",
+  "640x360|panel-settings-graphics|target|Accessibility",
+  "640x360|panel-settings-graphics|target|Auto",
+  "640x360|panel-settings-graphics|target|Low",
+  "640x360|panel-settings-graphics|target|Med",
+  "640x360|panel-settings-graphics|target|High",
+  "640x360|panel-settings-graphics|target|Shadows",
+  "640x360|panel-settings-graphics|target|Show FPS",
+  "640x360|panel-settings-graphics|target|Reset all",
+  "640x360|panel-settings-graphics|target|Back",
+  "640x360|panel-settings-audio|target|Controls",
+  "640x360|panel-settings-audio|target|Camera",
+  "640x360|panel-settings-audio|target|Graphics",
+  "640x360|panel-settings-audio|target|Audio",
+  "640x360|panel-settings-audio|target|Accessibility",
+  "640x360|panel-settings-audio|target|Mute",
+  "640x360|panel-settings-audio|target|Reset all",
+  "640x360|panel-settings-audio|target|Back",
+  "640x360|panel-settings-accessibility|target|Controls",
+  "640x360|panel-settings-accessibility|target|Camera",
+  "640x360|panel-settings-accessibility|target|Graphics",
+  "640x360|panel-settings-accessibility|target|Audio",
+  "640x360|panel-settings-accessibility|target|Accessibility",
+  "640x360|panel-settings-accessibility|target|Reduced motion",
+  "640x360|panel-settings-accessibility|target|Colour-blind friendly",
+  "640x360|panel-settings-accessibility|target|Show key hints",
+  "640x360|panel-settings-accessibility|target|Larger HUD text",
+  "640x360|panel-settings-accessibility|target|Reset all",
+  "640x360|panel-settings-accessibility|target|Back",
+  "640x360|panel-how|target|Back",
+  "640x360|panel-credits|target|Back",
+  "640x360|lobby-pre|target|← Menu",
+  "640x360|lobby-pre|clearance|← Menu|You drop as",
+  "640x360|lobby-pre|clearance|Level 1, 0 of 230 XP|You drop as",
+  "640x360|lobby-pre|clearance|Level 1, 0 of 230 XP|BLAZE",
+  "640x360|lobby-ready|target|← Menu",
+  "640x360|lobby-ready|clearance|← Menu|You drop as",
+  "640x360|lobby-ready|clearance|Level 1, 0 of 230 XP|You drop as",
+  "640x360|freefall|target|Reload",
+  "640x360|freefall|target|Pick up",
+  "640x360|freefall|target|◀ Q",
+  "640x360|freefall|target|E ▶",
+  "640x360|freefall|target|Pause",
+  "640x360|canopy|target|Reload",
+  "640x360|canopy|target|Pick up",
+  "640x360|canopy|target|◀ Q",
+  "640x360|canopy|target|E ▶",
+  "640x360|canopy|target|Pause",
+  "640x360|ground|target|Reload",
+  "640x360|ground|target|Pick up",
+  "640x360|ground|target|◀ Q",
+  "640x360|ground|target|E ▶",
+  "640x360|ground|target|Pause",
+  "640x360|ground-full|target|Reload",
+  "640x360|ground-full|target|Pick up",
+  "640x360|ground-full|target|Swap to SMG",
+  "640x360|ground-full|target|Heal",
+  "640x360|ground-full|target|◀ Q",
+  "640x360|ground-full|target|E ▶",
+  "640x360|ground-full|target|Pause",
+  "640x360|ground-full|zones|vitals|stick zone",
+  "640x360|pause|target|Resume",
+  "640x360|pause|target|Settings",
+  "640x360|pause|target|Quit to menu",
+  "667x375|menu|target|FighterBlaze",
+  "667x375|menu|target|Settings",
+  "667x375|menu|target|How to play",
+  "667x375|menu|target|Credits",
+  "667x375|panel-fighter|target|Back",
+  "667x375|panel-settings|target|Controls",
+  "667x375|panel-settings|target|Camera",
+  "667x375|panel-settings|target|Graphics",
+  "667x375|panel-settings|target|Audio",
+  "667x375|panel-settings|target|Accessibility",
+  "667x375|panel-settings|target|Invert Y",
+  "667x375|panel-settings|target|Reset all",
+  "667x375|panel-settings|target|Back",
+  "667x375|panel-settings-camera|target|Controls",
+  "667x375|panel-settings-camera|target|Camera",
+  "667x375|panel-settings-camera|target|Graphics",
+  "667x375|panel-settings-camera|target|Audio",
+  "667x375|panel-settings-camera|target|Accessibility",
+  "667x375|panel-settings-camera|target|Third person",
+  "667x375|panel-settings-camera|target|Reset all",
+  "667x375|panel-settings-camera|target|Back",
+  "667x375|panel-settings-graphics|target|Controls",
+  "667x375|panel-settings-graphics|target|Camera",
+  "667x375|panel-settings-graphics|target|Graphics",
+  "667x375|panel-settings-graphics|target|Audio",
+  "667x375|panel-settings-graphics|target|Accessibility",
+  "667x375|panel-settings-graphics|target|Auto",
+  "667x375|panel-settings-graphics|target|Low",
+  "667x375|panel-settings-graphics|target|Med",
+  "667x375|panel-settings-graphics|target|High",
+  "667x375|panel-settings-graphics|target|Shadows",
+  "667x375|panel-settings-graphics|target|Show FPS",
+  "667x375|panel-settings-graphics|target|Reset all",
+  "667x375|panel-settings-graphics|target|Back",
+  "667x375|panel-settings-audio|target|Controls",
+  "667x375|panel-settings-audio|target|Camera",
+  "667x375|panel-settings-audio|target|Graphics",
+  "667x375|panel-settings-audio|target|Audio",
+  "667x375|panel-settings-audio|target|Accessibility",
+  "667x375|panel-settings-audio|target|Mute",
+  "667x375|panel-settings-audio|target|Reset all",
+  "667x375|panel-settings-audio|target|Back",
+  "667x375|panel-settings-accessibility|target|Controls",
+  "667x375|panel-settings-accessibility|target|Camera",
+  "667x375|panel-settings-accessibility|target|Graphics",
+  "667x375|panel-settings-accessibility|target|Audio",
+  "667x375|panel-settings-accessibility|target|Accessibility",
+  "667x375|panel-settings-accessibility|target|Reduced motion",
+  "667x375|panel-settings-accessibility|target|Colour-blind friendly",
+  "667x375|panel-settings-accessibility|target|Show key hints",
+  "667x375|panel-settings-accessibility|target|Larger HUD text",
+  "667x375|panel-settings-accessibility|target|Reset all",
+  "667x375|panel-settings-accessibility|target|Back",
+  "667x375|panel-how|target|Back",
+  "667x375|panel-credits|target|Back",
+  "667x375|lobby-pre|target|← Menu",
+  "667x375|lobby-pre|clearance|← Menu|You drop as",
+  "667x375|lobby-pre|clearance|Level 1, 0 of 230 XP|You drop as",
+  "667x375|lobby-ready|target|← Menu",
+  "667x375|freefall|target|Reload",
+  "667x375|freefall|target|Pick up",
+  "667x375|freefall|target|◀ Q",
+  "667x375|freefall|target|E ▶",
+  "667x375|freefall|target|Pause",
+  "667x375|canopy|target|Reload",
+  "667x375|canopy|target|Pick up",
+  "667x375|canopy|target|◀ Q",
+  "667x375|canopy|target|E ▶",
+  "667x375|canopy|target|Pause",
+  "667x375|ground|target|Reload",
+  "667x375|ground|target|Pick up",
+  "667x375|ground|target|◀ Q",
+  "667x375|ground|target|E ▶",
+  "667x375|ground|target|Pause",
+  "667x375|ground-full|target|Reload",
+  "667x375|ground-full|target|Pick up",
+  "667x375|ground-full|target|Swap to SMG",
+  "667x375|ground-full|target|◀ Q",
+  "667x375|ground-full|target|E ▶",
+  "667x375|ground-full|target|Pause",
+  "667x375|ground-full|zones|vitals|stick zone",
+  "667x375|pause|target|Resume",
+  "667x375|pause|target|Settings",
+  "667x375|pause|target|Quit to menu",
+  "844x390|menu|target|FighterBlaze",
+  "844x390|menu|target|Settings",
+  "844x390|menu|target|How to play",
+  "844x390|menu|target|Credits",
+  "844x390|panel-fighter|target|Back",
+  "844x390|panel-settings|target|Controls",
+  "844x390|panel-settings|target|Camera",
+  "844x390|panel-settings|target|Graphics",
+  "844x390|panel-settings|target|Audio",
+  "844x390|panel-settings|target|Accessibility",
+  "844x390|panel-settings|target|Invert Y",
+  "844x390|panel-settings|target|Reset all",
+  "844x390|panel-settings|target|Back",
+  "844x390|panel-settings-camera|target|Controls",
+  "844x390|panel-settings-camera|target|Camera",
+  "844x390|panel-settings-camera|target|Graphics",
+  "844x390|panel-settings-camera|target|Audio",
+  "844x390|panel-settings-camera|target|Accessibility",
+  "844x390|panel-settings-camera|target|Third person",
+  "844x390|panel-settings-camera|target|Reset all",
+  "844x390|panel-settings-camera|target|Back",
+  "844x390|panel-settings-graphics|target|Controls",
+  "844x390|panel-settings-graphics|target|Camera",
+  "844x390|panel-settings-graphics|target|Graphics",
+  "844x390|panel-settings-graphics|target|Audio",
+  "844x390|panel-settings-graphics|target|Accessibility",
+  "844x390|panel-settings-graphics|target|Auto",
+  "844x390|panel-settings-graphics|target|Low",
+  "844x390|panel-settings-graphics|target|Med",
+  "844x390|panel-settings-graphics|target|High",
+  "844x390|panel-settings-graphics|target|Shadows",
+  "844x390|panel-settings-graphics|target|Show FPS",
+  "844x390|panel-settings-graphics|target|Reset all",
+  "844x390|panel-settings-graphics|target|Back",
+  "844x390|panel-settings-audio|target|Controls",
+  "844x390|panel-settings-audio|target|Camera",
+  "844x390|panel-settings-audio|target|Graphics",
+  "844x390|panel-settings-audio|target|Audio",
+  "844x390|panel-settings-audio|target|Accessibility",
+  "844x390|panel-settings-audio|target|Mute",
+  "844x390|panel-settings-audio|target|Reset all",
+  "844x390|panel-settings-audio|target|Back",
+  "844x390|panel-settings-accessibility|target|Controls",
+  "844x390|panel-settings-accessibility|target|Camera",
+  "844x390|panel-settings-accessibility|target|Graphics",
+  "844x390|panel-settings-accessibility|target|Audio",
+  "844x390|panel-settings-accessibility|target|Accessibility",
+  "844x390|panel-settings-accessibility|target|Reduced motion",
+  "844x390|panel-settings-accessibility|target|Colour-blind friendly",
+  "844x390|panel-settings-accessibility|target|Show key hints",
+  "844x390|panel-settings-accessibility|target|Larger HUD text",
+  "844x390|panel-settings-accessibility|target|Reset all",
+  "844x390|panel-settings-accessibility|target|Back",
+  "844x390|panel-how|target|Back",
+  "844x390|panel-credits|target|Back",
+  "844x390|lobby-pre|target|← Menu",
+  "844x390|lobby-pre|clearance|Level 1, 0 of 230 XP|You drop as",
+  "844x390|lobby-ready|target|← Menu",
+  "844x390|freefall|target|◀ Q",
+  "844x390|freefall|target|E ▶",
+  "844x390|freefall|target|Pause",
+  "844x390|canopy|target|◀ Q",
+  "844x390|canopy|target|E ▶",
+  "844x390|canopy|target|Pause",
+  "844x390|ground|target|◀ Q",
+  "844x390|ground|target|E ▶",
+  "844x390|ground|target|Pause",
+  "844x390|ground-full|target|Swap to SMG",
+  "844x390|ground-full|target|◀ Q",
+  "844x390|ground-full|target|E ▶",
+  "844x390|ground-full|target|Pause",
+  "844x390|ground-full|zones|vitals|stick zone",
+  "844x390|pause|target|Resume",
+  "844x390|pause|target|Settings",
+  "844x390|pause|target|Quit to menu",
+  "915x412|menu|target|FighterBlaze",
+  "915x412|menu|target|Settings",
+  "915x412|menu|target|How to play",
+  "915x412|menu|target|Credits",
+  "915x412|panel-fighter|target|Back",
+  "915x412|panel-settings|target|Controls",
+  "915x412|panel-settings|target|Camera",
+  "915x412|panel-settings|target|Graphics",
+  "915x412|panel-settings|target|Audio",
+  "915x412|panel-settings|target|Accessibility",
+  "915x412|panel-settings|target|Invert Y",
+  "915x412|panel-settings|target|Left-handed",
+  "915x412|panel-settings|target|Reset all",
+  "915x412|panel-settings|target|Back",
+  "915x412|panel-settings-camera|target|Controls",
+  "915x412|panel-settings-camera|target|Camera",
+  "915x412|panel-settings-camera|target|Graphics",
+  "915x412|panel-settings-camera|target|Audio",
+  "915x412|panel-settings-camera|target|Accessibility",
+  "915x412|panel-settings-camera|target|Third person",
+  "915x412|panel-settings-camera|target|Reset all",
+  "915x412|panel-settings-camera|target|Back",
+  "915x412|panel-settings-graphics|target|Controls",
+  "915x412|panel-settings-graphics|target|Camera",
+  "915x412|panel-settings-graphics|target|Graphics",
+  "915x412|panel-settings-graphics|target|Audio",
+  "915x412|panel-settings-graphics|target|Accessibility",
+  "915x412|panel-settings-graphics|target|Auto",
+  "915x412|panel-settings-graphics|target|Low",
+  "915x412|panel-settings-graphics|target|Med",
+  "915x412|panel-settings-graphics|target|High",
+  "915x412|panel-settings-graphics|target|Shadows",
+  "915x412|panel-settings-graphics|target|Show FPS",
+  "915x412|panel-settings-graphics|target|Reset all",
+  "915x412|panel-settings-graphics|target|Back",
+  "915x412|panel-settings-audio|target|Controls",
+  "915x412|panel-settings-audio|target|Camera",
+  "915x412|panel-settings-audio|target|Graphics",
+  "915x412|panel-settings-audio|target|Audio",
+  "915x412|panel-settings-audio|target|Accessibility",
+  "915x412|panel-settings-audio|target|Mute",
+  "915x412|panel-settings-audio|target|Reset all",
+  "915x412|panel-settings-audio|target|Back",
+  "915x412|panel-settings-accessibility|target|Controls",
+  "915x412|panel-settings-accessibility|target|Camera",
+  "915x412|panel-settings-accessibility|target|Graphics",
+  "915x412|panel-settings-accessibility|target|Audio",
+  "915x412|panel-settings-accessibility|target|Accessibility",
+  "915x412|panel-settings-accessibility|target|Reduced motion",
+  "915x412|panel-settings-accessibility|target|Colour-blind friendly",
+  "915x412|panel-settings-accessibility|target|Show key hints",
+  "915x412|panel-settings-accessibility|target|Larger HUD text",
+  "915x412|panel-settings-accessibility|target|Reset all",
+  "915x412|panel-settings-accessibility|target|Back",
+  "915x412|panel-how|target|Back",
+  "915x412|panel-credits|target|Back",
+  "915x412|lobby-pre|target|← Menu",
+  "915x412|lobby-ready|target|← Menu",
+  "915x412|freefall|target|◀ Q",
+  "915x412|freefall|target|E ▶",
+  "915x412|freefall|target|Pause",
+  "915x412|canopy|target|◀ Q",
+  "915x412|canopy|target|E ▶",
+  "915x412|canopy|target|Pause",
+  "915x412|ground|target|◀ Q",
+  "915x412|ground|target|E ▶",
+  "915x412|ground|target|Pause",
+  "915x412|ground-full|target|Swap to SMG",
+  "915x412|ground-full|target|◀ Q",
+  "915x412|ground-full|target|E ▶",
+  "915x412|ground-full|target|Pause",
+  "915x412|ground-full|zones|vitals|stick zone",
+  "915x412|pause|target|Resume",
+  "915x412|pause|target|Settings",
+  "915x412|pause|target|Quit to menu",
+  "932x430|menu|target|FighterBlaze",
+  "932x430|menu|target|Settings",
+  "932x430|menu|target|How to play",
+  "932x430|menu|target|Credits",
+  "932x430|panel-settings|target|Controls",
+  "932x430|panel-settings|target|Camera",
+  "932x430|panel-settings|target|Graphics",
+  "932x430|panel-settings|target|Audio",
+  "932x430|panel-settings|target|Accessibility",
+  "932x430|panel-settings|target|Invert Y",
+  "932x430|panel-settings|target|Left-handed",
+  "932x430|panel-settings|target|Reset all",
+  "932x430|panel-settings|target|Back",
+  "932x430|panel-settings-camera|target|Controls",
+  "932x430|panel-settings-camera|target|Camera",
+  "932x430|panel-settings-camera|target|Graphics",
+  "932x430|panel-settings-camera|target|Audio",
+  "932x430|panel-settings-camera|target|Accessibility",
+  "932x430|panel-settings-camera|target|Third person",
+  "932x430|panel-settings-camera|target|Reset all",
+  "932x430|panel-settings-camera|target|Back",
+  "932x430|panel-settings-graphics|target|Controls",
+  "932x430|panel-settings-graphics|target|Camera",
+  "932x430|panel-settings-graphics|target|Graphics",
+  "932x430|panel-settings-graphics|target|Audio",
+  "932x430|panel-settings-graphics|target|Accessibility",
+  "932x430|panel-settings-graphics|target|Auto",
+  "932x430|panel-settings-graphics|target|Low",
+  "932x430|panel-settings-graphics|target|Med",
+  "932x430|panel-settings-graphics|target|High",
+  "932x430|panel-settings-graphics|target|Shadows",
+  "932x430|panel-settings-graphics|target|Show FPS",
+  "932x430|panel-settings-graphics|target|Reset all",
+  "932x430|panel-settings-graphics|target|Back",
+  "932x430|panel-settings-audio|target|Controls",
+  "932x430|panel-settings-audio|target|Camera",
+  "932x430|panel-settings-audio|target|Graphics",
+  "932x430|panel-settings-audio|target|Audio",
+  "932x430|panel-settings-audio|target|Accessibility",
+  "932x430|panel-settings-audio|target|Mute",
+  "932x430|panel-settings-audio|target|Reset all",
+  "932x430|panel-settings-audio|target|Back",
+  "932x430|panel-settings-accessibility|target|Controls",
+  "932x430|panel-settings-accessibility|target|Camera",
+  "932x430|panel-settings-accessibility|target|Graphics",
+  "932x430|panel-settings-accessibility|target|Audio",
+  "932x430|panel-settings-accessibility|target|Accessibility",
+  "932x430|panel-settings-accessibility|target|Reduced motion",
+  "932x430|panel-settings-accessibility|target|Colour-blind friendly",
+  "932x430|panel-settings-accessibility|target|Show key hints",
+  "932x430|panel-settings-accessibility|target|Larger HUD text",
+  "932x430|panel-settings-accessibility|target|Reset all",
+  "932x430|panel-settings-accessibility|target|Back",
+  "932x430|lobby-pre|target|← Menu",
+  "932x430|lobby-ready|target|← Menu",
+  "932x430|freefall|target|◀ Q",
+  "932x430|freefall|target|E ▶",
+  "932x430|freefall|target|Pause",
+  "932x430|canopy|target|◀ Q",
+  "932x430|canopy|target|E ▶",
+  "932x430|canopy|target|Pause",
+  "932x430|ground|target|◀ Q",
+  "932x430|ground|target|E ▶",
+  "932x430|ground|target|Pause",
+  "932x430|ground-full|target|Swap to SMG",
+  "932x430|ground-full|target|◀ Q",
+  "932x430|ground-full|target|E ▶",
+  "932x430|ground-full|target|Pause",
+  "932x430|ground-full|zones|vitals|stick zone",
+  "932x430|pause|target|Resume",
+  "932x430|pause|target|Settings",
+  "932x430|pause|target|Quit to menu",
+  "800x450|menu|target|FighterBlaze",
+  "800x450|menu|target|Settings",
+  "800x450|menu|target|How to play",
+  "800x450|menu|target|Credits",
+  "800x450|panel-settings|target|Controls",
+  "800x450|panel-settings|target|Camera",
+  "800x450|panel-settings|target|Graphics",
+  "800x450|panel-settings|target|Audio",
+  "800x450|panel-settings|target|Accessibility",
+  "800x450|panel-settings|target|Invert Y",
+  "800x450|panel-settings|target|Left-handed",
+  "800x450|panel-settings|target|Reset all",
+  "800x450|panel-settings|target|Back",
+  "800x450|panel-settings-camera|target|Controls",
+  "800x450|panel-settings-camera|target|Camera",
+  "800x450|panel-settings-camera|target|Graphics",
+  "800x450|panel-settings-camera|target|Audio",
+  "800x450|panel-settings-camera|target|Accessibility",
+  "800x450|panel-settings-camera|target|Third person",
+  "800x450|panel-settings-camera|target|Reset all",
+  "800x450|panel-settings-camera|target|Back",
+  "800x450|panel-settings-graphics|target|Controls",
+  "800x450|panel-settings-graphics|target|Camera",
+  "800x450|panel-settings-graphics|target|Graphics",
+  "800x450|panel-settings-graphics|target|Audio",
+  "800x450|panel-settings-graphics|target|Accessibility",
+  "800x450|panel-settings-graphics|target|Auto",
+  "800x450|panel-settings-graphics|target|Low",
+  "800x450|panel-settings-graphics|target|Med",
+  "800x450|panel-settings-graphics|target|High",
+  "800x450|panel-settings-graphics|target|Shadows",
+  "800x450|panel-settings-graphics|target|Show FPS",
+  "800x450|panel-settings-graphics|target|Reset all",
+  "800x450|panel-settings-graphics|target|Back",
+  "800x450|panel-settings-audio|target|Controls",
+  "800x450|panel-settings-audio|target|Camera",
+  "800x450|panel-settings-audio|target|Graphics",
+  "800x450|panel-settings-audio|target|Audio",
+  "800x450|panel-settings-audio|target|Accessibility",
+  "800x450|panel-settings-audio|target|Mute",
+  "800x450|panel-settings-audio|target|Reset all",
+  "800x450|panel-settings-audio|target|Back",
+  "800x450|panel-settings-accessibility|target|Controls",
+  "800x450|panel-settings-accessibility|target|Camera",
+  "800x450|panel-settings-accessibility|target|Graphics",
+  "800x450|panel-settings-accessibility|target|Audio",
+  "800x450|panel-settings-accessibility|target|Accessibility",
+  "800x450|panel-settings-accessibility|target|Reduced motion",
+  "800x450|panel-settings-accessibility|target|Colour-blind friendly",
+  "800x450|panel-settings-accessibility|target|Show key hints",
+  "800x450|panel-settings-accessibility|target|Larger HUD text",
+  "800x450|panel-settings-accessibility|target|Reset all",
+  "800x450|panel-settings-accessibility|target|Back",
+  "800x450|lobby-pre|target|← Menu",
+  "800x450|lobby-ready|target|← Menu",
+  "800x450|freefall|target|◀ Q",
+  "800x450|freefall|target|E ▶",
+  "800x450|freefall|target|Pause",
+  "800x450|canopy|target|◀ Q",
+  "800x450|canopy|target|E ▶",
+  "800x450|canopy|target|Pause",
+  "800x450|ground|target|◀ Q",
+  "800x450|ground|target|E ▶",
+  "800x450|ground|target|Pause",
+  "800x450|ground-full|target|Swap to SMG",
+  "800x450|ground-full|target|◀ Q",
+  "800x450|ground-full|target|E ▶",
+  "800x450|ground-full|target|Pause",
+  "800x450|ground-full|zones|vitals|stick zone",
+  "800x450|pause|target|Resume",
+  "800x450|pause|target|Settings",
+  "800x450|pause|target|Quit to menu",
+  "1024x768|menu|target|FighterBlaze",
+  "1024x768|menu|target|Settings",
+  "1024x768|menu|target|How to play",
+  "1024x768|menu|target|Credits",
+  "1024x768|panel-settings|target|Controls",
+  "1024x768|panel-settings|target|Camera",
+  "1024x768|panel-settings|target|Graphics",
+  "1024x768|panel-settings|target|Audio",
+  "1024x768|panel-settings|target|Accessibility",
+  "1024x768|panel-settings|target|Invert Y",
+  "1024x768|panel-settings|target|Left-handed",
+  "1024x768|panel-settings|target|Reset all",
+  "1024x768|panel-settings-camera|target|Controls",
+  "1024x768|panel-settings-camera|target|Camera",
+  "1024x768|panel-settings-camera|target|Graphics",
+  "1024x768|panel-settings-camera|target|Audio",
+  "1024x768|panel-settings-camera|target|Accessibility",
+  "1024x768|panel-settings-camera|target|Third person",
+  "1024x768|panel-settings-camera|target|Reset all",
+  "1024x768|panel-settings-graphics|target|Controls",
+  "1024x768|panel-settings-graphics|target|Camera",
+  "1024x768|panel-settings-graphics|target|Graphics",
+  "1024x768|panel-settings-graphics|target|Audio",
+  "1024x768|panel-settings-graphics|target|Accessibility",
+  "1024x768|panel-settings-graphics|target|Auto",
+  "1024x768|panel-settings-graphics|target|Low",
+  "1024x768|panel-settings-graphics|target|Med",
+  "1024x768|panel-settings-graphics|target|High",
+  "1024x768|panel-settings-graphics|target|Shadows",
+  "1024x768|panel-settings-graphics|target|Show FPS",
+  "1024x768|panel-settings-graphics|target|Reset all",
+  "1024x768|panel-settings-audio|target|Controls",
+  "1024x768|panel-settings-audio|target|Camera",
+  "1024x768|panel-settings-audio|target|Graphics",
+  "1024x768|panel-settings-audio|target|Audio",
+  "1024x768|panel-settings-audio|target|Accessibility",
+  "1024x768|panel-settings-audio|target|Mute",
+  "1024x768|panel-settings-audio|target|Reset all",
+  "1024x768|panel-settings-accessibility|target|Controls",
+  "1024x768|panel-settings-accessibility|target|Camera",
+  "1024x768|panel-settings-accessibility|target|Graphics",
+  "1024x768|panel-settings-accessibility|target|Audio",
+  "1024x768|panel-settings-accessibility|target|Accessibility",
+  "1024x768|panel-settings-accessibility|target|Reduced motion",
+  "1024x768|panel-settings-accessibility|target|Colour-blind friendly",
+  "1024x768|panel-settings-accessibility|target|Show key hints",
+  "1024x768|panel-settings-accessibility|target|Larger HUD text",
+  "1024x768|panel-settings-accessibility|target|Reset all",
+  "1024x768|lobby-pre|target|← Menu",
+  "1024x768|lobby-ready|target|← Menu",
+  "1024x768|freefall|target|◀ Q",
+  "1024x768|freefall|target|E ▶",
+  "1024x768|freefall|target|Pause",
+  "1024x768|canopy|target|◀ Q",
+  "1024x768|canopy|target|E ▶",
+  "1024x768|canopy|target|Pause",
+  "1024x768|ground|target|◀ Q",
+  "1024x768|ground|target|E ▶",
+  "1024x768|ground|target|Pause",
+  "1024x768|ground-full|target|Swap to SMG",
+  "1024x768|ground-full|target|◀ Q",
+  "1024x768|ground-full|target|E ▶",
+  "1024x768|ground-full|target|Pause",
+  "1024x768|ground-full|zones|vitals|stick zone",
+  "1024x768|pause|target|Resume",
+  "1024x768|pause|target|Settings",
+  "1024x768|pause|target|Quit to menu",
+  "1080x607|menu|target|FighterBlaze",
+  "1080x607|menu|target|Settings",
+  "1080x607|menu|target|How to play",
+  "1080x607|menu|target|Credits",
+  "1080x607|panel-settings|target|Controls",
+  "1080x607|panel-settings|target|Camera",
+  "1080x607|panel-settings|target|Graphics",
+  "1080x607|panel-settings|target|Audio",
+  "1080x607|panel-settings|target|Accessibility",
+  "1080x607|panel-settings|target|Invert Y",
+  "1080x607|panel-settings|target|Left-handed",
+  "1080x607|panel-settings|target|Reset all",
+  "1080x607|panel-settings-camera|target|Controls",
+  "1080x607|panel-settings-camera|target|Camera",
+  "1080x607|panel-settings-camera|target|Graphics",
+  "1080x607|panel-settings-camera|target|Audio",
+  "1080x607|panel-settings-camera|target|Accessibility",
+  "1080x607|panel-settings-camera|target|Third person",
+  "1080x607|panel-settings-camera|target|Reset all",
+  "1080x607|panel-settings-graphics|target|Controls",
+  "1080x607|panel-settings-graphics|target|Camera",
+  "1080x607|panel-settings-graphics|target|Graphics",
+  "1080x607|panel-settings-graphics|target|Audio",
+  "1080x607|panel-settings-graphics|target|Accessibility",
+  "1080x607|panel-settings-graphics|target|Auto",
+  "1080x607|panel-settings-graphics|target|Low",
+  "1080x607|panel-settings-graphics|target|Med",
+  "1080x607|panel-settings-graphics|target|High",
+  "1080x607|panel-settings-graphics|target|Shadows",
+  "1080x607|panel-settings-graphics|target|Show FPS",
+  "1080x607|panel-settings-graphics|target|Reset all",
+  "1080x607|panel-settings-audio|target|Controls",
+  "1080x607|panel-settings-audio|target|Camera",
+  "1080x607|panel-settings-audio|target|Graphics",
+  "1080x607|panel-settings-audio|target|Audio",
+  "1080x607|panel-settings-audio|target|Accessibility",
+  "1080x607|panel-settings-audio|target|Mute",
+  "1080x607|panel-settings-audio|target|Reset all",
+  "1080x607|panel-settings-accessibility|target|Controls",
+  "1080x607|panel-settings-accessibility|target|Camera",
+  "1080x607|panel-settings-accessibility|target|Graphics",
+  "1080x607|panel-settings-accessibility|target|Audio",
+  "1080x607|panel-settings-accessibility|target|Accessibility",
+  "1080x607|panel-settings-accessibility|target|Reduced motion",
+  "1080x607|panel-settings-accessibility|target|Colour-blind friendly",
+  "1080x607|panel-settings-accessibility|target|Show key hints",
+  "1080x607|panel-settings-accessibility|target|Larger HUD text",
+  "1080x607|panel-settings-accessibility|target|Reset all",
+  "1080x607|lobby-pre|target|← Menu",
+  "1080x607|lobby-ready|target|← Menu",
+  "1080x607|freefall|target|◀ Q",
+  "1080x607|freefall|target|E ▶",
+  "1080x607|freefall|target|Pause",
+  "1080x607|canopy|target|◀ Q",
+  "1080x607|canopy|target|E ▶",
+  "1080x607|canopy|target|Pause",
+  "1080x607|ground|target|◀ Q",
+  "1080x607|ground|target|E ▶",
+  "1080x607|ground|target|Pause",
+  "1080x607|ground-full|target|Swap to SMG",
+  "1080x607|ground-full|target|◀ Q",
+  "1080x607|ground-full|target|E ▶",
+  "1080x607|ground-full|target|Pause",
+  "1080x607|ground-full|zones|vitals|stick zone",
+  "1080x607|pause|target|Resume",
+  "1080x607|pause|target|Settings",
+  "1080x607|pause|target|Quit to menu",
+  "1180x820|menu|target|FighterBlaze",
+  "1180x820|menu|target|Settings",
+  "1180x820|menu|target|How to play",
+  "1180x820|menu|target|Credits",
+  "1180x820|panel-settings|target|Controls",
+  "1180x820|panel-settings|target|Camera",
+  "1180x820|panel-settings|target|Graphics",
+  "1180x820|panel-settings|target|Audio",
+  "1180x820|panel-settings|target|Accessibility",
+  "1180x820|panel-settings|target|Invert Y",
+  "1180x820|panel-settings|target|Left-handed",
+  "1180x820|panel-settings|target|Reset all",
+  "1180x820|panel-settings-camera|target|Controls",
+  "1180x820|panel-settings-camera|target|Camera",
+  "1180x820|panel-settings-camera|target|Graphics",
+  "1180x820|panel-settings-camera|target|Audio",
+  "1180x820|panel-settings-camera|target|Accessibility",
+  "1180x820|panel-settings-camera|target|Third person",
+  "1180x820|panel-settings-camera|target|Reset all",
+  "1180x820|panel-settings-graphics|target|Controls",
+  "1180x820|panel-settings-graphics|target|Camera",
+  "1180x820|panel-settings-graphics|target|Graphics",
+  "1180x820|panel-settings-graphics|target|Audio",
+  "1180x820|panel-settings-graphics|target|Accessibility",
+  "1180x820|panel-settings-graphics|target|Auto",
+  "1180x820|panel-settings-graphics|target|Low",
+  "1180x820|panel-settings-graphics|target|Med",
+  "1180x820|panel-settings-graphics|target|High",
+  "1180x820|panel-settings-graphics|target|Shadows",
+  "1180x820|panel-settings-graphics|target|Show FPS",
+  "1180x820|panel-settings-graphics|target|Reset all",
+  "1180x820|panel-settings-audio|target|Controls",
+  "1180x820|panel-settings-audio|target|Camera",
+  "1180x820|panel-settings-audio|target|Graphics",
+  "1180x820|panel-settings-audio|target|Audio",
+  "1180x820|panel-settings-audio|target|Accessibility",
+  "1180x820|panel-settings-audio|target|Mute",
+  "1180x820|panel-settings-audio|target|Reset all",
+  "1180x820|panel-settings-accessibility|target|Controls",
+  "1180x820|panel-settings-accessibility|target|Camera",
+  "1180x820|panel-settings-accessibility|target|Graphics",
+  "1180x820|panel-settings-accessibility|target|Audio",
+  "1180x820|panel-settings-accessibility|target|Accessibility",
+  "1180x820|panel-settings-accessibility|target|Reduced motion",
+  "1180x820|panel-settings-accessibility|target|Colour-blind friendly",
+  "1180x820|panel-settings-accessibility|target|Show key hints",
+  "1180x820|panel-settings-accessibility|target|Larger HUD text",
+  "1180x820|panel-settings-accessibility|target|Reset all",
+  "1180x820|lobby-pre|target|← Menu",
+  "1180x820|lobby-ready|target|← Menu",
+  "1180x820|freefall|target|◀ Q",
+  "1180x820|freefall|target|E ▶",
+  "1180x820|freefall|target|Pause",
+  "1180x820|canopy|target|◀ Q",
+  "1180x820|canopy|target|E ▶",
+  "1180x820|canopy|target|Pause",
+  "1180x820|ground|target|◀ Q",
+  "1180x820|ground|target|E ▶",
+  "1180x820|ground|target|Pause",
+  "1180x820|ground-full|target|Swap to SMG",
+  "1180x820|ground-full|target|◀ Q",
+  "1180x820|ground-full|target|E ▶",
+  "1180x820|ground-full|target|Pause",
+  "1180x820|ground-full|zones|vitals|stick zone",
+  "1180x820|pause|target|Resume",
+  "1180x820|pause|target|Settings",
+  "1180x820|pause|target|Quit to menu",
+  "860x484|panel-settings|target|Shoot: J. Press to change.",
+  "860x484|panel-settings|target|Jump / parachute: Space. Press t",
+  "907x510|lobby-pre|clearance|Level 1, 0 of 230 XP|You drop as",
+  "907x510|lobby-pre|clearance|Level 1, 0 of 230 XP|BLAZE",
+  "907x510|lobby-ready|clearance|Level 1, 0 of 230 XP|You drop as",
+  "1020x540|lobby-pre|clearance|Level 1, 0 of 230 XP|You drop as",
+  "1216x684|panel-fighter|target|BlazeYOU",
+  "1216x684|panel-fighter|target|Bastion",
+  "1216x684|panel-fighter|target|Tempo",
+  "1216x684|panel-fighter|target|Rookie",
+  "1216x684|report|in-view|Play again",
+  "1216x684|report|in-view|Main menu"
+ ],
+ "notReached": [],
+ "results": [
+  {
+   "size": "568x320",
+   "state": "menu",
+   "fails": [
+    {
+     "check": "target",
+     "key": "FighterBlaze",
+     "detail": "FighterBlaze is 276x29, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Settings",
+     "detail": "Settings is 276x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "How to play",
+     "detail": "How to play is 276x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Credits",
+     "detail": "Credits is 276x28, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 25% of the screen"
+   ],
+   "shot": "shots/568x320-menu.jpg"
+  },
+  {
+   "size": "568x320",
+   "state": "panel-fighter",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Outfit: Standard",
+     "detail": "Outfit: Standard is 44x21, floor 44 (cut off by a scroll area, its own box is 44x44)"
+    },
+    {
+     "check": "target",
+     "key": "Gun: Factory",
+     "detail": "Gun: Factory is 44x21, floor 44 (cut off by a scroll area, its own box is 44x44)"
+    },
+    {
+     "check": "target",
+     "key": "Canopy: Classic",
+     "detail": "Canopy: Classic is 44x21, floor 44 (cut off by a scroll area, its own box is 44x44)"
+    },
+    {
+     "check": "target",
+     "key": "Smoke: Off",
+     "detail": "Smoke: Off is 44x21, floor 44 (cut off by a scroll area, its own box is 44x44)"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 25% of the screen"
+   ],
+   "shot": "shots/568x320-panel-fighter.jpg"
+  },
+  {
+   "size": "568x320",
+   "state": "panel-settings",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Invert Y",
+     "detail": "Invert Y is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 13% of the screen"
+   ],
+   "shot": "shots/568x320-panel-settings.jpg"
+  },
+  {
+   "size": "568x320",
+   "state": "panel-settings-camera",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Third person",
+     "detail": "Third person is 117x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 14% of the screen"
+   ],
+   "shot": "shots/568x320-panel-settings-camera.jpg"
+  },
+  {
+   "size": "568x320",
+   "state": "panel-settings-graphics",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Auto",
+     "detail": "Auto is 58x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Low",
+     "detail": "Low is 51x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Med",
+     "detail": "Med is 51x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "High",
+     "detail": "High is 55x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Shadows",
+     "detail": "Shadows is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 16% of the screen"
+   ],
+   "shot": "shots/568x320-panel-settings-graphics.jpg"
+  },
+  {
+   "size": "568x320",
+   "state": "panel-settings-audio",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Mute",
+     "detail": "Mute is 48x8, floor 44 (cut off by a scroll area, its own box is 48x28)"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 13% of the screen"
+   ],
+   "shot": "shots/568x320-panel-settings-audio.jpg"
+  },
+  {
+   "size": "568x320",
+   "state": "panel-settings-accessibility",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reduced motion",
+     "detail": "Reduced motion is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Colour-blind friendly",
+     "detail": "Colour-blind friendly is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Show key hints",
+     "detail": "Show key hints is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 13% of the screen"
+   ],
+   "shot": "shots/568x320-panel-settings-accessibility.jpg"
+  },
+  {
+   "size": "568x320",
+   "state": "panel-how",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ],
+   "shot": "shots/568x320-panel-how.jpg"
+  },
+  {
+   "size": "568x320",
+   "state": "panel-credits",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ],
+   "shot": "shots/568x320-panel-credits.jpg"
+  },
+  {
+   "size": "568x320",
+   "state": "lobby-pre",
+   "fails": [
+    {
+     "check": "target",
+     "key": "← Menu",
+     "detail": "← Menu is 84x36, floor 44"
+    },
+    {
+     "check": "clearance",
+     "key": "← Menu|You drop as",
+     "detail": "← Menu to You drop as: gap 1 px, needs 8"
+    },
+    {
+     "check": "clearance",
+     "key": "← Menu|BLAZE",
+     "detail": "← Menu to BLAZE: overlap 29 px, needs 8"
+    },
+    {
+     "check": "clearance",
+     "key": "Level 1, 0 of 230 XP|You drop as",
+     "detail": "Level 1, 0 of 230 XP to You drop as: overlap 4 px, needs 8"
+    },
+    {
+     "check": "clearance",
+     "key": "Level 1, 0 of 230 XP|BLAZE",
+     "detail": "Level 1, 0 of 230 XP to BLAZE: overlap 32 px, needs 8"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 6% of the screen"
+   ],
+   "shot": "shots/568x320-lobby-pre.jpg"
+  },
+  {
+   "size": "568x320",
+   "state": "lobby-ready",
+   "fails": [
+    {
+     "check": "target",
+     "key": "← Menu",
+     "detail": "← Menu is 84x36, floor 44"
+    },
+    {
+     "check": "clearance",
+     "key": "← Menu|You drop as",
+     "detail": "← Menu to You drop as: overlap 20 px, needs 8"
+    },
+    {
+     "check": "clearance",
+     "key": "← Menu|BLAZE",
+     "detail": "← Menu to BLAZE: overlap 5 px, needs 8"
+    },
+    {
+     "check": "clearance",
+     "key": "Level 1, 0 of 230 XP|You drop as",
+     "detail": "Level 1, 0 of 230 XP to You drop as: overlap 20 px, needs 8"
+    },
+    {
+     "check": "clearance",
+     "key": "Level 1, 0 of 230 XP|BLAZE",
+     "detail": "Level 1, 0 of 230 XP to BLAZE: overlap 10 px, needs 8"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 6% of the screen"
+   ],
+   "shot": "shots/568x320-lobby-ready.jpg"
+  },
+  {
+   "size": "568x320",
+   "state": "plane",
+   "fails": [],
+   "info": [
+    "buttons 1: Jump 69",
+    "controls+HUD cover about 31% of the screen"
+   ]
+  },
+  {
+   "size": "568x320",
+   "state": "freefall",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Fire",
+     "detail": "Fire is 69x69, floor 72"
+    },
+    {
+     "check": "target",
+     "key": "Dive",
+     "detail": "Dive is 39x39, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Jump",
+     "detail": "Jump is 39x39, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reload",
+     "detail": "Reload is 36x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pick up",
+     "detail": "Pick up is 35x35, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 29x29, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 29x29, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 30x30, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 69, Dive 39, Jump 39, Reload 36, Pick up 35, Super 44, ◀ Q 29, E ▶ 29",
+    "controls+HUD cover about 21% of the screen"
+   ],
+   "shot": "shots/568x320-freefall.jpg"
+  },
+  {
+   "size": "568x320",
+   "state": "canopy",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Fire",
+     "detail": "Fire is 69x69, floor 72"
+    },
+    {
+     "check": "target",
+     "key": "Dive",
+     "detail": "Dive is 39x39, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Jump",
+     "detail": "Jump is 39x39, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reload",
+     "detail": "Reload is 36x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pick up",
+     "detail": "Pick up is 35x35, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 29x29, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 29x29, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 30x30, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 69, Dive 39, Jump 39, Reload 36, Pick up 35, Super 44, ◀ Q 29, E ▶ 29",
+    "controls+HUD cover about 21% of the screen"
+   ],
+   "shot": "shots/568x320-canopy.jpg"
+  },
+  {
+   "size": "568x320",
+   "state": "ground",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Fire",
+     "detail": "Fire is 69x69, floor 72"
+    },
+    {
+     "check": "target",
+     "key": "Roll",
+     "detail": "Roll is 39x39, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Jump",
+     "detail": "Jump is 39x39, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reload",
+     "detail": "Reload is 36x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pick up",
+     "detail": "Pick up is 35x35, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 29x29, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 29x29, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 30x30, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 69, Roll 39, Jump 39, Reload 36, Pick up 35, Super 44, ◀ Q 29, E ▶ 29",
+    "controls+HUD cover about 21% of the screen"
+   ],
+   "shot": "shots/568x320-ground.jpg"
+  },
+  {
+   "size": "568x320",
+   "state": "ground-full",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Fire",
+     "detail": "Fire is 69x69, floor 72"
+    },
+    {
+     "check": "target",
+     "key": "Roll",
+     "detail": "Roll is 39x39, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Jump",
+     "detail": "Jump is 39x39, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reload",
+     "detail": "Reload is 36x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pick up",
+     "detail": "Pick up is 35x35, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Scope",
+     "detail": "Scope is 42x42, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Swap to SMG",
+     "detail": "Swap to SMG is 32x32, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Heal",
+     "detail": "Heal is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 29x29, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 29x29, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 30x30, floor 44"
+    },
+    {
+     "check": "zones",
+     "key": "vitals|stick zone",
+     "detail": "HUD vitals enters the stick zone (170x11)"
+    }
+   ],
+   "info": [
+    "buttons 11: Fire 69, Roll 39, Jump 39, Reload 36, Pick up 35, Scope 42, Super 44, Swap to SMG 32, Heal 38, ◀ Q 29, E ▶ 29",
+    "controls+HUD cover about 25% of the screen"
+   ],
+   "shot": "shots/568x320-ground-full.jpg"
+  },
+  {
+   "size": "568x320",
+   "state": "pause",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Resume",
+     "detail": "Resume is 296x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Settings",
+     "detail": "Settings is 296x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Quit to menu",
+     "detail": "Quit to menu is 296x40, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 20% of the screen"
+   ],
+   "shot": "shots/568x320-pause.jpg"
+  },
+  {
+   "size": "568x320",
+   "state": "report",
+   "fails": [
+    {
+     "check": "in-view",
+     "key": "/^Play again$/",
+     "detail": "Play again is not visible: scrolled or clipped out of the 568x320 screen"
+    },
+    {
+     "check": "in-view",
+     "key": "/^(Main menu|Back to lobby)$/",
+     "detail": "(Main menu|Back to lobby) is not visible: scrolled or clipped out of the 568x320 screen"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 0% of the screen"
+   ],
+   "shot": "shots/568x320-report.jpg"
+  },
+  {
+   "size": "640x360",
+   "state": "menu",
+   "fails": [
+    {
+     "check": "target",
+     "key": "FighterBlaze",
+     "detail": "FighterBlaze is 276x29, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Settings",
+     "detail": "Settings is 276x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "How to play",
+     "detail": "How to play is 276x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Credits",
+     "detail": "Credits is 276x28, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 20% of the screen"
+   ],
+   "shot": "shots/640x360-menu.jpg"
+  },
+  {
+   "size": "640x360",
+   "state": "panel-fighter",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 28% of the screen"
+   ],
+   "shot": "shots/640x360-panel-fighter.jpg"
+  },
+  {
+   "size": "640x360",
+   "state": "panel-settings",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Invert Y",
+     "detail": "Invert Y is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 11% of the screen"
+   ],
+   "shot": "shots/640x360-panel-settings.jpg"
+  },
+  {
+   "size": "640x360",
+   "state": "panel-settings-camera",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Third person",
+     "detail": "Third person is 117x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 11% of the screen"
+   ],
+   "shot": "shots/640x360-panel-settings-camera.jpg"
+  },
+  {
+   "size": "640x360",
+   "state": "panel-settings-graphics",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Auto",
+     "detail": "Auto is 58x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Low",
+     "detail": "Low is 51x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Med",
+     "detail": "Med is 51x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "High",
+     "detail": "High is 55x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Shadows",
+     "detail": "Shadows is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Show FPS",
+     "detail": "Show FPS is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 13% of the screen"
+   ],
+   "shot": "shots/640x360-panel-settings-graphics.jpg"
+  },
+  {
+   "size": "640x360",
+   "state": "panel-settings-audio",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Mute",
+     "detail": "Mute is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 11% of the screen"
+   ],
+   "shot": "shots/640x360-panel-settings-audio.jpg"
+  },
+  {
+   "size": "640x360",
+   "state": "panel-settings-accessibility",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reduced motion",
+     "detail": "Reduced motion is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Colour-blind friendly",
+     "detail": "Colour-blind friendly is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Show key hints",
+     "detail": "Show key hints is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Larger HUD text",
+     "detail": "Larger HUD text is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 11% of the screen"
+   ],
+   "shot": "shots/640x360-panel-settings-accessibility.jpg"
+  },
+  {
+   "size": "640x360",
+   "state": "panel-how",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ],
+   "shot": "shots/640x360-panel-how.jpg"
+  },
+  {
+   "size": "640x360",
+   "state": "panel-credits",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ],
+   "shot": "shots/640x360-panel-credits.jpg"
+  },
+  {
+   "size": "640x360",
+   "state": "lobby-pre",
+   "fails": [
+    {
+     "check": "target",
+     "key": "← Menu",
+     "detail": "← Menu is 84x36, floor 44"
+    },
+    {
+     "check": "clearance",
+     "key": "← Menu|You drop as",
+     "detail": "← Menu to You drop as: overlap 17 px, needs 8"
+    },
+    {
+     "check": "clearance",
+     "key": "Level 1, 0 of 230 XP|You drop as",
+     "detail": "Level 1, 0 of 230 XP to You drop as: overlap 20 px, needs 8"
+    },
+    {
+     "check": "clearance",
+     "key": "Level 1, 0 of 230 XP|BLAZE",
+     "detail": "Level 1, 0 of 230 XP to BLAZE: gap 6 px, needs 8"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 5% of the screen"
+   ],
+   "shot": "shots/640x360-lobby-pre.jpg"
+  },
+  {
+   "size": "640x360",
+   "state": "lobby-ready",
+   "fails": [
+    {
+     "check": "target",
+     "key": "← Menu",
+     "detail": "← Menu is 84x36, floor 44"
+    },
+    {
+     "check": "clearance",
+     "key": "← Menu|You drop as",
+     "detail": "← Menu to You drop as: gap 7 px, needs 8"
+    },
+    {
+     "check": "clearance",
+     "key": "Level 1, 0 of 230 XP|You drop as",
+     "detail": "Level 1, 0 of 230 XP to You drop as: gap 2 px, needs 8"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 5% of the screen"
+   ],
+   "shot": "shots/640x360-lobby-ready.jpg"
+  },
+  {
+   "size": "640x360",
+   "state": "plane",
+   "fails": [],
+   "info": [
+    "buttons 1: Jump 77",
+    "controls+HUD cover about 30% of the screen"
+   ]
+  },
+  {
+   "size": "640x360",
+   "state": "freefall",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Reload",
+     "detail": "Reload is 40x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pick up",
+     "detail": "Pick up is 39x39, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 32x32, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 32x32, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 34x34, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 77, Dive 44, Jump 44, Reload 40, Pick up 39, Super 49, ◀ Q 32, E ▶ 32",
+    "controls+HUD cover about 21% of the screen"
+   ],
+   "shot": "shots/640x360-freefall.jpg"
+  },
+  {
+   "size": "640x360",
+   "state": "canopy",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Reload",
+     "detail": "Reload is 40x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pick up",
+     "detail": "Pick up is 39x39, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 32x32, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 32x32, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 34x34, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 77, Dive 44, Jump 44, Reload 40, Pick up 39, Super 49, ◀ Q 32, E ▶ 32",
+    "controls+HUD cover about 21% of the screen"
+   ],
+   "shot": "shots/640x360-canopy.jpg"
+  },
+  {
+   "size": "640x360",
+   "state": "ground",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Reload",
+     "detail": "Reload is 40x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pick up",
+     "detail": "Pick up is 39x39, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 32x32, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 32x32, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 34x34, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 77, Roll 44, Jump 44, Reload 40, Pick up 39, Super 49, ◀ Q 32, E ▶ 32",
+    "controls+HUD cover about 21% of the screen"
+   ],
+   "shot": "shots/640x360-ground.jpg"
+  },
+  {
+   "size": "640x360",
+   "state": "ground-full",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Reload",
+     "detail": "Reload is 40x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pick up",
+     "detail": "Pick up is 39x39, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Swap to SMG",
+     "detail": "Swap to SMG is 35x35, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Heal",
+     "detail": "Heal is 42x42, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 32x32, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 32x32, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 34x34, floor 44"
+    },
+    {
+     "check": "zones",
+     "key": "vitals|stick zone",
+     "detail": "HUD vitals enters the stick zone (190x13)"
+    }
+   ],
+   "info": [
+    "buttons 11: Fire 77, Roll 44, Jump 44, Reload 40, Pick up 39, Scope 47, Super 49, Swap to SMG 35, Heal 42, ◀ Q 32, E ▶ 32",
+    "controls+HUD cover about 24% of the screen"
+   ],
+   "shot": "shots/640x360-ground-full.jpg"
+  },
+  {
+   "size": "640x360",
+   "state": "pause",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Resume",
+     "detail": "Resume is 296x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Settings",
+     "detail": "Settings is 296x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Quit to menu",
+     "detail": "Quit to menu is 296x40, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 15% of the screen"
+   ],
+   "shot": "shots/640x360-pause.jpg"
+  },
+  {
+   "size": "640x360",
+   "state": "report",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 6% of the screen"
+   ]
+  },
+  {
+   "size": "667x375",
+   "state": "menu",
+   "fails": [
+    {
+     "check": "target",
+     "key": "FighterBlaze",
+     "detail": "FighterBlaze is 276x29, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Settings",
+     "detail": "Settings is 276x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "How to play",
+     "detail": "How to play is 276x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Credits",
+     "detail": "Credits is 276x28, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 18% of the screen"
+   ],
+   "shot": "shots/667x375-menu.jpg"
+  },
+  {
+   "size": "667x375",
+   "state": "panel-fighter",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 26% of the screen"
+   ],
+   "shot": "shots/667x375-panel-fighter.jpg"
+  },
+  {
+   "size": "667x375",
+   "state": "panel-settings",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Invert Y",
+     "detail": "Invert Y is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 10% of the screen"
+   ],
+   "shot": "shots/667x375-panel-settings.jpg"
+  },
+  {
+   "size": "667x375",
+   "state": "panel-settings-camera",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Third person",
+     "detail": "Third person is 117x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 10% of the screen"
+   ],
+   "shot": "shots/667x375-panel-settings-camera.jpg"
+  },
+  {
+   "size": "667x375",
+   "state": "panel-settings-graphics",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Auto",
+     "detail": "Auto is 58x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Low",
+     "detail": "Low is 51x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Med",
+     "detail": "Med is 51x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "High",
+     "detail": "High is 55x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Shadows",
+     "detail": "Shadows is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Show FPS",
+     "detail": "Show FPS is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 12% of the screen"
+   ],
+   "shot": "shots/667x375-panel-settings-graphics.jpg"
+  },
+  {
+   "size": "667x375",
+   "state": "panel-settings-audio",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Mute",
+     "detail": "Mute is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 10% of the screen"
+   ],
+   "shot": "shots/667x375-panel-settings-audio.jpg"
+  },
+  {
+   "size": "667x375",
+   "state": "panel-settings-accessibility",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reduced motion",
+     "detail": "Reduced motion is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Colour-blind friendly",
+     "detail": "Colour-blind friendly is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Show key hints",
+     "detail": "Show key hints is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Larger HUD text",
+     "detail": "Larger HUD text is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 10% of the screen"
+   ],
+   "shot": "shots/667x375-panel-settings-accessibility.jpg"
+  },
+  {
+   "size": "667x375",
+   "state": "panel-how",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ],
+   "shot": "shots/667x375-panel-how.jpg"
+  },
+  {
+   "size": "667x375",
+   "state": "panel-credits",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ],
+   "shot": "shots/667x375-panel-credits.jpg"
+  },
+  {
+   "size": "667x375",
+   "state": "lobby-pre",
+   "fails": [
+    {
+     "check": "target",
+     "key": "← Menu",
+     "detail": "← Menu is 84x36, floor 44"
+    },
+    {
+     "check": "clearance",
+     "key": "← Menu|You drop as",
+     "detail": "← Menu to You drop as: overlap 2 px, needs 8"
+    },
+    {
+     "check": "clearance",
+     "key": "Level 1, 0 of 230 XP|You drop as",
+     "detail": "Level 1, 0 of 230 XP to You drop as: overlap 7 px, needs 8"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ],
+   "shot": "shots/667x375-lobby-pre.jpg"
+  },
+  {
+   "size": "667x375",
+   "state": "lobby-ready",
+   "fails": [
+    {
+     "check": "target",
+     "key": "← Menu",
+     "detail": "← Menu is 84x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 5% of the screen"
+   ],
+   "shot": "shots/667x375-lobby-ready.jpg"
+  },
+  {
+   "size": "667x375",
+   "state": "plane",
+   "fails": [],
+   "info": [
+    "buttons 1: Jump 81",
+    "controls+HUD cover about 30% of the screen"
+   ]
+  },
+  {
+   "size": "667x375",
+   "state": "freefall",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Reload",
+     "detail": "Reload is 42x42, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pick up",
+     "detail": "Pick up is 40x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 33x33, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 33x33, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 35x35, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 81, Dive 46, Jump 46, Reload 42, Pick up 40, Super 51, ◀ Q 33, E ▶ 33",
+    "controls+HUD cover about 21% of the screen"
+   ],
+   "shot": "shots/667x375-freefall.jpg"
+  },
+  {
+   "size": "667x375",
+   "state": "canopy",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Reload",
+     "detail": "Reload is 42x42, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pick up",
+     "detail": "Pick up is 40x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 33x33, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 33x33, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 35x35, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 81, Dive 46, Jump 46, Reload 42, Pick up 40, Super 51, ◀ Q 33, E ▶ 33",
+    "controls+HUD cover about 21% of the screen"
+   ],
+   "shot": "shots/667x375-canopy.jpg"
+  },
+  {
+   "size": "667x375",
+   "state": "ground",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Reload",
+     "detail": "Reload is 42x42, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pick up",
+     "detail": "Pick up is 40x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 33x33, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 33x33, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 35x35, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 81, Roll 46, Jump 46, Reload 42, Pick up 40, Super 51, ◀ Q 33, E ▶ 33",
+    "controls+HUD cover about 21% of the screen"
+   ],
+   "shot": "shots/667x375-ground.jpg"
+  },
+  {
+   "size": "667x375",
+   "state": "ground-full",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Reload",
+     "detail": "Reload is 42x42, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pick up",
+     "detail": "Pick up is 40x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Swap to SMG",
+     "detail": "Swap to SMG is 37x37, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 33x33, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 33x33, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 35x35, floor 44"
+    },
+    {
+     "check": "zones",
+     "key": "vitals|stick zone",
+     "detail": "HUD vitals enters the stick zone (199x13)"
+    }
+   ],
+   "info": [
+    "buttons 11: Fire 81, Roll 46, Jump 46, Reload 42, Pick up 40, Scope 49, Super 51, Swap to SMG 37, Heal 44, ◀ Q 33, E ▶ 33",
+    "controls+HUD cover about 25% of the screen"
+   ],
+   "shot": "shots/667x375-ground-full.jpg"
+  },
+  {
+   "size": "667x375",
+   "state": "pause",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Resume",
+     "detail": "Resume is 296x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Settings",
+     "detail": "Settings is 296x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Quit to menu",
+     "detail": "Quit to menu is 296x40, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 14% of the screen"
+   ],
+   "shot": "shots/667x375-pause.jpg"
+  },
+  {
+   "size": "667x375",
+   "state": "report",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 5% of the screen"
+   ]
+  },
+  {
+   "size": "844x390",
+   "state": "menu",
+   "fails": [
+    {
+     "check": "target",
+     "key": "FighterBlaze",
+     "detail": "FighterBlaze is 276x29, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Settings",
+     "detail": "Settings is 276x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "How to play",
+     "detail": "How to play is 276x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Credits",
+     "detail": "Credits is 276x28, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 14% of the screen"
+   ],
+   "shot": "shots/844x390-menu.jpg"
+  },
+  {
+   "size": "844x390",
+   "state": "panel-fighter",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 25% of the screen"
+   ],
+   "shot": "shots/844x390-panel-fighter.jpg"
+  },
+  {
+   "size": "844x390",
+   "state": "panel-settings",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Invert Y",
+     "detail": "Invert Y is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ],
+   "shot": "shots/844x390-panel-settings.jpg"
+  },
+  {
+   "size": "844x390",
+   "state": "panel-settings-camera",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Third person",
+     "detail": "Third person is 117x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 8% of the screen"
+   ],
+   "shot": "shots/844x390-panel-settings-camera.jpg"
+  },
+  {
+   "size": "844x390",
+   "state": "panel-settings-graphics",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Auto",
+     "detail": "Auto is 58x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Low",
+     "detail": "Low is 51x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Med",
+     "detail": "Med is 51x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "High",
+     "detail": "High is 55x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Shadows",
+     "detail": "Shadows is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Show FPS",
+     "detail": "Show FPS is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 9% of the screen"
+   ],
+   "shot": "shots/844x390-panel-settings-graphics.jpg"
+  },
+  {
+   "size": "844x390",
+   "state": "panel-settings-audio",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Mute",
+     "detail": "Mute is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ],
+   "shot": "shots/844x390-panel-settings-audio.jpg"
+  },
+  {
+   "size": "844x390",
+   "state": "panel-settings-accessibility",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reduced motion",
+     "detail": "Reduced motion is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Colour-blind friendly",
+     "detail": "Colour-blind friendly is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Show key hints",
+     "detail": "Show key hints is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Larger HUD text",
+     "detail": "Larger HUD text is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 8% of the screen"
+   ],
+   "shot": "shots/844x390-panel-settings-accessibility.jpg"
+  },
+  {
+   "size": "844x390",
+   "state": "panel-how",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ],
+   "shot": "shots/844x390-panel-how.jpg"
+  },
+  {
+   "size": "844x390",
+   "state": "panel-credits",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ],
+   "shot": "shots/844x390-panel-credits.jpg"
+  },
+  {
+   "size": "844x390",
+   "state": "lobby-pre",
+   "fails": [
+    {
+     "check": "target",
+     "key": "← Menu",
+     "detail": "← Menu is 84x36, floor 44"
+    },
+    {
+     "check": "clearance",
+     "key": "Level 1, 0 of 230 XP|You drop as",
+     "detail": "Level 1, 0 of 230 XP to You drop as: gap 8 px, needs 8"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ],
+   "shot": "shots/844x390-lobby-pre.jpg"
+  },
+  {
+   "size": "844x390",
+   "state": "lobby-ready",
+   "fails": [
+    {
+     "check": "target",
+     "key": "← Menu",
+     "detail": "← Menu is 84x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ],
+   "shot": "shots/844x390-lobby-ready.jpg"
+  },
+  {
+   "size": "844x390",
+   "state": "plane",
+   "fails": [],
+   "info": [
+    "buttons 1: Jump 92",
+    "controls+HUD cover about 27% of the screen"
+   ]
+  },
+  {
+   "size": "844x390",
+   "state": "freefall",
+   "fails": [
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 21% of the screen"
+   ],
+   "shot": "shots/844x390-freefall.jpg"
+  },
+  {
+   "size": "844x390",
+   "state": "canopy",
+   "fails": [
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 21% of the screen"
+   ],
+   "shot": "shots/844x390-canopy.jpg"
+  },
+  {
+   "size": "844x390",
+   "state": "ground",
+   "fails": [
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 21% of the screen"
+   ],
+   "shot": "shots/844x390-ground.jpg"
+  },
+  {
+   "size": "844x390",
+   "state": "ground-full",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Swap to SMG",
+     "detail": "Swap to SMG is 42x42, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    },
+    {
+     "check": "zones",
+     "key": "vitals|stick zone",
+     "detail": "HUD vitals enters the stick zone (226x15)"
+    }
+   ],
+   "info": [
+    "buttons 11: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Scope 56, Super 58, Swap to SMG 42, Heal 50, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 24% of the screen"
+   ],
+   "shot": "shots/844x390-ground-full.jpg"
+  },
+  {
+   "size": "844x390",
+   "state": "pause",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Resume",
+     "detail": "Resume is 296x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Settings",
+     "detail": "Settings is 296x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Quit to menu",
+     "detail": "Quit to menu is 296x40, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 11% of the screen"
+   ],
+   "shot": "shots/844x390-pause.jpg"
+  },
+  {
+   "size": "844x390",
+   "state": "report",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ]
+  },
+  {
+   "size": "915x412",
+   "state": "menu",
+   "fails": [
+    {
+     "check": "target",
+     "key": "FighterBlaze",
+     "detail": "FighterBlaze is 284x29, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Settings",
+     "detail": "Settings is 284x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "How to play",
+     "detail": "How to play is 284x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Credits",
+     "detail": "Credits is 284x28, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 12% of the screen"
+   ],
+   "shot": "shots/915x412-menu.jpg"
+  },
+  {
+   "size": "915x412",
+   "state": "panel-fighter",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 23% of the screen"
+   ],
+   "shot": "shots/915x412-panel-fighter.jpg"
+  },
+  {
+   "size": "915x412",
+   "state": "panel-settings",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Invert Y",
+     "detail": "Invert Y is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Left-handed",
+     "detail": "Left-handed is 48x16, floor 44 (cut off by a scroll area, its own box is 48x28)"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ],
+   "shot": "shots/915x412-panel-settings.jpg"
+  },
+  {
+   "size": "915x412",
+   "state": "panel-settings-camera",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Third person",
+     "detail": "Third person is 117x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ],
+   "shot": "shots/915x412-panel-settings-camera.jpg"
+  },
+  {
+   "size": "915x412",
+   "state": "panel-settings-graphics",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Auto",
+     "detail": "Auto is 58x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Low",
+     "detail": "Low is 51x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Med",
+     "detail": "Med is 51x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "High",
+     "detail": "High is 55x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Shadows",
+     "detail": "Shadows is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Show FPS",
+     "detail": "Show FPS is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 8% of the screen"
+   ],
+   "shot": "shots/915x412-panel-settings-graphics.jpg"
+  },
+  {
+   "size": "915x412",
+   "state": "panel-settings-audio",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Mute",
+     "detail": "Mute is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ],
+   "shot": "shots/915x412-panel-settings-audio.jpg"
+  },
+  {
+   "size": "915x412",
+   "state": "panel-settings-accessibility",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reduced motion",
+     "detail": "Reduced motion is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Colour-blind friendly",
+     "detail": "Colour-blind friendly is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Show key hints",
+     "detail": "Show key hints is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Larger HUD text",
+     "detail": "Larger HUD text is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ],
+   "shot": "shots/915x412-panel-settings-accessibility.jpg"
+  },
+  {
+   "size": "915x412",
+   "state": "panel-how",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ],
+   "shot": "shots/915x412-panel-how.jpg"
+  },
+  {
+   "size": "915x412",
+   "state": "panel-credits",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ],
+   "shot": "shots/915x412-panel-credits.jpg"
+  },
+  {
+   "size": "915x412",
+   "state": "lobby-pre",
+   "fails": [
+    {
+     "check": "target",
+     "key": "← Menu",
+     "detail": "← Menu is 84x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ],
+   "shot": "shots/915x412-lobby-pre.jpg"
+  },
+  {
+   "size": "915x412",
+   "state": "lobby-ready",
+   "fails": [
+    {
+     "check": "target",
+     "key": "← Menu",
+     "detail": "← Menu is 84x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ],
+   "shot": "shots/915x412-lobby-ready.jpg"
+  },
+  {
+   "size": "915x412",
+   "state": "plane",
+   "fails": [],
+   "info": [
+    "buttons 1: Jump 92",
+    "controls+HUD cover about 25% of the screen"
+   ]
+  },
+  {
+   "size": "915x412",
+   "state": "freefall",
+   "fails": [
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 18% of the screen"
+   ],
+   "shot": "shots/915x412-freefall.jpg"
+  },
+  {
+   "size": "915x412",
+   "state": "canopy",
+   "fails": [
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 18% of the screen"
+   ],
+   "shot": "shots/915x412-canopy.jpg"
+  },
+  {
+   "size": "915x412",
+   "state": "ground",
+   "fails": [
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 18% of the screen"
+   ],
+   "shot": "shots/915x412-ground.jpg"
+  },
+  {
+   "size": "915x412",
+   "state": "ground-full",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Swap to SMG",
+     "detail": "Swap to SMG is 42x42, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    },
+    {
+     "check": "zones",
+     "key": "vitals|stick zone",
+     "detail": "HUD vitals enters the stick zone (226x15)"
+    }
+   ],
+   "info": [
+    "buttons 11: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Scope 56, Super 58, Swap to SMG 42, Heal 50, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 21% of the screen"
+   ],
+   "shot": "shots/915x412-ground-full.jpg"
+  },
+  {
+   "size": "915x412",
+   "state": "pause",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Resume",
+     "detail": "Resume is 296x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Settings",
+     "detail": "Settings is 296x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Quit to menu",
+     "detail": "Quit to menu is 296x40, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 9% of the screen"
+   ],
+   "shot": "shots/915x412-pause.jpg"
+  },
+  {
+   "size": "915x412",
+   "state": "report",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "932x430",
+   "state": "menu",
+   "fails": [
+    {
+     "check": "target",
+     "key": "FighterBlaze",
+     "detail": "FighterBlaze is 290x29, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Settings",
+     "detail": "Settings is 290x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "How to play",
+     "detail": "How to play is 290x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Credits",
+     "detail": "Credits is 290x28, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 12% of the screen"
+   ],
+   "shot": "shots/932x430-menu.jpg"
+  },
+  {
+   "size": "932x430",
+   "state": "panel-fighter",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 22% of the screen"
+   ]
+  },
+  {
+   "size": "932x430",
+   "state": "panel-settings",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Invert Y",
+     "detail": "Invert Y is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Left-handed",
+     "detail": "Left-handed is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 6% of the screen"
+   ],
+   "shot": "shots/932x430-panel-settings.jpg"
+  },
+  {
+   "size": "932x430",
+   "state": "panel-settings-camera",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Third person",
+     "detail": "Third person is 117x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 6% of the screen"
+   ],
+   "shot": "shots/932x430-panel-settings-camera.jpg"
+  },
+  {
+   "size": "932x430",
+   "state": "panel-settings-graphics",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Auto",
+     "detail": "Auto is 58x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Low",
+     "detail": "Low is 51x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Med",
+     "detail": "Med is 51x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "High",
+     "detail": "High is 55x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Shadows",
+     "detail": "Shadows is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Show FPS",
+     "detail": "Show FPS is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ],
+   "shot": "shots/932x430-panel-settings-graphics.jpg"
+  },
+  {
+   "size": "932x430",
+   "state": "panel-settings-audio",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Mute",
+     "detail": "Mute is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 6% of the screen"
+   ],
+   "shot": "shots/932x430-panel-settings-audio.jpg"
+  },
+  {
+   "size": "932x430",
+   "state": "panel-settings-accessibility",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reduced motion",
+     "detail": "Reduced motion is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Colour-blind friendly",
+     "detail": "Colour-blind friendly is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Show key hints",
+     "detail": "Show key hints is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Larger HUD text",
+     "detail": "Larger HUD text is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 6% of the screen"
+   ],
+   "shot": "shots/932x430-panel-settings-accessibility.jpg"
+  },
+  {
+   "size": "932x430",
+   "state": "panel-how",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "932x430",
+   "state": "panel-credits",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "932x430",
+   "state": "lobby-pre",
+   "fails": [
+    {
+     "check": "target",
+     "key": "← Menu",
+     "detail": "← Menu is 84x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ],
+   "shot": "shots/932x430-lobby-pre.jpg"
+  },
+  {
+   "size": "932x430",
+   "state": "lobby-ready",
+   "fails": [
+    {
+     "check": "target",
+     "key": "← Menu",
+     "detail": "← Menu is 84x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ],
+   "shot": "shots/932x430-lobby-ready.jpg"
+  },
+  {
+   "size": "932x430",
+   "state": "plane",
+   "fails": [],
+   "info": [
+    "buttons 1: Jump 92",
+    "controls+HUD cover about 25% of the screen"
+   ]
+  },
+  {
+   "size": "932x430",
+   "state": "freefall",
+   "fails": [
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 17% of the screen"
+   ],
+   "shot": "shots/932x430-freefall.jpg"
+  },
+  {
+   "size": "932x430",
+   "state": "canopy",
+   "fails": [
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 17% of the screen"
+   ],
+   "shot": "shots/932x430-canopy.jpg"
+  },
+  {
+   "size": "932x430",
+   "state": "ground",
+   "fails": [
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 17% of the screen"
+   ],
+   "shot": "shots/932x430-ground.jpg"
+  },
+  {
+   "size": "932x430",
+   "state": "ground-full",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Swap to SMG",
+     "detail": "Swap to SMG is 42x42, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    },
+    {
+     "check": "zones",
+     "key": "vitals|stick zone",
+     "detail": "HUD vitals enters the stick zone (226x15)"
+    }
+   ],
+   "info": [
+    "buttons 11: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Scope 56, Super 58, Swap to SMG 42, Heal 50, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 20% of the screen"
+   ],
+   "shot": "shots/932x430-ground-full.jpg"
+  },
+  {
+   "size": "932x430",
+   "state": "pause",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Resume",
+     "detail": "Resume is 296x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Settings",
+     "detail": "Settings is 296x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Quit to menu",
+     "detail": "Quit to menu is 296x40, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 9% of the screen"
+   ],
+   "shot": "shots/932x430-pause.jpg"
+  },
+  {
+   "size": "932x430",
+   "state": "report",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "800x450",
+   "state": "menu",
+   "fails": [
+    {
+     "check": "target",
+     "key": "FighterBlaze",
+     "detail": "FighterBlaze is 276x29, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Settings",
+     "detail": "Settings is 276x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "How to play",
+     "detail": "How to play is 276x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Credits",
+     "detail": "Credits is 276x28, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 13% of the screen"
+   ],
+   "shot": "shots/800x450-menu.jpg"
+  },
+  {
+   "size": "800x450",
+   "state": "panel-fighter",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 22% of the screen"
+   ]
+  },
+  {
+   "size": "800x450",
+   "state": "panel-settings",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Invert Y",
+     "detail": "Invert Y is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Left-handed",
+     "detail": "Left-handed is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ],
+   "shot": "shots/800x450-panel-settings.jpg"
+  },
+  {
+   "size": "800x450",
+   "state": "panel-settings-camera",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Third person",
+     "detail": "Third person is 117x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ],
+   "shot": "shots/800x450-panel-settings-camera.jpg"
+  },
+  {
+   "size": "800x450",
+   "state": "panel-settings-graphics",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Auto",
+     "detail": "Auto is 58x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Low",
+     "detail": "Low is 51x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Med",
+     "detail": "Med is 51x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "High",
+     "detail": "High is 55x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Shadows",
+     "detail": "Shadows is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Show FPS",
+     "detail": "Show FPS is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 8% of the screen"
+   ],
+   "shot": "shots/800x450-panel-settings-graphics.jpg"
+  },
+  {
+   "size": "800x450",
+   "state": "panel-settings-audio",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Mute",
+     "detail": "Mute is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ],
+   "shot": "shots/800x450-panel-settings-audio.jpg"
+  },
+  {
+   "size": "800x450",
+   "state": "panel-settings-accessibility",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reduced motion",
+     "detail": "Reduced motion is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Colour-blind friendly",
+     "detail": "Colour-blind friendly is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Show key hints",
+     "detail": "Show key hints is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Larger HUD text",
+     "detail": "Larger HUD text is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Back",
+     "detail": "Back is 109x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ],
+   "shot": "shots/800x450-panel-settings-accessibility.jpg"
+  },
+  {
+   "size": "800x450",
+   "state": "panel-how",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "800x450",
+   "state": "panel-credits",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "800x450",
+   "state": "lobby-pre",
+   "fails": [
+    {
+     "check": "target",
+     "key": "← Menu",
+     "detail": "← Menu is 84x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ],
+   "shot": "shots/800x450-lobby-pre.jpg"
+  },
+  {
+   "size": "800x450",
+   "state": "lobby-ready",
+   "fails": [
+    {
+     "check": "target",
+     "key": "← Menu",
+     "detail": "← Menu is 84x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ],
+   "shot": "shots/800x450-lobby-ready.jpg"
+  },
+  {
+   "size": "800x450",
+   "state": "plane",
+   "fails": [],
+   "info": [
+    "buttons 1: Jump 92",
+    "controls+HUD cover about 29% of the screen"
+   ]
+  },
+  {
+   "size": "800x450",
+   "state": "freefall",
+   "fails": [
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 19% of the screen"
+   ],
+   "shot": "shots/800x450-freefall.jpg"
+  },
+  {
+   "size": "800x450",
+   "state": "canopy",
+   "fails": [
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 19% of the screen"
+   ],
+   "shot": "shots/800x450-canopy.jpg"
+  },
+  {
+   "size": "800x450",
+   "state": "ground",
+   "fails": [
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 19% of the screen"
+   ],
+   "shot": "shots/800x450-ground.jpg"
+  },
+  {
+   "size": "800x450",
+   "state": "ground-full",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Swap to SMG",
+     "detail": "Swap to SMG is 42x42, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    },
+    {
+     "check": "zones",
+     "key": "vitals|stick zone",
+     "detail": "HUD vitals enters the stick zone (226x15)"
+    }
+   ],
+   "info": [
+    "buttons 11: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Scope 56, Super 58, Swap to SMG 42, Heal 50, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 22% of the screen"
+   ],
+   "shot": "shots/800x450-ground-full.jpg"
+  },
+  {
+   "size": "800x450",
+   "state": "pause",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Resume",
+     "detail": "Resume is 296x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Settings",
+     "detail": "Settings is 296x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Quit to menu",
+     "detail": "Quit to menu is 296x40, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 10% of the screen"
+   ],
+   "shot": "shots/800x450-pause.jpg"
+  },
+  {
+   "size": "800x450",
+   "state": "report",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ]
+  },
+  {
+   "size": "390x844",
+   "state": "portrait",
+   "fails": [],
+   "info": [
+    "card text: \"Rotate your phoneLast Commit Standing is played in landscape\""
+   ]
+  },
+  {
+   "size": "1024x768",
+   "state": "menu",
+   "fails": [
+    {
+     "check": "target",
+     "key": "FighterBlaze",
+     "detail": "FighterBlaze is 325x39, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Settings",
+     "detail": "Settings is 325x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "How to play",
+     "detail": "How to play is 325x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Credits",
+     "detail": "Credits is 325x38, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 9% of the screen"
+   ],
+   "shot": "shots/1024x768-menu.jpg"
+  },
+  {
+   "size": "1024x768",
+   "state": "panel-fighter",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 11% of the screen"
+   ]
+  },
+  {
+   "size": "1024x768",
+   "state": "panel-settings",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Invert Y",
+     "detail": "Invert Y is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Left-handed",
+     "detail": "Left-handed is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ],
+   "shot": "shots/1024x768-panel-settings.jpg"
+  },
+  {
+   "size": "1024x768",
+   "state": "panel-settings-camera",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Third person",
+     "detail": "Third person is 117x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ],
+   "shot": "shots/1024x768-panel-settings-camera.jpg"
+  },
+  {
+   "size": "1024x768",
+   "state": "panel-settings-graphics",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Auto",
+     "detail": "Auto is 58x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Low",
+     "detail": "Low is 51x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Med",
+     "detail": "Med is 51x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "High",
+     "detail": "High is 55x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Shadows",
+     "detail": "Shadows is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Show FPS",
+     "detail": "Show FPS is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ],
+   "shot": "shots/1024x768-panel-settings-graphics.jpg"
+  },
+  {
+   "size": "1024x768",
+   "state": "panel-settings-audio",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Mute",
+     "detail": "Mute is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ],
+   "shot": "shots/1024x768-panel-settings-audio.jpg"
+  },
+  {
+   "size": "1024x768",
+   "state": "panel-settings-accessibility",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reduced motion",
+     "detail": "Reduced motion is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Colour-blind friendly",
+     "detail": "Colour-blind friendly is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Show key hints",
+     "detail": "Show key hints is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Larger HUD text",
+     "detail": "Larger HUD text is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ],
+   "shot": "shots/1024x768-panel-settings-accessibility.jpg"
+  },
+  {
+   "size": "1024x768",
+   "state": "panel-how",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "1024x768",
+   "state": "panel-credits",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "1024x768",
+   "state": "lobby-pre",
+   "fails": [
+    {
+     "check": "target",
+     "key": "← Menu",
+     "detail": "← Menu is 84x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ],
+   "shot": "shots/1024x768-lobby-pre.jpg"
+  },
+  {
+   "size": "1024x768",
+   "state": "lobby-ready",
+   "fails": [
+    {
+     "check": "target",
+     "key": "← Menu",
+     "detail": "← Menu is 84x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ],
+   "shot": "shots/1024x768-lobby-ready.jpg"
+  },
+  {
+   "size": "1024x768",
+   "state": "plane",
+   "fails": [],
+   "info": [
+    "buttons 1: Jump 92",
+    "controls+HUD cover about 16% of the screen"
+   ]
+  },
+  {
+   "size": "1024x768",
+   "state": "freefall",
+   "fails": [
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 9% of the screen"
+   ],
+   "shot": "shots/1024x768-freefall.jpg"
+  },
+  {
+   "size": "1024x768",
+   "state": "canopy",
+   "fails": [
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 9% of the screen"
+   ],
+   "shot": "shots/1024x768-canopy.jpg"
+  },
+  {
+   "size": "1024x768",
+   "state": "ground",
+   "fails": [
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 9% of the screen"
+   ],
+   "shot": "shots/1024x768-ground.jpg"
+  },
+  {
+   "size": "1024x768",
+   "state": "ground-full",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Swap to SMG",
+     "detail": "Swap to SMG is 42x42, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    },
+    {
+     "check": "zones",
+     "key": "vitals|stick zone",
+     "detail": "HUD vitals enters the stick zone (226x15)"
+    }
+   ],
+   "info": [
+    "buttons 11: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Scope 56, Super 58, Swap to SMG 42, Heal 50, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 10% of the screen"
+   ],
+   "shot": "shots/1024x768-ground-full.jpg"
+  },
+  {
+   "size": "1024x768",
+   "state": "pause",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Resume",
+     "detail": "Resume is 296x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Settings",
+     "detail": "Settings is 296x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Quit to menu",
+     "detail": "Quit to menu is 296x40, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 5% of the screen"
+   ],
+   "shot": "shots/1024x768-pause.jpg"
+  },
+  {
+   "size": "1024x768",
+   "state": "report",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "1080x607",
+   "state": "menu",
+   "fails": [
+    {
+     "check": "target",
+     "key": "FighterBlaze",
+     "detail": "FighterBlaze is 346x29, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Settings",
+     "detail": "Settings is 346x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "How to play",
+     "detail": "How to play is 346x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Credits",
+     "detail": "Credits is 346x28, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 9% of the screen"
+   ],
+   "shot": "shots/1080x607-menu.jpg"
+  },
+  {
+   "size": "1080x607",
+   "state": "panel-fighter",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ]
+  },
+  {
+   "size": "1080x607",
+   "state": "panel-settings",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Invert Y",
+     "detail": "Invert Y is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Left-handed",
+     "detail": "Left-handed is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 5% of the screen"
+   ],
+   "shot": "shots/1080x607-panel-settings.jpg"
+  },
+  {
+   "size": "1080x607",
+   "state": "panel-settings-camera",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Third person",
+     "detail": "Third person is 117x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 5% of the screen"
+   ],
+   "shot": "shots/1080x607-panel-settings-camera.jpg"
+  },
+  {
+   "size": "1080x607",
+   "state": "panel-settings-graphics",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Auto",
+     "detail": "Auto is 58x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Low",
+     "detail": "Low is 51x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Med",
+     "detail": "Med is 51x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "High",
+     "detail": "High is 55x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Shadows",
+     "detail": "Shadows is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Show FPS",
+     "detail": "Show FPS is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 5% of the screen"
+   ],
+   "shot": "shots/1080x607-panel-settings-graphics.jpg"
+  },
+  {
+   "size": "1080x607",
+   "state": "panel-settings-audio",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Mute",
+     "detail": "Mute is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ],
+   "shot": "shots/1080x607-panel-settings-audio.jpg"
+  },
+  {
+   "size": "1080x607",
+   "state": "panel-settings-accessibility",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reduced motion",
+     "detail": "Reduced motion is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Colour-blind friendly",
+     "detail": "Colour-blind friendly is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Show key hints",
+     "detail": "Show key hints is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Larger HUD text",
+     "detail": "Larger HUD text is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 5% of the screen"
+   ],
+   "shot": "shots/1080x607-panel-settings-accessibility.jpg"
+  },
+  {
+   "size": "1080x607",
+   "state": "panel-how",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "1080x607",
+   "state": "panel-credits",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "1080x607",
+   "state": "lobby-pre",
+   "fails": [
+    {
+     "check": "target",
+     "key": "← Menu",
+     "detail": "← Menu is 84x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ],
+   "shot": "shots/1080x607-lobby-pre.jpg"
+  },
+  {
+   "size": "1080x607",
+   "state": "lobby-ready",
+   "fails": [
+    {
+     "check": "target",
+     "key": "← Menu",
+     "detail": "← Menu is 84x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ],
+   "shot": "shots/1080x607-lobby-ready.jpg"
+  },
+  {
+   "size": "1080x607",
+   "state": "plane",
+   "fails": [],
+   "info": [
+    "buttons 1: Jump 92",
+    "controls+HUD cover about 19% of the screen"
+   ]
+  },
+  {
+   "size": "1080x607",
+   "state": "freefall",
+   "fails": [
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 10% of the screen"
+   ],
+   "shot": "shots/1080x607-freefall.jpg"
+  },
+  {
+   "size": "1080x607",
+   "state": "canopy",
+   "fails": [
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 10% of the screen"
+   ],
+   "shot": "shots/1080x607-canopy.jpg"
+  },
+  {
+   "size": "1080x607",
+   "state": "ground",
+   "fails": [
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 10% of the screen"
+   ],
+   "shot": "shots/1080x607-ground.jpg"
+  },
+  {
+   "size": "1080x607",
+   "state": "ground-full",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Swap to SMG",
+     "detail": "Swap to SMG is 42x42, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    },
+    {
+     "check": "zones",
+     "key": "vitals|stick zone",
+     "detail": "HUD vitals enters the stick zone (226x15)"
+    }
+   ],
+   "info": [
+    "buttons 11: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Scope 56, Super 58, Swap to SMG 42, Heal 50, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 12% of the screen"
+   ],
+   "shot": "shots/1080x607-ground-full.jpg"
+  },
+  {
+   "size": "1080x607",
+   "state": "pause",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Resume",
+     "detail": "Resume is 296x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Settings",
+     "detail": "Settings is 296x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Quit to menu",
+     "detail": "Quit to menu is 296x40, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 5% of the screen"
+   ],
+   "shot": "shots/1080x607-pause.jpg"
+  },
+  {
+   "size": "1080x607",
+   "state": "report",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "1180x820",
+   "state": "menu",
+   "fails": [
+    {
+     "check": "target",
+     "key": "FighterBlaze",
+     "detail": "FighterBlaze is 376x39, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Settings",
+     "detail": "Settings is 376x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "How to play",
+     "detail": "How to play is 376x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Credits",
+     "detail": "Credits is 376x38, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 9% of the screen"
+   ],
+   "shot": "shots/1180x820-menu.jpg"
+  },
+  {
+   "size": "1180x820",
+   "state": "panel-fighter",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 13% of the screen"
+   ]
+  },
+  {
+   "size": "1180x820",
+   "state": "panel-settings",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Invert Y",
+     "detail": "Invert Y is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Left-handed",
+     "detail": "Left-handed is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ],
+   "shot": "shots/1180x820-panel-settings.jpg"
+  },
+  {
+   "size": "1180x820",
+   "state": "panel-settings-camera",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Third person",
+     "detail": "Third person is 117x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ],
+   "shot": "shots/1180x820-panel-settings-camera.jpg"
+  },
+  {
+   "size": "1180x820",
+   "state": "panel-settings-graphics",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Auto",
+     "detail": "Auto is 58x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Low",
+     "detail": "Low is 51x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Med",
+     "detail": "Med is 51x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "High",
+     "detail": "High is 55x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Shadows",
+     "detail": "Shadows is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Show FPS",
+     "detail": "Show FPS is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ],
+   "shot": "shots/1180x820-panel-settings-graphics.jpg"
+  },
+  {
+   "size": "1180x820",
+   "state": "panel-settings-audio",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Mute",
+     "detail": "Mute is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ],
+   "shot": "shots/1180x820-panel-settings-audio.jpg"
+  },
+  {
+   "size": "1180x820",
+   "state": "panel-settings-accessibility",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Controls",
+     "detail": "Controls is 96x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Camera",
+     "detail": "Camera is 80x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Graphics",
+     "detail": "Graphics is 93x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Audio",
+     "detail": "Audio is 66x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Accessibility",
+     "detail": "Accessibility is 125x36, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reduced motion",
+     "detail": "Reduced motion is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Colour-blind friendly",
+     "detail": "Colour-blind friendly is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Show key hints",
+     "detail": "Show key hints is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Larger HUD text",
+     "detail": "Larger HUD text is 48x28, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Reset all",
+     "detail": "Reset all is 99x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ],
+   "shot": "shots/1180x820-panel-settings-accessibility.jpg"
+  },
+  {
+   "size": "1180x820",
+   "state": "panel-how",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 0% of the screen"
+   ]
+  },
+  {
+   "size": "1180x820",
+   "state": "panel-credits",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 0% of the screen"
+   ]
+  },
+  {
+   "size": "1180x820",
+   "state": "lobby-pre",
+   "fails": [
+    {
+     "check": "target",
+     "key": "← Menu",
+     "detail": "← Menu is 84x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ],
+   "shot": "shots/1180x820-lobby-pre.jpg"
+  },
+  {
+   "size": "1180x820",
+   "state": "lobby-ready",
+   "fails": [
+    {
+     "check": "target",
+     "key": "← Menu",
+     "detail": "← Menu is 84x36, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ],
+   "shot": "shots/1180x820-lobby-ready.jpg"
+  },
+  {
+   "size": "1180x820",
+   "state": "plane",
+   "fails": [],
+   "info": [
+    "buttons 1: Jump 92",
+    "controls+HUD cover about 13% of the screen"
+   ]
+  },
+  {
+   "size": "1180x820",
+   "state": "freefall",
+   "fails": [
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 7% of the screen"
+   ],
+   "shot": "shots/1180x820-freefall.jpg"
+  },
+  {
+   "size": "1180x820",
+   "state": "canopy",
+   "fails": [
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 7% of the screen"
+   ],
+   "shot": "shots/1180x820-canopy.jpg"
+  },
+  {
+   "size": "1180x820",
+   "state": "ground",
+   "fails": [
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    }
+   ],
+   "info": [
+    "buttons 8: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 7% of the screen"
+   ],
+   "shot": "shots/1180x820-ground.jpg"
+  },
+  {
+   "size": "1180x820",
+   "state": "ground-full",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Swap to SMG",
+     "detail": "Swap to SMG is 42x42, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "◀ Q",
+     "detail": "◀ Q is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "E ▶",
+     "detail": "E ▶ is 38x38, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Pause",
+     "detail": "Pause is 40x40, floor 44"
+    },
+    {
+     "check": "zones",
+     "key": "vitals|stick zone",
+     "detail": "HUD vitals enters the stick zone (226x15)"
+    }
+   ],
+   "info": [
+    "buttons 11: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Scope 56, Super 58, Swap to SMG 42, Heal 50, ◀ Q 38, E ▶ 38",
+    "controls+HUD cover about 8% of the screen"
+   ],
+   "shot": "shots/1180x820-ground-full.jpg"
+  },
+  {
+   "size": "1180x820",
+   "state": "pause",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Resume",
+     "detail": "Resume is 296x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Settings",
+     "detail": "Settings is 296x40, floor 44"
+    },
+    {
+     "check": "target",
+     "key": "Quit to menu",
+     "detail": "Quit to menu is 296x40, floor 44"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ],
+   "shot": "shots/1180x820-pause.jpg"
+  },
+  {
+   "size": "1180x820",
+   "state": "report",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ]
+  },
+  {
+   "size": "768x1024",
+   "state": "portrait",
+   "fails": [],
+   "info": [
+    "card text: \"Rotate your phoneLast Commit Standing is played in landscape\""
+   ]
+  },
+  {
+   "size": "860x484",
+   "state": "menu",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 11% of the screen"
+   ]
+  },
+  {
+   "size": "860x484",
+   "state": "panel-fighter",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 21% of the screen"
+   ]
+  },
+  {
+   "size": "860x484",
+   "state": "panel-settings",
+   "fails": [
+    {
+     "check": "target",
+     "key": "Shoot: J. Press to change.",
+     "detail": "Shoot: J. Press to change. is 80x23, floor 24 (cut off by a scroll area, its own box is 80x28)"
+    },
+    {
+     "check": "target",
+     "key": "Jump / parachute: Space. Press t",
+     "detail": "Jump / parachute: Space. Press t is 80x23, floor 24 (cut off by a scroll area, its own box is 80x28)"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 15% of the screen"
+   ],
+   "shot": "shots/860x484-panel-settings.jpg"
+  },
+  {
+   "size": "860x484",
+   "state": "panel-settings-camera",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 8% of the screen"
+   ]
+  },
+  {
+   "size": "860x484",
+   "state": "panel-settings-graphics",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ]
+  },
+  {
+   "size": "860x484",
+   "state": "panel-settings-audio",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 6% of the screen"
+   ]
+  },
+  {
+   "size": "860x484",
+   "state": "panel-settings-accessibility",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 6% of the screen"
+   ]
+  },
+  {
+   "size": "860x484",
+   "state": "panel-how",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "860x484",
+   "state": "panel-credits",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "860x484",
+   "state": "lobby-pre",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ]
+  },
+  {
+   "size": "860x484",
+   "state": "lobby-ready",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "860x484",
+   "state": "plane",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 35% of the screen"
+   ]
+  },
+  {
+   "size": "860x484",
+   "state": "freefall",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 15% of the screen"
+   ]
+  },
+  {
+   "size": "860x484",
+   "state": "canopy",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 15% of the screen"
+   ]
+  },
+  {
+   "size": "860x484",
+   "state": "ground",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 15% of the screen"
+   ]
+  },
+  {
+   "size": "860x484",
+   "state": "pause",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 9% of the screen"
+   ]
+  },
+  {
+   "size": "860x484",
+   "state": "report",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "907x510",
+   "state": "menu",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 10% of the screen"
+   ]
+  },
+  {
+   "size": "907x510",
+   "state": "panel-fighter",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 24% of the screen"
+   ]
+  },
+  {
+   "size": "907x510",
+   "state": "panel-settings",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 13% of the screen"
+   ]
+  },
+  {
+   "size": "907x510",
+   "state": "panel-settings-camera",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 8% of the screen"
+   ]
+  },
+  {
+   "size": "907x510",
+   "state": "panel-settings-graphics",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ]
+  },
+  {
+   "size": "907x510",
+   "state": "panel-settings-audio",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 6% of the screen"
+   ]
+  },
+  {
+   "size": "907x510",
+   "state": "panel-settings-accessibility",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ]
+  },
+  {
+   "size": "907x510",
+   "state": "panel-how",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "907x510",
+   "state": "panel-credits",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "907x510",
+   "state": "lobby-pre",
+   "fails": [
+    {
+     "check": "clearance",
+     "key": "Level 1, 0 of 230 XP|You drop as",
+     "detail": "Level 1, 0 of 230 XP to You drop as: overlap 20 px, needs 8"
+    },
+    {
+     "check": "clearance",
+     "key": "Level 1, 0 of 230 XP|BLAZE",
+     "detail": "Level 1, 0 of 230 XP to BLAZE: overlap 2 px, needs 8"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ],
+   "shot": "shots/907x510-lobby-pre.jpg"
+  },
+  {
+   "size": "907x510",
+   "state": "lobby-ready",
+   "fails": [
+    {
+     "check": "clearance",
+     "key": "Level 1, 0 of 230 XP|You drop as",
+     "detail": "Level 1, 0 of 230 XP to You drop as: overlap 6 px, needs 8"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ],
+   "shot": "shots/907x510-lobby-ready.jpg"
+  },
+  {
+   "size": "907x510",
+   "state": "plane",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 31% of the screen"
+   ]
+  },
+  {
+   "size": "907x510",
+   "state": "freefall",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 13% of the screen"
+   ]
+  },
+  {
+   "size": "907x510",
+   "state": "canopy",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 13% of the screen"
+   ]
+  },
+  {
+   "size": "907x510",
+   "state": "ground",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 13% of the screen"
+   ]
+  },
+  {
+   "size": "907x510",
+   "state": "pause",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 8% of the screen"
+   ]
+  },
+  {
+   "size": "907x510",
+   "state": "report",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ]
+  },
+  {
+   "size": "1020x540",
+   "state": "menu",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 10% of the screen"
+   ]
+  },
+  {
+   "size": "1020x540",
+   "state": "panel-fighter",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 20% of the screen"
+   ]
+  },
+  {
+   "size": "1020x540",
+   "state": "panel-settings",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 12% of the screen"
+   ]
+  },
+  {
+   "size": "1020x540",
+   "state": "panel-settings-camera",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ]
+  },
+  {
+   "size": "1020x540",
+   "state": "panel-settings-graphics",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 6% of the screen"
+   ]
+  },
+  {
+   "size": "1020x540",
+   "state": "panel-settings-audio",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 5% of the screen"
+   ]
+  },
+  {
+   "size": "1020x540",
+   "state": "panel-settings-accessibility",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 5% of the screen"
+   ]
+  },
+  {
+   "size": "1020x540",
+   "state": "panel-how",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "1020x540",
+   "state": "panel-credits",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "1020x540",
+   "state": "lobby-pre",
+   "fails": [
+    {
+     "check": "clearance",
+     "key": "Level 1, 0 of 230 XP|You drop as",
+     "detail": "Level 1, 0 of 230 XP to You drop as: gap 0 px, needs 8"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ],
+   "shot": "shots/1020x540-lobby-pre.jpg"
+  },
+  {
+   "size": "1020x540",
+   "state": "lobby-ready",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "1020x540",
+   "state": "plane",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 26% of the screen"
+   ]
+  },
+  {
+   "size": "1020x540",
+   "state": "freefall",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 11% of the screen"
+   ]
+  },
+  {
+   "size": "1020x540",
+   "state": "canopy",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 11% of the screen"
+   ]
+  },
+  {
+   "size": "1020x540",
+   "state": "ground",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 11% of the screen"
+   ]
+  },
+  {
+   "size": "1020x540",
+   "state": "pause",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 6% of the screen"
+   ]
+  },
+  {
+   "size": "1020x540",
+   "state": "report",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ]
+  },
+  {
+   "size": "1216x684",
+   "state": "menu",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 10% of the screen"
+   ]
+  },
+  {
+   "size": "1216x684",
+   "state": "panel-fighter",
+   "fails": [
+    {
+     "check": "target",
+     "key": "BlazeYOU",
+     "detail": "BlazeYOU is 197x11, floor 24 (cut off by a scroll area, its own box is 197x176)"
+    },
+    {
+     "check": "target",
+     "key": "Bastion",
+     "detail": "Bastion is 197x11, floor 24 (cut off by a scroll area, its own box is 197x176)"
+    },
+    {
+     "check": "target",
+     "key": "Tempo",
+     "detail": "Tempo is 197x11, floor 24 (cut off by a scroll area, its own box is 197x176)"
+    },
+    {
+     "check": "target",
+     "key": "Rookie",
+     "detail": "Rookie is 197x11, floor 24 (cut off by a scroll area, its own box is 197x176)"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ],
+   "shot": "shots/1216x684-panel-fighter.jpg"
+  },
+  {
+   "size": "1216x684",
+   "state": "panel-settings",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 9% of the screen"
+   ]
+  },
+  {
+   "size": "1216x684",
+   "state": "panel-settings-camera",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 5% of the screen"
+   ]
+  },
+  {
+   "size": "1216x684",
+   "state": "panel-settings-graphics",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ]
+  },
+  {
+   "size": "1216x684",
+   "state": "panel-settings-audio",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ]
+  },
+  {
+   "size": "1216x684",
+   "state": "panel-settings-accessibility",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ]
+  },
+  {
+   "size": "1216x684",
+   "state": "panel-how",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "1216x684",
+   "state": "panel-credits",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "1216x684",
+   "state": "lobby-pre",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ]
+  },
+  {
+   "size": "1216x684",
+   "state": "lobby-ready",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ]
+  },
+  {
+   "size": "1216x684",
+   "state": "plane",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 17% of the screen"
+   ]
+  },
+  {
+   "size": "1216x684",
+   "state": "freefall",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ]
+  },
+  {
+   "size": "1216x684",
+   "state": "canopy",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ]
+  },
+  {
+   "size": "1216x684",
+   "state": "ground",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ]
+  },
+  {
+   "size": "1216x684",
+   "state": "pause",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ]
+  },
+  {
+   "size": "1216x684",
+   "state": "report",
+   "fails": [
+    {
+     "check": "in-view",
+     "key": "Play again",
+     "detail": "Play again is not fully in view (646..702 of 684)"
+    },
+    {
+     "check": "in-view",
+     "key": "Main menu",
+     "detail": "Main menu is not fully in view (646..702 of 684)"
+    }
+   ],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ],
+   "shot": "shots/1216x684-report.jpg"
+  },
+  {
+   "size": "1280x720",
+   "state": "menu",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 9% of the screen"
+   ]
+  },
+  {
+   "size": "1280x720",
+   "state": "panel-fighter",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 5% of the screen"
+   ]
+  },
+  {
+   "size": "1280x720",
+   "state": "panel-settings",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 9% of the screen"
+   ]
+  },
+  {
+   "size": "1280x720",
+   "state": "panel-settings-camera",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ]
+  },
+  {
+   "size": "1280x720",
+   "state": "panel-settings-graphics",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ]
+  },
+  {
+   "size": "1280x720",
+   "state": "panel-settings-audio",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "1280x720",
+   "state": "panel-settings-accessibility",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "1280x720",
+   "state": "panel-how",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "1280x720",
+   "state": "panel-credits",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "1280x720",
+   "state": "lobby-pre",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ]
+  },
+  {
+   "size": "1280x720",
+   "state": "lobby-ready",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ]
+  },
+  {
+   "size": "1280x720",
+   "state": "plane",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 16% of the screen"
+   ]
+  },
+  {
+   "size": "1280x720",
+   "state": "freefall",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ]
+  },
+  {
+   "size": "1280x720",
+   "state": "canopy",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ]
+  },
+  {
+   "size": "1280x720",
+   "state": "ground",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ]
+  },
+  {
+   "size": "1280x720",
+   "state": "pause",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ]
+  },
+  {
+   "size": "1280x720",
+   "state": "report",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768",
+   "state": "menu",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 8% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768",
+   "state": "panel-fighter",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 8% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768",
+   "state": "panel-settings",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 8% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768",
+   "state": "panel-settings-camera",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768",
+   "state": "panel-settings-graphics",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768",
+   "state": "panel-settings-audio",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768",
+   "state": "panel-settings-accessibility",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768",
+   "state": "panel-how",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 0% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768",
+   "state": "panel-credits",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 0% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768",
+   "state": "lobby-pre",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768",
+   "state": "lobby-ready",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768",
+   "state": "plane",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 14% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768",
+   "state": "freefall",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 6% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768",
+   "state": "canopy",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 6% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768",
+   "state": "ground",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 6% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768",
+   "state": "pause",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768",
+   "state": "report",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ]
+  },
+  {
+   "size": "1440x900",
+   "state": "menu",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ]
+  },
+  {
+   "size": "1440x900",
+   "state": "panel-fighter",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 12% of the screen"
+   ]
+  },
+  {
+   "size": "1440x900",
+   "state": "panel-settings",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 8% of the screen"
+   ]
+  },
+  {
+   "size": "1440x900",
+   "state": "panel-settings-camera",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "1440x900",
+   "state": "panel-settings-graphics",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "1440x900",
+   "state": "panel-settings-audio",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ]
+  },
+  {
+   "size": "1440x900",
+   "state": "panel-settings-accessibility",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ]
+  },
+  {
+   "size": "1440x900",
+   "state": "panel-how",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 0% of the screen"
+   ]
+  },
+  {
+   "size": "1440x900",
+   "state": "panel-credits",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 0% of the screen"
+   ]
+  },
+  {
+   "size": "1440x900",
+   "state": "lobby-pre",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "1440x900",
+   "state": "lobby-ready",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "1440x900",
+   "state": "plane",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 11% of the screen"
+   ]
+  },
+  {
+   "size": "1440x900",
+   "state": "freefall",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 5% of the screen"
+   ]
+  },
+  {
+   "size": "1440x900",
+   "state": "canopy",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 5% of the screen"
+   ]
+  },
+  {
+   "size": "1440x900",
+   "state": "ground",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 5% of the screen"
+   ]
+  },
+  {
+   "size": "1440x900",
+   "state": "pause",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "1440x900",
+   "state": "report",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ]
+  },
+  {
+   "size": "1920x1080",
+   "state": "menu",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ]
+  },
+  {
+   "size": "1920x1080",
+   "state": "panel-fighter",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ]
+  },
+  {
+   "size": "1920x1080",
+   "state": "panel-settings",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 5% of the screen"
+   ]
+  },
+  {
+   "size": "1920x1080",
+   "state": "panel-settings-camera",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ]
+  },
+  {
+   "size": "1920x1080",
+   "state": "panel-settings-graphics",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ]
+  },
+  {
+   "size": "1920x1080",
+   "state": "panel-settings-audio",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "1920x1080",
+   "state": "panel-settings-accessibility",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "1920x1080",
+   "state": "panel-how",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 0% of the screen"
+   ]
+  },
+  {
+   "size": "1920x1080",
+   "state": "panel-credits",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 0% of the screen"
+   ]
+  },
+  {
+   "size": "1920x1080",
+   "state": "lobby-pre",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "1920x1080",
+   "state": "lobby-ready",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "1920x1080",
+   "state": "plane",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 7% of the screen"
+   ]
+  },
+  {
+   "size": "1920x1080",
+   "state": "freefall",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "1920x1080",
+   "state": "canopy",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "1920x1080",
+   "state": "ground",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "1920x1080",
+   "state": "pause",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ]
+  },
+  {
+   "size": "1920x1080",
+   "state": "report",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768-touchlaptop",
+   "state": "menu",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 8% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768-touchlaptop",
+   "state": "panel-fighter",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 8% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768-touchlaptop",
+   "state": "panel-settings",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 8% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768-touchlaptop",
+   "state": "panel-settings-camera",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 4% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768-touchlaptop",
+   "state": "panel-settings-graphics",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768-touchlaptop",
+   "state": "panel-settings-audio",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768-touchlaptop",
+   "state": "panel-settings-accessibility",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768-touchlaptop",
+   "state": "panel-how",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 0% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768-touchlaptop",
+   "state": "panel-credits",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 0% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768-touchlaptop",
+   "state": "lobby-pre",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768-touchlaptop",
+   "state": "lobby-ready",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 1% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768-touchlaptop",
+   "state": "plane",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 14% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768-touchlaptop",
+   "state": "freefall",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 6% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768-touchlaptop",
+   "state": "canopy",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 6% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768-touchlaptop",
+   "state": "ground",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 6% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768-touchlaptop",
+   "state": "pause",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 3% of the screen"
+   ]
+  },
+  {
+   "size": "1366x768-touchlaptop",
+   "state": "report",
+   "fails": [],
+   "info": [
+    "controls+HUD cover about 2% of the screen"
+   ]
+  }
+ ]
+}

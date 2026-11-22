@@ -4,6 +4,7 @@
  *   npm run test:layout                              # whole matrix (about 25 min, one browser context at a time)
  *   npm run test:layout -- --only 568x320,907x510    # a few sizes (add :p phone | :t tablet | :d desktop | :l touch laptop)
  *   npm run test:layout -- --base http://localhost:3203/   # use a dev server that is already running
+ *   npm run test:layout -- --all-shots              # also keep a screenshot of every screen that passed
  *   npm run test:layout -- --baseline docs/collab/ENGINEERING/layout-matrix-baseline/results.json
  *                                                    # compare with a recorded run: only NEW failures set the exit code
  *
@@ -23,7 +24,8 @@
  *   clearance     lobby: nothing in the top bar comes within 8 px of the plate, dock or Ready (spec 4.1)
  *   pad-gap       touch cluster: round buttons keep a 6 px gap (spec 4.2)
  *   zones         touch ground: the cluster fits its zone, no HUD box enters the cluster zone or the stick zone (spec 4.2)
- *   in-view       report: Play again and the menu button are fully visible without scrolling
+ *   in-view       report: Play again and the menu button are on screen and fully visible without scrolling; also Ready (lobby),
+ *                 Resume (pause), Pause and Fire (touch ground) must be visible at all
  *   rotate        portrait touch: the rotate card covers the screen
  *   device-rule   the touch UI is on exactly when the device is a phone or tablet (src/lib/device.ts), whatever the pointer
  *   errors        no page error
@@ -56,6 +58,7 @@ const BASE_ARG = arg('base');
 const OUT = resolve(ROOT, arg('out', '.layout-matrix'));
 const BASELINE = arg('baseline');
 const PORT = Number(arg('port', 3263));
+const ALL_SHOTS = argv.includes('--all-shots');
 
 /** p phone (touch, DPR 3, Android UA, CG says mobile) | t tablet (touch, DPR 2, CG says tablet) | d desktop (mouse, DPR 1)
  *  | l touch laptop (a desktop with a touch screen: CG says desktop, so it must get the mouse UI). */
@@ -329,6 +332,12 @@ const analyse = (snap, ctx) => {
     }
   }
 
+  // A control that has to be reachable must be on screen: absent from the visible set means it is scrolled or clipped out of view.
+  const MUST_SEE = { report: [/^Play again$/, /^(Main menu|Back to lobby)$/], 'lobby-pre': [/^Ready/], pause: [/^Resume/], ground: touchUi ? [/^Pause$/, /^Fire$/] : [] };
+  for (const re of MUST_SEE[ctx.state] ?? []) {
+    if (!boxes.some((b) => re.test(b.name))) add('in-view', String(re), `${String(re).replace(/[\/^$]/g, '')} is not visible: scrolled or clipped out of the ${vw}x${vh} screen`);
+  }
+
   if (ctx.state === 'report') {
     for (const b of boxes) {
       if (!/^(Play again|Main menu|Back to lobby|Quit to menu|Back to the room)$/.test(b.name)) continue;
@@ -380,7 +389,7 @@ const runSize = async (browser, base, spec) => {
     const snap = await p.evaluate(collectInPage, { scopeDialog: !!opts.dialog, lobby: state.startsWith('lobby'), overlayOf: opts.overlayOf ?? '' });
     const { fails, info } = analyse(snap, { kind, state, zones: !!opts.zones, deviceRule: state === 'menu' });
     const rec = { size, kind: kindKey, state, fails, info };
-    if (fails.length) {
+    if (fails.length || ALL_SHOTS) {
       mkdirSync(join(OUT, 'shots'), { recursive: true });
       const boxes = fails.flatMap((f) => f.boxes);
       await p
