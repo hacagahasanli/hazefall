@@ -49,3 +49,9 @@ Format: `## R-001 — title` then Context, Expected deliverable, Priority (P0-P3
 - Expected deliverable: CREATIVE/specifications/map-v2.md with a tile-scale layout (CREATIVE/levels/map-v2.svg), each place (size, buildings, loot tier, landmark, reason to go), road/river network, drop-path and Deadline centre rules, sightline/cover notes, density and draw-call budgets, phased build order with a 1-day shippable slice 1.
 - Priority: P0
 - Status: done (CD 2026-11-22): spec and SVG ready. 120 x 120 tiles, today's map kept and shifted +16, 13 places (4 hot: Old Town, Container Yard, The Campus, Mast Hill), 9 code-made landmarks each with its own colour and top-view shape, 5 river crossings, Route 1 spine. Slice 1 (1 day): water tower + Market Square, twin cranes, pole sign, farm names, place banner, names on the minimap during the drop, all on today's map.
+
+## R-009 — Review map v2 slice 1 and slice 2 shots
+- Context: R-008 slices 1 and 2 are built (LOG 2026-11-22: commits 854c038, 4481b70, 898aa41). Shots: ~/.agents-know/personal/feedback4/shots/lcs-map-v2/ (s1-*: Market Square and water tower, cranes, pole sign, place banner on desktop and phone; plane-*, canopy-*, ground-*, s2-*: the 240 m valley from the plane, canopy and ground at 1280x720 and 390x844).
+- Expected deliverable: accept, or F-xxx items: can you name the places from the plane, are the landmarks readable by shape and colour, is the banner and minimap naming right, what to dress in slice 3. Also say what to do about dead air (13-15 % against the 10 % gate, it trades one for one with round length in the bot-sim) and the lone-house, cabin and conveyor positions that moved from the plan (see LOG).
+- Priority: P0
+- Status: open
