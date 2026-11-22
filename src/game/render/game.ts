@@ -120,6 +120,11 @@ export interface HudState {
   scoped: boolean;
   /** Holding a sniper (the touch SCOPE button shows). */
   sniper: boolean;
+  /** Touch buttons that only show when they can do something: the magazine is not full and there are rounds to put in it,
+   * something to pick up is within reach (or a bomb is in hand), and the canopy has started to open. */
+  canReload: boolean;
+  canUse: boolean;
+  chute: boolean;
   /** First person on the ground (the crosshair shows), and whether the mouse is captured. */
   firstPerson: boolean;
   /** Over the shoulder: crosshair in the middle, mouse look. */
@@ -2821,7 +2826,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       : self.stage === 'drone'
         ? (touch ? 'Tap JUMP' : `${keyLabel(settings.keys.jump)} · jump`)
         : self.stage === 'falling' && self.canopy < 0 && DROP.height - self.alt >= DROP.minFreefallDrop
-          ? (touch ? 'Tap FIRE · open the parachute' : `${keyLabel(settings.keys.jump)} · open the parachute`)
+          ? (touch ? 'Tap OPEN · open the parachute' : `${keyLabel(settings.keys.jump)} · open the parachute`)
         : self.stage === 'falling' && self.canopy >= DROP.deployTime && self.alt > DROP.flareAlt + 4
           ? (touch ? 'Hold DIVE · dive to go farther, faster' : `Hold ${keyLabel(settings.keys.roll)} · dive to go farther, faster`)
         : self.stage === 'ground' && inWater(self.x, self.y)
@@ -2899,6 +2904,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       shoulder: shoulderView(),
       scoped,
       sniper: self.weapon === 'sniper' && self.alive,
+      canReload: self.weapon !== 'fists' && self.reload <= 0 && self.mag < WEAPONS[self.weapon].mag && self.ammo > 0,
+      canUse: self.stage === 'ground' && (!!k || self.bombs > 0),
+      chute: self.canopy >= 0,
       mouseLocked: locked,
       tier,
       elim: elim && time - elim.at < 1.4 ? { id: elim.id, name: elim.name, left: elim.left } : null,

@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-import { PICKUP_ICON, SWAP_ICON } from '~/game/render/icons';
+import { PICKUP_ICON, RELOAD_ICON, SWAP_ICON } from '~/game/render/icons';
 import { isTouchUi, subscribe } from '~/lib/device';
+import { clusterZone as layoutZone, isPhoneLandscape, layoutPads, padSize, phoneScale, TOUCH_FLOOR, visiblePads } from '~/lib/phoneUi';
+import type { PadId } from '~/lib/phoneUi';
 
 import type { TouchButton } from '~/game/render/game';
 
@@ -17,6 +19,28 @@ export const useTouch = () => {
     return subscribe(() => setTouch(isTouchUi()));
   }, []);
   return touch;
+};
+
+/** The screen size and the phone UI scale (the same rule as installPhoneUi), following resizes and the visual viewport. */
+const useScreen = () => {
+  const read = () => {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    const w = Math.round(vv?.width ?? (typeof window !== 'undefined' ? window.innerWidth : 844));
+    const h = Math.round(vv?.height ?? (typeof window !== 'undefined' ? window.innerHeight : 390));
+    return { w, h, ui: isPhoneLandscape(true, w, h) ? phoneScale(w, h) : 1 };
+  };
+  const [screen, setScreen] = useState(read);
+  useEffect(() => {
+    const on = () => setScreen(read());
+    on();
+    window.addEventListener('resize', on);
+    window.visualViewport?.addEventListener('resize', on);
+    return () => {
+      window.removeEventListener('resize', on);
+      window.visualViewport?.removeEventListener('resize', on);
+    };
+  }, []);
+  return screen;
 };
 
 /** Ask once for fullscreen: on Android it hides the browser bars and turns the phone sideways. */
@@ -125,12 +149,12 @@ const Pad = ({
   b,
   label,
   press,
-  style,
-  size = 68,
+  box,
   ready = 1,
   accent = false,
   sub,
   icon,
+  right,
 }: {
   b: TouchButton;
   label: string;
@@ -139,20 +163,34 @@ const Pad = ({
   /** A small second line under the label (what the button will use or draw). */
   sub?: string;
   press: Press;
-  style: React.CSSProperties;
-  size?: number;
+  /** Centre from the bottom corner and diameter (CSS px), from layoutPads. */
+  box: { x: number; y: number; size: number };
   ready?: number;
   accent?: boolean;
+  /** Mirrored: the cluster is on the left (left-handed). */
+  right: boolean;
 }) => {
   const [down, setDown] = useState(false);
+  const isDown = useRef(false);
   const up = () => {
+    isDown.current = false;
     setDown(false);
     press(b, false);
   };
+  // A button that hides while it is held (RELOAD once the magazine is full) must let go, or the game would hold it for good.
+  useEffect(
+    () => () => {
+      if (isDown.current) press(b, false);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [b],
+  );
+  const size = box.size;
   return (
     <button
       type="button"
       aria-label={label}
+      data-touch-btn={b}
       className={`absolute flex touch-none select-none items-center justify-center rounded-full border-2 font-display uppercase shadow-lg transition-transform ${
         down
           ? 'scale-95 border-gold bg-gold/85 text-ink-deep'
@@ -164,16 +202,19 @@ const Pad = ({
         width: size,
         height: size,
         fontSize: size > 90 ? 18 : size > 60 ? 12 : 10,
-        ...style,
+        [right ? 'left' : 'right']: box.x - size / 2,
+        bottom: box.y - size / 2,
       }}
       onPointerDown={(e) => {
         goFullscreen();
         e.currentTarget.setPointerCapture(e.pointerId);
+        isDown.current = true;
         setDown(true);
         press(b, true);
       }}
       onPointerUp={up}
       onPointerCancel={up}
+      onLostPointerCapture={up}
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Recharging: dim, with a ring filling up round it. */}
@@ -210,10 +251,11 @@ const Pad = ({
 };
 
 /**
- * Phone controls: the stick anywhere in the left half; on the right, FIRE under the thumb (it
- * aims by itself at whoever you can see; on the plane it is JUMP), ROLL beside it, a small pick-up
- * icon above it (pick up, hold to throw a bomb), then RELOAD, the SUPER with its charge ring, the two lean
- * buttons, a small swap icon (the other gun, when both slots are full), HEAL (named after what it will use), JUMP, and pause.
+ * Phone controls ("thumb arc", spec 4.2): the stick anywhere in the left half; on the right, FIRE under the thumb (it aims by
+ * itself at whoever you can see), ROLL, JUMP and SUPER (with its charge ring) around it, and the rest only when they can do
+ * something: RELOAD, HEAL (named after what it will use), USE (pick up; hold to throw a bomb), SWAP (the other gun, when both
+ * slots are full) and, with a sniper, SCOPE. On the plane only JUMP shows; in free fall OPEN and DIVE; under the canopy DIVE.
+ * Every button is at least 44 px (FIRE and OPEN 72); where the cluster is short of room the gaps give way, never the sizes.
  */
 export const TouchControls = ({
   press,
@@ -221,9 +263,12 @@ export const TouchControls = ({
   onPause,
   onPlane,
   inAir = false,
+  chute = false,
   superReady,
   rollReady,
   sniper = false,
+  canReload = false,
+  canUse = false,
   canSwap = false,
   swapLabel = null,
   heal = null,
@@ -237,10 +282,16 @@ export const TouchControls = ({
   onPlane: boolean;
   /** Out of the plane and still in the air: the roll button dives the canopy. */
   inAir?: boolean;
+  /** The canopy has started to open: nothing to open any more, and nobody shoots under it, so FIRE goes. */
+  chute?: boolean;
   superReady: number;
   rollReady: number;
   /** A sniper in hand: a SCOPE button to hold. */
   sniper?: boolean;
+  /** The magazine is not full and there are rounds to load: a RELOAD button. */
+  canReload?: boolean;
+  /** Something to pick up within reach, or a bomb in hand: a USE button. */
+  canUse?: boolean;
   /** Both gun slots full: a SWAP button, named after the gun it draws. */
   canSwap?: boolean;
   swapLabel?: string | null;
@@ -250,68 +301,70 @@ export const TouchControls = ({
   size?: number;
   opacity?: number;
   leftHanded?: boolean;
-}) => (
-  <div
-    className="absolute inset-0 z-[5] select-none"
-    style={{ WebkitTouchCallout: 'none' } as React.CSSProperties}
-  >
-    <Stick onMove={onMove} right={leftHanded} opacity={opacity} />
-    {/*
-      The button cluster, drawn for an 844 x 390 phone at scale 1 and scaled by the phone UI scale (--ui) and the player's
-      size setting, from the bottom corner. Every button is given by its centre (from the corner) and its size: FIRE under
-      the thumb, the others on two arcs round it, nothing above 236 px (the minimap ends at 132 px from the top).
-    */}
-    <div
-      className="absolute bottom-0 h-[236px] w-[282px]"
-      style={{
-        ...(leftHanded ? { left: 'env(safe-area-inset-left)' } : { right: 'env(safe-area-inset-right)' }),
-        opacity,
-        transform: `scale(calc(${size} * var(--ui, 1)))`,
-        transformOrigin: leftHanded ? 'bottom left' : 'bottom right',
-      }}
-    >
-      <Pad b="fire" label={onPlane ? 'Jump' : 'Fire'} press={press} size={92} accent style={at(66, 66, 92, leftHanded)} />
-      {!onPlane && (
-        <>
-          <Pad b="roll" label={inAir ? 'Dive' : 'Roll'} press={press} size={52} ready={rollReady} style={at(158, 50, 52, leftHanded)} />
-          <Pad b="jump" label="Jump" press={press} size={52} style={at(142, 116, 52, leftHanded)} />
-          <Pad b="reload" label="Reload" press={press} size={48} style={at(94, 152, 48, leftHanded)} />
-          {/* Pick up (and hold to throw a bomb): a small icon button. */}
-          <Pad b="use" label="Pick up" icon={PICKUP_ICON} press={press} size={46} style={at(30, 150, 46, leftHanded)} />
-          {sniper && <Pad b="scope" label="Scope" press={press} size={56} accent style={at(36, 214, 56, leftHanded)} />}
-          <Pad b="super" label="Super" press={press} size={58} ready={superReady} accent={superReady >= 1} style={at(212, 104, 58, leftHanded)} />
-          {canSwap && <Pad b="swap" label={swapLabel ? `Swap to ${swapLabel}` : 'Swap guns'} icon={SWAP_ICON} press={press} size={42} style={at(222, 40, 42, leftHanded)} />}
-          {heal && <Pad b="heal" label="Heal" sub={heal} press={press} size={50} accent style={at(188, 170, 50, leftHanded)} />}
-          <Pad b="leanL" label="◀ Q" press={press} size={38} style={at(258, 196, 38, leftHanded)} />
-          <Pad b="leanR" label="E ▶" press={press} size={38} style={at(258, 150, 38, leftHanded)} />
-        </>
-      )}
-    </div>
-    {/* Pause: just left of the minimap (hidden on the plane, where the big map takes the corner). */}
-    {!onPlane && (
-      <button
-        type="button"
-        aria-label="Pause"
-        onClick={onPause}
-        className="absolute flex items-center justify-center rounded-full border-2 border-cream/30 bg-ink-deep/60 text-cream"
+}) => {
+  const { w, h, ui } = useScreen();
+  const stage = onPlane ? 'plane' : inAir ? (chute ? 'canopy' : 'fall') : 'ground';
+  const ids = visiblePads({ stage, canReload, canHeal: !!heal, canUse, canSwap, sniper });
+  const boxes = layoutPads(ids, ui, size, w, h);
+  const show = (id: PadId) => boxes[id];
+  const box = (id: PadId) => boxes[id]!;
+  const zone = layoutZone(ui, w, h);
+  return (
+    <div className="absolute inset-0 z-[5] select-none" style={{ WebkitTouchCallout: 'none' } as React.CSSProperties}>
+      <Stick onMove={onMove} right={leftHanded} opacity={opacity} />
+      {/* The button cluster: every button given by its centre from the bottom corner and its size, inside the cluster zone. */}
+      <div
+        className="pointer-events-none absolute bottom-0"
         style={{
-          width: 'calc(40px * var(--ui, 1))',
-          height: 'calc(40px * var(--ui, 1))',
-          right: 'calc(124px * var(--ui, 1) + 16px + env(safe-area-inset-right))',
-          top: 8,
+          width: zone.w,
+          height: zone.h,
+          ...(leftHanded ? { left: 'env(safe-area-inset-left)' } : { right: 'env(safe-area-inset-right)' }),
+          opacity,
         }}
       >
-        <span className="flex gap-1">
-          <span className="h-3.5 w-1.5 rounded-sm bg-cream" />
-          <span className="h-3.5 w-1.5 rounded-sm bg-cream" />
+        <span className="pointer-events-auto contents">
+          {show('fire') && (
+            <Pad b="fire" label={stage === 'plane' ? 'Jump' : stage === 'fall' ? 'Open' : 'Fire'} press={press} box={box('fire')} right={leftHanded} accent />
+          )}
+          {show('roll') && (
+            <Pad b="roll" label={stage === 'ground' ? 'Roll' : 'Dive'} press={press} box={box('roll')} right={leftHanded} ready={rollReady} />
+          )}
+          {show('jump') && <Pad b="jump" label="Jump" press={press} box={box('jump')} right={leftHanded} />}
+          {show('super') && (
+            <Pad b="super" label="Super" press={press} box={box('super')} right={leftHanded} ready={superReady} accent={superReady >= 1} />
+          )}
+          {show('reload') && <Pad b="reload" label="Reload" icon={RELOAD_ICON} press={press} box={box('reload')} right={leftHanded} />}
+          {show('heal') && <Pad b="heal" label="Heal" sub={heal ?? undefined} press={press} box={box('heal')} right={leftHanded} accent />}
+          {/* Pick up (and hold to throw a bomb): an icon button. */}
+          {show('use') && <Pad b="use" label="Pick up" icon={PICKUP_ICON} press={press} box={box('use')} right={leftHanded} />}
+          {show('swap') && (
+            <Pad b="swap" label={swapLabel ? `Swap to ${swapLabel}` : 'Swap guns'} icon={SWAP_ICON} press={press} box={box('swap')} right={leftHanded} />
+          )}
+          {show('scope') && <Pad b="scope" label="Scope" press={press} box={box('scope')} right={leftHanded} accent />}
         </span>
-      </button>
-    )}
-  </div>
-);
-
-/** A button's place in the cluster from its centre (distance from the corner) and size; mirrored when left-handed. */
-const at = (cx: number, cy: number, size: number, left: boolean): React.CSSProperties => ({
-  [left ? 'left' : 'right']: cx - size / 2,
-  bottom: cy - size / 2,
-});
+      </div>
+      {/* Pause: just left of the minimap (hidden on the plane, where the big map takes the corner). */}
+      {!onPlane && (
+        <button
+          type="button"
+          aria-label="Pause"
+          onClick={onPause}
+          className="absolute flex items-center justify-center rounded-full border-2 border-cream/30 bg-ink-deep/60 text-cream"
+          style={{
+            width: padSize(40, ui, 1),
+            height: padSize(40, ui, 1),
+            right: 'calc(124px * var(--ui, 1) + 16px + env(safe-area-inset-right))',
+            top: 8,
+            minWidth: TOUCH_FLOOR,
+            minHeight: TOUCH_FLOOR,
+          }}
+        >
+          <span className="flex gap-1">
+            <span className="h-3.5 w-1.5 rounded-sm bg-cream" />
+            <span className="h-3.5 w-1.5 rounded-sm bg-cream" />
+          </span>
+        </button>
+      )}
+    </div>
+  );
+};

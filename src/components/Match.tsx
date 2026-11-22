@@ -1135,6 +1135,9 @@ export const Match = ({
               onPause={() => setMenuOpen(true)}
               onPlane={hud.stage === 'drone'}
               inAir={hud.stage === 'falling'}
+              chute={hud.chute}
+              canReload={hud.canReload}
+              canUse={hud.canUse}
               superReady={hud.superCharge}
               rollReady={Math.min(1, hud.roll)}
               sniper={hud.sniper}
