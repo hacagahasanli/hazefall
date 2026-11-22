@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { canopiesForLevel, CANOPIES, cellColor, canopyById } from './canopies';
+import { CANOPIES, cellColor, canopyById } from './canopies';
+import { unlockedFor } from './cosmetics';
 import { CAREER_KEY, defaultCareer, loadCareer, saveCareer } from './career';
 import { applyRound, dailyFor, dayKey, GOALS, goalsFor, hoursToReset, NO_FACTS, roundLines, xpToNext } from './progress';
 import { memoryStore } from '~/platform/web';
@@ -11,26 +12,47 @@ const round = (o: Partial<RoundResult> = {}): RoundResult => ({ fighter: 'hotfix
 const noon = (y: number, m: number, d: number) => new Date(y, m - 1, d, 12, 0, 0);
 
 describe('xp and levels', () => {
-  it('the rule: survived, placement, knock-outs, damage, win bonus, first round of the day', () => {
-    const sum = (r: RoundResult, first = false) => roundLines(r, first).reduce((a, l) => a + l.xp, 0);
-    expect(sum(round({ survived: 37, place: 19 }))).toBe(3 + 6); // a typical bad round
-    expect(sum(round({ survived: 900, place: 20 }))).toBe(30 + 3); // time is capped at 30
-    expect(sum(round({ place: 1, won: true, survived: 200, kills: 4, damage: 450 }))).toBe(20 + 60 + 60 + 22 + 50);
-    expect(sum(round(), true)).toBe(5 + 6 + 40);
-    expect(xpToNext(1)).toBe(100);
-    expect(xpToNext(5)).toBe(200);
+  const sum = (r: RoundResult, first = false, streak = 0) => roundLines(r, first, streak).reduce((a, l) => a + l.xp, 0);
+
+  it('the curve: min(900, 230 + 35 * (level - 1)), as in the spec table', () => {
+    const table: Record<number, number> = { 1: 230, 2: 265, 3: 300, 4: 335, 5: 370, 6: 405, 7: 440, 8: 475, 9: 510, 10: 545, 12: 615, 15: 720, 20: 895, 21: 900, 40: 900 };
+    for (const [l, xp] of Object.entries(table)) expect(xpToNext(Number(l))).toBe(xp);
+    // The spec's "total XP to reach it" column.
+    const total = (level: number) => Array.from({ length: level - 1 }, (_, i) => xpToNext(i + 1)).reduce((a, b) => a + b, 0);
+    expect([2, 3, 4, 5, 6, 10, 15, 20].map(total)).toEqual([230, 495, 795, 1130, 1500, 3330, 6405, 10355]);
   });
 
-  it('a fresh profile reaches level 2 within two rounds of the length the gentle bots give (90 s, #12)', () => {
-    let c = defaultCareer();
+  it('XP per round: played 20, survived 1 per 6 s (max 40), outlasted 2 each, knock-out 20, damage 1 per 25, win 60', () => {
+    // The four reference rounds of the spec.
+    expect(sum(round({ place: 16, survived: 70, kills: 0, damage: 40 }))).toBe(40);
+    expect(sum(round({ place: 10, survived: 150, kills: 1, damage: 150 }))).toBe(91);
+    expect(sum(round({ place: 4, survived: 210, kills: 2, damage: 300 }))).toBe(139);
+    expect(sum(round({ place: 1, won: true, survived: 240, kills: 4, damage: 500 }))).toBe(258);
+    expect(sum(round({ place: 20, survived: 900 }))).toBe(20 + 40 + 0);
+    // #1 of 20 outlasts 19... the report says Outlasted 19 and pays 38.
+    expect(roundLines(round({ place: 1, won: true }), false).find((l) => l.label === 'Outlasted 19')?.xp).toBe(38);
+  });
+
+  it('the report lines read as the spec words and zero lines are hidden', () => {
+    const labels = roundLines(round({ place: 10, survived: 151, kills: 2, damage: 150, won: true }), true, 3).map((l) => l.label);
+    expect(labels).toEqual(['Round played', 'Survived 2:31', 'Outlasted 10', 'Knock-outs x2', 'Damage 150', 'Win', 'First round today, 3-day streak']);
+    expect(roundLines(round({ place: 20, survived: 3, kills: 1, damage: 0 }), false).map((l) => l.label)).toEqual(['Round played', 'Knock-out']);
+  });
+
+  it('first round today pays 50 + 10 per streak day, up to 100', () => {
+    const first = (streak: number) => roundLines(round(), true, streak).find((l) => l.label.startsWith('First round today'))!.xp;
+    expect([0, 1, 3, 5, 9].map(first)).toEqual([50, 60, 80, 100, 100]);
+  });
+
+  it('a fresh profile does not reach level 2 in round 1 (91 XP + 50 first round < 230) but does by round 3 of typical play', () => {
     const day = noon(2026, 11, 22);
-    let levels = 0;
-    for (let i = 0; i < 2 && c.level < 2; i++) {
-      c = applyRound(c, round({ survived: 90, place: 12, kills: i, damage: 40 }), NO_FACTS, day).career;
-      levels = c.level;
-    }
-    expect(levels).toBe(2);
-    expect(c.unlocked).toContain('mint');
+    let c = defaultCareer();
+    c = applyRound(c, round({ place: 10, survived: 150, kills: 1, damage: 150 }), NO_FACTS, day).career;
+    expect(c.level).toBe(1);
+    expect(c.xp).toBe(141);
+    c = applyRound(c, round({ place: 10, survived: 150, kills: 1, damage: 150 }), NO_FACTS, day).career;
+    expect(c.level).toBe(2);
+    expect(c.unlocked).toContain('canopy:mint');
   });
 
   it('a finished round also counts as a round played, with its bests', () => {
@@ -38,21 +60,26 @@ describe('xp and levels', () => {
     expect(career).toMatchObject({ roundsPlayed: 1, bestPlace: 4, bestKills: 2, kills: 2 });
   });
 
-  it('carries leftover xp over a level and can climb several levels at once', () => {
-    const { career, summary } = applyRound({ ...defaultCareer(), xp: 90 }, round({ place: 1, won: true, kills: 6, damage: 900, survived: 300 }), NO_FACTS, noon(2026, 11, 22));
+  it('carries leftover xp over a level and can climb several levels at once, owning what the track gives', () => {
+    const { career, summary } = applyRound({ ...defaultCareer(), xp: 220 }, round({ place: 1, won: true, kills: 12, damage: 2400, survived: 300 }), NO_FACTS, noon(2026, 11, 22));
     expect(summary.levelUps.length).toBeGreaterThanOrEqual(2);
     expect(career.level).toBe(summary.after.level);
     expect(career.xp).toBeLessThan(xpToNext(career.level));
     expect(summary.gained).toBe(summary.lines.reduce((a, l) => a + l.xp, 0));
-    expect(career.unlocked).toEqual(expect.arrayContaining(canopiesForLevel(career.level)));
+    expect(career.unlocked).toEqual(expect.arrayContaining(unlockedFor(career.level, 0)));
+    expect(summary.newItems).toEqual(expect.arrayContaining(['canopy:mint', 'outfit:darkmode']));
   });
 
-  it('canopy unlocks follow the spec table', () => {
-    const at = (l: number) => canopiesForLevel(l).filter((id) => id !== 'classic');
-    expect(at(1)).toEqual([]);
-    expect(at(2)).toEqual(['mint']);
-    expect(at(5)).toEqual(['mint', 'sunset', 'navy', 'gold']);
-    expect(at(20)).toHaveLength(8);
+  it('a new item is worn at once: outfit sets on the fighter just played, the rest as the one setting', () => {
+    const c = { ...defaultCareer(), level: 2, xp: 229 };
+    const { career } = applyRound(c, round({ fighter: 'legacy' }), NO_FACTS, noon(2026, 11, 22));
+    expect(career.level).toBe(3);
+    expect(career.look.outfit).toEqual({ hotfix: 'standard', legacy: 'darkmode', standup: 'standard', intern: 'standard' });
+    const l4 = applyRound({ ...career, xp: xpToNext(3) - 1 }, round(), NO_FACTS, noon(2026, 11, 22)).career;
+    expect(l4.look.finish).toBe('arctic');
+    const l5 = applyRound({ ...l4, xp: xpToNext(4) - 1 }, round(), NO_FACTS, noon(2026, 11, 22));
+    expect(l5.summary.newItems).toEqual(['smoke:canopy']);
+    expect(l5.career.look.smoke).toBe('canopy');
   });
 });
 
@@ -72,21 +99,53 @@ describe('canopy painting', () => {
 });
 
 describe('the career save with levels', () => {
-  it('saves and loads a career with unlocks, the picked canopy, goals and the streak', () => {
+  it('saves and loads a career with unlocks, what is worn, goals and the streak', () => {
     const s = memoryStore();
     const { career } = applyRound(defaultCareer(), round({ place: 3, kills: 3, damage: 400 }), NO_FACTS, noon(2026, 11, 22));
-    saveCareer(s, { ...career, canopy: career.unlocked[career.unlocked.length - 1] });
-    expect(loadCareer(s)).toEqual({ ...career, canopy: career.unlocked[career.unlocked.length - 1] });
+    const worn = { ...career, look: { ...career.look, finish: 'factory' }, seen: ['canopy:classic'] };
+    saveCareer(s, worn);
+    expect(loadCareer(s)).toEqual(worn);
   });
 
-  it('a save from before levels existed keeps its rounds and starts at level 1; an unknown canopy falls back to classic', () => {
+  it('a save from before levels existed keeps its rounds and starts at level 1', () => {
     const s = memoryStore();
     s.setItem(CAREER_KEY, JSON.stringify({ v: 1, roundsPlayed: 6, wins: 1, kills: 9, bestPlace: 2, bestKills: 4, fighterRun: { id: 'legacy', n: 2 } }));
-    expect(loadCareer(s)).toMatchObject({ roundsPlayed: 6, wins: 1, kills: 9, bestPlace: 2, level: 1, xp: 0, canopy: 'classic', unlocked: ['classic'], daily: null, streak: { days: 0, lastDay: null } });
-    s.setItem(CAREER_KEY, JSON.stringify({ level: 4, xp: 30, unlocked: ['mint'], canopy: 'gold', streak: { days: 'x' } }));
-    expect(loadCareer(s)).toMatchObject({ level: 4, xp: 30, unlocked: ['classic', 'mint'], canopy: 'classic', streak: { days: 0, lastDay: null } });
+    expect(loadCareer(s)).toMatchObject({ v: 2, roundsPlayed: 6, wins: 1, kills: 9, bestPlace: 2, level: 1, xp: 0, daily: null, streak: { days: 0, lastDay: null } });
+    expect(loadCareer(s).look.canopy).toBe('classic');
+    expect(loadCareer(s).unlocked).toEqual(unlockedFor(1, 0));
     s.setItem(CAREER_KEY, JSON.stringify({ level: -3, xp: -5, daily: { day: 5 } }));
     expect(loadCareer(s)).toMatchObject({ level: 1, xp: 0, daily: null });
+  });
+
+  it('a version 1 save keeps its level, clamps xp to the new bar, owns everything up to its level and keeps old canopies', () => {
+    const s = memoryStore();
+    // Level 4 under the old curve, 250 xp into it (the old bar was 175): the new bar for level 4 is 335.
+    s.setItem(CAREER_KEY, JSON.stringify({ v: 1, level: 4, xp: 9999, unlocked: ['classic', 'mint', 'sunset', 'navy', 'gold', 'teal'], canopy: 'gold', streak: { days: 3, lastDay: '2026-11-21' } }));
+    const c = loadCareer(s);
+    expect(c.level).toBe(4);
+    expect(c.xp).toBe(xpToNext(4) - 1);
+    // Old canopies stay even where the new table puts them later (Gold cells is now Level 10).
+    expect(c.unlocked).toEqual(expect.arrayContaining(['canopy:mint', 'canopy:sunset', 'canopy:navy', 'canopy:gold', 'canopy:teal', 'outfit:darkmode', 'finish:arctic']));
+    expect(c.unlocked).not.toContain('outfit:arctic');
+    expect(c.look.canopy).toBe('gold');
+    expect(c.look.smoke).toBe('off');
+    // Over-levelled old saves own a lot, never less.
+    s.setItem(CAREER_KEY, JSON.stringify({ v: 1, level: 12, xp: 3, unlocked: ['classic', 'night'] }));
+    const big = loadCareer(s);
+    expect(big.unlocked).toEqual(expect.arrayContaining(unlockedFor(12, 0)));
+    expect(big.unlocked).toContain('canopy:night');
+    expect(big.look.smoke).toBe('canopy');
+  });
+
+  it('an equipped item that is not owned falls back to the start look; a good version 2 save loads as saved', () => {
+    const s = memoryStore();
+    s.setItem(CAREER_KEY, JSON.stringify({ v: 2, level: 2, xp: 4, unlocked: ['canopy:mint'], look: { outfit: { hotfix: 'legend' }, finish: 'gold', canopy: 'mint', smoke: 'canopy' }, seen: ['canopy:mint', 'outfit:legend'] }));
+    const c = loadCareer(s);
+    expect(c.look).toEqual({ outfit: { hotfix: 'standard', legacy: 'standard', standup: 'standard', intern: 'standard' }, finish: 'factory', canopy: 'mint', smoke: 'off' });
+    expect(c.seen).toEqual(['canopy:mint']);
+    // A save that is not JSON at all gives a fresh career.
+    s.setItem(CAREER_KEY, '{nope');
+    expect(loadCareer(s).level).toBe(1);
   });
 });
 
@@ -99,12 +158,12 @@ describe('daily goals', () => {
     expect(new Set(days).size).toBeGreaterThan(10);
   });
 
-  it('a win is asked only from level 5', () => {
+  it('a win is asked only from level 8', () => {
     for (let i = 1; i <= 60; i++) {
       const day = `2027-01-${String((i % 28) + 1).padStart(2, '0')}-${i}`;
-      expect(goalsFor(day, 4)).not.toContain('win');
+      expect(goalsFor(day, 7)).not.toContain('win');
     }
-    expect(Array.from({ length: 60 }, (_, i) => goalsFor(`2027-02-${i}`, 5)).some((g) => g.includes('win'))).toBe(true);
+    expect(Array.from({ length: 60 }, (_, i) => goalsFor(`2027-02-${i}`, 8)).some((g) => g.includes('win'))).toBe(true);
     expect(GOALS.every((g) => g.id && g.text)).toBe(true);
   });
 
@@ -120,29 +179,29 @@ describe('daily goals', () => {
     expect(c.daily!.progress.damage).toBe(200);
     r = applyRound(c, round({ damage: 150, place: 12, kills: 2 }), NO_FACTS, day);
     expect(r.summary.goalsDone.sort()).toEqual(['damage', 'kos']);
-    expect(r.summary.lines.filter((l) => l.label === 'Deal 300 damage' || l.label === 'Knock out 2 fighters').map((l) => l.xp)).toEqual([60, 60]);
+    expect(r.summary.lines.filter((l) => l.label === 'Deal 300 damage' || l.label === 'Knock out 2 fighters').map((l) => l.xp)).toEqual([75, 75]);
     expect(r.summary.lines.some((l) => l.label === 'All goals done')).toBe(false);
     c = r.career;
     // Done goals do not pay again; the third finishes the day.
     r = applyRound(c, round({ damage: 500, kills: 3, place: 6 }), NO_FACTS, day);
     expect(r.summary.goalsDone).toEqual(['top10']);
-    expect(r.summary.lines.find((l) => l.label === 'All goals done')?.xp).toBe(100);
+    expect(r.summary.lines.find((l) => l.label === 'All goals done')?.xp).toBe(75);
     expect(r.career.daily!.allDone).toBe(true);
     expect(r.career.daily!.rounds).toBe(4);
     const later = applyRound(r.career, round({ damage: 500 }), NO_FACTS, day);
     expect(later.summary.lines.some((l) => l.label === 'All goals done')).toBe(false);
   });
 
-  it('the first round of the day pays 40 once, and a new day brings new goals', () => {
+  it('the first round of the day pays 50 once, and a new day brings new goals', () => {
     const d1 = noon(2026, 11, 22);
     const a = applyRound(defaultCareer(), round(), NO_FACTS, d1);
-    expect(a.summary.lines.some((l) => l.label === 'First round of the day')).toBe(true);
+    expect(a.summary.lines.find((l) => l.label === 'First round today')?.xp).toBe(50);
     const b = applyRound(a.career, round(), NO_FACTS, d1);
-    expect(b.summary.lines.some((l) => l.label === 'First round of the day')).toBe(false);
+    expect(b.summary.lines.some((l) => l.label === 'First round today')).toBe(false);
     const d2 = noon(2026, 11, 23);
     expect(dailyFor(b.career, d2).day).toBe('2026-11-23');
     expect(dailyFor(b.career, d2).rounds).toBe(0);
-    expect(applyRound(b.career, round(), NO_FACTS, d2).summary.lines.some((l) => l.label === 'First round of the day')).toBe(true);
+    expect(applyRound(b.career, round(), NO_FACTS, d2).summary.lines.some((l) => l.label === 'First round today')).toBe(true);
   });
 
   it('goals read the round facts: container yard, a rifle, canopy below 60 m', () => {
@@ -161,7 +220,7 @@ describe('the day streak', () => {
     return applyRound(base, round({ place: 5 }), NO_FACTS, day);
   };
 
-  it('counts days in a row, holds within a day, resets after a missed day, and unlocks canopies at 3 and 7', () => {
+  it('counts days in a row, holds within a day, resets after a missed day, and unlocks Teal waves at 3 and Ember (canopy and gun finish) at 7', () => {
     let c = defaultCareer();
     const seen: number[] = [];
     const unlocked: string[] = [];
@@ -169,10 +228,10 @@ describe('the day streak', () => {
       const r = finishAGoal(c, noon(2026, 11, d));
       c = r.career;
       seen.push(c.streak.days);
-      unlocked.push(...r.summary.newCanopies.filter((id) => id === 'teal' || id === 'ember'));
+      unlocked.push(...r.summary.newItems.filter((id) => id === 'canopy:teal' || id === 'canopy:ember' || id === 'finish:ember'));
     }
     expect(seen).toEqual([1, 2, 3, 4, 5, 6, 7]);
-    expect(unlocked).toEqual(['teal', 'ember']);
+    expect(unlocked.sort()).toEqual(['canopy:ember', 'canopy:teal', 'finish:ember']);
     // Another goal the same day does not count twice.
     const same = applyRound({ ...c, daily: { ...c.daily!, done: [], progress: {}, goals: ['top10', 'damage', 'kos'] } }, round({ place: 2 }), NO_FACTS, noon(2026, 11, 26));
     expect(same.career.streak.days).toBe(7);

@@ -1,16 +1,17 @@
 /**
- * Career level, canopy unlocks, daily goals and the day streak: pure rules, applied to the saved `Career` after every round
+ * Career level, unlocks, daily goals and the day streak: pure rules, applied to the saved `Career` after every round
  * (`applyRound`). The page only loads, calls this, saves, and shows the summary on the round report.
  *
- * XP per round: 1 per 10 s survived (up to 30), 3 for every fighter you outlasted (`total + 1 - place`, so #1 = 60 of 20),
- * 15 per knock-out, 1 per 20 damage, +50 for a win, +40 for the first round of the day, 60 per daily goal and +100 for all three.
- * XP to the next level: `100 + 25 * (level - 1)`.
+ * XP per round (progression v2): 20 for playing, 1 per 6 s survived (up to 40), 2 per fighter outlasted, 20 per knock-out,
+ * 1 per 25 damage, 60 for a win, 50 + 10 per streak day (up to 5) for the first round of the day, 75 per daily goal and 75
+ * for all three. XP to the next level: `min(900, 230 + 35 * (level - 1))`.
  */
-import { canopiesForLevel, CLASSIC, streakCanopy } from './canopies';
-import { recordRound } from './career';
+import { equipNew, rewardsAtLevel, rewardsAtStreak } from './cosmetics';
+import { recordRound, xpToNext } from './career';
 import { mulberry32 } from './sim/bot-params';
 
 import type { Career, Daily, RoundResult } from './career';
+import type { FighterId } from './sim/types';
 
 /** What a round showed beyond the report's numbers (what the daily goals look at). */
 export interface RoundFacts {
@@ -23,7 +24,7 @@ export interface RoundFacts {
 
 export const NO_FACTS: RoundFacts = { landedIn: null, pickedRifle: false, openedAlt: null };
 
-export const xpToNext = (level: number) => 100 + 25 * (level - 1);
+export { xpToNext };
 
 // ---------- daily goals
 
@@ -44,12 +45,12 @@ export const GOALS: GoalDef[] = [
   { id: 'survive', text: 'Survive 3 minutes', target: 180, gain: (r) => r.survived },
   { id: 'yard', text: 'Land in the Container Yard', target: 1, gain: (_r, f) => (f.landedIn === 'Container Yard' ? 1 : 0) },
   { id: 'rifle', text: 'Pick up a rifle', target: 1, gain: (_r, f) => (f.pickedRifle ? 1 : 0) },
-  { id: 'win', text: 'Win a round', target: 1, gain: (r) => (r.won ? 1 : 0), minLevel: 5 },
+  { id: 'win', text: 'Win a round', target: 1, gain: (r) => (r.won ? 1 : 0), minLevel: 8 },
   { id: 'low', text: 'Open your canopy below 60 m', target: 1, gain: (_r, f) => (f.openedAlt !== null && f.openedAlt < 60 ? 1 : 0) },
 ];
 
-export const GOAL_XP = 60;
-export const ALL_GOALS_XP = 100;
+export const GOAL_XP = 75;
+export const ALL_GOALS_XP = 75;
 
 const pad = (n: number) => String(n).padStart(2, '0');
 /** The local calendar day of a moment: goals and streaks follow the player's own midnight. */
@@ -64,7 +65,7 @@ const seedOf = (day: string) => {
   return h >>> 0;
 };
 
-/** Three different goals for a day: the same for everyone on that date (a seed of the date), and a win only from level 5. */
+/** Three different goals for a day: the same for everyone on that date (a seed of the date), and a win only from level 8. */
 export const goalsFor = (day: string, level: number): string[] => {
   const pool = GOALS.filter((g) => (g.minLevel ?? 0) <= level).map((g) => g.id);
   const rand = mulberry32(seedOf(day));
@@ -96,23 +97,29 @@ export interface RoundSummary {
   before: { level: number; xp: number };
   after: { level: number; xp: number };
   levelUps: number[];
-  /** Canopy ids unlocked by this round (by level or by a streak). */
-  newCanopies: string[];
+  /** Item ids unlocked by this round (by level or by a streak), in the order of the track. */
+  newItems: string[];
   /** Goals finished by this round. */
   goalsDone: string[];
   streak: number;
 }
 
-/** The XP lines a round earns before the daily goals add theirs. */
-export const roundLines = (r: RoundResult, firstOfDay: boolean): XpLine[] => {
+const clock = (secs: number) => `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, '0')}`;
+
+/** The streak as it stands on this day: a streak whose last day was before yesterday has already ended. */
+export const liveStreak = (c: Career, now: Date): number => (c.streak.lastDay === dayKey(now) || c.streak.lastDay === yesterdayKey(now) ? c.streak.days : 0);
+
+/** The XP lines a round earns before the daily goals add theirs. `streak` is the days in a row going into the round. */
+export const roundLines = (r: RoundResult, firstOfDay: boolean, streak = 0): XpLine[] => {
   const lines: XpLine[] = [
-    { label: 'Survived', xp: Math.min(30, Math.floor(r.survived / 10)) },
-    { label: 'Placement', xp: Math.max(0, r.total + 1 - r.place) * 3 },
-    { label: r.kills === 1 ? 'Knock-out' : 'Knock-outs', xp: r.kills * 15 },
-    { label: 'Damage', xp: Math.floor(r.damage / 20) },
+    { label: 'Round played', xp: 20 },
+    { label: `Survived ${clock(r.survived)}`, xp: Math.min(40, Math.floor(r.survived / 6)) },
+    { label: `Outlasted ${Math.max(0, r.total - r.place)}`, xp: Math.max(0, r.total - r.place) * 2 },
+    { label: r.kills === 1 ? 'Knock-out' : `Knock-outs x${r.kills}`, xp: r.kills * 20 },
+    { label: `Damage ${Math.round(r.damage)}`, xp: Math.floor(r.damage / 25) },
   ];
-  if (r.won) lines.push({ label: 'Win bonus', xp: 50 });
-  if (firstOfDay) lines.push({ label: 'First round of the day', xp: 40 });
+  if (r.won) lines.push({ label: 'Win', xp: 60 });
+  if (firstOfDay) lines.push({ label: streak >= 2 ? `First round today, ${streak}-day streak` : 'First round today', xp: 50 + 10 * Math.min(streak, 5) });
   return lines.filter((l) => l.xp > 0);
 };
 
@@ -120,7 +127,7 @@ export const roundLines = (r: RoundResult, firstOfDay: boolean): XpLine[] => {
 export const applyRound = (c: Career, r: RoundResult, facts: RoundFacts, now: Date): { career: Career; summary: RoundSummary } => {
   const today = dayKey(now);
   const daily = dailyFor(c, now);
-  const lines = roundLines(r, daily.rounds === 0);
+  const lines = roundLines(r, daily.rounds === 0, liveStreak(c, now));
 
   // Goals: progress counts across the day's rounds.
   const progress = { ...daily.progress };
@@ -155,20 +162,24 @@ export const applyRound = (c: Career, r: RoundResult, facts: RoundFacts, now: Da
     level += 1;
     levelUps.push(level);
   }
-  const unlocked = new Set([CLASSIC, ...c.unlocked]);
-  const newCanopies: string[] = [];
-  const grant = (id: string | null) => {
-    if (id && !unlocked.has(id)) {
-      unlocked.add(id);
-      newCanopies.push(id);
-    }
-  };
-  canopiesForLevel(level).forEach(grant);
-  if (streak.days !== c.streak.days) grant(streakCanopy(streak.days));
+  // Everything the track gives for the levels reached and the streak day just reached.
+  const unlocked = new Set(c.unlocked);
+  const newItems: string[] = [];
+  const grant = (ids: string[]) =>
+    ids.forEach((id) => {
+      if (!unlocked.has(id)) {
+        unlocked.add(id);
+        newItems.push(id);
+      }
+    });
+  for (const l of levelUps) grant(rewardsAtLevel(l).map((i) => i.id));
+  if (streak.days !== c.streak.days) grant(rewardsAtStreak(streak.days).map((i) => i.id));
+  // A new item is worn at once (outfit sets on the fighter just played), so the very next drop shows it.
+  const look = equipNew(c.look, newItems, r.fighter as FighterId);
 
   const base = recordRound(c, r);
   return {
-    career: { ...base, xp, level, unlocked: [...unlocked], daily: { day: today, goals: daily.goals, progress, done, rounds: daily.rounds + 1, allDone }, streak },
-    summary: { lines, gained, before: { level: c.level, xp: c.xp }, after: { level, xp }, levelUps, newCanopies, goalsDone, streak: streak.days },
+    career: { ...base, xp, level, unlocked: [...unlocked], look, daily: { day: today, goals: daily.goals, progress, done, rounds: daily.rounds + 1, allDone }, streak },
+    summary: { lines, gained, before: { level: c.level, xp: c.xp }, after: { level, xp }, levelUps, newItems, goalsDone, streak: streak.days },
   };
 };

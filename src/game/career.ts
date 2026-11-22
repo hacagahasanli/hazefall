@@ -6,8 +6,10 @@
  * Old saves always load: a missing key, broken JSON, a field of the wrong type or a save from before a field existed give
  * that field's default, never an error and never a reset of the fields that are fine.
  */
+import { FIGHTER_ORDER, LOOK_START, itemById, unlockedFor } from './cosmetics';
 import { NEWBIE_ROUNDS } from './sim/constants';
 
+import type { Look } from './cosmetics';
 import type { KeyValue } from '~/platform/types';
 
 export const CAREER_KEY = 'lcs.career';
@@ -27,13 +29,16 @@ export interface Daily {
 }
 
 export interface Career {
-  v: 1;
+  v: 2;
   /** Career level (from 1) and the XP earned into it. */
   level: number;
   xp: number;
-  /** Canopy ids unlocked, and the one picked for the next drop. */
+  /** Kind-prefixed ids of everything unlocked (`outfit:arctic`, `finish:gold`, `canopy:mint`, `smoke:canopy`). */
   unlocked: string[];
-  canopy: string;
+  /** What is equipped: an outfit per fighter, and one gun finish, canopy and smoke setting. */
+  look: Look;
+  /** Unlocked ids the player has already looked at (the lobby's gold dot shows for the rest). */
+  seen: string[];
   daily: Daily | null;
   /** Days in a row with a daily goal done, and the last such day (YYYY-MM-DD). */
   streak: { days: number; lastDay: string | null };
@@ -47,12 +52,16 @@ export interface Career {
   fighterRun: { id: string | null; n: number };
 }
 
+/** XP to the next level: `min(900, 230 + 35 * (level - 1))`. Lives here so loading a save can clamp to it. */
+export const xpToNext = (level: number) => Math.min(900, 230 + 35 * (level - 1));
+
 export const defaultCareer = (): Career => ({
-  v: 1,
+  v: 2,
   level: 1,
   xp: 0,
-  unlocked: ['classic'],
-  canopy: 'classic',
+  unlocked: unlockedFor(1, 0),
+  look: structuredClone(LOOK_START),
+  seen: unlockedFor(1, 0),
   daily: null,
   streak: { days: 0, lastDay: null },
   roundsPlayed: 0,
@@ -88,23 +97,45 @@ export const loadCareer = (store: KeyValue): Career => {
   const run = o.fighterRun && typeof o.fighterRun === 'object' ? (o.fighterRun as Record<string, unknown>) : {};
   const bestPlace = count(o.bestPlace, 0);
   const strs = (x: unknown) => (Array.isArray(x) ? x.filter((v): v is string => typeof v === 'string') : []);
-  const unlocked = [...new Set(['classic', ...strs(o.unlocked)])];
   const streak = o.streak && typeof o.streak === 'object' ? (o.streak as Record<string, unknown>) : {};
   const d = o.daily && typeof o.daily === 'object' ? (o.daily as Record<string, unknown>) : null;
   const progress: Record<string, number> = {};
   if (d && d.progress && typeof d.progress === 'object') for (const [k, v] of Object.entries(d.progress)) progress[k] = count(v);
-  const canopy = typeof o.canopy === 'string' && unlocked.includes(o.canopy) ? o.canopy : 'classic';
+  const level = Math.max(1, count(o.level, 1));
+  const days = count(streak.days);
+  const rec = (x: unknown): Record<string, unknown> => (x && typeof x === 'object' && !Array.isArray(x) ? (x as Record<string, unknown>) : {});
+  // Everything the table gives at or below the saved level, plus what the save already owned. A version 1 save listed plain
+  // canopy ids; they become `canopy:<id>`. Nothing is ever taken away.
+  const owned = strs(o.unlocked).map((id) => (itemById(id) ? id : itemById(`canopy:${id}`) ? `canopy:${id}` : ''));
+  const unlocked = [...new Set([...unlockedFor(level, days), ...owned.filter(Boolean)])];
+  // A streak item the old save owned as a canopy (Teal waves, Ember) brings its sibling (Ember's gun finish).
+  if (unlocked.includes('canopy:ember') && !unlocked.includes('finish:ember')) unlocked.push('finish:ember');
+  const has = (id: string) => unlocked.includes(id);
+  const rawLook = rec(o.look);
+  const rawOutfit = rec(rawLook.outfit);
+  const pickId = (kind: string, val: unknown, fallback: string) => (typeof val === 'string' && has(`${kind}:${val}`) ? val : fallback);
+  const look: Look = {
+    outfit: Object.fromEntries(FIGHTER_ORDER.map((f) => [f, pickId('outfit', rawOutfit[f], 'standard')])) as Look['outfit'],
+    finish: pickId('finish', rawLook.finish, 'factory'),
+    // A version 1 save kept its picked canopy at the top level.
+    canopy: pickId('canopy', rawLook.canopy ?? o.canopy, 'classic'),
+    smoke: pickId('smoke', rawLook.smoke, level >= 5 && o.v !== 2 ? 'canopy' : 'off'),
+  };
+  // A save that never saw the gold dots has seen everything it already has.
+  const seen = o.v === 2 ? strs(o.seen).filter(has) : unlocked;
+  const xp = Math.min(count(o.xp), xpToNext(level) - 1);
   return {
-    v: 1,
-    level: Math.max(1, count(o.level, 1)),
-    xp: count(o.xp),
+    v: 2,
+    level,
+    xp,
     unlocked,
-    canopy,
+    look,
+    seen,
     daily:
       d && typeof d.day === 'string'
         ? { day: d.day, goals: strs(d.goals), progress, done: strs(d.done), rounds: count(d.rounds), allDone: d.allDone === true }
         : null,
-    streak: { days: count(streak.days), lastDay: typeof streak.lastDay === 'string' ? streak.lastDay : null },
+    streak: { days, lastDay: typeof streak.lastDay === 'string' ? streak.lastDay : null },
     roundsPlayed: count(o.roundsPlayed),
     wins: count(o.wins),
     kills: count(o.kills),

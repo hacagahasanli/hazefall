@@ -18,28 +18,23 @@ export interface Canopy {
 
 export const CLASSIC = 'classic';
 
-/** Unlocked in this order of level; the two streak canopies come from `STREAK_CANOPIES`. */
+/** The levels are the reward track's (see cosmetics.ts); the two streak canopies come at 3 and 7 days. */
 export const CANOPIES: Canopy[] = [
   { id: CLASSIC, name: 'Classic', from: { level: 1 }, a: 0, b: 0xf4f2ea, pattern: 'stripes' },
   { id: 'mint', name: 'Mint stripes', from: { level: 2 }, a: 0x3ddcb0, b: 0xf4f2ea, pattern: 'stripes' },
-  { id: 'sunset', name: 'Sunset', from: { level: 3 }, a: 0xff8a2b, b: 0x8a3fd1, pattern: 'stripes' },
-  { id: 'navy', name: 'Navy chevron', from: { level: 4 }, a: 0x1c2f6b, b: 0xe8eefc, pattern: 'chevron' },
-  { id: 'gold', name: 'Gold cells', from: { level: 5 }, a: 0xffc233, b: 0xd9961a, pattern: 'cells' },
-  { id: 'checker', name: 'Checker', from: { level: 7 }, a: 0x15171d, b: 0xf4f2ea, pattern: 'checker' },
-  { id: 'split', name: 'Two-tone split', from: { level: 10 }, a: 0xff3d6e, b: 0x3ec5ff, pattern: 'split' },
+  { id: 'navy', name: 'Navy chevron', from: { level: 6 }, a: 0x1c2f6b, b: 0xe8eefc, pattern: 'chevron' },
+  { id: 'checker', name: 'Checker', from: { level: 9 }, a: 0x15171d, b: 0xf4f2ea, pattern: 'checker' },
+  { id: 'gold', name: 'Gold cells', from: { level: 10 }, a: 0xffc233, b: 0xd9961a, pattern: 'cells' },
+  { id: 'split', name: 'Two-tone split', from: { level: 11 }, a: 0xff3d6e, b: 0x3ec5ff, pattern: 'split' },
+  { id: 'sunset', name: 'Sunset', from: { level: 13 }, a: 0xff8a2b, b: 0x8a3fd1, pattern: 'stripes' },
   { id: 'rainbow', name: 'Rainbow cells', from: { level: 15 }, a: 0, b: 0, pattern: 'rainbow' },
-  { id: 'night', name: 'Night', from: { level: 20 }, a: 0x141a33, b: 0x6f7fd1, pattern: 'cells' },
+  { id: 'night', name: 'Night', from: { level: 16 }, a: 0x141a33, b: 0x6f7fd1, pattern: 'cells' },
+  { id: 'legend', name: 'Legend', from: { level: 20 }, a: 0x1c2024, b: 0xffc23d, pattern: 'cells' },
   { id: 'teal', name: 'Teal waves', from: { streak: 3 }, a: 0x1fb5a8, b: 0xbdf2ea, pattern: 'waves' },
   { id: 'ember', name: 'Ember', from: { streak: 7 }, a: 0xd9261c, b: 0xffb020, pattern: 'fade' },
 ];
 
 export const canopyById = (id: string): Canopy => CANOPIES.find((c) => c.id === id) ?? CANOPIES[0];
-
-/** The canopies a level reaches (all of those at or below it). */
-export const canopiesForLevel = (level: number) => CANOPIES.filter((c) => 'level' in c.from && c.from.level <= level).map((c) => c.id);
-
-/** The streak canopy a day count unlocks (3 and 7 days), or null. */
-export const streakCanopy = (days: number): string | null => CANOPIES.find((c) => 'streak' in c.from && c.from.streak === days)?.id ?? null;
 
 const hsl = (h: number) => {
   // A saturated, fairly light colour for hue h (0..1): the rainbow's cells.
