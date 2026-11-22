@@ -213,6 +213,10 @@ const beamGeometry = (() => {
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   return g;
 })();
+/** The lens through the sniper's scope (degrees), and the widest the over-the-shoulder view goes. */
+const SCOPE_FOV = { first: 16, shoulder: 30 } as const;
+const SHOULDER_FOV_MAX = 78;
+
 const SOUND: Record<Exclude<WeaponKind, 'fists' | 'rockets'>, 'pistol' | 'smg' | 'shotgun' | 'rifle' | 'sniper'> = {
   pistol: 'pistol', smg: 'smg', shotgun: 'shotgun', rifle: 'rifle', sniper: 'sniper',
 };
@@ -979,6 +983,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** First person once you're out of the plane: falling, under the canopy and on the ground. */
   /** Looking through the sniper's scope this frame (set every frame from the input). */
   let scoped = false;
+  /**
+   * How far into the scope the lens is (0 = normal view, 1 = fully zoomed), read from the lens itself so it eases with the
+   * zoom, and the share of mouse speed that goes with it: the view turns by the screen angle the hand asked for, so a slow
+   * move is a slow, small move of the crosshair at any zoom (set every frame in the camera step).
+   */
+  let zoomT = 0;
+  let lookScale = 1;
   const firstPerson = () => fpp && state.players[me].stage !== 'drone' && state.players[me].alive;
   /** Over the shoulder once you're out of the plane. */
   const shoulderView = () => shoulder && state.players[me].stage !== 'drone' && state.players[me].alive;
@@ -986,6 +997,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const mouseLook = () => firstPerson() || shoulderView();
   /** The shoulder camera's arm: how far out it is now (pulled in by walls, eased back out). */
   let armNow = 3.2;
+  /** The arm length the view is easing to (without walls), and the side offset: both ease with the scope. */
+  let armWant = 3.2;
+  let sideNow = 0.62;
   /** Where the crosshair points on the map this frame (the shoulder view aims there, not straight ahead of you). */
   const crossAim = { x: 0, y: 0 };
   /** First person: the fighter under the crosshair (in 3D, so someone on a roof or below one), else none (aim straight ahead). */
@@ -995,10 +1009,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   };
   const onLook = (e: MouseEvent) => {
     if (!locked) return;
-    // Through the scope the view moves as much less as it is zoomed, so aiming stays steady.
-    const sens = 0.0022 * settings.sensitivity * (scoped ? 0.25 : 1);
-    viewYaw += e.movementX * sens;
-    viewPitch = Math.max(-1.1, Math.min(1.1, viewPitch - e.movementY * sens * (settings.invertY ? -1 : 1)));
+    // Through the scope the view moves as much less as it is zoomed (lookScale follows the lens), so aiming stays steady.
+    // A browser sometimes reports one huge jump after a hiccup; a single event never turns the view more than ~100 px's worth.
+    const sens = 0.0022 * settings.sensitivity * lookScale;
+    const dx = Math.max(-100, Math.min(100, e.movementX));
+    const dy = Math.max(-100, Math.min(100, e.movementY));
+    viewYaw += dx * sens;
+    viewPitch = Math.max(-1.1, Math.min(1.1, viewPitch - dy * sens * (settings.invertY ? -1 : 1)));
   };
   const onLockClick = () => {
     if ((fpp || shoulder) && !locked && mouseLook()) void canvas.requestPointerLock();
@@ -2488,10 +2505,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const overview = self.stage === 'drone' && state.phase === 'drop';
     const fp = firstPerson();
     const sv = shoulderView();
+    // Into and out of the scope the lens eases over about 150 ms (95 % of the way at rate 20), both ways.
     const fov = fp
-      ? THREE.MathUtils.damp(camera.fov, scoped ? 16 : settings.fov, 18, dt)
+      ? THREE.MathUtils.damp(camera.fov, scoped ? SCOPE_FOV.first : settings.fov, 20, dt)
       : sv
-        ? THREE.MathUtils.damp(camera.fov, scoped ? 30 : Math.min(settings.fov, 78), 14, dt)
+        ? THREE.MathUtils.damp(camera.fov, scoped ? SCOPE_FOV.shoulder : Math.min(settings.fov, SHOULDER_FOV_MAX), 20, dt)
         : THREE.MathUtils.damp(camera.fov, widenFov(overview ? 52 : 42 + airFov(self), lensWiden), 3, dt);
     // Far away above the map, a nearer near-plane wastes depth precision and the ground and the
     // roads fight (flicker); push it out while in the overview.
@@ -2500,6 +2518,18 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       camera.fov = fov;
       camera.near = near;
       camera.updateProjectionMatrix();
+    }
+    if (fp || sv) {
+      const tan = (deg: number) => Math.tan((deg * Math.PI) / 360);
+      const base = fp ? settings.fov : Math.min(settings.fov, SHOULDER_FOV_MAX);
+      const tBase = tan(base);
+      const tScope = tan(fp ? SCOPE_FOV.first : SCOPE_FOV.shoulder);
+      zoomT = Math.max(0, Math.min(1, (tBase - tan(camera.fov)) / Math.max(0.001, tBase - tScope)));
+      // Turn by the lens's share of the screen, and a fifth slower again once fully zoomed (it is a rifle, not a mouse pointer).
+      lookScale = Math.max(0.08, Math.min(1, tan(camera.fov) / tBase)) * (1 - 0.2 * zoomT);
+    } else {
+      zoomT = 0;
+      lookScale = 1;
     }
     // Clouds: see-through from the plane, a thin mist while you fall through them (no white-out),
     // solid again once you're on the ground and they're only sky.
@@ -2555,9 +2585,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       }
       // The shake in first person turns the view a little (about a degree at most) instead of
       // moving your eyes: a jolt, not a slide. Only the view: where you aim does not move.
-      camera.rotateY(n(13, 5) * 0.02 * shake);
-      camera.rotateX(n(17, 2) * 0.015 * shake);
-      camera.rotateZ(n(19, 4) * 0.012 * shake);
+      // Zoomed in, the same jolt would swing the picture many times as far across the screen: it is scaled down with the zoom.
+      const steady = 1 - 0.75 * zoomT;
+      camera.rotateY(n(13, 5) * 0.02 * shake * steady);
+      camera.rotateX(n(17, 2) * 0.015 * shake * steady);
+      camera.rotateZ(n(19, 4) * 0.012 * shake * steady);
       camPos.copy(camera.position);
       camLook.copy(tmpV);
       camFocus.set(selfX, 0, selfY);
@@ -2595,10 +2627,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const cp = Math.cos(viewPitch);
       const pivotY = selfH + (air ? 1.2 : 1.62);
       // Right of the shoulder, so you see past yourself; scoped the arm comes in and the lens narrows (aim down sights).
-      const side = air ? 0 : scoped ? 0.45 : 0.62;
+      // The side offset and the arm length ease to their scoped values (no pop when the right button goes down or up).
+      sideNow = air ? 0 : THREE.MathUtils.damp(sideNow, scoped ? 0.45 : 0.62, 20, dt);
+      const side = sideNow;
       const px = selfX - sn * side;
       const pz = selfY + c * side;
-      const wantArm = air ? 7 : scoped ? 1.4 : 3.2;
+      armWant = air ? 7 : THREE.MathUtils.damp(armWant, scoped ? 1.4 : 3.2, 20, dt);
+      const wantArm = armWant;
       // Walls, ceilings and roofs: march out along the arm and stop short of the first solid (walls to their tops, the roof
       // slab over a house from its ceiling to its roof surface, so indoors the camera stays under the ceiling and up on a
       // roof it stays above the tiles).
@@ -2625,7 +2660,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // The view turns with the mouse unsmoothed (the crosshair is the aim); only the hit shake adds a small jolt.
       tmpV.set(camera.position.x + c * cp, camera.position.y + Math.sin(viewPitch), camera.position.z + sn * cp);
       camera.lookAt(tmpV);
-      if (shake > 0) camera.rotateZ(n(17, 2) * 0.02 * shake);
+      if (shake > 0) camera.rotateZ(n(17, 2) * 0.02 * shake * (1 - 0.75 * zoomT));
       // Too close (a tight corner): hide your own body rather than fill the screen with it.
       rigs[me].root.visible = rigs[me].root.visible && armNow > 0.75;
       camPos.copy(camera.position);
