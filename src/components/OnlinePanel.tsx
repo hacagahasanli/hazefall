@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { inviteLink } from '~/game/net/client';
 import { MATCH_SEATS, MAX_PEOPLE } from '~/game/net/lobby';
 import { FIGHTERS } from '~/game/sim/constants';
+import { isTouchUi } from '~/lib/device';
 
 import type { LobbyState } from '~/game/net/lobby';
 import type { Room } from '@colyseus/sdk';
@@ -44,7 +45,7 @@ export const OnlinePanel = ({
 
   const copy = async () => {
     try {
-      if (navigator.share && window.matchMedia('(pointer: coarse)').matches) {
+      if (navigator.share && isTouchUi()) {
         await navigator.share({
           title: 'Last Commit Standing',
           text: 'Drop in with me:',

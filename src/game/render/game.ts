@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import { COPY } from '../copy/studio';
+import { isTouchUi } from '../../lib/device';
 import { createSfx } from '../sfx';
 import { actionFor, DEFAULT_SETTINGS, keyLabel, keyMap } from '../settings';
 
@@ -263,7 +264,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const resGuard = new ResolutionGuard();
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: TIERS[tier].antialias, powerPreference: 'high-performance' });
   /** Phones and tablets: touch controls, always auto-aim, a lighter pixel ratio. */
-  const touch = window.matchMedia?.('(pointer: coarse)').matches || 'ontouchstart' in window;
+  const touch = isTouchUi();
   renderer.setPixelRatio(pixelRatio());
   renderer.shadowMap.enabled = shadowsOn();
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;

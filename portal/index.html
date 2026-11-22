@@ -88,7 +88,8 @@
       #rotate b{display:block;font:400 28px/1 'BootBungee','BootChakra',Impact,sans-serif;color:#ffd23f;letter-spacing:.02em}
       #rotate span{display:block;margin-top:8px;font-size:15px;font-weight:500;color:rgba(230,235,245,.75)}
       @keyframes rTurn{0%,18%{transform:rotate(0)}52%,78%{transform:rotate(-90deg)}100%{transform:rotate(0)}}
-      @media (orientation:portrait) and (pointer:coarse){#rotate{display:flex}}
+      @media (orientation:portrait) and (pointer:coarse){html:not(.lcs-mouse) #rotate{display:flex}}
+      @media (orientation:portrait){html.lcs-touch #rotate{display:flex}}
       @media (prefers-reduced-motion:reduce){#rotate svg{animation:none;transform:rotate(-90deg)}}
       @media (prefers-reduced-motion:reduce){#boot *,#boot *::before,#boot *::after{animation:none!important}#boot.out,#boot.out .all{transition:none!important}#boot .plane{left:56%;transform:none}#boot .jp{transform:translateY(44vh)}#boot .jp.j2{transform:translateY(52vh)}#boot .jp.j3,#boot .jp.j4{display:none}}
     </style>

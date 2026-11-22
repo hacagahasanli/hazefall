@@ -13,6 +13,7 @@ import { OnlineInterest } from '~/components/OnlineInterest';
 import { PortalGame } from '~/components/PortalGame';
 import { SupportLink } from '~/components/SupportLink';
 import { disableAutoFullscreen } from '~/components/TouchControls';
+import { installDevice } from '~/lib/device';
 import { boot } from '~/lib/loading';
 import { STUDIO_NAME } from '~/lib/studio';
 import { init, track } from '~/lib/telemetry';
@@ -42,6 +43,7 @@ if (!crazy) {
 
 // The same start as the portal build (portal/main.tsx): the boot checkpoints, then the menu.
 disableAutoFullscreen();
+installDevice();
 boot.step('Engine running', 0.44, 0.47);
 const platform = createWebPlatform();
 boot.step('Platform ready', 0.47, 0.5);

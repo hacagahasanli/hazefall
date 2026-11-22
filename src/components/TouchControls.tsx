@@ -3,16 +3,18 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { PICKUP_ICON, SWAP_ICON } from '~/game/render/icons';
+import { isTouchUi, subscribe } from '~/lib/device';
 
 import type { TouchButton } from '~/game/render/game';
 
 type Press = (b: TouchButton, on: boolean) => void;
 
-/** True on phones and tablets (known only after mount). */
+/** True on phones and tablets, as src/lib/device.ts decides (known only after mount). */
 export const useTouch = () => {
   const [touch, setTouch] = useState(false);
   useEffect(() => {
-    setTouch(window.matchMedia?.('(pointer: coarse)').matches || 'ontouchstart' in window);
+    setTouch(isTouchUi());
+    return subscribe(() => setTouch(isTouchUi()));
   }, []);
   return touch;
 };

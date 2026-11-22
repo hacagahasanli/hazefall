@@ -1,3 +1,5 @@
+import { isTouchUi } from '~/lib/device';
+
 import type { AimMode } from '~/game/render/game';
 
 /**
@@ -6,16 +8,8 @@ import type { AimMode } from '~/game/render/game';
  */
 export const AIM_KEY = 'lcs:aim';
 
-const touchDevice = () => {
-  try {
-    return !!window.matchMedia?.('(pointer: coarse)').matches || 'ontouchstart' in window;
-  } catch {
-    return false;
-  }
-};
-
 export const readAim = (): AimMode => {
-  const fallback: AimMode = touchDevice() ? 'auto' : 'mouse';
+  const fallback: AimMode = isTouchUi() ? 'auto' : 'mouse';
   try {
     const v = window.localStorage.getItem(AIM_KEY);
     return v === 'mouse' || v === 'auto' ? v : fallback;

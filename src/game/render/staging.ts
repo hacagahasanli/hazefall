@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import { DEFAULT_LOOK } from '../cosmetics';
+import { isTouchUi } from '../../lib/device';
 import { FIGHTERS, WORLD } from '../sim/constants';
 import { createGame } from '../sim/step';
 
@@ -58,7 +59,7 @@ export const startStaging = (
   const low = opts.tier === 'low';
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !low, powerPreference: 'high-performance' });
   // Phones: a fixed pixel budget (phoneRatio), so the backdrop is sharp; elsewhere the low tier draws lighter still.
-  const coarse = !!window.matchMedia?.('(pointer: coarse)').matches;
+  const coarse = isTouchUi();
   renderer.setPixelRatio(
     coarse
       ? phoneRatio(sceneTier(opts.tier ?? 'medium'), canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, window.devicePixelRatio)
