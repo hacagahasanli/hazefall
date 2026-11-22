@@ -63,8 +63,10 @@ export const autoTier = (f: DeviceFacts): Tier => {
   const memory = f.memory ?? 4;
   const chromebook = /\bCrOS\b/.test(f.ua ?? '');
   if (f.device === 'mobile' || f.device === 'tablet') {
-    // Only flagship phones get medium; nothing on a phone gets high (a small screen does not need it and the battery does).
-    return memory >= 6 && cores >= 8 && !WEAK_GPU.test(gpu) ? 'medium' : 'low';
+    // Phones get medium unless something says the device is weak: a clean, shadowed picture at a sensible pixel count
+    // (see `phoneRatio`) beats the old default of low, which drew a third of a modern phone's pixels with no antialiasing.
+    // iPhones hide their memory and report a default here, so only an explicit low number or a weak GPU counts against a phone.
+    return memory <= 3 || (f.cores !== undefined && f.cores <= 4) || WEAK_GPU.test(gpu) ? 'low' : 'medium';
   }
   if (chromebook) return memory >= 8 && cores >= 8 && !WEAK_GPU.test(gpu) ? 'medium' : 'low';
   if (memory <= 2 || cores <= 2) return 'low';
@@ -74,6 +76,64 @@ export const autoTier = (f: DeviceFacts): Tier => {
 
 /** The tier to use: the player's choice, or the automatic one. */
 export const resolveTier = (setting: QualitySetting, facts: DeviceFacts): Tier => (setting === 'auto' ? autoTier(facts) : setting);
+
+/**
+ * Pixels the phone draws per frame, by tier (CSS size times the ratio squared). A phone's screen is 3x or more in each
+ * direction, which no mid phone can fill at 60 fps; this spends a fixed pixel budget instead of a fixed ratio, so a
+ * small iframe is drawn sharper than a full screen and neither is ever blurry. About 0.95 MP is a 844 x 390 screen at 1.7x.
+ */
+const PHONE_BUDGET: Record<Tier, number> = { low: 0.6e6, medium: 0.95e6, high: 1.4e6 };
+
+/** The pixel ratio for a touch device: the budget's, never above 2 or the screen's own, never below 1 (or the screen's, if less). */
+export const phoneRatio = (tier: Tier, cssW: number, cssH: number, dpr: number): number => {
+  const area = Math.max(1, cssW * cssH);
+  const k = Math.sqrt(PHONE_BUDGET[tier] / area);
+  return Math.max(Math.min(1, dpr), Math.min(k, dpr, 2));
+};
+
+/** The tier a phone's menu and lobby scenes draw at: never above medium (a backdrop does not need more). */
+export const sceneTier = (t: Tier): Tier => (t === 'high' ? 'medium' : t);
+
+/**
+ * Dynamic resolution for touch devices: when the frame rate stays low the picture is drawn at a slightly lower
+ * resolution (`scale` 1 down to 0.7 in steps of 0.1, each step 3 s after the last), which is invisible at this pixel density.
+ * It never goes back up (so the picture does not pump) and it is what the game tries before ever switching shadows off.
+ */
+export class ResolutionGuard {
+  scale = 1;
+  private low = 0;
+  private seen = 0;
+  private cool = 0;
+
+  constructor(
+    private minFps = 45,
+    private window = 2.5,
+    private grace = 3,
+    private floor = 0.7,
+  ) {}
+
+  /** Feed one frame; returns the new scale when it just changed, else null. */
+  frame(dt: number): number | null {
+    if (!(dt > 0) || dt > 0.5) return null;
+    this.seen += dt;
+    this.cool = Math.max(0, this.cool - dt);
+    if (this.seen < this.grace || this.scale <= this.floor + 1e-6) return null;
+    if (1 / dt < this.minFps) this.low += dt;
+    else this.low = Math.max(0, this.low - dt * 0.5);
+    if (this.low >= this.window && this.cool <= 0) {
+      this.low = 0;
+      this.cool = 3;
+      this.scale = Math.max(this.floor, Math.round((this.scale - 0.1) * 10) / 10);
+      return this.scale;
+    }
+    return null;
+  }
+
+  /** True once the resolution cannot go lower: only then may the tier step down. */
+  get exhausted(): boolean {
+    return this.scale <= this.floor + 1e-6;
+  }
+}
 
 export const lowerTier = (t: Tier): Tier => (t === 'high' ? 'medium' : 'low');
 

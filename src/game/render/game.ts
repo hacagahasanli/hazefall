@@ -32,7 +32,7 @@ import { buildProps, DECK_Y, WATER_Y } from './props';
 import { chunkedInstances } from './chunks';
 import { mergeRigid } from './merge';
 import { createPerfOverlay, PERF_KEY, perfRequested } from './perfOverlay';
-import { FpsGuard, lowerTier, TIERS } from './quality';
+import { FpsGuard, lowerTier, phoneRatio, ResolutionGuard, TIERS } from './quality';
 import { buildWorld } from './world';
 import { buildLadders } from './ladders';
 
@@ -253,9 +253,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   let tier: Tier = perfTier === 'low' || perfTier === 'medium' || perfTier === 'high' ? perfTier : (opts.tier ?? 'high');
   let settings: Settings = opts.settings ?? DEFAULT_SETTINGS;
   let bound = keyMap(settings.keys);
-  const pixelRatio = () => Math.min(window.devicePixelRatio, TIERS[tier].dprCap, touch ? 1.5 : 2) * settings.resolution;
+  // Phones draw a fixed pixel budget (phoneRatio) times the dynamic-resolution step; everything else the tier's own ratio.
+  const pixelRatio = () =>
+    touch
+      ? phoneRatio(tier, canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, window.devicePixelRatio) * settings.resolution * resGuard.scale
+      : Math.min(window.devicePixelRatio, TIERS[tier].dprCap, 2) * settings.resolution;
   const shadowsOn = () => TIERS[tier].shadows && settings.shadows;
   const fpsGuard = new FpsGuard();
+  const resGuard = new ResolutionGuard();
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: TIERS[tier].antialias, powerPreference: 'high-performance' });
   /** Phones and tablets: touch controls, always auto-aim, a lighter pixel ratio. */
   const touch = window.matchMedia?.('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -2944,9 +2949,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     time += dt;
     if (dt > 0) fps += (1 / dt - fps) * 0.05;
     // Auto quality: a frame rate that stays low during real play steps the tier down (never up, so the picture does not pump).
-    if (opts.autoTier && !perfTier && !paused && state.phase !== 'drop' && tier !== 'low' && fpsGuard.frame(dt)) {
-      setTier(lowerTier(tier));
-      opts.onTier?.(tier);
+    // On a touch screen the resolution gives way first (0.1 at a time, see ResolutionGuard); the tier (shadows off, shorter
+    // view) only steps down once the resolution is at its floor and the frame rate is still low.
+    if (opts.autoTier && !perfTier && !paused && state.phase !== 'drop' && tier !== 'low') {
+      if (touch && !resGuard.exhausted) {
+        if (resGuard.frame(dt) !== null) setTier(tier);
+      } else if (fpsGuard.frame(dt)) {
+        setTier(lowerTier(tier));
+        opts.onTier?.(tier);
+      }
     }
     if (holding) {
       // Waiting behind the pre-match screen: draw the first frames (compiles shaders, uploads textures), report ready,

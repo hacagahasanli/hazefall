@@ -11,6 +11,8 @@ import { buildProps } from './props';
 import { buildWorld } from './world';
 
 import type { Look } from '../cosmetics';
+import { phoneRatio, sceneTier } from './quality';
+
 import type { Tier } from './quality';
 import type { FighterId } from '../sim/types';
 
@@ -24,7 +26,13 @@ export const startShowcase = (canvas: HTMLCanvasElement, onReady: () => void, op
   // motion) draws a few frames and then holds the picture.
   const low = opts.tier === 'low';
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !low, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(low ? Math.min(window.devicePixelRatio, 1) * 0.75 : Math.min(window.devicePixelRatio, opts.tier === 'medium' ? 1.25 : 1.5));
+  // Phones: a fixed pixel budget (phoneRatio), so the backdrop is sharp; elsewhere the low tier draws lighter still.
+  const coarse = !!window.matchMedia?.('(pointer: coarse)').matches;
+  renderer.setPixelRatio(
+    coarse
+      ? phoneRatio(sceneTier(opts.tier ?? 'medium'), canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, window.devicePixelRatio)
+      : low ? Math.min(window.devicePixelRatio, 1) * 0.75 : Math.min(window.devicePixelRatio, opts.tier === 'medium' ? 1.25 : 1.5),
+  );
   renderer.shadowMap.enabled = !low;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.1;
