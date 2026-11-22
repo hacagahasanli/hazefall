@@ -75,7 +75,7 @@ and the same movement. They differ in how they fight.
 | Space | attack; aims at the nearest visible enemy (mouse aim with T) |
 | Q | super, when charged |
 | E | use / throw an item |
-| Esc Esc | pause menu (offline) |
+| Esc or P | pause menu (offline) |
 
 ## Online
 

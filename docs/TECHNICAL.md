@@ -40,7 +40,7 @@ src/
     play/page.tsx         renders <Lobby/>
   components/             React UI around the canvas
     Lobby.tsx             fighter pick, Play button, remembers the pick
-    Match.tsx             owns the canvas, the HUD, the Esc Esc menu
+    Match.tsx             owns the canvas, the HUD, the Esc / P menu
     AimChoice.tsx         auto-aim / mouse-aim switch
   game/
     sim/                  THE RULES. Pure TypeScript: no DOM, no three.js
@@ -305,7 +305,7 @@ Created with `createSfx()` and driven by events; the sim does not know about it.
 | Footsteps ("Footsteps") | 0.8 | multiplier inside `footstep` |
 | `sfx` / `ui` / `amb` buses | 1.0 / 0.7 / 0.5 | fixed |
 
-- **Volume sliders**: `Match.tsx` shows three sliders in the Esc Esc menu; `setVolume` applies at once and saves `{master, guns, steps}` as JSON in `localStorage` under `lcs:volume` (reads and writes are in try/catch). M mutes (key `merge-conflict:muted`).
+- **Volume sliders**: `Match.tsx` shows three sliders in the Esc / P menu; `setVolume` applies at once and saves `{master, guns, steps}` as JSON in `localStorage` under `lcs:volume` (reads and writes are in try/catch). M mutes (key `merge-conflict:muted`).
 - **Gunshots** are recordings (`public/assets/sounds/*.m4a`, fetched and decoded when the context starts), played on the `guns` bus at `GUN_LEVEL` 0.4 scaled by distance. Until the files decode, the code falls back to a synthesised crack, body and thump. Footsteps, hits, explosions, vaults and UI sounds are always synthesised from oscillators and filtered noise. A budget of 5 gunshot voices stops rapid fire from clipping.
 - **Surfaces**: footsteps differ for grass (soft brush), dirt, hard floor and asphalt (click and heel), wood (a hollow thud) and plants (rustle).
 
@@ -316,10 +316,10 @@ Created with `createSfx()` and driven by events; the sim does not know about it.
 | Component | Job |
 |---|---|
 | `Lobby` | Pick a fighter (saved to `localStorage` key `lcs:fighter`) and start a match. Remounting `Match` with a new `key` is how "play again" works. |
-| `Match` | Creates the canvas and the minimap canvas, calls `startMatch` in an effect, shows the HUD from `HudState`, the Esc Esc menu (aim choice, sound sliders, resume, exit) and the end screen with placement. Disposes the game on unmount. |
+| `Match` | Creates the canvas and the minimap canvas, calls `startMatch` in an effect, shows the HUD from `HudState`, the Esc / P menu (aim choice, sound sliders, resume, exit) and the end screen with placement. Disposes the game on unmount. |
 | `AimChoice` | Auto-aim or mouse aim; stored in `lcs:aim` and also toggled by T. |
 
-React only draws the HUD. It reads the 10 Hz `HudState` snapshot and calls a few methods returned by `startMatch` (`setPaused`, `setVolume`, `setAimMode`, `dispose`); it does not touch the simulation. Esc pressed twice within 450 ms opens the menu and pauses (this is offline, so pausing is fair).
+React only draws the HUD. It reads the 10 Hz `HudState` snapshot and calls a few methods returned by `startMatch` (`setPaused`, `setVolume`, `setAimMode`, `dispose`); it does not touch the simulation. Esc or P opens the menu and pauses in one press (with the mouse captured, the browser's release of it counts as the Esc: see `game/pauseKeys.ts`) (this is offline, so pausing is fair).
 
 ---
 

@@ -19,6 +19,7 @@ import { resolveTier } from '~/game/render/quality';
 import { keyLabel } from '~/game/settings';
 import { SettingsPanel } from '~/components/SettingsPanel';
 import { useSettings } from '~/components/useSettings';
+import { lockReleaseOpensMenu, pauseKeyAction } from '~/game/pauseKeys';
 import { createWebPlatform } from '~/platform/web';
 import { TouchControls, useTouch } from '~/components/TouchControls';
 import { ShockRing, Streaks } from '~/components/Transitions';
@@ -636,7 +637,6 @@ export const Match = ({
   const gameRef = useRef<ReturnType<typeof startMatch> | null>(null);
   const [hud, setHud] = useState<HudState | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const lastEsc = useRef(0);
   const touch = useTouch();
   const inPlane = hud?.stage === 'drone';
   useLayoutEffect(() => {
@@ -746,32 +746,49 @@ export const Match = ({
     playing: !!hud && !held && !menuOpen && !showResult && hud.phase !== 'over',
   });
 
-  // Esc twice opens the menu and pauses the match (it's offline, so pausing is fair). Esc closes it.
-  // P does the same in one press (in a portal's fullscreen, Esc belongs to the browser).
+  // One Esc (or P) opens the menu and pauses the match (offline, so pausing is fair); one more closes it.
+  // With the mouse captured the browser spends that Esc on handing the mouse back, so the page may only see the lock end:
+  // that counts as the press (see pauseKeys). In a portal's fullscreen the browser may keep Esc for itself: P still works.
+  const lockReleasedAt = useRef(-1e9);
+  const menuStateRef = useRef({ over: false, settingsOpen: false, menuOpen: false });
+  menuStateRef.current = { over: !!over, settingsOpen, menuOpen };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (settingsOpen || heldRef.current) return;
-      if (e.code === settingsRef.current.keys.pause && !e.repeat) {
-        if (!over) setMenuOpen((o) => !o);
-        return;
-      }
-      if (e.code !== 'Escape') return;
-      if (menuOpen) {
-        setMenuOpen(false);
-        return;
-      }
-      const now = performance.now();
-      const double = now - lastEsc.current < 450;
-      lastEsc.current = double ? 0 : now;
-      if (double) setMenuOpen(true);
+      const m = menuStateRef.current;
+      const action = pauseKeyAction(e, {
+        pauseKey: settingsRef.current.keys.pause,
+        settingsOpen: m.settingsOpen,
+        held: !!heldRef.current,
+        over: m.over,
+        menuOpen: m.menuOpen,
+        msSinceLockRelease: performance.now() - lockReleasedAt.current,
+      });
+      if (action === 'toggle') setMenuOpen(!m.menuOpen);
+    };
+    let wasLocked = false;
+    const onLock = () => {
+      const locked = document.pointerLockElement != null;
+      const released = wasLocked && !locked;
+      wasLocked = locked;
+      if (!released) return;
+      const m = menuStateRef.current;
+      if (!lockReleaseOpensMenu({ held: !!heldRef.current, over: m.over, hasFocus: document.hasFocus(), settingsOpen: m.settingsOpen })) return;
+      lockReleasedAt.current = performance.now();
+      setMenuOpen(true);
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [menuOpen, over, settingsOpen]);
+    document.addEventListener('pointerlockchange', onLock);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerlockchange', onLock);
+    };
+  }, []);
 
   useEffect(() => {
     gameRef.current?.setPaused(menuOpen);
     if (!menuOpen) setSettingsOpen(false);
+    // The menu needs the mouse: if it opened with P (or a button) while the mouse was captured, give it back.
+    else if (document.pointerLockElement) document.exitPointerLock();
   }, [menuOpen]);
 
   // Remember the aim choice, whether it was made in the menu or with T.
@@ -1160,13 +1177,12 @@ export const Match = ({
                 <Key k={keyLabel(settings.keys.mute)} /> mute
               </span>
               <span className="flex items-center gap-1">
-                <Key k={keyLabel(settings.keys.pause)} /> / <Key k="Esc" />
-                <Key k="Esc" /> menu
+                <Key k="Esc" /> / <Key k={keyLabel(settings.keys.pause)} /> menu
               </span>
             </div>
           )}
 
-          {/* Esc Esc menu */}
+          {/* Esc / P menu */}
           {menuOpen && !over && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-ink-deep/70">
               <div

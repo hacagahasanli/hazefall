@@ -32,7 +32,7 @@ export const COPY: Copy = {
   howTo: [
     ['Drop', 'Jump from the plane when you like, free-fall, then steer the parachute down. You land with a pistol and two spare magazines. Shooting starts once you are on the ground.'],
     ['Loot', 'Two gun slots (1 / 2 or X to swap), vests I to III, backpacks, heals and bombs. The busy places hide the best gear: blue and gold beams. Walk over loot to take it; when a key shows over an item (a gun with both slots full), press F. C heals.'],
-    ['Survive', 'Stay inside the Deadline. J or the left button shoots, Space jumps, Q / E lean, Shift rolls, G is your super, hide in tall grass. Esc Esc pauses.'],
+    ['Survive', 'Stay inside the Deadline. J or the left button shoots, Space jumps, Q / E lean, Shift rolls, G is your super, hide in tall grass. Esc or P pauses.'],
   ],
   tips: [
     'Jump from the plane whenever you like, then steer your parachute down.',
