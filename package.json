@@ -16,6 +16,7 @@
     "dev:web": "vite --config vite.web.config.ts",
     "build:web": "vite build --config vite.web.config.ts && node scripts/web-report.mjs",
     "preview:web": "vite preview --config vite.web.config.ts",
+    "test:layout": "node scripts/layout-matrix.mjs",
     "looks:sheet": "vite --config scripts/looks-sheet/vite.config.ts"
   },
   "dependencies": {
@@ -35,6 +36,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/three": "^0.187.0",
+    "playwright-core": "^1.65.0",
     "postcss": "^8.5.33",
     "tailwindcss": "^4.3.5",
     "tsx": "^4.23.15",
