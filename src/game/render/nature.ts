@@ -83,9 +83,9 @@ const sampleGrid = (g: Float32Array, x: number, y: number) => {
 const sstep = (a: number, b: number, v: number) => smooth(Math.max(0, Math.min(1, (v - a) / (b - a))));
 const mix = (a: number[], b: number[], k: number) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
 
-/** The ground texture: 6 px per metre (roads and paths are geometry), meadow greens with dry patches, soft dirt, mud. */
+/** The ground texture: 4.4 px per metre (roads and paths are geometry), meadow greens with dry patches, soft dirt, mud. */
 export const paintTerrain = () => {
-  const px = 6;
+  const px = 4.4; // 1056 px across, as before (6 px a metre over the old 176 m)
   const n = WORLD * px;
   const c = document.createElement('canvas');
   c.width = c.height = n;
@@ -589,7 +589,9 @@ export const outerForest = (): Placement[] => {
   const out: Placement[] = [];
   const r = rng(808);
   const margin = 26;
-  for (let i = 0; i < 1400; i++) {
+  // 1400 trees round the old 176 m map; the same density round whatever the map is now.
+  const n = Math.round(1400 * (((WORLD + margin * 2) ** 2 - WORLD ** 2) / ((176 + margin * 2) ** 2 - 176 ** 2)));
+  for (let i = 0; i < n; i++) {
     const x = -margin + r() * (WORLD + margin * 2);
     const y = -margin + r() * (WORLD + margin * 2);
     if (x > 0 && y > 0 && x < WORLD && y < WORLD) continue;

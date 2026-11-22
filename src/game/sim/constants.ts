@@ -4,10 +4,12 @@ import type { FighterId, LootKind, WeaponKind } from './types';
 
 export const DT = 1 / 60;
 
-/** Tiles are 2 m; the map is 88 x 88 tiles = 176 x 176 m. */
+/** Tiles are 2 m; the map is 120 x 120 tiles = 240 x 240 m. */
 export const TILE = 2;
-export const SIZE = 88;
-/** The original 64-tile heart of the map (town, farms, forest, quarry) sits this far in. */
+export const SIZE = 120;
+/** The original 88-tile map (town, farms, forest, quarry, written with the 64-tile heart `O` in) sits this far in now. */
+const S = 16;
+const HEART = 88;
 const O = 12;
 export const WORLD = TILE * SIZE;
 export const PLAYER_RADIUS = 0.55;
@@ -37,13 +39,15 @@ export interface District {
 
 /** A road or path centre line in world metres, for the renderer to draw as a clean strip. */
 export interface Route {
-  kind: 'asphalt' | 'dirt';
+  kind: 'asphalt' | 'dirt' | 'rail';
   points: { x: number; y: number }[];
 }
 
 /** Big props the renderer draws over their 'v' tiles (and decor with no collision). */
 export interface Prop {
-  kind: 'car' | 'container' | 'tent' | 'windmill' | 'campfire' | 'pond' | 'river' | 'tower' | 'crane' | 'sign';
+  kind:
+    | 'car' | 'container' | 'tent' | 'windmill' | 'campfire' | 'pond' | 'river'
+    | 'tower' | 'crane' | 'sign' | 'mast' | 'hq' | 'lookout' | 'gantry' | 'conveyor' | 'boxcar';
   /** Tile rectangle. */
   x0: number;
   y0: number;
@@ -74,9 +78,11 @@ const rng = (seed: number) => () => {
 export const RIVER = {
   half: 3.2,
   bridges: [
-    [15, 2],
-    [43, 4],
-    [70, 2],
+    [9, 2],
+    [31, 2],
+    [59, 4],
+    [86, 2],
+    [113, 3],
   ] as [number, number][],
 };
 /** Which sides of a deck tile ('d') have a rail: the long sides of a bridge, and a pier's sides that face water. */
@@ -86,16 +92,23 @@ export const railSides = (tx: number, ty: number) => {
   const wet = (x: number, y: number) => tileAt(x, y) === 'o';
   return { w: wet(tx - 1, ty), e: wet(tx + 1, ty), n: wet(tx, ty - 1), s: wet(tx, ty + 1) };
 };
-export const riverCentre = (x: number) => 32 + O + Math.sin(x / 7) * 2 + Math.sin(x / 3.1) * 0.5;
+export const riverCentre = (x: number) => 32 + O + S + Math.sin((x - S) / 7) * 2 + Math.sin((x - S) / 3.1) * 0.5;
 
 const buildMap = () => {
   const grid: string[][] = Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => 'g'));
-  const get = (x: number, y: number) => (x >= 0 && y >= 0 && x < SIZE && y < SIZE ? grid[y][x] : '#');
+  // The old map's code runs inside a shifted frame (`sh` tiles in, `lim` tiles across): every helper below adds the shift,
+  // so its coordinates read as they always did and the places and random numbers of that map come out the same, 16 tiles
+  // further in. Everything new runs in the plain frame (sh 0) with its own random stream.
+  let sh = 0;
+  let lim = SIZE;
+  const get = (x: number, y: number) => (x >= 0 && y >= 0 && x < lim && y < lim ? grid[y + sh][x + sh] : '#');
   const set = (x: number, y: number, c: string) => {
-    if (x >= 0 && y >= 0 && x < SIZE && y < SIZE) grid[y][x] = c;
+    if (x >= 0 && y >= 0 && x < lim && y < lim) grid[y + sh][x + sh] = c;
   };
   const r = rng(91827);
-  const ri = (a: number, b: number) => a + Math.floor(r() * (b - a + 1));
+  const r2 = rng(40213);
+  let rr = r;
+  const ri = (a: number, b: number) => a + Math.floor(rr() * (b - a + 1));
   const buildings: Building[] = [];
   const districts: District[] = [];
   const routes: Route[] = [];
@@ -105,11 +118,11 @@ const buildMap = () => {
     for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) if (!on.includes(get(x, y))) return false;
     for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) set(x, y, 'v');
     // A landmark has a fixed look (and takes no number from the map's random stream, so the places round it stay as they were).
-    props.push({ kind, x0, y0, w, h, seed: fixed ? fixed.seed : r(), ...(fixed?.dir ? { dir: fixed.dir } : {}) });
+    props.push({ kind, x0: x0 + sh, y0: y0 + sh, w, h, seed: fixed ? fixed.seed : rr(), ...(fixed?.dir ? { dir: fixed.dir } : {}) });
     return true;
   };
   const district = (name: string, x0: number, y0: number, x1: number, y1: number) =>
-    districts.push({ name, x0: x0 * TILE, y0: y0 * TILE, x1: x1 * TILE, y1: y1 * TILE });
+    districts.push({ name, x0: (x0 + sh) * TILE, y0: (y0 + sh) * TILE, x1: (x1 + sh) * TILE, y1: (y1 + sh) * TILE });
 
   // The river first, so everything else is placed around it: twelve metres of water winding
   // across the whole map from west to east, crossed by three wooden bridges. You can swim it
@@ -141,19 +154,19 @@ const buildMap = () => {
     for (let i = 0; i <= n; i++) {
       const yf = y0 + ((y1 - y0) * i) / n;
       // Straight onto a bridge: no wobble near the river.
-      const calm = Math.max(0, Math.min(1, (Math.abs(yf - riverCentre(x0 + ((x1 - x0) * i) / n)) - RIVER.half - 1) / 4));
+      const calm = Math.max(0, Math.min(1, (Math.abs(yf - (riverCentre(x0 + ((x1 - x0) * i) / n + sh) - sh)) - RIVER.half - 1) / 4));
       const xf = x0 + ((x1 - x0) * i) / n + Math.sin(i / 3) * 0.8 * calm;
       const x = Math.round(xf);
       const y = Math.round(yf);
       if (get(x, y) === 'g') set(x, y, 'p');
       if (get(x + 1, y) === 'g') set(x + 1, y, 'p');
-      line.points.push({ x: (xf + 1) * TILE, y: (yf + 0.5) * TILE });
+      line.points.push({ x: (xf + 1 + sh) * TILE, y: (yf + 0.5 + sh) * TILE });
     }
     routes.push(line);
   };
-  path(32 + O, 4, 32 + O, 76); // over the big bridge
-  path(15, 22, 15, 62); // over the west bridge
-  path(70, 18, 70, 64); // over the east bridge
+  // ---- The old map, in its shifted frame (see `sh`). Route 1 over the big bridge is now the asphalt road laid further down.
+  sh = S;
+  lim = HEART;
   path(30 + O, 14 + O, 12 + O, 12 + O);
   path(34 + O, 14 + O, 52 + O, 10 + O);
   path(30 + O, 50 + O, 12 + O, 54 + O);
@@ -177,7 +190,7 @@ const buildMap = () => {
       set(x, y, '.');
       set(x, y + 1, '.');
     };
-    if (r() < 0.5) {
+    if (rr() < 0.5) {
       doorH(y0);
       doorH(y0 + h - 1);
       if (barn) doorV(x0);
@@ -209,7 +222,7 @@ const buildMap = () => {
       if (get(q.x, q.y) === '.') set(q.x, q.y, 'r');
     }
     furnish(x0, y0, w, h, barn);
-    buildings.push({ x0, y0, w, h, model: ri(0, 20), barn });
+    buildings.push({ x0: x0 + sh, y0: y0 + sh, w, h, model: ri(0, 20), barn });
   };
 
   /**
@@ -285,7 +298,7 @@ const buildMap = () => {
 
   const free = (x0: number, y0: number, w: number, h: number) => {
     for (let y = y0 - 1; y <= y0 + h; y++) for (let x = x0 - 1; x <= x0 + w; x++) if (!'gp'.includes(get(x, y))) return false;
-    return x0 > 2 && y0 > 2 && x0 + w < SIZE - 3 && y0 + h < SIZE - 3;
+    return x0 > 2 && y0 > 2 && x0 + w < lim - 3 && y0 + h < lim - 3;
   };
 
   // The new outer districts first, so the town and the lone houses are placed around them.
@@ -301,7 +314,7 @@ const buildMap = () => {
         else if (d <= 1.35 && get(x, y) === 'g' && r() < 0.45) set(x, y, 'b'); // reeds
       }
     }
-    props.push({ kind: 'pond', x0: cx - 5, y0: cy - 8, w: 11, h: 17, seed: r() });
+    props.push({ kind: 'pond', x0: cx - 5 + sh, y0: cy - 8 + sh, w: 11, h: 17, seed: r() });
     for (let x = cx; x <= cx + 6; x++) if ('ob'.includes(get(x, cy))) set(x, cy, 'd'); // the pier
     set(cx - 1, cy, 's');
     if (free(4, 29, 4, 4)) house(4, 29, 4, 4, false);
@@ -312,7 +325,7 @@ const buildMap = () => {
   district('Windmill Hill', 26, 2, 62, 11);
   solidProp('windmill', 46, 4, 2, 2);
   for (const [x, y] of [[33, 4], [37, 7], [29, 7]]) solidProp('tent', x, y, 2, 2);
-  props.push({ kind: 'campfire', x0: 33, y0: 7, w: 1, h: 1, seed: r() });
+  props.push({ kind: 'campfire', x0: 33 + sh, y0: 7 + sh, w: 1, h: 1, seed: r() });
   for (let i = 0; i < 4; i++) {
     const x = ri(28, 40);
     const y = ri(3, 10);
@@ -400,18 +413,6 @@ const buildMap = () => {
     }
   }
 
-  // A few lone houses out in the fields.
-  for (let i = 0, made = 0; i < 80 && made < 9; i++) {
-    const w = ri(4, 6);
-    const h = ri(4, 5);
-    const x0 = ri(4, SIZE - 10);
-    const y0 = ri(4, SIZE - 10);
-    if (free(x0, y0, w, h)) {
-      house(x0, y0, w, h, false);
-      made += 1;
-    }
-  }
-
   // Farms: a barn, a farmhouse, a fenced field of crops you can hide in.
   const farm = (name: string, x0: number, y0: number) => {
     district(name, x0, y0, x0 + 16, y0 + 12);
@@ -439,8 +440,7 @@ const buildMap = () => {
   farm('Redgate Farm', 44 + O, 6 + O);
   farm('Southfield Farm', 5 + O, 46 + O);
 
-  // Forest in the south-east, a quarry of rocks in the east.
-  district('Deadwood', 44 + O, 42 + O, 60 + O, 60 + O);
+  // Forest in the south-east (unnamed woods now), a quarry of rocks in the east.
   for (let i = 0; i < 140; i++) {
     const x = ri(44 + O, 60 + O);
     const y = ri(40 + O, 60 + O);
@@ -460,8 +460,8 @@ const buildMap = () => {
 
   // Lone trees, bushes and rocks across the fields.
   for (let i = 0; i < 200; i++) {
-    const x = ri(2, SIZE - 3);
-    const y = ri(2, SIZE - 3);
+    const x = ri(2, lim - 3);
+    const y = ri(2, lim - 3);
     if (get(x, y) !== 'g') continue;
     const k = r();
     set(x, y, k < 0.45 ? 't' : k < 0.85 ? 'b' : 'k');
@@ -469,8 +469,8 @@ const buildMap = () => {
 
   // Meadows of tall grass you can crawl through unseen.
   for (let i = 0, made = 0; i < 80 && made < 14; i++) {
-    const cx = ri(6, SIZE - 7);
-    const cy = ri(6, SIZE - 7);
+    const cx = ri(6, lim - 7);
+    const cy = ri(6, lim - 7);
     if (get(cx, cy) !== 'g') continue;
     const rx = 1.5 + r() * 2.5;
     const ry = 1.5 + r() * 2.5;
@@ -482,16 +482,331 @@ const buildMap = () => {
     made += 1;
   }
 
-  // Every door opens onto open ground: clear two tiles in front of it of fences, trees, rocks
-  // and crates that the yards, farms and lone trees may have put there.
+  // ---------------------------------------------------------------------------------------------------------------
+  // The rest of the valley: everything new, in the plain frame with its own random stream, so the old map above comes out
+  // exactly as it did. See docs/collab/CREATIVE/specifications/map-v2.md (and levels/map-v2.svg) for the plan.
+  // ---------------------------------------------------------------------------------------------------------------
+  sh = 0;
+  lim = SIZE;
+  rr = r2;
+  districts.length = 0;
+
+  /** Turn trees, bushes, rocks, crates and meadow in a rectangle back into open grass (a place is cleared before it is built). */
+  const bulldoze = (x0: number, y0: number, w: number, h: number) => {
+    for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) if ('tbkhcfsr'.includes(get(x, y))) set(x, y, 'g');
+  };
+  const fill = (x0: number, y0: number, x1: number, y1: number, c: string, on = 'gphbtkcfsr') => {
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (on.includes(get(x, y))) set(x, y, c);
+  };
+  /** Room for a building with a one-tile margin: open ground, paving or something a bulldozer can clear (no water, walls or props). */
+  const roomFor = (x0: number, y0: number, w: number, h: number, m = 1) => {
+    for (let y = y0 - m; y < y0 + h + m; y++) for (let x = x0 - m; x < x0 + w + m; x++) if (!'gpabhtkcfsr'.includes(get(x, y))) return false;
+    return x0 > 2 && y0 > 2 && x0 + w < SIZE - 3 && y0 + h < SIZE - 3;
+  };
+  /** Does this building have a wall a ladder can stand on (the rule of `LADDERS` in roofs.ts: a plain wall, open ground two tiles out)? */
+  const ladderFits = (x0: number, y0: number, w: number, h: number) => {
+    for (let y = y0; y < y0 + h; y++) {
+      for (let x = x0; x < x0 + w; x++) {
+        const nx = x === x0 ? -1 : x === x0 + w - 1 ? 1 : 0;
+        const ny = y === y0 ? -1 : y === y0 + h - 1 ? 1 : 0;
+        if (Math.abs(nx) + Math.abs(ny) !== 1 || get(x, y) !== '#') continue;
+        if (!'gpash'.includes(get(x + nx, y + ny)) || !'gpash'.includes(get(x + nx * 2, y + ny * 2))) continue;
+        if ([[ny, nx], [-ny, -nx]].some(([sx, sy]) => get(x + sx, y + sy) === '.')) continue;
+        return true;
+      }
+    }
+    return false;
+  };
+  /** A building that must keep a ladder wall: built, and taken back down if its random doors left none. */
+  const buildWithLadder = (x0: number, y0: number, w: number, h: number) => {
+    const saved: string[][] = [];
+    for (let y = y0 - 3; y < y0 + h + 3; y++) saved.push([...Array(w + 6)].map((_, i) => get(x0 - 3 + i, y)));
+    const count = buildings.length;
+    build(x0, y0, w, h);
+    if (ladderFits(x0, y0, w, h)) return true;
+    buildings.length = count;
+    saved.forEach((row, j) => row.forEach((c, i) => set(x0 - 3 + i, y0 - 3 + j, c)));
+    return false;
+  };
+  /** A building at (x0, y0): the ground under it is cleared first. */
+  const build = (x0: number, y0: number, w: number, h: number, barn = false) => {
+    // Anything parked or stacked on the site (and in front of its doors) goes: its props come off the map and the ground under them is cleared.
+    for (let i = props.length - 1; i >= 0; i--) {
+      const q = props[i];
+      if (!['container', 'car', 'tent', 'boxcar'].includes(q.kind)) continue;
+      const m = q.kind === 'boxcar' ? 0 : 2;
+      if (q.x0 >= x0 + w + m || q.x0 + q.w <= x0 - m || q.y0 >= y0 + h + m || q.y0 + q.h <= y0 - m) continue;
+      for (let y = q.y0; y < q.y0 + q.h; y++) for (let x = q.x0; x < q.x0 + q.w; x++) if (get(x, y) === 'v') set(x, y, q.kind === 'tent' ? 'g' : 'a');
+      props.splice(i, 1);
+    }
+    for (let y = y0 - 1; y <= y0 + h; y++) for (let x = x0 - 1; x <= x0 + w; x++) if ('tbkhcfsr'.includes(get(x, y)) && (x < x0 || y < y0 || x >= x0 + w || y >= y0 + h)) set(x, y, 'g');
+    bulldoze(x0, y0, w, h);
+    house(x0, y0, w, h, barn);
+  };
+  /** A straight road, path or track along one axis. `width` tiles wide for roads (the centre line runs between the two), 1 for rails. */
+  const road = (kind: Route['kind'], x0: number, y0: number, x1: number, y1: number) => {
+    const width = kind === 'rail' ? 1 : 2;
+    const tile = kind === 'asphalt' ? 'a' : 'p';
+    const horizontal = y0 === y1;
+    const a = horizontal ? Math.min(x0, x1) : Math.min(y0, y1);
+    const b = horizontal ? Math.max(x0, x1) : Math.max(y0, y1);
+    for (let k = a; k <= b; k++) {
+      for (let w = 0; w < width; w++) {
+        const x = horizontal ? k : x0 + w;
+        const y = horizontal ? y0 + w : k;
+        if ('gphbtkcfsr'.includes(get(x, y))) set(x, y, tile);
+      }
+    }
+    const c = width / 2;
+    routes.push({
+      kind,
+      points: horizontal
+        ? [{ x: x0 * TILE, y: (y0 + c) * TILE }, { x: (x1 + 1) * TILE, y: (y0 + c) * TILE }]
+        : [{ x: (x0 + c) * TILE, y: y0 * TILE }, { x: (x0 + c) * TILE, y: (y1 + 1) * TILE }],
+    });
+  };
+
+  // ---- Roads: Route 1 (asphalt, the spine), Mill Road and River Road (dirt), Campus Drive, the lanes to the crossings and
+  // the rail line. Roads go down first so houses keep clear of them.
+  road('asphalt', 60, 2, 60, 117);
+  road('dirt', 12, 30, 100, 30);
+  road('dirt', 14, 82, 98, 82);
+  road('asphalt', 40, 96, 60, 96);
+  road('dirt', 10, 36, 10, 84); // Lake lane, to the Footbridge
+  road('dirt', 31, 36, 31, 80); // West lane
+  road('dirt', 86, 32, 86, 86); // East lane
+  road('dirt', 113, 40, 113, 80); // Quay lane, to the Weir
+  road('dirt', 14, 19, 14, 30); // up to Mast Hill's south gate
+  road('dirt', 102, 19, 102, 30); // up to the Deadwood lodge
+
+  // ---- Container Yard: the quay on the east bank of the yard, two more columns of containers, two port offices.
+  fill(103, 36, 113, 83, 'a', 'gphbtkcfsr');
+  for (let y = 37; y < 82; y += 3) for (const x of [104, 108]) if (rr() >= 0.1) solidProp('container', x, y, 3, 2);
+  build(90, 38, 6, 5);
+  build(90, 75, 6, 5);
+  for (const [x, y] of [[92, 41], [93, 77]]) if ('.'.includes(get(x, y))) set(x, y, 'l');
+
+  // ---- Mast Hill (north-west): few items, the best ones, on an exposed hill. A fenced yard with a mast, a control house and
+  // two sheds; nothing taller than grass for ten tiles round it.
+  fill(8, 7, 23, 20, 'a');
+  for (let x = 8; x < 23; x++) for (const y of [7, 19]) set(x, y, 'f');
+  for (let y = 7; y < 20; y++) for (const x of [8, 22]) set(x, y, 'f');
+  for (const [x, y] of [[14, 19], [15, 19], [22, 13], [22, 14]]) set(x, y, 'a'); // the two gates
+  build(9, 13, 7, 5);
+  build(18, 13, 4, 4);
+  build(18, 8, 4, 4);
+  solidProp('mast', 14, 9, 2, 2, 'gpa', { seed: 0.5 });
+  for (const [x, y] of [[12, 11], [17, 12], [11, 18]]) if (get(x, y) === 'a') set(x, y, 's');
+
+  // ---- The Campus (south-west): where the developers worked. Glass offices round a plaza with the HQ tower in it.
+  fill(19, 95, 31, 107, 'a');
+  build(12, 92, 8, 6);
+  build(30, 92, 8, 6);
+  build(12, 106, 8, 6);
+  build(30, 106, 8, 6);
+  build(23, 109, 4, 4);
+  solidProp('hq', 22, 98, 6, 6, 'gpa', { seed: 0.5 });
+  fill(12, 100, 21, 105, 'a');
+  for (const [x, y] of [[13, 100], [15, 100], [17, 100], [13, 102], [17, 102]]) solidProp('car', x, y, 1, 2, 'a');
+  for (const [x, y] of [[20, 95], [21, 95], [28, 95], [29, 95], [20, 106], [21, 106], [28, 106], [29, 106]]) if (get(x, y) === 'a') set(x, y, 'b');
+  for (const [x, y] of [[21, 100], [29, 101], [25, 105], [25, 96]]) if (get(x, y) === 'a') set(x, y, 's');
+
+  // ---- Truck Stop: a motel row of four one-room cabins behind the shop, three more cars in the car park.
+  for (const x of [54, 60, 66, 72]) build(x, 100, 4, 5);
+  for (const [x, y] of [[57, 94], [63, 94], [67, 97]]) solidProp('car', x, y, 1, 2, 'a');
+
+  // ---- Quarry: the conveyor and a site office.
+  bulldoze(76, 48, 13, 9);
+  solidProp('conveyor', 78, 48, 1, 6, 'gpa', { seed: 0.5 }); // (the plan has it at 86,51, which is the East bridge)
+  build(80, 53, 5, 4);
+
+  // ---- Railyard (south-east): a main line and two yard tracks lined with boxcars, an engine shed, a goods shed, a signal box.
+  bulldoze(80, 93, 37, 24);
+  road('rail', 40, 110, 117, 110);
+  road('rail', 82, 101, 117, 101);
+  road('rail', 82, 105, 117, 105);
+  for (const ty of [100, 104]) {
+    const gaps = [1, 3, 2, 4, 1, 2, 3];
+    let x = 83 + (ty === 104 ? 2 : 0);
+    for (let i = 0; i < 7 && x + 3 <= 116; i++) {
+      solidProp('boxcar', x, ty, 3, 2, 'gpa');
+      x += 3 + gaps[(i + (ty === 104 ? 3 : 0)) % gaps.length];
+    }
+  }
+  build(100, 93, 10, 6, true);
+  build(84, 111, 8, 5);
+  build(111, 106, 4, 4);
+  solidProp('gantry', 90, 99, 1, 1, 'gpa', { seed: 0 });
+  solidProp('gantry', 90, 107, 1, 1, 'gpa', { seed: 1 });
+  for (const [x, y] of [[97, 103], [106, 103], [95, 108], [113, 98]]) if ('gpa'.includes(get(x, y))) set(x, y, 's');
+
+  // ---- Deadwood (north-east): dense conifers for ambush, a lodge and a hut in clearings, a fire lookout.
+  for (let y = 4; y < 31; y++) {
+    for (let x = 88; x < 117; x++) {
+      if (get(x, y) !== 'g') continue;
+      const k = rr();
+      if (k < 0.5) set(x, y, 't');
+      else if (k < 0.65) set(x, y, 'b');
+    }
+  }
+  for (const [cx, cy, rad] of [[103, 16, 6], [110, 26, 5]]) bulldoze(cx - rad, cy - rad, rad * 2 + 1, rad * 2 + 1);
+  build(100, 14, 6, 5);
+  build(108, 24, 4, 4);
+  props.push({ kind: 'campfire', x0: 107, y0: 16, w: 1, h: 1, seed: rr() });
+  bulldoze(94, 7, 4, 4);
+  solidProp('lookout', 95, 8, 2, 2, 'gpa', { seed: 0.5 });
+  for (const [x, y] of [[98, 17], [110, 21]]) if (get(x, y) === 'g') set(x, y, 's');
+
+  // ---- Windmill Hill: an orchard (broadleaf trees on a 3-tile grid, tall grass in the lanes between) and the miller's cottage.
+  bulldoze(31, 5, 27, 12);
+  for (let y = 5; y < 17; y += 3) for (let x = 31; x < 58; x += 3) if (get(x, y) === 'g') set(x, y, 't');
+  for (const y of [7, 13]) for (let x = 32; x < 57; x++) if (get(x, y) === 'g' && rr() < 0.55) set(x, y, 'h');
+  build(68, 21, 5, 4);
+  for (const [x, y] of [[40, 11], [50, 9]]) if (get(x, y) === 'g') set(x, y, 's');
+
+  // ---- Lakeside: one more cabin, and a boathouse on the pond's west shore with a short deck into the water.
+  build(5, 49, 4, 4); // (the plan has it at 5,52, which is in the river at that bend)
+  build(12, 69, 5, 4);
+  for (let x = 17; x <= 19; x++) if ('gbo'.includes(get(x, 70))) set(x, 70, 'd');
+
+  // ---- Old Town: top the grid up to eighteen houses (north and south bank) in the gaps between.
+  {
+    const inTown = (b: Building) => b.x0 >= 44 && b.x0 < 79 && b.y0 >= 42 && b.y0 < 79;
+    for (let tries = 0; tries < 20000 && buildings.filter(inTown).length < 18; tries++) {
+      const w = 4 + Math.floor(rr() * 2);
+      const h = 4 + Math.floor(rr() * 2);
+      const x0 = 44 + Math.floor(rr() * 34);
+      const y0 = 42 + Math.floor(rr() * 36);
+      if (x0 + w > 55 && x0 < 67 && y0 + h > 46 && y0 < 54) continue; // the Market Square stays open
+      if (x0 < 63 && x0 + w > 57) continue; // Route 1 and the bridge approach stay clear
+      if (roomFor(x0, y0, w, h)) buildWithLadder(x0, y0, w, h);
+    }
+  }
+
+  // ---- Lone houses: eight, each beside a road and clear of every place (the plan says ten tiles, but the places cover so much of the
+  // valley that only a sliver of the map is that far from all of them: three tiles keeps each one a home on its own).
+  const PLACES: [string, number, number, number, number][] = [
+    ['Mast Hill', 4, 4, 27, 25],
+    ['Windmill Hill', 30, 4, 79, 28],
+    ['Deadwood', 88, 4, 117, 31],
+    ['Hollis Farm', 34, 32, 51, 45],
+    ['Redgate Farm', 72, 34, 89, 47],
+    ['Lakeside', 4, 40, 31, 91],
+    ['Old Town', 44, 42, 79, 79],
+    ['Quarry', 76, 48, 89, 57],
+    ['Container Yard', 89, 36, 113, 83],
+    ['Southfield Farm', 33, 74, 50, 87],
+    ['The Campus', 10, 90, 41, 115],
+    ['Truck Stop', 52, 90, 79, 105],
+    ['Railyard', 80, 93, 117, 117],
+  ];
+  {
+    const nearPlace = (x: number, y: number) => (x > 58 && x < 108 && y > 83 && y < 93) || PLACES.some(([, a, b, c, d]) => x > a - 3 && x < c + 3 && y > b - 3 && y < d + 3);
+    const spots: [number, number][] = [];
+    for (const rt of routes) {
+      if (rt.kind === 'rail') continue;
+      const [p, q] = rt.points;
+      const n = Math.ceil(Math.hypot(q.x - p.x, q.y - p.y) / TILE);
+      for (let i = 4; i < n - 4; i += 2) spots.push([Math.round((p.x + ((q.x - p.x) * i) / n) / TILE), Math.round((p.y + ((q.y - p.y) * i) / n) / TILE)]);
+    }
+    for (let i = spots.length - 1; i > 0; i--) {
+      const j = Math.floor(rr() * (i + 1));
+      [spots[i], spots[j]] = [spots[j], spots[i]];
+    }
+    const lone: [number, number][] = [];
+    for (const [rx, ry] of spots) {
+      if (lone.length >= 8) break;
+      const w = 4 + Math.floor(rr() * 3);
+      const h = 4 + Math.floor(rr() * 2);
+      const vertical = routes.some((rt) => rt.kind !== 'rail' && rt.points[0].x === rt.points[1].x && Math.abs(rt.points[0].x / TILE - rx) < 2.5 && ry >= rt.points[0].y / TILE && ry <= rt.points[1].y / TILE);
+      for (const side of [rr() < 0.5 ? -1 : 1, 0]) {
+        const sd = side || -1;
+        const x0 = vertical ? (sd < 0 ? rx - 3 - w : rx + 3) : rx - 2;
+        const y0 = vertical ? ry - 2 : sd < 0 ? ry - 3 - h : ry + 3;
+        if (nearPlace(x0, y0) || nearPlace(x0 + w, y0 + h) || nearPlace(x0 + w, y0) || nearPlace(x0, y0 + h)) continue;
+        if (lone.some(([lx, ly]) => Math.hypot(lx - x0, ly - y0) < 20)) continue;
+        if (!roomFor(x0, y0, w, h)) continue;
+        if (!buildWithLadder(x0, y0, w, h)) continue;
+        lone.push([x0, y0]);
+        break;
+      }
+    }
+  }
+
+  // ---- Cover in the fields: lone trees, bushes and rocks over the new ground, tall-grass meadows, and a piece of cover by
+  // every road at least every ~40 m (a tree, a rock or a bush a few tiles off its edge).
+  // (Nothing is scattered within three tiles of a building: a ladder and a doorway need open ground in front.)
+  const nearHouse = new Uint8Array(SIZE * SIZE);
+  for (const b of buildings) for (let y = b.y0 - 3; y < b.y0 + b.h + 3; y++) for (let x = b.x0 - 3; x < b.x0 + b.w + 3; x++) if (x >= 0 && y >= 0 && x < SIZE && y < SIZE) nearHouse[y * SIZE + x] = 1;
+  for (let i = 0; i < 1500; i++) {
+    const x = 2 + Math.floor(rr() * (SIZE - 4));
+    const y = 2 + Math.floor(rr() * (SIZE - 4));
+    if (get(x, y) !== 'g' || nearHouse[y * SIZE + x]) continue;
+    const k = rr();
+    set(x, y, k < 0.5 ? 't' : k < 0.85 ? 'b' : 'k');
+  }
+  for (let i = 0, made = 0; i < 300 && made < 34; i++) {
+    const cx = 6 + Math.floor(rr() * (SIZE - 12));
+    const cy = 6 + Math.floor(rr() * (SIZE - 12));
+    if (get(cx, cy) !== 'g' || nearHouse[cy * SIZE + cx]) continue;
+    const rx = 1.5 + rr() * 2.5;
+    const ry = 1.5 + rr() * 2.5;
+    for (let y = Math.floor(cy - ry); y <= cy + ry; y++) for (let x = Math.floor(cx - rx); x <= cx + rx; x++) {
+      if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1 + (rr() - 0.5) * 0.4 && get(x, y) === 'g') set(x, y, 'h');
+    }
+    made += 1;
+  }
+  const COVER = 'tkbf#vr';
+  for (const rt of routes) {
+    if (rt.kind === 'rail') continue;
+    const [p, q] = rt.points;
+    const horizontal = p.y === q.y;
+    const a = Math.round((horizontal ? p.x : p.y) / TILE);
+    const b = Math.round((horizontal ? q.x : q.y) / TILE);
+    const fixed = Math.round((horizontal ? p.y : p.x) / TILE);
+    let since = 0;
+    for (let k = a; k <= b; k++) {
+      let near = false;
+      for (let d = -3; d <= 3 && !near; d++) for (let e = -3; e <= 3 && !near; e++) {
+        const x = horizontal ? k + d : fixed + e;
+        const y = horizontal ? fixed + e : k + d;
+        if (COVER.includes(get(x, y))) near = true;
+      }
+      since = near ? 0 : since + 1;
+      if (since >= 14) {
+        const side = rr() < 0.5 ? -1 : 1;
+        const off = side * (3 + Math.floor(rr() * 2));
+        const x = horizontal ? k : fixed + off;
+        const y = horizontal ? fixed + off : k;
+        if (get(x, y) === 'g' && !nearHouse[y * SIZE + x]) {
+          const c = rr();
+          set(x, y, c < 0.5 ? 't' : c < 0.8 ? 'k' : 'b');
+          since = 0;
+        }
+      }
+    }
+  }
+  // The South field: forty-four tiles of open meadow between River Road and the Truck Stop, three rows wide with a few trees, rocks
+  // and bushes along its edges (grazing country; also a clear stretch the tests can stand a duel on, with cover a few steps off,
+  // and near enough the middle of the map to lie inside every early Deadline circle).
+  for (let y = 87; y < 90; y++) for (let x = 62; x < 106; x++) if ('tbkhcfsr'.includes(get(x, y))) set(x, y, 'g');
+  for (const y of [85, 86, 90, 91]) for (let x = 62; x < 106; x += 3) if (get(x, y) === 'g' && !nearHouse[y * SIZE + x]) set(x, y, rr() < 0.4 ? 't' : rr() < 0.5 ? 'k' : 'b');
+  for (const [x, y] of [[71, 86], [75, 86], [79, 86], [71, 88], [75, 88], [79, 88]]) set(x, y, 'k'); // boulders by the row's middle
+  // Mast Hill is exposed: nothing taller than grass for ten tiles round the fence, three blobs of tall grass and six rocks.
+  for (let y = 7 - 10; y < 20 + 10; y++) for (let x = 8 - 10; x < 23 + 10; x++) if (x > 1 && y > 1 && 'tb'.includes(get(x, y))) set(x, y, 'g');
+  for (const [cx, cy] of [[30, 12], [4, 22], [14, 27]]) for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 2; x++) if (get(x, y) === 'g') set(x, y, 'h');
+  for (const [x, y] of [[28, 8], [29, 17], [5, 12], [6, 25], [18, 26], [24, 25]]) if (get(x, y) === 'g') set(x, y, 'k');
+
+  // Every door opens onto open ground: clear two tiles in front of it of fences, trees, rocks and crates that the yards,
+  // farms and lone trees may have put there.
   for (const b of buildings) {
     for (let y = b.y0; y < b.y0 + b.h; y++) {
       for (let x = b.x0; x < b.x0 + b.w; x++) {
         const ring = x === b.x0 || y === b.y0 || x === b.x0 + b.w - 1 || y === b.y0 + b.h - 1;
         if (!ring || get(x, y) !== '.') continue;
-        const ox = x === b.x0 ? -1 : x === b.x0 + b.w - 1 ? 1 : 0;
-        const oy = y === b.y0 ? -1 : y === b.y0 + b.h - 1 ? 1 : 0;
-        for (let k = 1; k <= 2; k++) if ('ftkr'.includes(get(x + ox * k, y + oy * k))) set(x + ox * k, y + oy * k, 'g');
+        const dx = x === b.x0 ? -1 : x === b.x0 + b.w - 1 ? 1 : 0;
+        const dy = y === b.y0 ? -1 : y === b.y0 + b.h - 1 ? 1 : 0;
+        for (let k = 1; k <= 2; k++) if ('ftkr'.includes(get(x + dx * k, y + dy * k))) set(x + dx * k, y + dy * k, 'g');
       }
     }
   }
@@ -500,6 +815,67 @@ const buildMap = () => {
   for (let i = 0; i < SIZE; i++) {
     for (const [x, y] of [[i, 0], [i, 1], [i, SIZE - 1], [i, SIZE - 2], [0, i], [1, i], [SIZE - 1, i], [SIZE - 2, i]]) set(x, y, 't');
   }
+
+  // Nothing is walled in: every open tile can be reached from Route 1. A pocket that trees or rocks have closed off gets one of
+  // them cleared (the shortest way out); anything walled in by buildings is left for the map test to report.
+  {
+    const blocked = (c: string) => 'tkv#ur'.includes(c);
+    const idx = (x: number, y: number) => y * SIZE + x;
+    const reach = new Uint8Array(SIZE * SIZE);
+    const flood = (sx: number, sy: number) => {
+      const q = [idx(sx, sy)];
+      reach[q[0]] = 1;
+      while (q.length) {
+        const i = q.pop()!;
+        const x = i % SIZE;
+        const y = (i - x) / SIZE;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= SIZE || ny >= SIZE || reach[idx(nx, ny)] || blocked(get(nx, ny))) continue;
+          reach[idx(nx, ny)] = 1;
+          q.push(idx(nx, ny));
+        }
+      }
+    };
+    flood(60, 3);
+    for (let y = 2; y < SIZE - 2; y++) for (let x = 2; x < SIZE - 2; x++) {
+      if (reach[idx(x, y)] || blocked(get(x, y))) continue;
+      // Shortest way out through trees and rocks only (a breadth-first walk from the pocket to anything reached).
+      const prev = new Map<number, number>();
+      const queue = [idx(x, y)];
+      prev.set(idx(x, y), -1);
+      let found = -1;
+      for (let qi = 0; qi < queue.length && found < 0; qi++) {
+        const i = queue[qi];
+        const cx = i % SIZE;
+        const cy = (i - cx) / SIZE;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = cx + dx;
+          const ny = cy + dy;
+          if (nx < 2 || ny < 2 || nx >= SIZE - 2 || ny >= SIZE - 2 || prev.has(idx(nx, ny))) continue;
+          const c = get(nx, ny);
+          if (blocked(c) && !'tkr'.includes(c)) continue;
+          prev.set(idx(nx, ny), i);
+          if (reach[idx(nx, ny)] && !blocked(c)) {
+            found = idx(nx, ny);
+            break;
+          }
+          queue.push(idx(nx, ny));
+        }
+      }
+      if (found < 0) continue;
+      for (let i = prev.get(found)!; i >= 0 && !reach[i]; i = prev.get(i)!) {
+        const px = i % SIZE;
+        const py = (i - px) / SIZE;
+        if ('tkr'.includes(get(px, py))) set(px, py, 'g');
+      }
+      flood(x, y);
+    }
+  }
+
+  // The places, with their names and rectangles as drawn in the plan.
+  for (const [name, a, b, c, d] of PLACES) district(name, a, b, c, d);
   return { map: grid.map((row) => row.join('')), districts, buildings, routes, props };
 };
 
@@ -670,6 +1046,9 @@ export const LOOT_TABLES: { kinds: LootWeights; rarity: number[]; vest: number[]
 export const PLACE_TIER: Record<string, number> = {
   'Old Town': 3,
   'Container Yard': 3,
+  'The Campus': 3,
+  'Mast Hill': 3,
+  Railyard: 2,
   'Hollis Farm': 2,
   'Redgate Farm': 2,
   'Southfield Farm': 2,
@@ -678,6 +1057,20 @@ export const PLACE_TIER: Record<string, number> = {
   Lakeside: 1,
   'Windmill Hill': 1,
   Deadwood: 1,
+};
+/** The named place a point (metres) lies in: the riskiest one where two overlap, or null out in the fields. */
+export const placeAt = (x: number, y: number): District | null => {
+  let best: District | null = null;
+  let tier = 0;
+  for (const d of DISTRICTS) {
+    if (x < d.x0 || x >= d.x1 || y < d.y0 || y >= d.y1) continue;
+    const t = PLACE_TIER[d.name] ?? 1;
+    if (t > tier) {
+      best = d;
+      tier = t;
+    }
+  }
+  return best;
 };
 /** The loot tier at a point of the map: the riskiest place it lies in, or 1 out in the fields. */
 export const lootTierAt = (x: number, y: number) => {
@@ -840,15 +1233,13 @@ export const SWIM = { speed: 0.42 };
 export const MOVE = { accel: 40, friction: 45, turn: 12 };
 
 /**
- * The Deadline: wait, then shrink, phase after phase, until nothing is left. Six phases, at most 7 min 33 s of ground
- * play (453 s) on the 176 m map; players dying, not the table, should set the real length. The radii are the 288 m plan's
- * (110, 70, 42, 24, 12) scaled to this map and then widened (0.61x gives 67, 43, 26, 15, 7). For twenty fighters the first
- * three circles wait and shrink longer and the second and third are wider again (62 and 40 m, from 55 and 34): with the
- * ten-player table twenty bots packed into the second circle and the round was over in about 3:40 (bot-sim median); with
- * this one it is about 4:10 and the waits the lull breaker cuts keep the dead air down. Once the bots hunted, matches
- * ended in the first two phases (bot-sim median 3:03) with 16% dead air, mostly the last few searching a circle still
- * drawn for twenty; the first circle now starts closing at 75 s (from 90) and the endgame rush below pulls the last
- * three together (dead air about 6%, median about 2:46). Rules the sim tests hold it to:
+ * The Deadline: wait, then shrink, phase after phase, until nothing is left. Six phases on the 240 m map. The radii are the 176 m
+ * map's (80, 62, 40, 22, 9) times 1.36 (109, 84, 54, 30, 12); the start radius stays 0.72 of the map. The waits and shrinks were
+ * tuned with the bot-sim (50 matches) to the map-v2 gates: round length median 4:30-5:30 from Play, p10 over 3:30, p90 under
+ * 6:30, dead air about 10% after the first ground minute, at most one Deadline death a match. What the bot-sim showed: the first
+ * circle waits long (150 s) because bots only start trading about two minutes in (their landing grace is 90 s and the field
+ * is wide), then every circle closes slowly (70 to 120 s) so there is always a line to walk and fights keep coming; players
+ * dying, not the table, set the real length (the endgame rules below cut the end short). Rules the sim tests hold it to:
  *  - the edge never moves faster than `ZONE_EDGE_SPEED` (under half the slowest running speed and under swimming);
  *  - from anywhere inside the current circle, the next one is never more than a third of that phase's wait + shrink away
  *    at running speed;
@@ -856,12 +1247,12 @@ export const MOVE = { accel: 40, friction: 45, turn: 12 };
  * `ZONE_RULES` can cut a wait short, never the first one: see there.
  */
 export const ZONE_PHASES = [
-  { wait: 75, shrink: 40, radius: 80, dps: 3 },
-  { wait: 70, shrink: 45, radius: 62, dps: 5 },
-  { wait: 45, shrink: 35, radius: 40, dps: 8 },
-  { wait: 30, shrink: 28, radius: 22, dps: 13 },
-  { wait: 20, shrink: 20, radius: 9, dps: 20 },
-  { wait: 15, shrink: 25, radius: 0, dps: 35 },
+  { wait: 150, shrink: 70, radius: 109, dps: 3 },
+  { wait: 20, shrink: 120, radius: 84, dps: 5 },
+  { wait: 20, shrink: 80, radius: 54, dps: 8 },
+  { wait: 30, shrink: 45, radius: 30, dps: 13 },
+  { wait: 25, shrink: 25, radius: 12, dps: 20 },
+  { wait: 15, shrink: 12, radius: 0, dps: 35 },
 ];
 /**
  * Waits that react to the match (decided in the sim, so online stays in sync):
@@ -881,9 +1272,9 @@ export const ZONE_PHASES = [
 export const ZONE_RULES = {
   lull: 20,
   lullWait: 6,
-  lullLate: 12,
-  squeezeAlive: 5,
-  rush: [{ alive: 3, phase: 2 }],
+  lullLate: 8,
+  squeezeAlive: 6,
+  rush: [{ alive: 4, phase: 2 }, { alive: 2, phase: 3 }],
   rushRoom: 0.25,
   rushWait: 5,
 };

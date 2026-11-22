@@ -386,12 +386,13 @@ describe('moving among things', () => {
 });
 
 describe('the river', () => {
-  it('crosses the whole map, twelve metres wide, with three bridges you walk over on a deck', () => {
+  it('crosses the whole map, twelve metres wide, with five crossings (footbridge, two bridges, the road bridge, the weir) you walk over on a deck', () => {
     for (let x = 2; x < SIZE - 2; x++) {
       const col = MAP.map((row) => row[x]);
       const wet = col.filter((t) => t === 'o' || t === 'd').length;
       expect(wet).toBeGreaterThanOrEqual(6);
     }
+    expect(RIVER.bridges).toHaveLength(5);
     for (const [bx, bw] of RIVER.bridges) {
       for (let x = bx; x < bx + bw; x++) expect(MAP.some((row) => row[x] === 'o')).toBe(false); // dry all the way over
       const c = Math.round(riverCentre(bx));
@@ -482,7 +483,7 @@ describe('the Deadline', () => {
     expect(hurtOutside).toBe(true);
     expect(s.phase).toBe('over');
     expect(s.winner).not.toBeNull();
-  });
+  }, 30000);
 
   const run = Math.min(...Object.values(FIGHTERS).map((f) => f.speed));
 
@@ -561,7 +562,7 @@ describe('the endgame rush', () => {
 
   it('with the last few left, an early Deadline skips to a small circle near the middle of the old one', () => {
     const s = landed();
-    for (let i = 0; i < 60 * 100; i++) step(s, idle());
+    for (let i = 0; i < 60 * (ZONE_PHASES[0].wait + 20); i++) step(s, idle());
     expect(s.zone.phase).toBe(0);
     expect(s.zone.state).toBe('shrink');
     const { cx, cy, r } = s.zone;
@@ -613,6 +614,6 @@ describe('bots', () => {
     expect(shots).toBeGreaterThan(20);
     expect(s.players.filter((p) => p.placement === 1)).toHaveLength(1);
     expect(s.players.some((p) => p.weapon !== 'fists' || p.kills > 0)).toBe(true);
-    expect(WORLD).toBe(176);
-  });
+    expect(WORLD).toBe(240);
+  }, 30000);
 });

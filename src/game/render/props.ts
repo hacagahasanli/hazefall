@@ -163,6 +163,7 @@ const bridge = (bx: number, bw: number) => {
     y1 = Math.max(y1, y);
   }
   const big = bw >= 4;
+  const weir = bw === 3;
   const x0 = bx * TILE;
   const x1 = (bx + bw) * TILE;
   const z0 = y0 * TILE;
@@ -170,6 +171,13 @@ const bridge = (bx: number, bw: number) => {
   const cx = (x0 + x1) / 2;
   const parts: THREE.BufferGeometry[] = [];
   const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  if (weir) {
+    // The Weir: a plain grey concrete deck with a low parapet on each side, no truss: exposed on purpose.
+    parts.push(box(x1 - x0 + 0.2, 0.3, z1 - z0, cx, DECK_Y - 0.15, (z0 + z1) / 2, 0x9a9a96));
+    for (const x of [x0 + 0.1, x1 - 0.1]) parts.push(box(0.3, 0.7, z1 - z0, x, DECK_Y + 0.35, (z0 + z1) / 2, 0x8a8a86));
+    for (const z of [z0 + 0.4, z1 - 0.4]) parts.push(box(x1 - x0 + 0.6, 0.9, 0.8, cx, DECK_Y - 0.4, z, 0x7a7a76));
+    return mesh(join(parts));
+  }
   const MEMBER = big ? 0x3e6a8a : 0x8a623e;
   const JOINT = big ? 0x1f2a33 : 0x3a2a1c;
   const t = big ? 0.14 : 0.12; // member thickness
@@ -350,6 +358,83 @@ const poleSign = () => {
   return mesh(join(parts));
 };
 
+
+/** The radio mast on Mast Hill: a tapered lattice of boxes, red and white every 5 m, 30 m up, with a red lamp on top. Thin from above: its long shadow is the read. */
+const radioMast = () => {
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const parts: THREE.BufferGeometry[] = [box(3.4, 0.5, 3.4, 0, 0.25, 0, 0x8f8b82)];
+  const legs = [[-1, -1], [1, -1], [0, 1]];
+  for (let k = 0; k < 6; k++) {
+    const y0 = k * 5;
+    const y1 = y0 + 5;
+    const w0 = 1.3 - k * 0.17;
+    const w1 = 1.3 - (k + 1) * 0.17;
+    const col = k % 2 ? 0xf3efe6 : 0xe23d5c;
+    for (const [sx, sz] of legs) parts.push(beam(v(sx * w0, y0, sz * w0 * 0.8), v(sx * w1, y1, sz * w1 * 0.8), 0.22, 0.22, col));
+    parts.push(beam(v(-w1, y1, -w1 * 0.8), v(w1, y1, -w1 * 0.8), 0.12, 0.12, 0x9aa0ab), beam(v(w1, y1, -w1 * 0.8), v(0, y1, w1 * 0.8), 0.12, 0.12, 0x9aa0ab));
+  }
+  parts.push(knot(v(0, 30.4, 0), 0.45, 0xff3b3b));
+  return mesh(join(parts));
+};
+
+/** The HQ tower on the Campus plaza: a solid blue-glass block 18 m up with window bands, a blue roof slab and a green ring on it, 8 m across. */
+const hqTower = () => {
+  const parts: THREE.BufferGeometry[] = [box(11.4, 18, 11.4, 0, 9, 0, 0x6f8fb8)];
+  for (const y of [3, 7, 11, 15]) parts.push(box(11.6, 1.5, 11.6, 0, y, 0, 0x1b2a38));
+  parts.push(box(12, 0.8, 12, 0, 18.4, 0, 0x3e7bfa));
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const g = box(2.2, 0.5, 0.9, 0, 0, 0, 0x2ec27e);
+    g.rotateY(-a);
+    g.translate(Math.cos(a) * 3.8, 19, Math.sin(a) * 3.8);
+    parts.push(g);
+  }
+  return mesh(join(parts));
+};
+
+/** The fire lookout in Deadwood: four legs, a cabin and a pyramid roof (an orange square in the dark green), 14 m up. */
+const fireLookout = () => {
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const parts: THREE.BufferGeometry[] = [];
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) parts.push(beam(v(sx * 1.6, 0, sz * 1.6), v(sx * 0.9, 10.5, sz * 0.9), 0.3, 0.3, 0x5a4030));
+  for (const y of [4, 8]) for (const [a, b] of [[[-1.3, -1.3], [1.3, 1.3]], [[1.3, -1.3], [-1.3, 1.3]]]) parts.push(beam(v(a[0], y, a[1]), v(b[0], y + 3, b[1]), 0.12, 0.12, 0x7a5434));
+  parts.push(box(2.8, 2, 2.8, 0, 11.5, 0, 0x8a623e), box(2.9, 0.8, 2.9, 0, 11.7, 0, 0x1b2a38));
+  parts.push(drum(0.05, 2.7, 1.8, 0, 12.5, 0, 4, 0xf2542d).rotateY(Math.PI / 4));
+  return mesh(join(parts));
+};
+
+/** A signal gantry: one leg, and (the first of the pair) a beam 16 m long across the tracks with a red and a green light. */
+const signalGantry = (p: Prop) => {
+  const parts: THREE.BufferGeometry[] = [box(0.4, 7, 0.4, 0, 3.5, 0, 0x2a2d33)];
+  if (p.seed < 0.5) {
+    parts.push(box(0.35, 0.5, 16.4, 0, 7, 8, 0x2a2d33));
+    parts.push(box(0.5, 0.5, 0.5, 0.35, 6.4, 5.5, 0xff3b3b), box(0.5, 0.5, 0.5, 0.35, 6.4, 11, 0x3ddc84));
+  }
+  return mesh(join(parts));
+};
+
+/** The quarry conveyor: an inclined grey belt on three legs ending over a pale gravel cone. Runs along the map's y axis, 1 x 6 tiles. */
+const conveyor = () => {
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const parts: THREE.BufferGeometry[] = [beam(v(0, 1, -5.6), v(0, 9, 4.4), 1, 0.5, 0x7b8088)];
+  for (const [z, h] of [[-4, 2.4], [-0.5, 5], [3, 7.6]]) parts.push(box(0.3, h, 0.3, 0, h / 2, z, 0x4b5563));
+  parts.push(drum(0.2, 2.8, 2.6, 0, 0, 5.2, 7, 0xd6cfc0));
+  return mesh(join(parts));
+};
+
+/** A boxcar: a container-sized rust-coloured wagon with a roof ridge, one per 3 x 2 tiles on a yard track. */
+const boxcar = (p: Prop) => {
+  const colors = [0x8a4b32, 0x6b3a2a, 0x7a5a3a, 0x5a3c30];
+  const color = colors[Math.floor(p.seed * colors.length)];
+  const parts = [
+    box(5.8, 2.6, 2.4, 0, 1.8, 0, color),
+    box(5.8, 0.25, 1.2, 0, 3.2, 0, 0x3a2a22),
+    box(0.1, 2, 1.1, 0, 1.8, 1.22, 0x3a2a22),
+    box(5.9, 0.4, 2.1, 0, 0.45, 0, 0x2a2d33),
+  ];
+  return mesh(join(parts));
+};
+
 const tent = (p: Prop) => {
   const color = p.seed > 0.5 ? 0x3f6b3a : 0xd0782c;
   const shape = new THREE.Shape();
@@ -385,7 +470,13 @@ export const buildProps = (scene: THREE.Scene) => {
     else if (p.kind === 'tower') o = waterTower();
     else if (p.kind === 'crane') o = crane();
     else if (p.kind === 'sign') o = poleSign();
-    if (o && (p.kind === 'tower' || p.kind === 'crane' || p.kind === 'sign')) {
+    else if (p.kind === 'mast') o = radioMast();
+    else if (p.kind === 'hq') o = hqTower();
+    else if (p.kind === 'lookout') o = fireLookout();
+    else if (p.kind === 'gantry') o = signalGantry(p);
+    else if (p.kind === 'conveyor') o = conveyor();
+    else if (p.kind === 'boxcar') o = boxcar(p);
+    if (o && ['tower', 'crane', 'sign', 'mast', 'hq', 'lookout', 'gantry', 'conveyor', 'boxcar'].includes(p.kind)) {
       // Landmarks stand square to the map (a crane's boom runs along the map's y axis towards `dir`) and keep their own look.
       o.position.set(c.x, 0, c.y);
       if (p.kind === 'crane') o.rotation.y = p.dir === -1 ? Math.PI : 0;

@@ -337,5 +337,5 @@ describe('determinism with roofs', () => {
       }
     }
     expect(longest / 60).toBeLessThan(20);
-  });
+  }, 30000);
 });

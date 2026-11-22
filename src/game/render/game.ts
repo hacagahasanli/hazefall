@@ -6,7 +6,7 @@ import { actionFor, DEFAULT_SETTINGS, keyLabel, keyMap } from '../settings';
 
 import type { VolumeKind } from '../sfx';
 import type { Action, Settings } from '../settings';
-import { ARMOR, HEALS, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITEMS, MAP, PLACE_TIER, PLAYERS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
+import { ARMOR, HEALS, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITEMS, MAP, PLACE_TIER, placeAt, PLAYERS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
 import { canSee, carryCap, chestHeight, feetOf, healChoice, inPlant, inWater, lineOfSight, lootUnder, reloadTime, solidAt, superThrowTarget, throwDistance } from '../sim/step';
 import { buildingAt, roofAt } from '../sim/roofs';
 import { createOfflineSession } from '../net/session';
@@ -2678,20 +2678,6 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     }
     return 'something';
   };
-  /** The named place a point of the map lies in (the riskiest one where they overlap), or null out in the fields. */
-  const placeAt = (x: number, y: number) => {
-    let best: string | null = null;
-    let tier = 0;
-    for (const d of DISTRICTS) {
-      if (x < d.x0 || x >= d.x1 || y < d.y0 || y >= d.y1) continue;
-      const t = PLACE_TIER[d.name] ?? 1;
-      if (t > tier || (t === tier && best === null)) {
-        best = d.name;
-        tier = t;
-      }
-    }
-    return best;
-  };
   const emitHud = () => {
     const self = state.players[me];
     const z = state.zone;
@@ -2708,7 +2694,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
             : { label: COPY.zone.final, seconds: 0, outside };
     const k = self.stage === 'ground' ? lootUnder(state, self) : null;
     // Walking into a named place on the ground shows its name once; nothing in the plane or the air, nothing once you are down.
-    const here = self.alive && self.stage === 'ground' ? placeAt(self.x, self.y) : null;
+    const here = self.alive && self.stage === 'ground' ? placeAt(self.x, self.y)?.name ?? null : null;
     if (here !== inPlace) {
       inPlace = here;
       if (here && !placesShown.has(here)) {
