@@ -246,7 +246,8 @@ export interface Drone {
 }
 
 export type GameEvent =
-  | { type: 'shot'; owner: number; x: number; y: number; angle: number; weapon: WeaponKind }
+  /** `len`: for a round that lands the tick it is fired (the sniper), how far it flew before it stopped, so the contrail ends there. */
+  | { type: 'shot'; owner: number; x: number; y: number; angle: number; weapon: WeaponKind; len?: number }
   | { type: 'hit'; target: number; by: number | null; x: number; y: number; damage: number; armor: boolean; ko: boolean }
   /** `z`: the height it happened at (absent = the old default height). */
   | { type: 'impact'; x: number; y: number; z?: number }

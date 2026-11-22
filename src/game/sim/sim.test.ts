@@ -617,3 +617,62 @@ describe('bots', () => {
     expect(WORLD).toBe(240);
   }, 30000);
 });
+
+describe('the sniper lands the tick it is fired', () => {
+  const duel = (dist: number, hp = 50) => {
+    const s = landed(3);
+    clearAround(s);
+    const [a, b] = s.players;
+    place(s, 0, OPEN.x, OPEN.y);
+    place(s, 1, OPEN.x + dist, OPEN.y);
+    Object.assign(a, { weapon: 'sniper', rarity: 0, mag: 5, ammo: 10, cooldown: 0, swapping: 0, reload: 0 });
+    Object.assign(b, { hp, armor: 0 });
+    const inputs = idle();
+    inputs[0] = { ...NO_INPUT, fire: true, aimX: b.x, aimY: b.y };
+    step(s, inputs);
+    return { s, a, b };
+  };
+
+  it('a hit, the damage and the kill all come on the frame of the shot, not a second later', () => {
+    const { s, b } = duel(50);
+    expect(b.alive).toBe(false);
+    const kinds = s.events.map((e) => e.type);
+    expect(kinds).toContain('shot');
+    expect(kinds).toContain('hit');
+    expect(kinds.indexOf('shot')).toBeLessThan(kinds.indexOf('hit'));
+    expect(s.projectiles.filter((p) => p.kind === 'bullet')).toHaveLength(0);
+  });
+
+  it('the shot says where the round stopped: at the body, not through it', () => {
+    const { s } = duel(50);
+    const shot = s.events.find((e) => e.type === 'shot');
+    expect(shot?.type === 'shot' && shot.len).toBeGreaterThan(48);
+    expect(shot?.type === 'shot' && shot.len).toBeLessThan(50.5);
+  });
+
+  it('a round fired at nobody still reports how far it went', () => {
+    const t = landed(3);
+    clearAround(t);
+    place(t, 0, OPEN.x, OPEN.y);
+    Object.assign(t.players[0], { weapon: 'sniper', rarity: 0, mag: 5, ammo: 10, cooldown: 0, swapping: 0, reload: 0 });
+    const inputs = idle();
+    inputs[0] = { ...NO_INPUT, fire: true, aimX: OPEN.x + 10, aimY: OPEN.y };
+    step(t, inputs);
+    const shot = t.events.find((e) => e.type === 'shot');
+    expect(t.events.some((e) => e.type === 'hit')).toBe(false);
+    expect(shot?.type === 'shot' && shot.len).toBeGreaterThan(20);
+  });
+
+  it('the other guns still fly: a rifle round is in the air after the shot', () => {
+    const s = landed(3);
+    clearAround(s);
+    place(s, 0, OPEN.x, OPEN.y);
+    Object.assign(s.players[0], { weapon: 'rifle', rarity: 0, mag: 5, ammo: 10, cooldown: 0, swapping: 0, reload: 0 });
+    const inputs = idle();
+    inputs[0] = { ...NO_INPUT, fire: true, aimX: OPEN.x + 10, aimY: OPEN.y };
+    step(s, inputs);
+    expect(s.projectiles.filter((p) => p.kind === 'bullet')).toHaveLength(1);
+    const shot = s.events.find((e) => e.type === 'shot');
+    expect(shot?.type === 'shot' && shot.len).toBeUndefined();
+  });
+});

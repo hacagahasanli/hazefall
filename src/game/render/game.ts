@@ -665,10 +665,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     return m;
   });
   let nextContrail = 0;
-  const contrail = (x: number, y: number, angle: number, h: number) => {
-    // March along the line until something solid or someone stops the round.
-    let d = 0.8;
-    for (; d < 160; d += 0.5) {
+  const contrail = (x: number, y: number, angle: number, h: number, len?: number) => {
+    // The sim says where the round stopped (it lands the tick it is fired): the line ends exactly there. Without it (an old
+    // snapshot), march along the line until something solid or someone stops the round.
+    let d = len !== undefined ? Math.max(0.8, len + 0.6) : 0.8;
+    for (; len === undefined && d < 160; d += 0.5) {
       const px = x + Math.cos(angle) * d;
       const py = y + Math.sin(angle) * d;
       if (solidAt(state, px, py, h)) break;
@@ -1349,7 +1350,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           else sfx.gunshot(SOUND[e.weapon], e.x - camX(), d);
         }
         if (e.owner === me && (e.weapon === 'shotgun' || e.weapon === 'sniper')) trauma = Math.min(1, trauma + 0.2);
-        if (e.weapon === 'sniper') contrail(e.x, e.y, e.angle, chestHeight(state.players[e.owner]) + 0.05);
+        if (e.weapon === 'sniper') contrail(e.x, e.y, e.angle, chestHeight(state.players[e.owner]) + 0.05, e.len);
         break;
       }
       case 'hit':

@@ -50,7 +50,7 @@ import {
 import { BODY, buildingAt, CLIMB, EAVE, FEET, inRoofSlab, ladderAt, roofAt, roofBetween, ROOF_LAYER, roofHeightOf, supportAt } from './roofs';
 import { NO_INPUT } from './types';
 
-import type { Field, FighterId, GameState, Gun, HealKind, Input, Loot, LootKind, Player, Projectile, WeaponKind } from './types';
+import type { Field, FighterId, GameEvent, GameState, Gun, HealKind, Input, Loot, LootKind, Player, Projectile, WeaponKind } from './types';
 
 const CENTER = WORLD / 2;
 
@@ -992,7 +992,16 @@ const aimedAt = (state: GameState, p: Player, aimX: number, aimY: number) => {
 /** A gun's damage per bullet at the rarity in hand (fists are fists). */
 const gunDamage = (p: Player) => WEAPONS[p.weapon].damage * (p.weapon === 'fists' ? 1 : (RARITY.damage[p.rarity] ?? 1));
 
-const fireBullet = (state: GameState, p: Player, angle: number, aim?: { x: number; y: number }) => {
+/**
+ * Rounds that land the tick they are fired. The sniper's round flies at 80 m/s, so at 100 m it would hit more than a second
+ * after the contrail was drawn, and the target would die long after the line had passed through it. It is resolved with
+ * the same flight, wall, height and falloff rules as any bullet, just all at once, so the hit, the damage number and a
+ * kill all land on the frame of the shot, and the line ends where the round did.
+ */
+const INSTANT: ReadonlySet<WeaponKind> = new Set<WeaponKind>(['sniper']);
+
+/** Fires one round. Returns how far it flew if it was resolved at once (INSTANT), else undefined. */
+const fireBullet = (state: GameState, p: Player, angle: number, aim?: { x: number; y: number }): number | undefined => {
   const w = WEAPONS[p.weapon];
   // Leaning out, the muzzle is out past the corner too.
   const o = hitPoint(p);
@@ -1010,6 +1019,13 @@ const fireBullet = (state: GameState, p: Player, angle: number, aim?: { x: numbe
     sx: x, sy: y, tx: 0, ty: 0, t: 0, duration: 0, radius: 0,
     h: h0, h0, h1: target ? chestHeight(target) : aim ? 1.1 : h0, hd: target ? Math.max(1, Math.hypot(target.x - x, target.y - y)) : toAim,
   });
+  if (!INSTANT.has(p.weapon)) return undefined;
+  const pr = state.projectiles[state.projectiles.length - 1];
+  while (updateProjectile(state, pr)) {
+    /* keep flying until it hits something or runs out of range */
+  }
+  state.projectiles.pop();
+  return Math.hypot(pr.x - pr.sx, pr.y - pr.sy);
 };
 
 /** Damage after the distance the bullet flew: full up close, down to `min` of it far away. */
@@ -1120,12 +1136,17 @@ const shoot = (state: GameState, p: Player, input: Input) => {
   const keep = p.weapon;
   p.weapon = kind; // fireBullet reads the weapon
   const at = { x: input.aimX, y: input.aimY };
+  // The shot comes first in the event list, so a hit or a kill it causes this tick reads as its result.
+  const shot: GameEvent = { type: 'shot', owner: p.id, x: p.x, y: p.y, angle: aim, weapon: kind };
+  state.events.push(shot);
   if (kind === 'rockets') fireRocket(state, p, aim, input.pitch ?? 0);
   else if (w.bullets > 1) {
     for (let i = 0; i < w.bullets; i++) fireBullet(state, p, aim - w.spread / 2 + (w.spread * i) / (w.bullets - 1), at);
-  } else fireBullet(state, p, aim + (nextRandom(state) - 0.5) * w.spread, at);
+  } else {
+    const len = fireBullet(state, p, aim + (nextRandom(state) - 0.5) * w.spread, at);
+    if (len !== undefined && shot.type === 'shot') shot.len = len;
+  }
   p.weapon = keep;
-  state.events.push({ type: 'shot', owner: p.id, x: p.x, y: p.y, angle: aim, weapon: kind });
   if (kind !== 'fists') p.shots += w.bullets;
   if (kind !== 'fists') {
     p.mag -= 1;
