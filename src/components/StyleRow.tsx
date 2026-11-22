@@ -144,7 +144,7 @@ export const StyleRow = ({
                 <Chip item={item} fighter={fighter} w={26} h={22} />
                 {isNew(kind) && <span aria-label="New" className="absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full bg-gold" />}
               </button>
-              <span className="text-xs text-cream/65">{caption}</span>
+              <span className="text-xs text-cream/65 [@media(max-height:420px)]:hidden">{caption}</span>
             </div>
           );
         })}

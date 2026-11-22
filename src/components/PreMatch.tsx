@@ -268,9 +268,11 @@ export const PreMatch = ({
       <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(270deg,rgba(10,13,24,0.88)_0%,rgba(10,13,24,0.55)_24%,rgba(10,13,24,0)_46%)] max-sm:bg-[linear-gradient(0deg,rgba(10,13,24,0.95)_0%,rgba(10,13,24,0.6)_40%,rgba(10,13,24,0)_65%)]" />
       <div className="pointer-events-none fixed inset-0 shadow-[inset_0_0_200px_rgba(0,0,0,0.6)]" />
 
+      {/* One column owns the top bar and the identity stack, so the stack can only grow into the space the bar leaves (it used to be two fixed islands that met on short screens). */}
+      <div className="pointer-events-none fixed inset-0 flex flex-col">
       {/* Top: the status and the clock. */}
       <header
-        className={`fixed inset-x-0 top-0 flex items-start justify-between gap-4 px-5 pt-4 transition-opacity duration-500 sm:px-8 sm:pt-6 ${launching ? 'opacity-0' : 'opacity-100'}`}
+        className={`pointer-events-auto flex shrink-0 items-start justify-between gap-4 px-5 pt-4 transition-opacity duration-500 sm:px-8 sm:pt-6 [@media(max-height:500px)]:pt-2 ${launching ? 'opacity-0' : 'opacity-100'}`}
         style={{ paddingLeft: 'max(1.25rem, env(safe-area-inset-left))', paddingRight: 'max(1.25rem, env(safe-area-inset-right))' }}
       >
         <div className="flex flex-col items-start gap-2 [@media(max-height:500px)]:flex-row [@media(max-height:500px)]:items-center">
@@ -280,7 +282,7 @@ export const PreMatch = ({
               uiTick(true);
               onBack();
             }}
-            className="panel-cut bg-ink-deep/70 px-4 py-2 text-sm font-semibold text-cream/80 backdrop-blur hover:text-cream focus-visible:outline-2 focus-visible:outline-green"
+            className={`panel-cut bg-ink-deep/70 px-4 py-2 text-sm font-semibold text-cream/80 backdrop-blur hover:text-cream focus-visible:outline-2 focus-visible:outline-green ${touch ? 'min-h-11' : ''}`}
           >
             ← Menu{!touch && <span className="ml-2 text-cream/45">Esc</span>}
           </button>
@@ -296,10 +298,10 @@ export const PreMatch = ({
 
       {/* Left (bottom on phones): who you are. */}
       <section
-        className={`fixed bottom-0 left-0 flex max-w-[min(560px,58vw)] flex-col gap-3 px-5 pb-6 transition-all duration-500 sm:px-8 sm:pb-9 max-sm:max-w-none max-sm:right-0 [@media(max-height:640px)]:sm:gap-2 [@media(max-height:640px)]:sm:pb-5 [@media(max-height:500px)]:gap-1.5 [@media(max-height:500px)]:pb-3 [@media(max-height:500px)]:sm:pb-3 ${launching ? 'translate-y-6 opacity-0' : 'opacity-100'}`}
+        className={`pointer-events-auto mt-auto flex max-w-[min(560px,58vw)] min-h-0 flex-col gap-3 px-5 pb-6 transition-all duration-500 sm:px-8 sm:pb-9 max-sm:max-w-none [@media(max-height:640px)]:sm:gap-2 [@media(max-height:640px)]:sm:pb-5 [@media(max-height:500px)]:gap-1.5 [@media(max-height:500px)]:pb-3 [@media(max-height:500px)]:sm:pb-3 ${launching ? 'translate-y-6 opacity-0' : 'opacity-100'}`}
         style={{ paddingLeft: 'max(1.25rem, env(safe-area-inset-left))', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
       >
-        <span className="text-sm font-semibold text-cream/70">You drop as</span>
+        <span className="text-sm font-semibold text-cream/70 [@media(max-height:640px)]:hidden">You drop as</span>
         <h1
           key={fighter}
           className="font-display text-5xl leading-[0.9] drop-shadow-[0_4px_20px_rgba(0,0,0,0.7)] [animation:riseIn_0.35s_ease-out] sm:text-7xl [@media(max-height:500px)]:text-4xl [@media(max-height:420px)]:text-3xl"
@@ -358,8 +360,9 @@ export const PreMatch = ({
           {readied ? <span className={fx ? 'lcs-glitch-in inline-block' : ''}>Ready ✓</span> : 'Ready'}
           {!touch && !readied && settings.showKeyHints && <span className="ml-3 text-sm opacity-70">Space</span>}
         </button>
-        {!readied && live && full && <span className="text-xs text-cream/60">The match starts when you are ready.</span>}
+        {!readied && live && full && <span className="text-xs text-cream/60 [@media(max-height:640px)]:hidden">The match starts when you are ready.</span>}
       </section>
+      </div>
 
       {/* Right: the lobby filling (hidden on short phones, where the clock already says it). */}
       <aside
