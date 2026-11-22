@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0C1A17" />
+    <link rel="icon" href="./favicon.ico" sizes="48x48" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="./favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="icon" href="./favicon-16.png" type="image/png" sizes="16x16" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" sizes="180x180" />
+    <link rel="manifest" href="./site.webmanifest" />
+    <title>%GAME_TITLE%</title>
+    <meta name="author" content="%STUDIO_NAME%" />
+    <meta name="description" content="A battle royale in your browser: twenty players drop from a plane, loot guns and armor, and fight inside a shrinking safe zone until one is left." />
+    <!-- CrazyGames SDK v3. If it cannot load (offline, another portal), the game runs without it. -->
+    <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
+    <!--
+      The boot screen: up from the first paint until the menu's live scene has drawn its first frame. It is the game's own
+      world: the real map (drawn by the build, portal/bootMap.ts) seen from the drop plane under the menu's late-afternoon
+      sky, the plane crossing, fighters under their canopies, the logo. Its one progress value (src/lib/bootProgress.ts,
+      inlined) follows real checkpoints: the game code's bytes as they arrive (see the boot-loader plugin in
+      vite.portal.config.ts), then each step the game reports through window.__lcsBoot (src/lib/loading.ts). Only transforms
+      and opacity animate, so it keeps moving while the page is busy building the world.
+    -->
+    <style>
+      html,body{margin:0;height:100%;background:#0a0d18}
+      #boot{--gold:#ffd23f;--cream:#e6ebf5;--ink:#0a0d18;--pink:#ff3d6e;position:fixed;inset:0;z-index:1000;overflow:hidden;background:#0a0d18;color:var(--cream);font:600 14px/1.4 'BootChakra',system-ui,sans-serif;-webkit-user-select:none;user-select:none;cursor:default}
+      #boot *{box-sizing:border-box}
+      #boot .all{position:absolute;inset:0;transform-origin:50% 62%}
+      /* Late afternoon over the battleground, the menu's own sky: blue up high, warm haze at the horizon. */
+      #boot .sky{position:absolute;inset:0;background:linear-gradient(180deg,#6f9fcc 0%,#a9cbe6 26%,#d6dcd8 40%,#e9dcc0 46%,#c9d6df 100%)}
+      #boot .sun{position:absolute;right:8%;top:6%;width:46vmax;height:46vmax;margin:-23vmax -23vmax 0 0;border-radius:50%;background:radial-gradient(circle,rgba(255,236,190,.85) 0%,rgba(255,226,176,.32) 22%,transparent 60%)}
+      /* The real map (inlined by the build), seen from the plane: tilted away to the horizon, drifting by underneath. */
+      #boot .ground{position:absolute;inset:0;perspective:900px;perspective-origin:50% 18%;overflow:hidden;-webkit-mask-image:linear-gradient(180deg,transparent 24%,#000 36%);mask-image:linear-gradient(180deg,transparent 24%,#000 36%)}
+      #boot .land{position:absolute;left:50%;bottom:-60vmax;width:400vmax;height:400vmax;margin-left:-200vmax;transform-origin:50% 100%;transform:rotateX(58deg);background:#2f6a32}
+      /* Forest all round, at the map's own tile size: each tree a lit canopy with a dark rim, as on the map. */
+      #boot .land::before{content:'';position:absolute;inset:0;background:radial-gradient(circle,#386f3a 0 30%,#2f6a32 31% 52%,#214d24 70%) 0 0/.727vmax .727vmax}
+      #boot .land i{position:absolute;left:42%;top:64.25%;width:16%;height:16%;background:var(--map) center/100% 100% no-repeat;-webkit-mask-image:linear-gradient(90deg,transparent,#000 3%,#000 97%,transparent),linear-gradient(180deg,transparent,#000 3%,#000 97%,transparent);-webkit-mask-composite:source-in;mask-image:linear-gradient(90deg,transparent,#000 3%,#000 97%,transparent),linear-gradient(180deg,transparent,#000 3%,#000 97%,transparent);mask-composite:intersect;animation:bDrift 60s ease-in-out infinite alternate}
+      #boot .haze{position:absolute;left:0;right:0;top:18%;height:26%;background:linear-gradient(180deg,rgba(201,214,223,0) 0%,rgba(233,220,192,.9) 32%,rgba(214,220,216,.6) 50%,rgba(201,214,223,0) 100%)}
+      /* Clouds: soft, below the plane and above the fields, at three depths. */
+      #boot .cl{position:absolute;border-radius:50%;background:radial-gradient(closest-side,rgba(255,255,255,.95),rgba(255,255,255,.55) 55%,rgba(255,255,255,0));filter:blur(2px);animation:bCloud linear infinite}
+      #boot .cl.a{top:48%;width:44vmax;height:9vmax;animation-duration:38s;animation-delay:-6s;opacity:.85}
+      #boot .cl.b{top:62%;width:60vmax;height:13vmax;animation-duration:26s;animation-delay:-17s;opacity:.7}
+      #boot .cl.c{top:36%;width:28vmax;height:5vmax;animation-duration:60s;animation-delay:-30s;opacity:.9}
+      #boot .cl.d{top:78%;width:80vmax;height:18vmax;animation-duration:19s;animation-delay:-4s;opacity:.55}
+      /* The drop plane crossing, and fighters already out under their canopies. */
+      #boot .plane{position:absolute;left:0;top:33%;width:clamp(150px,19vw,260px);aspect-ratio:160/48;animation:bFly 16s linear infinite;animation-delay:-5s}
+      #boot .plane svg{width:100%;height:100%;display:block;filter:drop-shadow(0 6px 10px rgba(30,40,60,.25))}
+      #boot .plane .prop{transform-box:fill-box;transform-origin:50% 50%;animation:bProp .09s linear infinite}
+      #boot .jp{position:absolute;width:clamp(30px,3.4vw,46px);aspect-ratio:40/56;animation:bFall linear infinite}
+      #boot .jp svg{width:100%;height:100%;display:block;transform-origin:50% 0;animation:bSway 3.2s ease-in-out infinite alternate}
+      #boot .jp.j1{left:64%;animation-duration:15s;animation-delay:-3s}
+      #boot .jp.j2{left:76%;animation-duration:18s;animation-delay:-11s;width:clamp(24px,2.6vw,36px)}
+      #boot .jp.j3{left:22%;animation-duration:17s;animation-delay:-8s;width:clamp(22px,2.3vw,32px)}
+      #boot .jp.j4{left:86%;animation-duration:21s;animation-delay:-16s;width:clamp(20px,2vw,28px)}
+      #boot .jp.j2 svg{animation-delay:-1.4s}#boot .jp.j3 svg{animation-delay:-.7s}#boot .jp.j4 svg{animation-delay:-2.2s}
+      /* Shade for the words: dark at the top behind the logo, darker at the bottom behind the bar. */
+      #boot .shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,13,24,.35) 0%,rgba(10,13,24,0) 30%,rgba(10,13,24,0) 52%,rgba(10,13,24,.55) 74%,rgba(10,13,24,.9) 100%)}
+      #boot .logo{position:absolute;left:50%;top:max(7%,24px);width:min(480px,62vw);aspect-ratio:1130/306;transform:translateX(-50%);background:url(./brand/logo.svg) center/contain no-repeat;filter:drop-shadow(0 8px 24px rgba(10,13,24,.45))}
+      #boot .foot{position:absolute;left:50%;bottom:max(34px,calc(env(safe-area-inset-bottom) + 18px));width:min(620px,calc(100vw - 32px));transform:translateX(-50%);display:flex;flex-direction:column;gap:10px}
+      #boot .row{display:flex;align-items:flex-end;justify-content:space-between;gap:16px}
+      #boot .now{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15px;color:var(--cream);text-shadow:0 1px 2px rgba(0,0,0,.6);padding-bottom:3px}
+      #boot .pct{flex:none;font:400 40px/0.9 'BootBungee','BootChakra',Impact,sans-serif;color:var(--gold);text-shadow:0 2px 0 rgba(10,13,24,.55),0 0 22px rgba(255,210,63,.25);font-variant-numeric:tabular-nums}
+      #boot .pct small{font-size:.5em;margin-left:3px}
+      #boot .bar{position:relative;height:12px;overflow:hidden;clip-path:polygon(6px 0,100% 0,calc(100% - 6px) 100%,0 100%);background:rgba(10,13,24,.6);box-shadow:inset 0 0 0 1px rgba(230,235,245,.14)}
+      #boot .fill{position:absolute;inset:0;transform-origin:0 50%;transform:scaleX(0);background:linear-gradient(90deg,#3ddc84,var(--gold))}
+      #boot .tip{min-height:40px;font-weight:500;font-size:14px;color:rgba(230,235,245,.82)}
+      #boot .tip q{quotes:none;display:block;animation:bTip .4s ease-out both}
+      #boot .go{position:absolute;left:0;right:0;bottom:max(8px,env(safe-area-inset-bottom));text-align:center;font-weight:700;font-size:13px;color:var(--gold);opacity:0}
+      #boot.ready .go{opacity:1;animation:bPulse 1.6s ease-in-out infinite .3s}
+      /* The exit: the camera dives towards the island and the menu (the same battleground) comes up through it. */
+      #boot.out{pointer-events:none;transition:opacity .45s ease-in;opacity:0}
+      #boot.out .all{transition:transform .45s cubic-bezier(.5,0,.75,0);transform:scale(1.12)}
+      @keyframes bDrift{from{transform:translate(-6%,-4%)}to{transform:translate(6%,10%)}}
+      @keyframes bCloud{from{transform:translateX(110vw)}to{transform:translateX(-100%)}}
+      @keyframes bFly{from{transform:translate(-110%,0)}to{transform:translate(calc(100vw + 10%),-3vh)}}
+      @keyframes bProp{to{transform:scaleY(.25)}}
+      @keyframes bFall{0%{transform:translateY(8vh);opacity:0}8%{opacity:1}88%{opacity:1}100%{transform:translateY(68vh);opacity:0}}
+      @keyframes bSway{from{transform:rotate(-6deg)}to{transform:rotate(6deg)}}
+      @keyframes bTip{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+      @keyframes bPulse{50%{opacity:.45}}
+      @media (max-width:640px){#boot .pct{font-size:34px}#boot .now{font-size:13px}#boot .tip{font-size:13px}}
+      @media (max-height:460px){#boot .logo{width:min(320px,48vw);top:16px}#boot .foot{gap:6px;bottom:max(32px,calc(env(safe-area-inset-bottom) + 24px))}#boot .pct{font-size:30px}#boot .tip{min-height:0;font-size:12px}#boot .go{font-size:12px;bottom:max(6px,env(safe-area-inset-bottom))}#boot .plane{top:30%;width:clamp(120px,16vw,200px)}}
+      /* Rotate card: a touch screen held upright shows only this, from the first paint (src/lib/orientation.ts pauses a running round). */
+      #rotate{display:none;position:fixed;inset:0;z-index:2000;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center;background:radial-gradient(ellipse at 50% 40%,#13213a,#0a0d18 65%,#05070e);color:#e6ebf5;font:600 18px/1.35 'BootChakra',system-ui,sans-serif}
+      #rotate svg{width:96px;height:96px;transform-origin:50% 50%;animation:rTurn 2.6s ease-in-out infinite}
+      #rotate b{display:block;font:400 28px/1 'BootBungee','BootChakra',Impact,sans-serif;color:#ffd23f;letter-spacing:.02em}
+      #rotate span{display:block;margin-top:8px;font-size:15px;font-weight:500;color:rgba(230,235,245,.75)}
+      @keyframes rTurn{0%,18%{transform:rotate(0)}52%,78%{transform:rotate(-90deg)}100%{transform:rotate(0)}}
+      @media (orientation:portrait) and (pointer:coarse){html:not(.lcs-mouse) #rotate{display:flex}}
+      @media (orientation:portrait){html.lcs-touch #rotate{display:flex}}
+      @media (prefers-reduced-motion:reduce){#rotate svg{animation:none;transform:rotate(-90deg)}}
+      @media (prefers-reduced-motion:reduce){#boot *,#boot *::before,#boot *::after{animation:none!important}#boot.out,#boot.out .all{transition:none!important}#boot .plane{left:56%;transform:none}#boot .jp{transform:translateY(44vh)}#boot .jp.j2{transform:translateY(52vh)}#boot .jp.j3,#boot .jp.j4{display:none}}
+    </style>
+  </head>
+  <body>
+    <div id="boot" role="status" aria-label="Loading">
+      <div class="all" aria-hidden="true">
+        <div class="sky"></div>
+        <div class="sun"></div>
+        <div class="ground"><div class="land"><i style="--map:url(%BOOT_MAP%)"></i></div></div>
+        <div class="haze"></div>
+        <div class="cl c"></div><div class="cl a"></div>
+        <div class="plane">
+          <svg viewBox="0 0 160 48">
+            <path fill="#e9e5dc" d="M4 25.5h26l-2 3H7z"/>
+            <path fill="#f4f1ea" d="M15 19 7 4h11l16 15z"/>
+            <path fill="#ff3d6e" d="M7 4h11l2.2 4.2H9.2z"/>
+            <path fill="#f4f1ea" d="M8 26c0-5 6-8 16-8h104c16 0 26 4 28 9-2 5-10 7-24 7H30c-12 0-22-3-22-8z"/>
+            <path fill="#d9d4c8" d="M10 29c4 3 11 5 20 5h102c9 0 17-1 21-3.5-3 0-8 .5-15 .5H30c-9 0-15-.7-20-2z"/>
+            <path fill="#ff3d6e" d="M96 18h7v16h-7z"/>
+            <path fill="#1b2a44" d="M139 21.2 149 24.6 146.6 26.4H137.6z"/>
+            <path fill="#1b2a44" opacity=".75" d="M42 22.5h4v3h-4zm9 0h4v3h-4zm9 0h4v3h-4zm9 0h4v3h-4zm40 0h4v3h-4zm9 0h4v3h-4z"/>
+            <path fill="#f4f1ea" d="M64 13.6h44l4 4H60z"/>
+            <path fill="#ff3d6e" d="M104 13.6h4l4 4h-4z"/>
+            <path fill="#c9c4b8" d="M76 17.6h16v5H78z"/>
+            <ellipse class="prop" cx="93.5" cy="20" rx="1.3" ry="7.5" fill="#2a2d24" opacity=".55"/>
+          </svg>
+        </div>
+        <div class="jp j1"><svg viewBox="0 0 40 56"><path fill="#ff6a3d" d="M2 15C6 3 34 3 38 15c-3-2-6-2-9 0-3-2-6-2-9 0-3-2-6-2-9 0-3-2-6-2-9 0z"/><path fill="#fff" opacity=".9" d="M11 15c0-6 3-10 4.5-11.5C17 5 20 9 20 15c-3-2-6-2-9 0zm9 0c0-6 3-10 4.5-11.5C26 5 29 9 29 15c-3-2-6-2-9 0z" transform="translate(4.5 0) scale(.78 1)"/><path stroke="#f2efe6" stroke-width=".8" fill="none" d="M2.5 15 18 38M11 15l7.5 23M29 15l-7.5 23M37.5 15 22 38"/><circle cx="20" cy="40.5" r="2.8" fill="#e9b48f"/><path fill="#2a2d24" d="M17.2 43h5.6l.6 7h-6.8z"/><path fill="#2a2d24" d="M17.6 50h2l-.6 5h-1.6zm2.8 0h2l.2 5h-1.6z"/></svg></div>
+        <div class="jp j2"><svg viewBox="0 0 40 56"><path fill="#3ec5ff" d="M2 15C6 3 34 3 38 15c-3-2-6-2-9 0-3-2-6-2-9 0-3-2-6-2-9 0-3-2-6-2-9 0z"/><path fill="#fff" opacity=".9" d="M11 15c0-6 3-10 4.5-11.5C17 5 20 9 20 15c-3-2-6-2-9 0zm9 0c0-6 3-10 4.5-11.5C26 5 29 9 29 15c-3-2-6-2-9 0z" transform="translate(4.5 0) scale(.78 1)"/><path stroke="#f2efe6" stroke-width=".8" fill="none" d="M2.5 15 18 38M11 15l7.5 23M29 15l-7.5 23M37.5 15 22 38"/><circle cx="20" cy="40.5" r="2.8" fill="#c68a63"/><path fill="#2a2d24" d="M17.2 43h5.6l.6 7h-6.8z"/><path fill="#2a2d24" d="M17.6 50h2l-.6 5h-1.6zm2.8 0h2l.2 5h-1.6z"/></svg></div>
+        <div class="jp j3"><svg viewBox="0 0 40 56"><path fill="#3ddc84" d="M2 15C6 3 34 3 38 15c-3-2-6-2-9 0-3-2-6-2-9 0-3-2-6-2-9 0-3-2-6-2-9 0z"/><path fill="#fff" opacity=".9" d="M11 15c0-6 3-10 4.5-11.5C17 5 20 9 20 15c-3-2-6-2-9 0zm9 0c0-6 3-10 4.5-11.5C26 5 29 9 29 15c-3-2-6-2-9 0z" transform="translate(4.5 0) scale(.78 1)"/><path stroke="#f2efe6" stroke-width=".8" fill="none" d="M2.5 15 18 38M11 15l7.5 23M29 15l-7.5 23M37.5 15 22 38"/><circle cx="20" cy="40.5" r="2.8" fill="#8d5a3b"/><path fill="#2a2d24" d="M17.2 43h5.6l.6 7h-6.8z"/><path fill="#2a2d24" d="M17.6 50h2l-.6 5h-1.6zm2.8 0h2l.2 5h-1.6z"/></svg></div>
+        <div class="jp j4"><svg viewBox="0 0 40 56"><path fill="#ffd23f" d="M2 15C6 3 34 3 38 15c-3-2-6-2-9 0-3-2-6-2-9 0-3-2-6-2-9 0-3-2-6-2-9 0z"/><path fill="#fff" opacity=".9" d="M11 15c0-6 3-10 4.5-11.5C17 5 20 9 20 15c-3-2-6-2-9 0zm9 0c0-6 3-10 4.5-11.5C26 5 29 9 29 15c-3-2-6-2-9 0z" transform="translate(4.5 0) scale(.78 1)"/><path stroke="#f2efe6" stroke-width=".8" fill="none" d="M2.5 15 18 38M11 15l7.5 23M29 15l-7.5 23M37.5 15 22 38"/><circle cx="20" cy="40.5" r="2.8" fill="#e9b48f"/><path fill="#2a2d24" d="M17.2 43h5.6l.6 7h-6.8z"/><path fill="#2a2d24" d="M17.6 50h2l-.6 5h-1.6zm2.8 0h2l.2 5h-1.6z"/></svg></div>
+        <div class="cl b"></div><div class="cl d"></div>
+        <div class="shade"></div>
+        <div class="logo"></div>
+      </div>
+      <div class="foot">
+        <div class="row">
+          <div class="now" id="bootNow">Starting up</div>
+          <div class="pct" aria-hidden="true"><span id="bootPct">0</span><small>%</small></div>
+        </div>
+        <div class="bar"><div class="fill" id="bootFill"></div></div>
+        <div class="tip"><q id="bootTip"></q></div>
+      </div>
+      <div class="go" id="bootGo">Tap or press any key</div>
+    </div>
+    <div id="rotate" role="alert">
+      <svg viewBox="0 0 96 96" aria-hidden="true" fill="none" stroke="#e6ebf5" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="28" y="8" width="40" height="80" rx="8"/>
+        <path d="M44 78h8" stroke="#ffd23f"/>
+        <path d="M76 30c6 5 6 31 0 36M72 62l4 4 5-5" stroke="#3ddc84" stroke-width="3.5"/>
+      </svg>
+      <div><b>Rotate your phone</b><span>Last Commit Standing is played in landscape</span></div>
+    </div>
+    <div id="root"></div>
+    <!--boot-progress-->
+    <script>
+      (function () {
+        var el = document.getElementById('boot');
+        var pctEl = document.getElementById('bootPct');
+        var fill = document.getElementById('bootFill');
+        var now = document.getElementById('bootNow');
+        var tip = document.getElementById('bootTip');
+        var gone = false, out = false, ready = false, completed = false, waiters = [];
+        var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+        // One value drives both the bar and the number (src/lib/bootProgress.ts, inlined above): real checkpoints, a smooth
+        // ease between them, never backwards, 99 at most until everything is in. The screen leaves only once 100 is drawn.
+        var model = window.LcsBootProgress.createBootProgress(reduce ? { ease: 0.05, creep: 3 } : {});
+        var last = performance.now(), lastPct = -1;
+        var draw = function (ts) {
+          if (gone) return;
+          model.tick(Math.max(0, (ts - last) / 1000));
+          last = ts;
+          var pct = model.percent();
+          if (pct !== lastPct) { pctEl.textContent = String(pct); lastPct = pct; }
+          fill.style.transform = 'scaleX(' + model.value() + ')';
+          if (completed && model.finished()) finish();
+          requestAnimationFrame(draw);
+        };
+        requestAnimationFrame(draw);
+        var set = function (v, next) { model.reach(v, next); };
+        // Gameplay tips: only things the game really does.
+        var TIPS = [
+          'Jump from the plane whenever you like, then steer your parachute down.',
+          'You land with a pistol and two spare magazines: grab a better gun fast.',
+          'Blue and gold beams mark the best gear.',
+          'Tall grass hides you.',
+          '~J or the left button shoots, Space jumps.',
+          '~Lean round corners with Q and E. Shift rolls out of trouble.',
+          '~Two gun slots: 1 and 2 pick one, X swaps.',
+          '~Stand on a gun and press F to take it.',
+          'Vests I to III soak up hits; a bigger backpack carries more heals.',
+          'The safe zone closes phase by phase, and the Storm hurts more each time.',
+          'Your super is ready when its bar turns gold.'
+        ];
+        // Tips that name keys (marked ~) only where there is a keyboard.
+        var coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+        TIPS = TIPS.filter(function (t) { return !coarse || t.charAt(0) !== '~'; }).map(function (t) { return t.replace(/^~/, ''); });
+        var ti = Math.floor(Math.random() * TIPS.length);
+        var showTip = function () {
+          var q = document.createElement('q');
+          q.textContent = TIPS[ti++ % TIPS.length];
+          tip.parentNode.replaceChild(q, tip);
+          tip = q;
+        };
+        showTip();
+        var tipTimer = setInterval(showTip, 3600);
+        var finish = function () {
+          if (out) return;
+          out = true;
+          clearInterval(tipTimer);
+          el.className += ' out';
+          window.removeEventListener('keydown', skip, true);
+          window.removeEventListener('pointerdown', skip, true);
+          setTimeout(function () {
+            gone = true;
+            if (el.parentNode) el.parentNode.removeChild(el);
+            waiters.splice(0).forEach(function (fn) { try { fn(); } catch (e) {} });
+          }, reduce ? 0 : 460);
+        };
+        // Once the menu is up underneath, any key or tap goes straight to it.
+        var skip = function (e) { if (ready) { e.stopPropagation(); e.preventDefault(); finish(); } };
+        window.addEventListener('keydown', skip, true);
+        window.addEventListener('pointerdown', skip, true);
+        window.__lcsBoot = {
+          step: function (text, v, next) { set(v, next); },
+          progress: function (v, live, next) { set(v, next); if (live) now.textContent = live; },
+          ready: function () {
+            if (ready) return;
+            ready = true;
+            el.className += ' ready';
+            // A slow device building the scene never keeps the player from the menu for long.
+            setTimeout(finish, 6000);
+          },
+          // Everything is in: the number runs on to 100 and the screen goes once it shows (see draw).
+          done: function () { if (completed) return; completed = true; model.complete(); now.textContent = 'Ready'; },
+          active: function () { return !gone; },
+          onGone: function (fn) { if (gone) fn(); else waiters.push(fn); }
+        };
+        // The game code: fetched here with its bytes counted (the build gives the file and its size), then run as a module,
+        // which the browser takes from its cache. Without that (the dev server) the page's own script tag loads it.
+        var entry = window.__lcsEntry;
+        if (!entry) { set(0, 0.44); now.textContent = 'Downloading the game'; return; }
+        var kb = function (n) { return Math.round(n / 1024).toLocaleString('en-US'); };
+        var started = performance.now();
+        var run = function () {
+          var s = document.createElement('script');
+          s.type = 'module';
+          s.crossOrigin = '';
+          s.src = entry.src;
+          document.head.appendChild(s);
+        };
+        set(0, 0.4);
+        now.textContent = 'Downloading the game';
+        if (!window.fetch || !window.ReadableStream) { run(); return; }
+        fetch(entry.src, { credentials: 'same-origin' }).then(function (r) {
+          if (!r.ok || !r.body) throw new Error('no stream');
+          var reader = r.body.getReader();
+          var got = 0;
+          var pump = function () {
+            return reader.read().then(function (c) {
+              if (c.done) return;
+              got += c.value.length;
+              window.__lcsBoot.progress(Math.min(1, got / entry.bytes) * 0.4, 'Downloading the game  ' + kb(got) + ' / ' + kb(entry.bytes) + ' KB', 0.4);
+              return pump();
+            });
+          };
+          return pump().then(function () {
+            window.__lcsBoot.step('Game code  ' + kb(got) + ' KB in ' + Math.round(performance.now() - started) + ' ms', 0.4, 0.44);
+            now.textContent = 'Starting up';
+            run();
+          });
+        }).catch(function () { run(); });
+      })();
+    </script>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

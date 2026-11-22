@@ -5,17 +5,18 @@ import type { MetadataRoute } from 'next';
  * Share -> Add to Home Screen, then open Last Commit Standing from the home screen.
  */
 const manifest = (): MetadataRoute.Manifest => ({
-  name: 'Last Commit Standing · Merge Conflict',
+  name: 'Last Commit Standing · Nalbaki Games',
   short_name: 'Last Commit',
   description: 'A battle royale for developers who never agree. The last one standing gets to merge.',
   start_url: '/',
   display: 'fullscreen',
   orientation: 'landscape',
-  background_color: '#0a0d18',
-  theme_color: '#0a0d18',
+  background_color: '#16110E',
+  theme_color: '#0C1A17',
   icons: [
-    { src: '/icon', sizes: '512x512', type: 'image/png', purpose: 'any' },
-    { src: '/apple-icon', sizes: '180x180', type: 'image/png' },
+    { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+    { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+    { src: '/icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
   ],
 });
 

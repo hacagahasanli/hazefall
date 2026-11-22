@@ -3,6 +3,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 import { DISTRICTS, MAP, PROPS, RIVER, SIZE, TILE, railSides, riverCentre, tileHash } from '../sim/constants';
 
+import { mergeRigid, mergeStatic } from './merge';
+
 import type { Prop } from '../sim/constants';
 
 /**
@@ -161,6 +163,7 @@ const bridge = (bx: number, bw: number) => {
     y1 = Math.max(y1, y);
   }
   const big = bw >= 4;
+  const weir = bw === 3;
   const x0 = bx * TILE;
   const x1 = (bx + bw) * TILE;
   const z0 = y0 * TILE;
@@ -168,6 +171,13 @@ const bridge = (bx: number, bw: number) => {
   const cx = (x0 + x1) / 2;
   const parts: THREE.BufferGeometry[] = [];
   const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  if (weir) {
+    // The Weir: a plain grey concrete deck with a low parapet on each side, no truss: exposed on purpose.
+    parts.push(box(x1 - x0 + 0.2, 0.3, z1 - z0, cx, DECK_Y - 0.15, (z0 + z1) / 2, 0x9a9a96));
+    for (const x of [x0 + 0.1, x1 - 0.1]) parts.push(box(0.3, 0.7, z1 - z0, x, DECK_Y + 0.35, (z0 + z1) / 2, 0x8a8a86));
+    for (const z of [z0 + 0.4, z1 - 0.4]) parts.push(box(x1 - x0 + 0.6, 0.9, 0.8, cx, DECK_Y - 0.4, z, 0x7a7a76));
+    return mesh(join(parts));
+  }
   const MEMBER = big ? 0x3e6a8a : 0x8a623e;
   const JOINT = big ? 0x1f2a33 : 0x3a2a1c;
   const t = big ? 0.14 : 0.12; // member thickness
@@ -272,6 +282,180 @@ const container = (p: Prop) => {
   return g;
 };
 
+
+// ---------------------------------------------------------------------------
+// Landmarks: things you can name from the plane. Each is built for the view from above first (its colour and the shape it
+// makes seen from above), then for the side view. Code-made, plain coloured parts that merge with the other statics.
+// ---------------------------------------------------------------------------
+
+/** A low-poly cylinder standing on its base at y, vertex-coloured, with a few sides. */
+const drum = (rTop: number, rBottom: number, h: number, x: number, y: number, z: number, sides: number, color: THREE.ColorRepresentation) => {
+  const g = new THREE.CylinderGeometry(rTop, rBottom, h, sides).toNonIndexed();
+  g.deleteAttribute('uv');
+  g.translate(x, y + h / 2, z);
+  const c = new THREE.Color(color);
+  const col = new Float32Array(g.getAttribute('position').count * 3);
+  for (let i = 0; i < col.length; i += 3) col.set([c.r, c.g, c.b], i);
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return g;
+};
+
+/**
+ * A landmark in two pieces: the legs and footings (baked into the statics) and the tall part that fades when it hides you
+ * (see `tallLandmarks`).
+ */
+interface Landmark {
+  base: THREE.Object3D | null;
+  tall: THREE.BufferGeometry;
+}
+const landmark = (base: THREE.BufferGeometry[], tall: THREE.BufferGeometry[]): Landmark => ({ base: base.length ? mesh(join(base)) : null, tall: join(tall) });
+
+/** The water tower: a cream drum under a red lid on four legs with X braces, 16 m up. A red disc seen from the plane. The tank and lid are the tall part. */
+const waterTower = () => {
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const parts: THREE.BufferGeometry[] = [];
+  const tank: THREE.BufferGeometry[] = [];
+  const legY = 11.6;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) parts.push(box(0.34, legY, 0.34, sx * 1.6, legY / 2, sz * 1.6, 0x6b7280));
+  for (const y of [3.8, 7.6]) {
+    parts.push(box(3.4, 0.16, 0.16, 0, y, 1.6, 0x6b7280), box(3.4, 0.16, 0.16, 0, y, -1.6, 0x6b7280), box(0.16, 0.16, 3.4, 1.6, y, 0, 0x6b7280), box(0.16, 0.16, 3.4, -1.6, y, 0, 0x6b7280));
+    for (const sz of [-1, 1]) {
+      parts.push(beam(v(-1.6, y - 3.8, sz * 1.6), v(1.6, y, sz * 1.6), 0.1, 0.1, 0x4b5563), beam(v(1.6, y - 3.8, sz * 1.6), v(-1.6, y, sz * 1.6), 0.1, 0.1, 0x4b5563));
+    }
+  }
+  tank.push(box(4.4, 0.3, 4.4, 0, legY + 0.15, 0, 0x4b5563)); // the platform under the tank
+  tank.push(drum(3, 3, 3.4, 0, legY + 0.3, 0, 8, 0xf1e6c8)); // the drum
+  tank.push(drum(0.2, 2.6, 0.9, 0, legY + 3.7, 0, 8, 0xe23d5c)); // the lid
+  return landmark(parts, tank);
+};
+
+/**
+ * A harbour crane: a gold portal on four legs with a long boom out over the water (towards +z; the caller turns it), a cab
+ * and a counterweight at the back. Two long gold bars seen from above. The boom has no collision.
+ */
+const crane = () => {
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const GOLD = 0xffc93c;
+  const DARK = 0x2a2d33;
+  const parts: THREE.BufferGeometry[] = [];
+  const hi: THREE.BufferGeometry[] = [];
+  const top = 17.6;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) parts.push(box(0.4, top, 0.4, sx * 2.6, top / 2, sz * 1.5, GOLD));
+  for (const sz of [-1, 1]) hi.push(box(5.7, 0.55, 0.55, 0, top, sz * 1.5, GOLD)); // the top beams
+  for (const sx of [-1, 1]) {
+    hi.push(box(0.55, 0.55, 3.5, sx * 2.6, top, 0, GOLD));
+    parts.push(beam(v(sx * 2.6, 6, -1.5), v(sx * 2.6, top, 1.5), 0.2, 0.2, 0xe8a91f), beam(v(sx * 2.6, 6, 1.5), v(sx * 2.6, top, -1.5), 0.2, 0.2, 0xe8a91f));
+    parts.push(box(0.4, 0.4, 3.4, sx * 2.6, 6, 0, 0xe8a91f));
+  }
+  hi.push(box(1.1, 0.7, 25, 0, top + 0.6, 8.5, GOLD)); // the boom: from 4 m behind the portal to 21 m out
+  hi.push(box(1.3, 0.16, 25.2, 0, top + 1.05, 8.5, 0xe8a91f)); // its deck line
+  hi.push(box(2.4, 2, 2.6, 0, top + 2, -1.2, GOLD)); // the cab
+  hi.push(box(2.2, 1.1, 0.4, 0, top + 2.3, 0.1, 0x1b2a38)); // its window
+  hi.push(box(2.2, 1.6, 2.2, 0, top + 1.5, -3.6, DARK)); // the counterweight
+  for (const z of [13, 20]) hi.push(box(0.05, 6, 0.05, 0, top - 2.6, z, DARK)); // the hoist cables
+  hi.push(box(1.1, 0.6, 1.1, 0, top - 5.8, 20, DARK)); // the spreader
+  return landmark(parts, hi);
+};
+
+/** The pole sign: a dark pole and a gold disc with a dark rim, tilted 20 degrees towards the sky so the disc shows from above. */
+const poleSign = () => {
+  const parts: THREE.BufferGeometry[] = [box(0.34, 11.2, 0.34, 0, 5.6, 0, 0x3a3e45)];
+  const board = (r: number, h: number, y: number, color: THREE.ColorRepresentation) => {
+    const g = drum(r, r, h, 0, 0, 0, 20, color);
+    g.rotateX(Math.PI * (70 / 180));
+    g.translate(0, y, 0.2);
+    return g;
+  };
+  parts.push(board(2.15, 0.3, 11.6, 0x2a2d33), board(1.85, 0.34, 11.66, 0xffc93c));
+  return mesh(join(parts));
+};
+
+
+/** The radio mast on Mast Hill: a tapered lattice of boxes, red and white every 6 m, 30 m up, with a red lamp on top. Thin from above: its long shadow is the read. Above 6 m is the tall part. */
+const radioMast = () => {
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  // A gravel pad one tile wider than the 2 x 2 footprint on every side, the concrete foot on it, and three guy lines out to ground anchors.
+  const parts: THREE.BufferGeometry[] = [box(6, 0.12, 6, 0, 0.06, 0, 0xb3ada0), box(3.4, 0.5, 3.4, 0, 0.25, 0, 0x8f8b82)];
+  for (let i = 0; i < 3; i++) {
+    const a = Math.PI / 2 + (i * Math.PI * 2) / 3;
+    const anchor = v(Math.cos(a) * 13, 0.1, Math.sin(a) * 13);
+    parts.push(beam(v(0, 24, 0), anchor, 0.07, 0.07, 0x2a2d33), box(0.6, 0.3, 0.6, anchor.x, 0.15, anchor.z, 0x8f8b82));
+  }
+  const hi: THREE.BufferGeometry[] = [];
+  const legs = [[-1, -1], [1, -1], [0, 1]];
+  for (let k = 0; k < 5; k++) {
+    const y0 = k * 6;
+    const y1 = y0 + 6;
+    const w0 = 1.3 - k * 0.2;
+    const w1 = 1.3 - (k + 1) * 0.2;
+    const col = k % 2 ? 0xf3efe6 : 0xe23d5c;
+    const out = k === 0 ? parts : hi;
+    for (const [sx, sz] of legs) out.push(beam(v(sx * w0, y0, sz * w0 * 0.8), v(sx * w1, y1, sz * w1 * 0.8), 0.22, 0.22, col));
+    out.push(beam(v(-w1, y1, -w1 * 0.8), v(w1, y1, -w1 * 0.8), 0.12, 0.12, 0x9aa0ab), beam(v(w1, y1, -w1 * 0.8), v(0, y1, w1 * 0.8), 0.12, 0.12, 0x9aa0ab));
+  }
+  hi.push(box(0.6, 0.5, 0.6, 0, 30.25, 0, 0x2a1414)); // the lamp's housing; the blinking light is added in buildProps
+  return landmark(parts, hi);
+};
+
+/** The HQ tower on the Campus plaza: a solid blue-glass block 12 m up with four window bands, a blue roof slab and a green ring on it, 8 m across. All of it is the tall part. */
+const hqTower = () => {
+  const parts: THREE.BufferGeometry[] = [box(11.4, 12, 11.4, 0, 6, 0, 0x6f8fb8)];
+  for (const y of [2, 5, 8, 11]) parts.push(box(11.6, 1.5, 11.6, 0, y, 0, 0x1b2a38));
+  parts.push(box(12, 0.8, 12, 0, 12.4, 0, 0x3e7bfa));
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const g = box(2.2, 0.5, 0.9, 0, 0, 0, 0x2ec27e);
+    g.rotateY(-a);
+    g.translate(Math.cos(a) * 3.8, 13, Math.sin(a) * 3.8);
+    parts.push(g);
+  }
+  return landmark([], parts);
+};
+
+/** The fire lookout in Deadwood: four legs, a cabin and a pyramid roof (an orange square in the dark green), 14 m up. */
+const fireLookout = () => {
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const parts: THREE.BufferGeometry[] = [];
+  const cabin: THREE.BufferGeometry[] = [];
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) parts.push(beam(v(sx * 1.6, 0, sz * 1.6), v(sx * 0.9, 10.5, sz * 0.9), 0.3, 0.3, 0x5a4030));
+  for (const y of [4, 8]) for (const [a, b] of [[[-1.3, -1.3], [1.3, 1.3]], [[1.3, -1.3], [-1.3, 1.3]]]) parts.push(beam(v(a[0], y, a[1]), v(b[0], y + 3, b[1]), 0.12, 0.12, 0x7a5434));
+  cabin.push(box(2.8, 2, 2.8, 0, 11.5, 0, 0x8a623e), box(2.9, 0.8, 2.9, 0, 11.7, 0, 0x1b2a38));
+  cabin.push(drum(0.05, 2.7, 1.8, 0, 12.5, 0, 4, 0xf2542d).rotateY(Math.PI / 4));
+  return landmark(parts, cabin);
+};
+
+/** A signal gantry: one leg, and (the first of the pair) a beam 16 m long across the tracks with a red and a green light. */
+const signalGantry = (p: Prop) => {
+  const parts: THREE.BufferGeometry[] = [box(0.4, 7, 0.4, 0, 3.5, 0, 0x2a2d33)];
+  if (p.seed < 0.5) {
+    parts.push(box(0.35, 0.5, 16.4, 0, 7, 8, 0x2a2d33));
+    parts.push(box(0.5, 0.5, 0.5, 0.35, 6.4, 5.5, 0xff3b3b), box(0.5, 0.5, 0.5, 0.35, 6.4, 11, 0x3ddc84));
+  }
+  return mesh(join(parts));
+};
+
+/** The quarry conveyor: an inclined grey belt on three legs ending over a pale gravel cone. Runs along the map's y axis, 1 x 6 tiles. */
+const conveyor = () => {
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const parts: THREE.BufferGeometry[] = [beam(v(0, 1, -5.6), v(0, 9, 4.4), 1, 0.5, 0x7b8088)];
+  for (const [z, h] of [[-4, 2.4], [-0.5, 5], [3, 7.6]]) parts.push(box(0.3, h, 0.3, 0, h / 2, z, 0x4b5563));
+  parts.push(drum(0.2, 2.8, 2.6, 0, 0, 5.2, 7, 0xd6cfc0));
+  return mesh(join(parts));
+};
+
+/** A boxcar: a container-sized rust-coloured wagon with a roof ridge, one per 3 x 2 tiles on a yard track. */
+const boxcar = (p: Prop) => {
+  const colors = [0x8a4b32, 0x6b3a2a, 0x7a5a3a, 0x5a3c30];
+  const color = colors[Math.floor(p.seed * colors.length)];
+  const parts = [
+    box(5.8, 2.6, 2.4, 0, 1.8, 0, color),
+    box(5.8, 0.25, 1.2, 0, 3.2, 0, 0x3a2a22),
+    box(0.1, 2, 1.1, 0, 1.8, 1.22, 0x3a2a22),
+    box(5.9, 0.4, 2.1, 0, 0.45, 0, 0x2a2d33),
+  ];
+  return mesh(join(parts));
+};
+
 const tent = (p: Prop) => {
   const color = p.seed > 0.5 ? 0x3f6b3a : 0xd0782c;
   const shape = new THREE.Shape();
@@ -291,21 +475,170 @@ const tent = (p: Prop) => {
 
 // ---------------------------------------------------------------------------
 
+
+/** How many tall parts can fade on their own (the HQ, the water tower, two cranes, the mast, the lookout and room for more). */
+const TALL_MAX = 16;
+/** A tall part fades to this opacity over `FADE_IN` s when it stands between the camera and you, and returns over `FADE_OUT` s after `FADE_HOLD` s clear. */
+const FADE_MIN = 0.3;
+const FADE_IN = 0.15;
+const FADE_OUT = 0.3;
+const FADE_HOLD = 0.4;
+/** How far each part's box grows before the line from the camera to you is tested against it (m). */
+const FADE_PAD = 1;
+
+/**
+ * The tall parts of the landmarks (the HQ block, the water tower's tank, the cranes' beams and cabs, the lookout cabin, the
+ * mast above 6 m) in ONE mesh, one draw call: each vertex carries its part's number and a uniform array holds each part's
+ * opacity, so every part fades alone. They fade when the line from the camera to the local player's chest crosses their
+ * box (grown by a metre): to 0.3 in 0.15 s, back in 0.3 s once 0.4 s have passed without a hit. The shadow pass ignores the
+ * fade, so shadows keep their full strength. High and medium fade with alpha (depth writes off while any part is ghosted);
+ * the low tier uses a dither cut-out, which needs no blending.
+ */
+export const tallLandmarks = () => {
+  const geos: THREE.BufferGeometry[] = [];
+  const boxes: THREE.Box3[] = [];
+  const level = new Float32Array(TALL_MAX).fill(1);
+  const clear = new Float32Array(TALL_MAX).fill(99);
+  const uniforms = { uFade: { value: level }, uDither: { value: 0 } };
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, flatShading: true, transparent: true });
+  mat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, uniforms);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aPart;\nvarying float vPart;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPart = aPart;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vPart;\nuniform float uFade[' + TALL_MAX + '];\nuniform float uDither;')
+      .replace(
+        '#include <alphamap_fragment>',
+        `#include <alphamap_fragment>
+        float fadeNow = uFade[int(vPart + 0.5)];
+        if (uDither > 0.5) {
+          if (fadeNow < 0.999 && fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) > fadeNow) discard;
+        } else diffuseColor.a *= fadeNow;`,
+      );
+  };
+  mat.customProgramCacheKey = () => 'tall-landmarks';
+  const hits = (ax: number, ay: number, az: number, bx: number, by: number, bz: number, b: THREE.Box3) => {
+    // The segment from a to b against the box (slab test).
+    let t0 = 0;
+    let t1 = 1;
+    const lo = [b.min.x, b.min.y, b.min.z];
+    const hi = [b.max.x, b.max.y, b.max.z];
+    const a = [ax, ay, az];
+    const d = [bx - ax, by - ay, bz - az];
+    for (let i = 0; i < 3; i++) {
+      if (Math.abs(d[i]) < 1e-9) {
+        if (a[i] < lo[i] || a[i] > hi[i]) return false;
+        continue;
+      }
+      let u0 = (lo[i] - a[i]) / d[i];
+      let u1 = (hi[i] - a[i]) / d[i];
+      if (u0 > u1) [u0, u1] = [u1, u0];
+      t0 = Math.max(t0, u0);
+      t1 = Math.min(t1, u1);
+      if (t0 > t1) return false;
+    }
+    return true;
+  };
+  let mesh_: THREE.Mesh | null = null;
+  return {
+    /** Adds one landmark's tall geometry, standing at (x, z) turned `rot` about the vertical. */
+    add: (g: THREE.BufferGeometry, x: number, z: number, rot: number) => {
+      if (geos.length >= TALL_MAX) throw new Error('too many tall landmarks');
+      g.rotateY(rot);
+      g.translate(x, 0, z);
+      g.computeBoundingBox();
+      boxes.push(g.boundingBox!.clone().expandByScalar(FADE_PAD));
+      g.setAttribute('aPart', new THREE.BufferAttribute(new Float32Array(g.getAttribute('position').count).fill(geos.length), 1));
+      geos.push(g);
+    },
+    build: () => {
+      const g = mergeGeometries(geos)!;
+      geos.forEach((p) => p.dispose());
+      mesh_ = new THREE.Mesh(g, mat);
+      mesh_.castShadow = true;
+      mesh_.receiveShadow = true;
+      return mesh_;
+    },
+    /** `dither`: the low tier. `on` false (in the plane, before the drop): every part is solid again at once. */
+    fade: (cam: THREE.Vector3, target: THREE.Vector3, dt: number, dither: boolean, on = true) => {
+      uniforms.uDither.value = dither ? 1 : 0;
+      let ghosted = false;
+      for (let i = 0; i < boxes.length; i++) {
+        if (on && hits(cam.x, cam.y, cam.z, target.x, target.y, target.z, boxes[i])) clear[i] = 0;
+        else clear[i] += dt;
+        if (!on) level[i] = 1;
+        else if (clear[i] < FADE_HOLD) level[i] = Math.max(FADE_MIN, level[i] - ((1 - FADE_MIN) / FADE_IN) * dt);
+        else level[i] = Math.min(1, level[i] + ((1 - FADE_MIN) / FADE_OUT) * dt);
+        if (level[i] < 1) ghosted = true;
+      }
+      // Alpha mode always draws in the blended pass (switching it would recompile the shader mid-game); depth writes are off only while something is ghosted.
+      if (mat.transparent === dither) {
+        mat.transparent = !dither;
+        mat.needsUpdate = true;
+      }
+      mat.depthWrite = dither || !ghosted;
+    },
+    /** For tests and dev checks. */
+    state: () => ({ boxes, level: Array.from(level.slice(0, boxes.length)) }),
+  };
+};
+
 export const buildProps = (scene: THREE.Scene) => {
   const updates: ((time: number, dt: number) => void)[] = [];
+  /** True while the player is in the plane choosing where to jump. */
+  let planeView = false;
 
   /** Water tiles already covered by a sheet (the pond and the river each draw their own). */
   const wet = new Set<number>();
+  /** Everything that never moves (cars, containers, tents, the windmill's tower, the fire ring, decks and bridges): merged per material at the end. */
+  const statics = new THREE.Group();
+  const tall = tallLandmarks();
+  /** Keeps the legs and footings with the statics and hands the tall part to the fading group, placed where the landmark stands. */
+  const tallOf = (l: Landmark, p: Prop, c: { x: number; y: number }): THREE.Object3D => {
+    tall.add(l.tall, c.x, c.y, p.kind === 'crane' && p.dir === -1 ? Math.PI : 0);
+    return l.base ?? new THREE.Group();
+  };
   for (const p of PROPS) {
     const c = centre(p);
     let o: THREE.Object3D | null = null;
     if (p.kind === 'car') o = car(p);
     else if (p.kind === 'container') o = container(p);
     else if (p.kind === 'tent') o = tent(p);
-    if (o) {
+    else if (p.kind === 'tower') o = tallOf(waterTower(), p, c);
+    else if (p.kind === 'crane') o = tallOf(crane(), p, c);
+    else if (p.kind === 'sign') o = poleSign();
+    else if (p.kind === 'mast') o = tallOf(radioMast(), p, c);
+    else if (p.kind === 'hq') o = tallOf(hqTower(), p, c);
+    else if (p.kind === 'lookout') o = tallOf(fireLookout(), p, c);
+    else if (p.kind === 'gantry') o = signalGantry(p);
+    else if (p.kind === 'conveyor') o = conveyor();
+    else if (p.kind === 'boxcar') o = boxcar(p);
+    if (o && ['tower', 'crane', 'sign', 'mast', 'hq', 'lookout', 'gantry', 'conveyor', 'boxcar'].includes(p.kind)) {
+      // Landmarks stand square to the map (a crane's boom runs along the map's y axis towards `dir`) and keep their own look.
+      o.position.set(c.x, 0, c.y);
+      if (p.kind === 'crane') o.rotation.y = p.dir === -1 ? Math.PI : 0;
+      statics.add(o);
+    } else if (o) {
       o.position.set(c.x, 0, c.y);
       o.rotation.y = (c.alongX ? 0 : Math.PI / 2) + (p.seed - 0.5) * 0.12;
-      scene.add(o);
+      statics.add(o);
+    }
+
+    if (p.kind === 'mast') {
+      // The red light on top: on for half a second, off for half a second (1 Hz), with a glow disc that shows from the plane.
+      const lampMat = new THREE.MeshBasicMaterial({ color: 0xff3030 });
+      const lamp = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 1), lampMat);
+      const glowMat = new THREE.MeshBasicMaterial({ color: 0xff2a2a, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending });
+      const glow = new THREE.Mesh(new THREE.CircleGeometry(3.2, 20).rotateX(-Math.PI / 2), glowMat);
+      lamp.position.set(c.x, 30.8, c.y);
+      glow.position.set(c.x, 31.2, c.y);
+      scene.add(lamp, glow);
+      updates.push((time) => {
+        const on = time % 1 < 0.5;
+        lamp.visible = on;
+        glow.visible = on;
+      });
     }
 
     if (p.kind === 'windmill') {
@@ -314,10 +647,14 @@ export const buildProps = (scene: THREE.Scene) => {
       tower.position.y = 5;
       const cap = mesh(new THREE.ConeGeometry(1.5, 2, 8), new THREE.MeshStandardMaterial({ color: 0x7a3b2e, flatShading: true }));
       cap.position.y = 11;
-      g.add(tower, cap);
+      const still = new THREE.Group();
+      still.add(tower, cap);
+      still.position.set(c.x, 0, c.y);
+      statics.add(still);
       // The sails face the camera (south) and turn slowly.
       const rotor = new THREE.Group();
       rotor.position.set(0, 9.6, 1.6);
+      rotor.scale.setScalar(1.15); // 15 % bigger sails
       for (let i = 0; i < 4; i++) {
         const blade = new THREE.Group();
         const arm = mesh(new THREE.BoxGeometry(0.18, 6.2, 0.12), new THREE.MeshStandardMaterial({ color: 0x5a4030 }));
@@ -328,26 +665,32 @@ export const buildProps = (scene: THREE.Scene) => {
         blade.rotation.z = (i / 4) * Math.PI * 2;
         rotor.add(blade);
       }
+      // The sails turn as one: one mesh.
+      mergeRigid(rotor);
       g.add(rotor);
       g.position.set(c.x, 0, c.y);
       scene.add(g);
-      updates.push((_t, dt) => (rotor.rotation.z -= dt * 0.6));
+      // They turn slowly on the ground and faster while you choose where to drop from the plane (the north's moving read).
+      updates.push((_t, dt) => (rotor.rotation.z -= dt * (planeView ? 1.6 : 0.6)));
     }
 
     if (p.kind === 'campfire') {
       const g = new THREE.Group();
+      const ring = new THREE.Group();
+      ring.position.set((p.x0 + 0.5) * TILE, 0, (p.y0 + 0.5) * TILE);
+      statics.add(ring);
       for (let i = 0; i < 8; i++) {
         const a = (i / 8) * Math.PI * 2;
         const stone = mesh(new THREE.DodecahedronGeometry(0.22, 0), new THREE.MeshStandardMaterial({ color: 0x8a8580, flatShading: true }));
         stone.position.set(Math.cos(a) * 0.75, 0.12, Math.sin(a) * 0.75);
-        g.add(stone);
+        ring.add(stone);
       }
       for (let i = 0; i < 3; i++) {
         const log = mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.1, 6), new THREE.MeshStandardMaterial({ color: 0x4a3020 }));
         log.rotation.z = Math.PI / 2;
         log.rotation.y = (i / 3) * Math.PI;
         log.position.y = 0.15;
-        g.add(log);
+        ring.add(log);
       }
       const flame = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1, 8), new THREE.MeshBasicMaterial({ color: 0xffa630, transparent: true, opacity: 0.9 }));
       flame.position.y = 0.6;
@@ -358,26 +701,42 @@ export const buildProps = (scene: THREE.Scene) => {
       light.position.y = 1;
       g.add(light);
       // Smoke: soft grey puffs rising and spreading.
-      const puffMat = new THREE.MeshBasicMaterial({ color: 0x9a9a9a, transparent: true, opacity: 0.35, depthWrite: false });
-      const puffs = Array.from({ length: 10 }, (_, i) => {
-        const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.35, 1), puffMat.clone());
-        m.userData.t = i / 10;
-        g.add(m);
-        return m;
-      });
+      // All ten puffs are one instanced mesh; each fades on its own through a per-instance opacity.
+      const puffMat = new THREE.MeshBasicMaterial({ color: 0x9a9a9a, transparent: true, depthWrite: false });
+      const puffAlpha = new THREE.InstancedBufferAttribute(new Float32Array(10), 1);
+      puffMat.onBeforeCompile = (sh) => {
+        sh.vertexShader = sh.vertexShader
+          .replace('#include <common>', '#include <common>\nattribute float aAlpha;\nvarying float vAlpha;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvAlpha = aAlpha;');
+        sh.fragmentShader = sh.fragmentShader
+          .replace('#include <common>', '#include <common>\nvarying float vAlpha;')
+          .replace('#include <alphamap_fragment>', '#include <alphamap_fragment>\ndiffuseColor.a *= vAlpha;');
+      };
+      puffMat.customProgramCacheKey = () => 'puff-alpha';
+      const puffGeo = new THREE.IcosahedronGeometry(0.35, 1);
+      puffGeo.setAttribute('aAlpha', puffAlpha);
+      const puffMesh = new THREE.InstancedMesh(puffGeo, puffMat, 10);
+      puffMesh.frustumCulled = false;
+      g.add(puffMesh);
+      const puffM = new THREE.Matrix4();
+      const puffQ = new THREE.Quaternion();
+      const puffS = new THREE.Vector3();
+      const puffs = Array.from({ length: 10 }, (_, i) => ({ t: i / 10, position: new THREE.Vector3() }));
       g.position.set((p.x0 + 0.5) * TILE, 0, (p.y0 + 0.5) * TILE);
       scene.add(g);
       updates.push((time, dt) => {
         const f = 1 + Math.sin(time * 17) * 0.12 + Math.sin(time * 29) * 0.08;
         flame.scale.set(f, f * (1 + Math.sin(time * 11) * 0.1), f);
         light.intensity = 5 + Math.sin(time * 13) * 1.2;
-        for (const m of puffs) {
-          m.userData.t = (m.userData.t + dt * 0.18) % 1;
-          const k = m.userData.t as number;
+        puffs.forEach((m, i) => {
+          m.t = (m.t + dt * 0.18) % 1;
+          const k = m.t;
           m.position.set(Math.sin(k * 6 + time * 0.5) * 0.4 * k + k * 1.2, 1 + k * 7, Math.cos(k * 5) * 0.3 * k);
-          m.scale.setScalar(0.6 + k * 2.4);
-          (m.material as THREE.MeshBasicMaterial).opacity = 0.35 * (1 - k);
-        }
+          puffMesh.setMatrixAt(i, puffM.compose(m.position, puffQ, puffS.setScalar(0.6 + k * 2.4)));
+          puffAlpha.setX(i, 0.35 * (1 - k));
+        });
+        puffMesh.instanceMatrix.needsUpdate = true;
+        puffAlpha.needsUpdate = true;
       });
     }
 
@@ -459,13 +818,24 @@ export const buildProps = (scene: THREE.Scene) => {
       }
     }
   }
-  if (planks.length) scene.add(mesh(join(planks)));
-  for (const [bx, bw] of RIVER.bridges) scene.add(bridge(bx, bw));
+  if (planks.length) statics.add(mesh(join(planks)));
+  for (const [bx, bw] of RIVER.bridges) statics.add(bridge(bx, bw));
+  // A few draw calls per quarter of the map instead of one per car, container, bar and stone.
+  scene.add(mergeStatic(statics, { chunk: 88, bake: true }));
+  scene.add(tall.build());
 
   const herd = animals(scene);
   updates.push(herd.update, birds(scene));
   return {
     update: (time: number, dt: number) => updates.forEach((u) => u(time, dt)),
+    /** Once a frame while on the ground or under the canopy: ghosts the tall landmark parts that stand between the camera and `target` (the local player's chest). */
+    fade: tall.fade,
+    /** The plane phase: the windmill's sails turn faster. */
+    setPlaneView: (on: boolean) => {
+      planeView = on;
+    },
+    /** Dev checks: each tall part's box and current opacity. */
+    tallState: tall.state,
     /** Dev checks: where every animal stands. */
     animals: () => herd.list.map((a) => ({ x: a.g.position.x, y: a.g.position.z })),
   };
@@ -541,11 +911,45 @@ const animals = (scene: THREE.Scene) => {
       const s0 = spot(h.area);
       g.position.set(s0.x, 0, s0.y);
       g.scale.setScalar(h.kind === 'cow' ? 1 : 0.95);
-      scene.add(g);
+      g.userData.kind = h.kind;
       const t = spot(h.area, s0);
       list.push({ g, legs, head: rnd() * 6, tx: t.x, ty: t.y, wait: rnd() * 4, area: h.area, speed: h.kind === 'cow' ? 0.7 : 0.9 });
     }
   }
+  // Drawn instanced (all bodies of a kind, all legs: three draw calls); the groups above only hold the pose.
+  const herdOf = (kind: 'cow' | 'sheep') => list.filter((a) => a.g.userData.kind === kind);
+  const inst = (geo: THREE.BufferGeometry, m: THREE.Material, n: number) => {
+    const im = new THREE.InstancedMesh(geo, m, Math.max(1, n));
+    im.count = n;
+    im.castShadow = true;
+    im.receiveShadow = true;
+    im.frustumCulled = false;
+    scene.add(im);
+    return im;
+  };
+  const cows = herdOf('cow');
+  const sheep = herdOf('sheep');
+  const bodies = [
+    { herd: cows, im: inst(geos.cow, flat, cows.length) },
+    { herd: sheep, im: inst(geos.sheep, flat, sheep.length) },
+  ];
+  const legGeo = { cow: list.find((a) => a.g.userData.kind === 'cow')?.legs[0].geometry, sheep: list.find((a) => a.g.userData.kind === 'sheep')?.legs[0].geometry };
+  const legSets = (['cow', 'sheep'] as const).map((k) => ({ herd: herdOf(k), im: legGeo[k] ? inst(legGeo[k]!, legMat, herdOf(k).length * 4) : null }));
+  const draw = () => {
+    for (const { herd, im } of bodies) {
+      herd.forEach((a, i) => {
+        a.g.updateMatrixWorld(true);
+        im.setMatrixAt(i, a.g.children[0].matrixWorld);
+      });
+      im.instanceMatrix.needsUpdate = true;
+    }
+    for (const { herd, im } of legSets) {
+      if (!im) continue;
+      herd.forEach((a, i) => a.legs.forEach((l, k) => im.setMatrixAt(i * 4 + k, l.matrixWorld)));
+      im.instanceMatrix.needsUpdate = true;
+    }
+  };
+  draw();
   return {
     list,
     update: (time: number, dt: number) => {
@@ -585,6 +989,7 @@ const animals = (scene: THREE.Scene) => {
         // Grazing: the head (the front of the body) dips.
         a.g.children[0].rotation.z = walking ? 0 : -0.12 + Math.sin(time * 1.3 + a.head) * 0.05;
       }
+      draw();
     },
   };
 };

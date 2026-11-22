@@ -4,11 +4,17 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { AimChoice, readAim, saveAim } from '~/components/AimChoice';
+import { FighterCard, FighterGrid, FIGHTER_IDS as IDS, HowTo, PICK_KEY, usePortraits } from '~/components/FighterSelect';
 import { Match } from '~/components/Match';
+import { OnlineInterest } from '~/components/OnlineInterest';
 import { OnlinePanel } from '~/components/OnlinePanel';
+import { Support, SupportLink } from '~/components/SupportLink';
 import { createRoom, joinRoom } from '~/game/net/client';
 import { createGuestSession, createHostSession } from '~/game/net/session';
+import { COPY } from '~/game/copy/studio';
 import { BOT_NAMES, FIGHTERS } from '~/game/sim/constants';
+import { ONLINE_PLAY } from '~/lib/studio';
+import { loadDone, track } from '~/lib/telemetry';
 
 import type { LobbyState, StartMessage } from '~/game/net/lobby';
 import type { Session } from '~/game/net/session';
@@ -16,48 +22,11 @@ import type { AimMode } from '~/game/render/game';
 import type { FighterId } from '~/game/sim/types';
 import type { Room } from '@colyseus/sdk';
 
-const IDS: FighterId[] = ['hotfix', 'legacy', 'standup', 'intern'];
-const PICK_KEY = 'lcs:fighter';
 const NAME_KEY = 'lcs:name';
-const randomName = () => `dev_${Math.floor(1000 + Math.random() * 9000)}`;
-
-const SPEEDS = IDS.map((id) => FIGHTERS[id].speed);
-const COSTS = IDS.map((id) => FIGHTERS[id].superCost);
-/** 0..1 within the roster, so the bars compare fighters, never a made-up maximum. */
-const rel = (v: number, all: number[], invert = false) => {
-  const lo = Math.min(...all);
-  const hi = Math.max(...all);
-  const k = hi === lo ? 1 : (v - lo) / (hi - lo);
-  return 0.35 + 0.65 * (invert ? 1 - k : k);
-};
-
-const Bar = ({
-  label,
-  value,
-  text,
-  color,
-}: {
-  label: string;
-  value: number;
-  text: string;
-  color: string;
-}) => (
-  <div className="flex flex-col gap-1">
-    <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-cream/55">
-      <span>{label}</span>
-      <span className="text-cream/80">{text}</span>
-    </div>
-    <div className="h-1.5 overflow-hidden bg-cream/10">
-      <div
-        className="h-full transition-all duration-500"
-        style={{ width: `${value * 100}%`, background: color }}
-      />
-    </div>
-  </div>
-);
+const randomName = () => `${COPY.guestPrefix}${Math.floor(1000 + Math.random() * 9000)}`;
 
 /**
- * The lobby between rounds. Offline: nine bots are always ready, you press Ready. With friends:
+ * The lobby between rounds. Offline: nineteen bots are always ready, you press Ready. With friends:
  * "Play with friends" opens a room and gives you a link; whoever opens it lands in the same
  * room (?room=...), picks a fighter and says ready, and the host starts the round. Same look as
  * the home page (cut panels, rendered portraits, gold call to action) but a calm backdrop.
@@ -67,7 +36,6 @@ export const Lobby = () => {
   const [round, setRound] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [aim, setAim] = useState<AimMode>('auto');
-  const [portraits, setPortraits] = useState<Record<FighterId, string> | null>(null);
   // Online: the room, what it says, and the round being played.
   const [room, setRoom] = useState<Room | null>(null);
   const [lobby, setLobby] = useState<LobbyState | null>(null);
@@ -125,7 +93,7 @@ export const Lobby = () => {
   // Opened from a friend's link: join their room (once, even under React's double effects).
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('room');
-    if (!id || joinedFromLink.current) return;
+    if (!ONLINE_PLAY || !id || joinedFromLink.current) return;
     joinedFromLink.current = true;
     void enter(id);
   }, [enter]);
@@ -203,21 +171,18 @@ export const Lobby = () => {
   };
 
   // Portraits come from the game's own models, rendered once after the page has painted.
+  const portraits = usePortraits(playing);
+
+  // Anonymous counting (site only; a no-op unless TelemetryInit started it). Loading starts when /play opens and ends when the
+  // lobby's models have rendered: that is the moment the player can pick a fighter.
+  useEffect(() => track('load_start'), []);
+  const menuSent = useRef(false);
   useEffect(() => {
-    if (playing || portraits) return;
-    let cancelled = false;
-    const raf = requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        void import('~/game/render/showcase').then(({ renderPortraits }) => {
-          if (!cancelled) setPortraits(renderPortraits());
-        });
-      }),
-    );
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(raf);
-    };
-  }, [playing, portraits]);
+    if (!portraits || menuSent.current) return;
+    menuSent.current = true;
+    loadDone();
+    track('menu_view');
+  }, [portraits]);
 
   const pick = (id: FighterId) => {
     setFighter(id);
@@ -237,6 +202,7 @@ export const Lobby = () => {
   if (session) {
     return (
       <Match
+        support={SupportLink}
         key={`online${round}`}
         fighter={fighter}
         session={session}
@@ -248,6 +214,7 @@ export const Lobby = () => {
   if (playing && !room) {
     return (
       <Match
+        support={SupportLink}
         key={round}
         fighter={fighter}
         onExit={() => setPlaying(false)}
@@ -282,116 +249,10 @@ export const Lobby = () => {
 
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] [@media(max-height:500px)]:grid-cols-2 [@media(max-height:500px)]:gap-4">
           {/* The fighter you drop as, big. */}
-          <div className="panel-cut relative flex min-h-[300px] overflow-hidden border border-cream/10 bg-ink/70 backdrop-blur sm:min-h-[380px] [@media(max-height:500px)]:min-h-[250px]">
-            <div
-              className="absolute inset-0 opacity-50 transition-[background] duration-700"
-              style={{
-                background: `radial-gradient(circle at 70% 65%, ${f.color}, transparent 60%)`,
-              }}
-            />
-            <div className="relative z-10 flex flex-1 flex-col justify-between gap-4 p-5 sm:p-6">
-              <div className="flex flex-col gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-cream/55">
-                  You drop as
-                </span>
-                <h1
-                  key={fighter}
-                  className="font-display text-4xl leading-none [animation:riseIn_0.35s_ease-out] sm:text-6xl [@media(max-height:500px)]:text-4xl"
-                  style={{ color: f.color }}
-                >
-                  {f.name.toUpperCase()}
-                </h1>
-                <span className="text-sm text-cream/70">{f.role}</span>
-              </div>
-              <div className="flex max-w-[11rem] flex-col gap-3 sm:max-w-[15rem]">
-                <Bar label="Health" value={1} text={`${f.hp}`} color="#3ddc84" />
-                <Bar
-                  label="Speed"
-                  value={rel(f.speed, SPEEDS)}
-                  text={`${f.speed} m/s`}
-                  color="#3ec5ff"
-                />
-                <Bar
-                  label="Super charge"
-                  value={rel(f.superCost, COSTS, true)}
-                  text={f.superCost <= 140 ? 'fast' : 'slow'}
-                  color="#ffd23f"
-                />
-              </div>
-              <div className="panel-cut max-w-xs bg-ink-deep/70 p-3 text-sm">
-                <span className="font-bold text-gold">G · {f.superName}</span>
-                <span className="text-cream/80">: {f.superText}</span>
-              </div>
-            </div>
-            {portraits && (
-              // A rendered portrait, not a photo: plain <img> is right here.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                key={fighter}
-                src={portraits[fighter]}
-                alt={`${f.name}, ${f.role}`}
-                className="pointer-events-none absolute -right-8 bottom-0 z-0 h-[62%] w-auto sm:h-[92%] [@media(max-height:500px)]:h-[72%] [@media(max-height:500px)]:-right-14 object-contain drop-shadow-[0_12px_28px_rgba(0,0,0,0.7)] [animation:riseIn_0.4s_ease-out] sm:right-2"
-              />
-            )}
-          </div>
+          <FighterCard fighter={fighter} portraits={portraits} />
 
           <div className="flex flex-col gap-4">
-            <div className="flex items-end justify-between">
-              <h2 className="font-display text-xl [@media(max-height:500px)]:text-base">
-                Pick a fighter
-              </h2>
-              <span className="text-xs text-cream/50 [@media(max-height:500px)]:hidden">
-                Same guns for all: the super is yours
-              </span>
-            </div>
-            <div
-              className="grid grid-cols-2 gap-3 sm:grid-cols-4"
-              role="radiogroup"
-              aria-label="Fighter"
-            >
-              {IDS.map((id) => {
-                const c = FIGHTERS[id];
-                const on = id === fighter;
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    role="radio"
-                    aria-checked={on}
-                    onClick={() => pick(id)}
-                    className={`panel-cut group relative flex h-36 flex-col justify-end overflow-hidden border-2 bg-ink/80 p-2.5 text-left transition sm:h-44 [@media(max-height:500px)]:h-28 ${on ? 'border-gold' : 'border-cream/10 hover:border-cream/30'}`}
-                  >
-                    <div
-                      className={`absolute inset-0 transition ${on ? 'opacity-60' : 'opacity-25 group-hover:opacity-40'}`}
-                      style={{
-                        background: `radial-gradient(circle at 50% 40%, ${c.color}, transparent 65%)`,
-                      }}
-                    />
-                    {portraits && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={portraits[id]}
-                        alt=""
-                        className={`absolute inset-x-0 top-0 mx-auto h-[82%] w-auto object-contain transition ${on ? 'scale-105' : 'opacity-80 group-hover:scale-105'}`}
-                      />
-                    )}
-                    <div className="relative z-10 flex items-baseline justify-between bg-gradient-to-t from-ink-deep/90 to-transparent pt-4">
-                      <span
-                        className="truncate font-display text-base leading-none [@media(max-height:500px)]:text-xs"
-                        style={{ color: c.color }}
-                      >
-                        {c.name}
-                      </span>
-                      {on && (
-                        <span className="text-[9px] font-bold tracking-widest text-gold [@media(max-height:500px)]:hidden">
-                          YOU
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+            <FighterGrid fighter={fighter} portraits={portraits} onPick={pick} />
 
             {notice && (
               <p className="panel-cut bg-orange/15 p-3 text-sm text-cream/85" role="status">
@@ -424,7 +285,7 @@ export const Lobby = () => {
                       IN THIS LOBBY
                     </span>
                     <span className="text-[10px] text-cream/40">
-                      Invite links come with online play
+                      {ONLINE_PLAY ? 'Invite links come with online play' : 'Online play is coming soon'}
                     </span>
                   </div>
                   <ul className="grid grid-cols-2 gap-1 text-xs sm:grid-cols-5">
@@ -445,14 +306,29 @@ export const Lobby = () => {
                 </div>
 
                 <div className="flex flex-wrap items-center justify-end gap-3">
-                  <button
-                    type="button"
-                    disabled={connecting}
-                    onClick={() => void enter(null)}
-                    className="panel-cut bg-blue/90 px-6 py-4 font-display text-base uppercase text-ink-deep transition hover:brightness-110 disabled:opacity-60"
-                  >
-                    {connecting ? 'Opening a room…' : 'Play with friends'}
-                  </button>
+                  {ONLINE_PLAY ? (
+                    <button
+                      type="button"
+                      disabled={connecting}
+                      onClick={() => void enter(null)}
+                      className="panel-cut bg-blue/90 px-6 py-4 font-display text-base uppercase text-ink-deep transition hover:brightness-110 disabled:opacity-60"
+                    >
+                      {connecting ? 'Opening a room…' : 'Play with friends'}
+                    </button>
+                  ) : (
+                    // Online play is not open yet: a clearly disabled tile, nothing to click into.
+                    <button
+                      type="button"
+                      disabled
+                      aria-disabled
+                      title="Online play is coming soon"
+                      className="panel-cut flex cursor-not-allowed items-center gap-3 border border-cream/15 bg-cream/5 px-6 py-3 text-left"
+                    >
+                      <span className="font-display text-base uppercase text-cream/45">Play with friends</span>
+                      <span className="rounded-sm bg-gold/90 px-2 py-0.5 text-xs font-bold text-ink-deep">Coming soon</span>
+                    </button>
+                  )}
+                  {!ONLINE_PLAY && <OnlineInterest />}
                   {/* Desktop: the big button sits here; on phones it rides along at the bottom. */}
                   <button
                     type="button"
@@ -463,38 +339,15 @@ export const Lobby = () => {
                     <span className="transition group-hover:translate-x-1">→</span>
                   </button>
                 </div>
+
+                {/* The studio's support card, out of the way under the buttons. */}
+                <Support variant="menu" className="self-end" />
               </>
             )}
           </div>
         </section>
 
-        <section className="grid gap-3 sm:grid-cols-3">
-          {[
-            [
-              '01',
-              'Drop',
-              'Jump from the plane when you like, free-fall, then steer the parachute down. You land with a pistol and one magazine.',
-            ],
-            [
-              '02',
-              'Loot',
-              'Guns, armor, ammo, med kits and bombs lie in houses, barns and yards. Walk over them or press F.',
-            ],
-            [
-              '03',
-              'Survive',
-              'Stay inside the Deadline. Space shoots, Q / E lean, Shift rolls, G is your super, hide in tall grass. Esc Esc pauses.',
-            ],
-          ].map(([n, title, text]) => (
-            <div key={n} className="panel-cut flex gap-4 bg-ink/70 p-4 backdrop-blur">
-              <span className="font-display text-2xl text-gold/80">{n}</span>
-              <div className="flex flex-col gap-1">
-                <span className="font-display text-base">{title}</span>
-                <span className="text-sm text-cream/70">{text}</span>
-              </div>
-            </div>
-          ))}
-        </section>
+        <HowTo />
       </div>
     </main>
   );

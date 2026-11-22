@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 
+import { finishById } from '../cosmetics';
+
+import { mergeRigid } from './merge';
+
 /**
  * Guns built in code with realistic proportions and materials: gunmetal, black polymer,
  * walnut and olive furniture, a scoped bolt-action, a pump shotgun with a tube magazine.
@@ -16,7 +20,7 @@ export interface GunView {
   length: number;
 }
 
-const M = {
+const FACTORY = {
   steel: new THREE.MeshStandardMaterial({ color: 0x3a3e45, metalness: 0.55, roughness: 0.4 }),
   dark: new THREE.MeshStandardMaterial({ color: 0x1d1f23, metalness: 0.2, roughness: 0.7 }),
   polymer: new THREE.MeshStandardMaterial({ color: 0x26282c, roughness: 0.85 }),
@@ -27,6 +31,27 @@ const M = {
   brass: new THREE.MeshStandardMaterial({ color: 0xb08d3c, metalness: 0.6, roughness: 0.35 }),
   red: new THREE.MeshStandardMaterial({ color: 0xa02a22, roughness: 0.6 }),
   fuse: new THREE.MeshBasicMaterial({ color: 0xffb347 }),
+};
+
+type Mats = typeof FACTORY;
+
+/** One material set per finish, built once and shared by every gun that wears it (a finish costs no extra draw calls). */
+const SETS = new Map<string, Mats>([['factory', FACTORY]]);
+const matsFor = (finish: string): Mats => {
+  const hit = SETS.get(finish);
+  if (hit) return hit;
+  const set = { ...FACTORY };
+  for (const [name, tweak] of Object.entries(finishById(finish).mats)) {
+    const m = FACTORY[name as keyof typeof FACTORY].clone() as THREE.MeshStandardMaterial;
+    if (tweak.color !== undefined) m.color.setHex(tweak.color);
+    if (tweak.metalness !== undefined) m.metalness = tweak.metalness;
+    if (tweak.roughness !== undefined) m.roughness = tweak.roughness;
+    if (tweak.emissive !== undefined) m.emissive.setHex(tweak.emissive);
+    if (tweak.emissiveIntensity !== undefined) m.emissiveIntensity = tweak.emissiveIntensity;
+    (set as Record<string, THREE.Material>)[name] = m;
+  }
+  SETS.set(finish, set);
+  return set;
 };
 
 const S = 1.3;
@@ -42,7 +67,7 @@ const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
 /** A cylinder along z. */
 const tube = (r: number, len: number, r2 = r, seg = 10) => new THREE.CylinderGeometry(r2, r, len, seg).rotateX(Math.PI / 2);
 
-const pistol = (g: THREE.Group) => {
+const pistol = (g: THREE.Group, M: Mats) => {
   g.add(part(box(0.034, 0.042, 0.2), M.steel, 0, 0.055, 0.075)); // slide
   g.add(part(box(0.03, 0.006, 0.12), M.dark, 0, 0.078, 0.06)); // top
   g.add(part(box(0.031, 0.028, 0.16), M.polymer, 0, 0.02, 0.07)); // frame
@@ -53,7 +78,7 @@ const pistol = (g: THREE.Group) => {
   return 0.24;
 };
 
-const smg = (g: THREE.Group) => {
+const smg = (g: THREE.Group, M: Mats) => {
   g.add(part(box(0.045, 0.06, 0.3), M.steel, 0, 0.045, 0.1)); // receiver
   g.add(part(tube(0.022, 0.16), M.polymer, 0, 0.045, 0.32)); // shroud
   g.add(part(tube(0.01, 0.06), M.dark, 0, 0.045, 0.42)); // barrel tip
@@ -66,7 +91,7 @@ const smg = (g: THREE.Group) => {
   return 0.45;
 };
 
-const shotgun = (g: THREE.Group) => {
+const shotgun = (g: THREE.Group, M: Mats) => {
   g.add(part(box(0.045, 0.06, 0.2), M.steel, 0, 0.04, 0.06)); // receiver
   g.add(part(tube(0.012, 0.5), M.steel, 0, 0.06, 0.41)); // barrel
   g.add(part(tube(0.012, 0.4), M.steel, 0, 0.032, 0.36)); // tube magazine
@@ -78,7 +103,7 @@ const shotgun = (g: THREE.Group) => {
   return 0.68;
 };
 
-const rifle = (g: THREE.Group) => {
+const rifle = (g: THREE.Group, M: Mats) => {
   g.add(part(box(0.05, 0.075, 0.3), M.dark, 0, 0.045, 0.08)); // receiver
   g.add(part(box(0.052, 0.062, 0.24), M.tan, 0, 0.045, 0.33)); // handguard
   for (let i = 0; i < 5; i++) g.add(part(box(0.054, 0.012, 0.02), M.dark, 0, 0.045, 0.24 + i * 0.045)); // vents
@@ -94,7 +119,7 @@ const rifle = (g: THREE.Group) => {
   return 0.64;
 };
 
-const sniper = (g: THREE.Group) => {
+const sniper = (g: THREE.Group, M: Mats) => {
   g.add(part(box(0.06, 0.07, 0.62), M.olive, 0, 0.02, 0.08)); // stock and fore-end
   g.add(part(box(0.05, 0.05, 0.12), M.olive, 0, 0.065, -0.14)); // cheek rest
   g.add(part(box(0.062, 0.09, 0.03), M.dark, 0, 0.0, -0.24)); // butt pad
@@ -115,7 +140,7 @@ const sniper = (g: THREE.Group) => {
   return 0.96;
 };
 
-const launcher = (g: THREE.Group) => {
+const launcher = (g: THREE.Group, M: Mats) => {
   g.add(part(tube(0.055, 0.85), M.olive, 0, 0.08, 0.2)); // tube
   g.add(part(tube(0.07, 0.08, 0.055), M.olive, 0, 0.08, 0.66)); // front bell
   g.add(part(tube(0.06, 0.05), M.dark, 0, 0.08, -0.24)); // rear ring
@@ -127,17 +152,20 @@ const launcher = (g: THREE.Group) => {
   return 0.8;
 };
 
-const bomb = (g: THREE.Group) => {
+const bomb = (g: THREE.Group, M: Mats) => {
   g.add(part(new THREE.SphereGeometry(0.1, 12, 10), M.dark, 0, 0, 0.1));
   g.add(part(tube(0.03, 0.04).rotateX(Math.PI / 2), M.steel, 0, 0.1, 0.1));
   g.add(part(new THREE.IcosahedronGeometry(0.02, 0), M.fuse, 0, 0.14, 0.1));
   return 0.15;
 };
 
-const BUILDERS: Record<GunKind, (g: THREE.Group) => number> = { pistol, smg, shotgun, rifle, sniper, launcher, bomb };
+const BUILDERS: Record<GunKind, (g: THREE.Group, M: Mats) => number> = { pistol, smg, shotgun, rifle, sniper, launcher, bomb };
 
-export const buildGun = (kind: GunKind): GunView => {
+/** `finish` is a key from cosmetics.ts. Ground loot and bombs are always Factory (the default), so loot reads by its shape and colour. */
+export const buildGun = (kind: GunKind, finish = 'factory'): GunView => {
   const root = new THREE.Group();
-  const length = BUILDERS[kind](root) * S;
+  const length = BUILDERS[kind](root, matsFor(finish)) * S;
+  // Its parts never move relative to each other: one mesh per material.
+  mergeRigid(root);
   return { kind, root, length };
 };

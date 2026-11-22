@@ -4,23 +4,23 @@
 
 ### Ten developers. One merge.
 
-A game by **[Merge Conflict](https://merge-conflict-drab.vercel.app)**, the studio where coworkers settle their conflicts.
+A game by **[Nalbaki Games](https://nalbakigames.com)**.
 
-### [▶ Play with friends](https://last-commit-standing.vercel.app/play) · [Studio](https://merge-conflict-drab.vercel.app) · [Floor 42](https://floor-42.vercel.app)
+### [▶ Play with friends](https://lastcommit.nalbakigames.com/play) · [Studio](https://nalbakigames.com) · [Floor 42](https://floor42.nalbakigames.com)
 
 </div>
 
-A battle royale in the browser for developers who never agree: up to ten of you parachute into the
-same countryside with a pistol each, the Deadline closes in, and only the last one standing gets
-to merge. Play with friends by link (bots fill the empty places, or switch them off), or solo
-against nine bots. Works on phones.
+A 20-player battle royale in the browser for developers who never agree: twenty fighters parachute
+into the same countryside with a pistol each, the Deadline closes in, and only the last one standing
+gets to merge. Play solo against nineteen bots; rooms with friends by link (up to ten people, bots fill
+the round to twenty) are coming soon. Works on phones.
 
 ## How a round goes
 
 1. **Room**: pick your fighter, press *Play with friends* and send the link (or play solo with bots).
    Everyone says ready, the host starts.
 2. **Drop**: a cargo plane crosses the map. Jump with Space, free-fall, steer the parachute down.
-3. **Loot**: you land with a pistol and one magazine. Guns, armor, ammo, med kits and bombs lie in
+3. **Loot**: you land with a pistol, a magazine and two spare ones (nobody can shoot in the air). Guns, armor, ammo, med kits and bombs lie in
    houses, barns and the container port; walk over them or press F.
 4. **Fight**: Space shoots (auto-aim on whoever you can see, or mouse aim), Q / E lean, Shift rolls,
    G is your fighter's super, R reloads. Hide in tall grass, swim the river, take a bridge.
@@ -46,7 +46,7 @@ vests, ammo boxes and med kits. Loot glows by rarity.
 
 ## Support
 
-Last Commit Standing is free. If you enjoyed it, you can [☕ support the studio](https://merge-conflict-drab.vercel.app/donate.html).
+Last Commit Standing is free. If you enjoyed it, you can [☕ support the studio](https://nalbakigames.com/support).
 
 ## Run it
 

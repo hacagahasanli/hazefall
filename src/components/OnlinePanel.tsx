@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 
 import { inviteLink } from '~/game/net/client';
-import { MAX_PLAYERS } from '~/game/net/lobby';
+import { MATCH_SEATS, MAX_PEOPLE } from '~/game/net/lobby';
 import { FIGHTERS } from '~/game/sim/constants';
+import { isTouchUi } from '~/lib/device';
 
 import type { LobbyState } from '~/game/net/lobby';
 import type { Room } from '@colyseus/sdk';
@@ -44,7 +45,7 @@ export const OnlinePanel = ({
 
   const copy = async () => {
     try {
-      if (navigator.share && window.matchMedia('(pointer: coarse)').matches) {
+      if (navigator.share && isTouchUi()) {
         await navigator.share({
           title: 'Last Commit Standing',
           text: 'Drop in with me:',
@@ -105,7 +106,7 @@ export const OnlinePanel = ({
       <div className="panel-cut bg-ink/80 p-3 backdrop-blur">
         <div className="mb-2 flex items-baseline justify-between">
           <span className="text-[10px] font-semibold tracking-widest text-cream/50">
-            IN THIS ROOM · {people.length} / {MAX_PLAYERS}
+            IN THIS ROOM · {people.length} / {MAX_PEOPLE}
           </span>
           {host ? (
             <label className="flex cursor-pointer items-center gap-2 text-[11px] text-cream/75">
@@ -127,7 +128,7 @@ export const OnlinePanel = ({
           )}
         </div>
         <ul className="grid grid-cols-2 gap-1 text-xs sm:grid-cols-3">
-          {Array.from({ length: MAX_PLAYERS }, (_, i) => {
+          {Array.from({ length: MAX_PEOPLE }, (_, i) => {
             const m = people[i];
             if (!m) {
               return (
@@ -189,7 +190,7 @@ export const OnlinePanel = ({
                   ? `Waiting for ${waiting} to be ready`
                   : people.length < 2 && !bots
                     ? 'Invite a friend or switch bots on'
-                    : `${people.length} ${people.length === 1 ? 'person' : 'people'}${bots && people.length < MAX_PLAYERS ? ` + ${MAX_PLAYERS - people.length} bots` : ''}`}
+                    : `${people.length} ${people.length === 1 ? 'person' : 'people'}${bots && people.length < MATCH_SEATS ? ` + ${MATCH_SEATS - people.length} bots` : ''}`}
             </span>
           </button>
         ) : (

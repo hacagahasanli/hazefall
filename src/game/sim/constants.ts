@@ -1,15 +1,22 @@
-import type { FighterId, WeaponKind } from './types';
+import { COPY } from '../copy/studio';
+
+import type { FighterId, LootKind, WeaponKind } from './types';
 
 export const DT = 1 / 60;
 
-/** Tiles are 2 m; the map is 88 x 88 tiles = 176 x 176 m. */
+/** Tiles are 2 m; the map is 120 x 120 tiles = 240 x 240 m. */
 export const TILE = 2;
-export const SIZE = 88;
-/** The original 64-tile heart of the map (town, farms, forest, quarry) sits this far in. */
+export const SIZE = 120;
+/** The original 88-tile map (town, farms, forest, quarry, written with the 64-tile heart `O` in) sits this far in now. */
+const S = 16;
+const HEART = 88;
 const O = 12;
+/** The Market Square in tiles (the old town's 40,31 to 50,37 in the frame shifted by 16): one paved rectangle that Route 1 crosses. */
+export const MARKET_SQUARE = { x0: 56, y0: 47, w: 10, h: 6 };
 export const WORLD = TILE * SIZE;
 export const PLAYER_RADIUS = 0.55;
-export const PLAYERS = 10;
+/** Fighters in a match: you and nineteen bots offline, or people plus bots online. */
+export const PLAYERS = 20;
 
 // ---------------------------------------------------------------------------
 // The map: an original countryside with a dense old town in the middle, farms around it,
@@ -34,19 +41,23 @@ export interface District {
 
 /** A road or path centre line in world metres, for the renderer to draw as a clean strip. */
 export interface Route {
-  kind: 'asphalt' | 'dirt';
+  kind: 'asphalt' | 'dirt' | 'rail';
   points: { x: number; y: number }[];
 }
 
 /** Big props the renderer draws over their 'v' tiles (and decor with no collision). */
 export interface Prop {
-  kind: 'car' | 'container' | 'tent' | 'windmill' | 'campfire' | 'pond' | 'river';
+  kind:
+    | 'car' | 'container' | 'tent' | 'windmill' | 'campfire' | 'pond' | 'river'
+    | 'tower' | 'crane' | 'sign' | 'mast' | 'hq' | 'lookout' | 'gantry' | 'conveyor' | 'boxcar';
   /** Tile rectangle. */
   x0: number;
   y0: number;
   w: number;
   h: number;
   seed: number;
+  /** A crane's boom runs this way along the map's y axis (1 = south, -1 = north). */
+  dir?: number;
 }
 
 export interface Building {
@@ -69,9 +80,11 @@ const rng = (seed: number) => () => {
 export const RIVER = {
   half: 3.2,
   bridges: [
-    [15, 2],
-    [43, 4],
-    [70, 2],
+    [9, 2],
+    [31, 2],
+    [59, 4],
+    [86, 2],
+    [113, 3],
   ] as [number, number][],
 };
 /** Which sides of a deck tile ('d') have a rail: the long sides of a bridge, and a pier's sides that face water. */
@@ -81,29 +94,37 @@ export const railSides = (tx: number, ty: number) => {
   const wet = (x: number, y: number) => tileAt(x, y) === 'o';
   return { w: wet(tx - 1, ty), e: wet(tx + 1, ty), n: wet(tx, ty - 1), s: wet(tx, ty + 1) };
 };
-export const riverCentre = (x: number) => 32 + O + Math.sin(x / 7) * 2 + Math.sin(x / 3.1) * 0.5;
+export const riverCentre = (x: number) => 32 + O + S + Math.sin((x - S) / 7) * 2 + Math.sin((x - S) / 3.1) * 0.5;
 
 const buildMap = () => {
   const grid: string[][] = Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => 'g'));
-  const get = (x: number, y: number) => (x >= 0 && y >= 0 && x < SIZE && y < SIZE ? grid[y][x] : '#');
+  // The old map's code runs inside a shifted frame (`sh` tiles in, `lim` tiles across): every helper below adds the shift,
+  // so its coordinates read as they always did and the places and random numbers of that map come out the same, 16 tiles
+  // further in. Everything new runs in the plain frame (sh 0) with its own random stream.
+  let sh = 0;
+  let lim = SIZE;
+  const get = (x: number, y: number) => (x >= 0 && y >= 0 && x < lim && y < lim ? grid[y + sh][x + sh] : '#');
   const set = (x: number, y: number, c: string) => {
-    if (x >= 0 && y >= 0 && x < SIZE && y < SIZE) grid[y][x] = c;
+    if (x >= 0 && y >= 0 && x < lim && y < lim) grid[y + sh][x + sh] = c;
   };
   const r = rng(91827);
-  const ri = (a: number, b: number) => a + Math.floor(r() * (b - a + 1));
+  const r2 = rng(40213);
+  let rr = r;
+  const ri = (a: number, b: number) => a + Math.floor(rr() * (b - a + 1));
   const buildings: Building[] = [];
   const districts: District[] = [];
   const routes: Route[] = [];
   const props: Prop[] = [];
   /** Place a solid prop over a w x h tile rectangle if it's all open grass, path or asphalt. */
-  const solidProp = (kind: Prop['kind'], x0: number, y0: number, w: number, h: number, on = 'gpa') => {
+  const solidProp = (kind: Prop['kind'], x0: number, y0: number, w: number, h: number, on = 'gpa', fixed?: { seed: number; dir?: number }) => {
     for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) if (!on.includes(get(x, y))) return false;
     for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) set(x, y, 'v');
-    props.push({ kind, x0, y0, w, h, seed: r() });
+    // A landmark has a fixed look (and takes no number from the map's random stream, so the places round it stay as they were).
+    props.push({ kind, x0: x0 + sh, y0: y0 + sh, w, h, seed: fixed ? fixed.seed : rr(), ...(fixed?.dir ? { dir: fixed.dir } : {}) });
     return true;
   };
   const district = (name: string, x0: number, y0: number, x1: number, y1: number) =>
-    districts.push({ name, x0: x0 * TILE, y0: y0 * TILE, x1: x1 * TILE, y1: y1 * TILE });
+    districts.push({ name, x0: (x0 + sh) * TILE, y0: (y0 + sh) * TILE, x1: (x1 + sh) * TILE, y1: (y1 + sh) * TILE });
 
   // The river first, so everything else is placed around it: twelve metres of water winding
   // across the whole map from west to east, crossed by three wooden bridges. You can swim it
@@ -135,19 +156,19 @@ const buildMap = () => {
     for (let i = 0; i <= n; i++) {
       const yf = y0 + ((y1 - y0) * i) / n;
       // Straight onto a bridge: no wobble near the river.
-      const calm = Math.max(0, Math.min(1, (Math.abs(yf - riverCentre(x0 + ((x1 - x0) * i) / n)) - RIVER.half - 1) / 4));
+      const calm = Math.max(0, Math.min(1, (Math.abs(yf - (riverCentre(x0 + ((x1 - x0) * i) / n + sh) - sh)) - RIVER.half - 1) / 4));
       const xf = x0 + ((x1 - x0) * i) / n + Math.sin(i / 3) * 0.8 * calm;
       const x = Math.round(xf);
       const y = Math.round(yf);
       if (get(x, y) === 'g') set(x, y, 'p');
       if (get(x + 1, y) === 'g') set(x + 1, y, 'p');
-      line.points.push({ x: (xf + 1) * TILE, y: (yf + 0.5) * TILE });
+      line.points.push({ x: (xf + 1 + sh) * TILE, y: (yf + 0.5 + sh) * TILE });
     }
     routes.push(line);
   };
-  path(32 + O, 4, 32 + O, 76); // over the big bridge
-  path(15, 22, 15, 62); // over the west bridge
-  path(70, 18, 70, 64); // over the east bridge
+  // ---- The old map, in its shifted frame (see `sh`). Route 1 over the big bridge is now the asphalt road laid further down.
+  sh = S;
+  lim = HEART;
   path(30 + O, 14 + O, 12 + O, 12 + O);
   path(34 + O, 14 + O, 52 + O, 10 + O);
   path(30 + O, 50 + O, 12 + O, 54 + O);
@@ -171,7 +192,7 @@ const buildMap = () => {
       set(x, y, '.');
       set(x, y + 1, '.');
     };
-    if (r() < 0.5) {
+    if (rr() < 0.5) {
       doorH(y0);
       doorH(y0 + h - 1);
       if (barn) doorV(x0);
@@ -203,7 +224,7 @@ const buildMap = () => {
       if (get(q.x, q.y) === '.') set(q.x, q.y, 'r');
     }
     furnish(x0, y0, w, h, barn);
-    buildings.push({ x0, y0, w, h, model: ri(0, 20), barn });
+    buildings.push({ x0: x0 + sh, y0: y0 + sh, w, h, model: ri(0, 20), barn });
   };
 
   /**
@@ -279,7 +300,7 @@ const buildMap = () => {
 
   const free = (x0: number, y0: number, w: number, h: number) => {
     for (let y = y0 - 1; y <= y0 + h; y++) for (let x = x0 - 1; x <= x0 + w; x++) if (!'gp'.includes(get(x, y))) return false;
-    return x0 > 2 && y0 > 2 && x0 + w < SIZE - 3 && y0 + h < SIZE - 3;
+    return x0 > 2 && y0 > 2 && x0 + w < lim - 3 && y0 + h < lim - 3;
   };
 
   // The new outer districts first, so the town and the lone houses are placed around them.
@@ -295,7 +316,7 @@ const buildMap = () => {
         else if (d <= 1.35 && get(x, y) === 'g' && r() < 0.45) set(x, y, 'b'); // reeds
       }
     }
-    props.push({ kind: 'pond', x0: cx - 5, y0: cy - 8, w: 11, h: 17, seed: r() });
+    props.push({ kind: 'pond', x0: cx - 5 + sh, y0: cy - 8 + sh, w: 11, h: 17, seed: r() });
     for (let x = cx; x <= cx + 6; x++) if ('ob'.includes(get(x, cy))) set(x, cy, 'd'); // the pier
     set(cx - 1, cy, 's');
     if (free(4, 29, 4, 4)) house(4, 29, 4, 4, false);
@@ -306,7 +327,7 @@ const buildMap = () => {
   district('Windmill Hill', 26, 2, 62, 11);
   solidProp('windmill', 46, 4, 2, 2);
   for (const [x, y] of [[33, 4], [37, 7], [29, 7]]) solidProp('tent', x, y, 2, 2);
-  props.push({ kind: 'campfire', x0: 33, y0: 7, w: 1, h: 1, seed: r() });
+  props.push({ kind: 'campfire', x0: 33 + sh, y0: 7 + sh, w: 1, h: 1, seed: r() });
   for (let i = 0; i < 4; i++) {
     const x = ri(28, 40);
     const y = ri(3, 10);
@@ -318,6 +339,8 @@ const buildMap = () => {
   for (let y = 78; y <= 83; y++) for (let x = 38; x <= 52; x++) if ('gp'.includes(get(x, y))) set(x, y, 'a');
   for (let i = 0; i < 6; i++) solidProp('car', 39 + i * 2 + (i > 2 ? 2 : 0), r() < 0.5 ? 78 : 82, 1, 2, 'a');
   if (free(54, 77, 6, 5)) house(54, 77, 6, 5, false);
+  // The pole sign beside the main path, a gold disc you can see from the plane.
+  solidProp('sign', 46, 75, 1, 1, 'gpa', { seed: 0.5 });
   for (let i = 0; i < 3; i++) {
     const x = ri(38, 52);
     const y = ri(79, 81);
@@ -334,6 +357,9 @@ const buildMap = () => {
   ];
   // A paved yard: nothing grows between the containers.
   for (let y = 20; y <= 65; y++) for (let x = 73; x <= 85; x++) if (get(x, y) === 'g') set(x, y, 'a');
+  // The twin cranes, one on each bank, booms out over the water; they stand where containers would have.
+  solidProp('crane', 79, 37, 3, 2, 'gpa', { seed: 0.31, dir: 1 });
+  solidProp('crane', 83, 49, 3, 2, 'gpa', { seed: 0.74, dir: -1 });
   const inSquare = (x: number, y: number) => squares.some((q) => x >= q.x0 && x <= q.x1 && y >= q.y0 && y <= q.y1);
   for (let y = 21; y <= 64; y += 3) {
     for (const x of [74, 78, 82]) {
@@ -358,6 +384,14 @@ const buildMap = () => {
 
   // Old Town: a tight grid of houses of every size, with alleys between them.
   district('Old Town', 16 + O, 14 + O, 50 + O, 50 + O);
+  // The Market Square, the one open space in town: paved, no houses in it, the water tower on one side, two market tents,
+  // three crates and six supply spots to fight round.
+  for (let y = 31; y < 37; y++) for (let x = 40; x < 50; x++) if ('gp'.includes(get(x, y))) set(x, y, 'a');
+  solidProp('tower', 47, 32, 2, 2, 'gpa', { seed: 0.5 });
+  solidProp('tent', 41, 32, 2, 2, 'gpa', { seed: 0.2 });
+  solidProp('tent', 41, 35, 2, 2, 'gpa', { seed: 0.8 });
+  for (const [x, y] of [[47, 35], [43, 31], [49, 34]]) if (get(x, y) === 'a') set(x, y, 'r');
+  for (const [x, y] of [[42, 34], [45, 32], [46, 34], [44, 36], [48, 36], [40, 33]]) if (get(x, y) === 'a') set(x, y, 's');
   for (let gy = 0; gy < 4; gy++) {
     for (let gx = 0; gx < 4; gx++) {
       // The road crosses the town around row 31 and the main path around column 32: step around them.
@@ -378,18 +412,6 @@ const buildMap = () => {
       // A fenced yard or a garden next to some of them.
       if (r() < 0.4) for (let i = 0; i < 4; i++) set(x0 + w, y0 + i, get(x0 + w, y0 + i) === 'g' ? 'f' : get(x0 + w, y0 + i));
       if (r() < 0.5) set(x0 - 1, y0 + h, get(x0 - 1, y0 + h) === 'g' ? 'b' : get(x0 - 1, y0 + h));
-    }
-  }
-
-  // A few lone houses out in the fields.
-  for (let i = 0, made = 0; i < 80 && made < 9; i++) {
-    const w = ri(4, 6);
-    const h = ri(4, 5);
-    const x0 = ri(4, SIZE - 10);
-    const y0 = ri(4, SIZE - 10);
-    if (free(x0, y0, w, h)) {
-      house(x0, y0, w, h, false);
-      made += 1;
     }
   }
 
@@ -416,12 +438,11 @@ const buildMap = () => {
       if (get(x, y) === 'g') set(x, y, 's');
     }
   };
-  farm('North Farm', 6 + O, 4 + O);
-  farm('East Farm', 44 + O, 6 + O);
-  farm('South Farm', 5 + O, 46 + O);
+  farm('Hollis Farm', 6 + O, 4 + O);
+  farm('Redgate Farm', 44 + O, 6 + O);
+  farm('Southfield Farm', 5 + O, 46 + O);
 
-  // Forest in the south-east, a quarry of rocks in the east.
-  district('Deadwood', 44 + O, 42 + O, 60 + O, 60 + O);
+  // Forest in the south-east (unnamed woods now), a quarry of rocks in the east.
   for (let i = 0; i < 140; i++) {
     const x = ri(44 + O, 60 + O);
     const y = ri(40 + O, 60 + O);
@@ -441,8 +462,8 @@ const buildMap = () => {
 
   // Lone trees, bushes and rocks across the fields.
   for (let i = 0; i < 200; i++) {
-    const x = ri(2, SIZE - 3);
-    const y = ri(2, SIZE - 3);
+    const x = ri(2, lim - 3);
+    const y = ri(2, lim - 3);
     if (get(x, y) !== 'g') continue;
     const k = r();
     set(x, y, k < 0.45 ? 't' : k < 0.85 ? 'b' : 'k');
@@ -450,8 +471,8 @@ const buildMap = () => {
 
   // Meadows of tall grass you can crawl through unseen.
   for (let i = 0, made = 0; i < 80 && made < 14; i++) {
-    const cx = ri(6, SIZE - 7);
-    const cy = ri(6, SIZE - 7);
+    const cx = ri(6, lim - 7);
+    const cy = ri(6, lim - 7);
     if (get(cx, cy) !== 'g') continue;
     const rx = 1.5 + r() * 2.5;
     const ry = 1.5 + r() * 2.5;
@@ -463,16 +484,350 @@ const buildMap = () => {
     made += 1;
   }
 
-  // Every door opens onto open ground: clear two tiles in front of it of fences, trees, rocks
-  // and crates that the yards, farms and lone trees may have put there.
+  // ---------------------------------------------------------------------------------------------------------------
+  // The rest of the valley: everything new, in the plain frame with its own random stream, so the old map above comes out
+  // exactly as it did. See docs/collab/CREATIVE/specifications/map-v2.md (and levels/map-v2.svg) for the plan.
+  // ---------------------------------------------------------------------------------------------------------------
+  sh = 0;
+  lim = SIZE;
+  rr = r2;
+  districts.length = 0;
+
+  /** Turn trees, bushes, rocks, crates and meadow in a rectangle back into open grass (a place is cleared before it is built). */
+  const bulldoze = (x0: number, y0: number, w: number, h: number) => {
+    for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) if ('tbkhcfsr'.includes(get(x, y))) set(x, y, 'g');
+  };
+  const fill = (x0: number, y0: number, x1: number, y1: number, c: string, on = 'gphbtkcfsr') => {
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (on.includes(get(x, y))) set(x, y, c);
+  };
+  /** Room for a building with a one-tile margin: open ground, paving or something a bulldozer can clear (no water, walls or props). */
+  const roomFor = (x0: number, y0: number, w: number, h: number, m = 1) => {
+    for (let y = y0 - m; y < y0 + h + m; y++) for (let x = x0 - m; x < x0 + w + m; x++) if (!'gpabhtkcfsr'.includes(get(x, y))) return false;
+    return x0 > 2 && y0 > 2 && x0 + w < SIZE - 3 && y0 + h < SIZE - 3;
+  };
+  /** Does this building have a wall a ladder can stand on (the rule of `LADDERS` in roofs.ts: a plain wall, open ground two tiles out)? */
+  const ladderFits = (x0: number, y0: number, w: number, h: number) => {
+    for (let y = y0; y < y0 + h; y++) {
+      for (let x = x0; x < x0 + w; x++) {
+        const nx = x === x0 ? -1 : x === x0 + w - 1 ? 1 : 0;
+        const ny = y === y0 ? -1 : y === y0 + h - 1 ? 1 : 0;
+        if (Math.abs(nx) + Math.abs(ny) !== 1 || get(x, y) !== '#') continue;
+        if (!'gpash'.includes(get(x + nx, y + ny)) || !'gpash'.includes(get(x + nx * 2, y + ny * 2))) continue;
+        if ([[ny, nx], [-ny, -nx]].some(([sx, sy]) => get(x + sx, y + sy) === '.')) continue;
+        return true;
+      }
+    }
+    return false;
+  };
+  /** A building that must keep a ladder wall: built, and taken back down if its random doors left none. */
+  const buildWithLadder = (x0: number, y0: number, w: number, h: number) => {
+    const saved: string[][] = [];
+    for (let y = y0 - 3; y < y0 + h + 3; y++) saved.push([...Array(w + 6)].map((_, i) => get(x0 - 3 + i, y)));
+    const count = buildings.length;
+    build(x0, y0, w, h);
+    if (ladderFits(x0, y0, w, h)) return true;
+    buildings.length = count;
+    saved.forEach((row, j) => row.forEach((c, i) => set(x0 - 3 + i, y0 - 3 + j, c)));
+    return false;
+  };
+  /** A building at (x0, y0): the ground under it is cleared first. */
+  const build = (x0: number, y0: number, w: number, h: number, barn = false) => {
+    // Anything parked or stacked on the site (and in front of its doors) goes: its props come off the map and the ground under them is cleared.
+    for (let i = props.length - 1; i >= 0; i--) {
+      const q = props[i];
+      if (!['container', 'car', 'tent', 'boxcar'].includes(q.kind)) continue;
+      const m = q.kind === 'boxcar' ? 0 : 2;
+      if (q.x0 >= x0 + w + m || q.x0 + q.w <= x0 - m || q.y0 >= y0 + h + m || q.y0 + q.h <= y0 - m) continue;
+      for (let y = q.y0; y < q.y0 + q.h; y++) for (let x = q.x0; x < q.x0 + q.w; x++) if (get(x, y) === 'v') set(x, y, q.kind === 'tent' ? 'g' : 'a');
+      props.splice(i, 1);
+    }
+    for (let y = y0 - 1; y <= y0 + h; y++) for (let x = x0 - 1; x <= x0 + w; x++) if ('tbkhcfsr'.includes(get(x, y)) && (x < x0 || y < y0 || x >= x0 + w || y >= y0 + h)) set(x, y, 'g');
+    bulldoze(x0, y0, w, h);
+    house(x0, y0, w, h, barn);
+  };
+  /** A straight road, path or track along one axis. `width` tiles wide for roads (the centre line runs between the two), 1 for rails. */
+  const road = (kind: Route['kind'], x0: number, y0: number, x1: number, y1: number) => {
+    const width = kind === 'rail' ? 1 : 2;
+    const tile = kind === 'asphalt' ? 'a' : 'p';
+    const horizontal = y0 === y1;
+    const a = horizontal ? Math.min(x0, x1) : Math.min(y0, y1);
+    const b = horizontal ? Math.max(x0, x1) : Math.max(y0, y1);
+    for (let k = a; k <= b; k++) {
+      for (let w = 0; w < width; w++) {
+        const x = horizontal ? k : x0 + w;
+        const y = horizontal ? y0 + w : k;
+        if ('gphbtkcfsr'.includes(get(x, y))) set(x, y, tile);
+      }
+    }
+    const c = width / 2;
+    routes.push({
+      kind,
+      points: horizontal
+        ? [{ x: x0 * TILE, y: (y0 + c) * TILE }, { x: (x1 + 1) * TILE, y: (y0 + c) * TILE }]
+        : [{ x: (x0 + c) * TILE, y: y0 * TILE }, { x: (x0 + c) * TILE, y: (y1 + 1) * TILE }],
+    });
+  };
+
+  // ---- Roads: Route 1 (asphalt, the spine), Mill Road and River Road (dirt), Campus Drive, the lanes to the crossings and
+  // the rail line. Roads go down first so houses keep clear of them.
+  road('asphalt', 60, 2, 60, 117);
+  road('dirt', 12, 30, 100, 30);
+  road('dirt', 14, 82, 98, 82);
+  road('asphalt', 40, 96, 60, 96);
+  road('dirt', 10, 36, 10, 84); // Lake lane, to the Footbridge
+  road('dirt', 31, 36, 31, 80); // West lane
+  road('dirt', 86, 32, 86, 86); // East lane
+  road('dirt', 113, 40, 113, 80); // Quay lane, to the Weir
+  road('dirt', 14, 19, 14, 30); // up to Mast Hill's south gate
+  road('dirt', 102, 19, 102, 30); // up to the Deadwood lodge
+
+  // ---- Container Yard: the quay on the east bank of the yard, two more columns of containers, two port offices.
+  fill(103, 36, 113, 83, 'a', 'gphbtkcfsr');
+  for (let y = 37; y < 82; y += 3) for (const x of [104, 108]) if (rr() >= 0.1) solidProp('container', x, y, 3, 2);
+  build(90, 38, 6, 5);
+  build(90, 75, 6, 5);
+  for (const [x, y] of [[92, 41], [93, 77]]) if ('.'.includes(get(x, y))) set(x, y, 'l');
+
+  // ---- Mast Hill (north-west): few items, the best ones, on an exposed hill. A fenced yard with a mast, a control house and
+  // two sheds; nothing taller than grass for ten tiles round it.
+  fill(8, 7, 23, 20, 'a');
+  for (let x = 8; x < 23; x++) for (const y of [7, 19]) set(x, y, 'f');
+  for (let y = 7; y < 20; y++) for (const x of [8, 22]) set(x, y, 'f');
+  for (const [x, y] of [[14, 19], [15, 19], [22, 13], [22, 14]]) set(x, y, 'a'); // the two gates
+  build(9, 13, 7, 5);
+  build(18, 13, 4, 4);
+  build(18, 8, 4, 4);
+  solidProp('mast', 14, 9, 2, 2, 'gpa', { seed: 0.5 });
+  for (const [x, y] of [[12, 11], [17, 12], [11, 18]]) if (get(x, y) === 'a') set(x, y, 's');
+
+  // ---- The Campus (south-west): where the developers worked. Glass offices round a plaza with the HQ tower in it.
+  fill(19, 95, 31, 107, 'a');
+  build(12, 92, 8, 6);
+  build(30, 92, 8, 6);
+  build(12, 106, 8, 6);
+  build(30, 106, 8, 6);
+  build(23, 109, 4, 4);
+  solidProp('hq', 22, 98, 6, 6, 'gpa', { seed: 0.5 });
+  fill(12, 100, 21, 105, 'a');
+  for (const [x, y] of [[13, 100], [15, 100], [17, 100], [13, 102], [17, 102]]) solidProp('car', x, y, 1, 2, 'a');
+  for (const [x, y] of [[20, 95], [21, 95], [28, 95], [29, 95], [20, 106], [21, 106], [28, 106], [29, 106]]) if (get(x, y) === 'a') set(x, y, 'b');
+  for (const [x, y] of [[21, 100], [29, 101], [25, 105], [25, 96]]) if (get(x, y) === 'a') set(x, y, 's');
+
+  // ---- Truck Stop: a motel row of four one-room cabins behind the shop, three more cars in the car park.
+  for (const x of [54, 60, 66, 72]) build(x, 100, 4, 5);
+  for (const [x, y] of [[57, 94], [63, 94], [67, 97]]) solidProp('car', x, y, 1, 2, 'a');
+
+  // ---- Quarry: the conveyor and a site office.
+  bulldoze(76, 48, 13, 9);
+  solidProp('conveyor', 78, 48, 1, 6, 'gpa', { seed: 0.5 }); // (the plan has it at 86,51, which is the East bridge)
+  build(80, 53, 5, 4);
+
+  // ---- Railyard (south-east): a main line and two yard tracks lined with boxcars, an engine shed, a goods shed, a signal box.
+  bulldoze(80, 93, 37, 24);
+  road('rail', 40, 110, 117, 110);
+  road('rail', 82, 101, 117, 101);
+  road('rail', 82, 105, 117, 105);
+  for (const ty of [100, 104]) {
+    const gaps = [1, 3, 2, 4, 1, 2, 3];
+    let x = 83 + (ty === 104 ? 2 : 0);
+    for (let i = 0; i < 7 && x + 3 <= 116; i++) {
+      solidProp('boxcar', x, ty, 3, 2, 'gpa');
+      x += 3 + gaps[(i + (ty === 104 ? 3 : 0)) % gaps.length];
+    }
+  }
+  build(100, 93, 10, 6, true);
+  build(84, 111, 8, 5);
+  build(111, 106, 4, 4);
+  solidProp('gantry', 90, 99, 1, 1, 'gpa', { seed: 0 });
+  solidProp('gantry', 90, 107, 1, 1, 'gpa', { seed: 1 });
+  for (const [x, y] of [[97, 103], [106, 103], [95, 108], [113, 98]]) if ('gpa'.includes(get(x, y))) set(x, y, 's');
+
+  // ---- Deadwood (north-east): dense conifers for ambush, a lodge and a hut in clearings, a fire lookout.
+  for (let y = 4; y < 31; y++) {
+    for (let x = 88; x < 117; x++) {
+      if (get(x, y) !== 'g') continue;
+      const k = rr();
+      if (k < 0.5) set(x, y, 't');
+      else if (k < 0.65) set(x, y, 'b');
+    }
+  }
+  for (const [cx, cy, rad] of [[103, 16, 6], [110, 26, 5]]) bulldoze(cx - rad, cy - rad, rad * 2 + 1, rad * 2 + 1);
+  build(100, 14, 6, 5);
+  build(108, 24, 4, 4);
+  props.push({ kind: 'campfire', x0: 107, y0: 16, w: 1, h: 1, seed: rr() });
+  bulldoze(94, 7, 4, 4);
+  solidProp('lookout', 95, 8, 2, 2, 'gpa', { seed: 0.5 });
+  for (const [x, y] of [[98, 17], [110, 21]]) if (get(x, y) === 'g') set(x, y, 's');
+
+  // ---- Windmill Hill: an orchard (broadleaf trees on a 3-tile grid, tall grass in the lanes between) and the miller's cottage.
+  bulldoze(31, 5, 27, 12);
+  for (let y = 5; y < 17; y += 3) for (let x = 31; x < 58; x += 3) if (get(x, y) === 'g') set(x, y, 't');
+  for (const y of [7, 13]) for (let x = 32; x < 57; x++) if (get(x, y) === 'g' && rr() < 0.55) set(x, y, 'h');
+  build(68, 21, 5, 4);
+  for (const [x, y] of [[40, 11], [50, 9]]) if (get(x, y) === 'g') set(x, y, 's');
+
+  // ---- Lakeside: one more cabin, and a boathouse on the pond's west shore with a short deck into the water.
+  build(5, 49, 4, 4); // (the plan has it at 5,52, which is in the river at that bend)
+  build(12, 69, 5, 4);
+  for (let x = 17; x <= 19; x++) if ('gbo'.includes(get(x, 70))) set(x, 70, 'd');
+
+  // ---- Old Town: top the grid up to eighteen houses (north and south bank) in the gaps between.
+  {
+    const inTown = (b: Building) => b.x0 >= 44 && b.x0 < 79 && b.y0 >= 42 && b.y0 < 79;
+    for (let tries = 0; tries < 20000 && buildings.filter(inTown).length < 18; tries++) {
+      const w = 4 + Math.floor(rr() * 2);
+      const h = 4 + Math.floor(rr() * 2);
+      const x0 = 44 + Math.floor(rr() * 34);
+      const y0 = 42 + Math.floor(rr() * 36);
+      if (x0 + w > 55 && x0 < 67 && y0 + h > 46 && y0 < 54) continue; // the Market Square stays open
+      if (x0 < 63 && x0 + w > 57) continue; // Route 1 and the bridge approach stay clear
+      if (roomFor(x0, y0, w, h)) buildWithLadder(x0, y0, w, h);
+    }
+  }
+
+  // ---- Lone houses: eight, each beside a road and clear of every place (the plan says ten tiles, but the places cover so much of the
+  // valley that only a sliver of the map is that far from all of them: three tiles keeps each one a home on its own).
+  const PLACES: [string, number, number, number, number][] = [
+    ['Mast Hill', 4, 4, 27, 25],
+    ['Windmill Hill', 30, 4, 79, 28],
+    ['Deadwood', 88, 4, 117, 31],
+    ['Hollis Farm', 34, 32, 51, 45],
+    ['Redgate Farm', 72, 34, 89, 47],
+    ['Lakeside', 4, 40, 31, 91],
+    ['Old Town', 44, 42, 79, 79],
+    ['Quarry', 76, 48, 89, 57],
+    ['Container Yard', 89, 36, 113, 83],
+    ['Southfield Farm', 33, 74, 50, 87],
+    ['The Campus', 10, 90, 41, 115],
+    ['Truck Stop', 52, 90, 79, 105],
+    ['Railyard', 80, 93, 117, 117],
+  ];
+  {
+    const nearPlace = (x: number, y: number) => (x > 58 && x < 108 && y > 83 && y < 93) || PLACES.some(([, a, b, c, d]) => x > a - 3 && x < c + 3 && y > b - 3 && y < d + 3);
+    const spots: [number, number][] = [];
+    for (const rt of routes) {
+      if (rt.kind === 'rail') continue;
+      const [p, q] = rt.points;
+      const n = Math.ceil(Math.hypot(q.x - p.x, q.y - p.y) / TILE);
+      for (let i = 4; i < n - 4; i += 2) spots.push([Math.round((p.x + ((q.x - p.x) * i) / n) / TILE), Math.round((p.y + ((q.y - p.y) * i) / n) / TILE)]);
+    }
+    for (let i = spots.length - 1; i > 0; i--) {
+      const j = Math.floor(rr() * (i + 1));
+      [spots[i], spots[j]] = [spots[j], spots[i]];
+    }
+    const lone: [number, number][] = [];
+    for (const [rx, ry] of spots) {
+      if (lone.length >= 8) break;
+      const w = 4 + Math.floor(rr() * 3);
+      const h = 4 + Math.floor(rr() * 2);
+      const vertical = routes.some((rt) => rt.kind !== 'rail' && rt.points[0].x === rt.points[1].x && Math.abs(rt.points[0].x / TILE - rx) < 2.5 && ry >= rt.points[0].y / TILE && ry <= rt.points[1].y / TILE);
+      for (const side of [rr() < 0.5 ? -1 : 1, 0]) {
+        const sd = side || -1;
+        const x0 = vertical ? (sd < 0 ? rx - 3 - w : rx + 3) : rx - 2;
+        const y0 = vertical ? ry - 2 : sd < 0 ? ry - 3 - h : ry + 3;
+        if (nearPlace(x0, y0) || nearPlace(x0 + w, y0 + h) || nearPlace(x0 + w, y0) || nearPlace(x0, y0 + h)) continue;
+        if (lone.some(([lx, ly]) => Math.hypot(lx - x0, ly - y0) < 20)) continue;
+        if (!roomFor(x0, y0, w, h)) continue;
+        if (!buildWithLadder(x0, y0, w, h)) continue;
+        lone.push([x0, y0]);
+        break;
+      }
+    }
+  }
+
+  // ---- Cover in the fields: lone trees, bushes and rocks over the new ground, tall-grass meadows, and a piece of cover by
+  // every road at least every ~40 m (a tree, a rock or a bush a few tiles off its edge).
+  // (Nothing is scattered within three tiles of a building: a ladder and a doorway need open ground in front.)
+  const nearHouse = new Uint8Array(SIZE * SIZE);
+  for (const b of buildings) for (let y = b.y0 - 3; y < b.y0 + b.h + 3; y++) for (let x = b.x0 - 3; x < b.x0 + b.w + 3; x++) if (x >= 0 && y >= 0 && x < SIZE && y < SIZE) nearHouse[y * SIZE + x] = 1;
+  for (let i = 0; i < 1500; i++) {
+    const x = 2 + Math.floor(rr() * (SIZE - 4));
+    const y = 2 + Math.floor(rr() * (SIZE - 4));
+    if (get(x, y) !== 'g' || nearHouse[y * SIZE + x]) continue;
+    const k = rr();
+    set(x, y, k < 0.5 ? 't' : k < 0.85 ? 'b' : 'k');
+  }
+  for (let i = 0, made = 0; i < 300 && made < 34; i++) {
+    const cx = 6 + Math.floor(rr() * (SIZE - 12));
+    const cy = 6 + Math.floor(rr() * (SIZE - 12));
+    if (get(cx, cy) !== 'g' || nearHouse[cy * SIZE + cx]) continue;
+    const rx = 1.5 + rr() * 2.5;
+    const ry = 1.5 + rr() * 2.5;
+    for (let y = Math.floor(cy - ry); y <= cy + ry; y++) for (let x = Math.floor(cx - rx); x <= cx + rx; x++) {
+      if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1 + (rr() - 0.5) * 0.4 && get(x, y) === 'g') set(x, y, 'h');
+    }
+    made += 1;
+  }
+  const COVER = 'tkbf#vr';
+  for (const rt of routes) {
+    if (rt.kind === 'rail') continue;
+    const [p, q] = rt.points;
+    const horizontal = p.y === q.y;
+    const a = Math.round((horizontal ? p.x : p.y) / TILE);
+    const b = Math.round((horizontal ? q.x : q.y) / TILE);
+    const fixed = Math.round((horizontal ? p.y : p.x) / TILE);
+    let since = 0;
+    for (let k = a; k <= b; k++) {
+      let near = false;
+      for (let d = -3; d <= 3 && !near; d++) for (let e = -3; e <= 3 && !near; e++) {
+        const x = horizontal ? k + d : fixed + e;
+        const y = horizontal ? fixed + e : k + d;
+        if (COVER.includes(get(x, y))) near = true;
+      }
+      since = near ? 0 : since + 1;
+      if (since >= 14) {
+        const side = rr() < 0.5 ? -1 : 1;
+        const off = side * (3 + Math.floor(rr() * 2));
+        const x = horizontal ? k : fixed + off;
+        const y = horizontal ? fixed + off : k;
+        if (get(x, y) === 'g' && !nearHouse[y * SIZE + x]) {
+          const c = rr();
+          set(x, y, c < 0.5 ? 't' : c < 0.8 ? 'k' : 'b');
+          since = 0;
+        }
+      }
+    }
+  }
+  // The South field: forty-four tiles of open meadow between River Road and the Truck Stop, three rows wide with a few trees, rocks
+  // and bushes along its edges (grazing country; also a clear stretch the tests can stand a duel on, with cover a few steps off,
+  // and near enough the middle of the map to lie inside every early Deadline circle).
+  for (let y = 87; y < 90; y++) for (let x = 62; x < 106; x++) if ('tbkhcfsr'.includes(get(x, y))) set(x, y, 'g');
+  for (const y of [85, 86, 90, 91]) for (let x = 62; x < 106; x += 3) if (get(x, y) === 'g' && !nearHouse[y * SIZE + x]) set(x, y, rr() < 0.4 ? 't' : rr() < 0.5 ? 'k' : 'b');
+  for (const [x, y] of [[71, 86], [75, 86], [79, 86], [71, 88], [75, 88], [79, 88]]) set(x, y, 'k'); // boulders by the row's middle
+  // Every crossing gets hard cover at both ends (section 6): two rocks 2 to 4 tiles to either side of the deck's axis and 2 to 3 tiles
+  // short of the deck, on open grass only (never on the lane, the road or the deck).
+  for (const [bx, bw] of RIVER.bridges) {
+    let y0 = SIZE;
+    let y1 = -1;
+    for (let y = 0; y < SIZE; y++) if (get(bx, y) === 'd') [y0, y1] = [Math.min(y0, y), Math.max(y1, y)];
+    if (y1 < 0) continue;
+    const axis = bx + Math.floor(bw / 2);
+    for (const rows of [[y0 - 2, y0 - 3], [y1 + 2, y1 + 3]]) {
+      const open = [2, 3, 4]
+        .flatMap((dx) => [-1, 1].flatMap((side) => rows.map((y) => [axis + side * dx, y] as [number, number])))
+        .filter(([x, y]) => 'gbth'.includes(get(x, y)) && (x < bx - 1 || x > bx + bw));
+      // Two pieces, on opposite sides of the axis when both have room.
+      const first = open[0];
+      const second = open.find(([x]) => first && Math.sign(x - axis) !== Math.sign(first[0] - axis)) ?? open[1];
+      for (const spot of [first, second]) if (spot) set(spot[0], spot[1], 'k');
+    }
+  }
+
+  // Mast Hill is exposed: nothing taller than grass for ten tiles round the fence, three blobs of tall grass and six rocks.
+  for (let y = 7 - 10; y < 20 + 10; y++) for (let x = 8 - 10; x < 23 + 10; x++) if (x > 1 && y > 1 && 'tb'.includes(get(x, y))) set(x, y, 'g');
+  for (const [cx, cy] of [[30, 12], [4, 22], [14, 27]]) for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 2; x++) if (get(x, y) === 'g') set(x, y, 'h');
+  for (const [x, y] of [[28, 8], [29, 17], [5, 12], [6, 25], [18, 26], [24, 25]]) if (get(x, y) === 'g') set(x, y, 'k');
+
+  // Every door opens onto open ground: clear two tiles in front of it of fences, trees, rocks and crates that the yards,
+  // farms and lone trees may have put there.
   for (const b of buildings) {
     for (let y = b.y0; y < b.y0 + b.h; y++) {
       for (let x = b.x0; x < b.x0 + b.w; x++) {
         const ring = x === b.x0 || y === b.y0 || x === b.x0 + b.w - 1 || y === b.y0 + b.h - 1;
         if (!ring || get(x, y) !== '.') continue;
-        const ox = x === b.x0 ? -1 : x === b.x0 + b.w - 1 ? 1 : 0;
-        const oy = y === b.y0 ? -1 : y === b.y0 + b.h - 1 ? 1 : 0;
-        for (let k = 1; k <= 2; k++) if ('ftkr'.includes(get(x + ox * k, y + oy * k))) set(x + ox * k, y + oy * k, 'g');
+        const dx = x === b.x0 ? -1 : x === b.x0 + b.w - 1 ? 1 : 0;
+        const dy = y === b.y0 ? -1 : y === b.y0 + b.h - 1 ? 1 : 0;
+        for (let k = 1; k <= 2; k++) if ('ftkr'.includes(get(x + dx * k, y + dy * k))) set(x + dx * k, y + dy * k, 'g');
       }
     }
   }
@@ -481,6 +836,67 @@ const buildMap = () => {
   for (let i = 0; i < SIZE; i++) {
     for (const [x, y] of [[i, 0], [i, 1], [i, SIZE - 1], [i, SIZE - 2], [0, i], [1, i], [SIZE - 1, i], [SIZE - 2, i]]) set(x, y, 't');
   }
+
+  // Nothing is walled in: every open tile can be reached from Route 1. A pocket that trees or rocks have closed off gets one of
+  // them cleared (the shortest way out); anything walled in by buildings is left for the map test to report.
+  {
+    const blocked = (c: string) => 'tkv#ur'.includes(c);
+    const idx = (x: number, y: number) => y * SIZE + x;
+    const reach = new Uint8Array(SIZE * SIZE);
+    const flood = (sx: number, sy: number) => {
+      const q = [idx(sx, sy)];
+      reach[q[0]] = 1;
+      while (q.length) {
+        const i = q.pop()!;
+        const x = i % SIZE;
+        const y = (i - x) / SIZE;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= SIZE || ny >= SIZE || reach[idx(nx, ny)] || blocked(get(nx, ny))) continue;
+          reach[idx(nx, ny)] = 1;
+          q.push(idx(nx, ny));
+        }
+      }
+    };
+    flood(60, 3);
+    for (let y = 2; y < SIZE - 2; y++) for (let x = 2; x < SIZE - 2; x++) {
+      if (reach[idx(x, y)] || blocked(get(x, y))) continue;
+      // Shortest way out through trees and rocks only (a breadth-first walk from the pocket to anything reached).
+      const prev = new Map<number, number>();
+      const queue = [idx(x, y)];
+      prev.set(idx(x, y), -1);
+      let found = -1;
+      for (let qi = 0; qi < queue.length && found < 0; qi++) {
+        const i = queue[qi];
+        const cx = i % SIZE;
+        const cy = (i - cx) / SIZE;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = cx + dx;
+          const ny = cy + dy;
+          if (nx < 2 || ny < 2 || nx >= SIZE - 2 || ny >= SIZE - 2 || prev.has(idx(nx, ny))) continue;
+          const c = get(nx, ny);
+          if (blocked(c) && !'tkr'.includes(c)) continue;
+          prev.set(idx(nx, ny), i);
+          if (reach[idx(nx, ny)] && !blocked(c)) {
+            found = idx(nx, ny);
+            break;
+          }
+          queue.push(idx(nx, ny));
+        }
+      }
+      if (found < 0) continue;
+      for (let i = prev.get(found)!; i >= 0 && !reach[i]; i = prev.get(i)!) {
+        const px = i % SIZE;
+        const py = (i - px) / SIZE;
+        if ('tkr'.includes(get(px, py))) set(px, py, 'g');
+      }
+      flood(x, y);
+    }
+  }
+
+  // The places, with their names and rectangles as drawn in the plan.
+  for (const [name, a, b, c, d] of PLACES) district(name, a, b, c, d);
   return { map: grid.map((row) => row.join('')), districts, buildings, routes, props };
 };
 
@@ -535,11 +951,12 @@ export interface FighterStats {
   color: string;
 }
 
+/** Names, roles and supers are words (from the copy module, so the portal build can swap them); the numbers are here. */
 export const FIGHTERS: Record<FighterId, FighterStats> = {
-  hotfix: { name: 'Hotfix', role: 'On-call engineer', hp: 100, speed: 6.6, superCost: 160, superName: 'Deploy', superText: 'a fast dash that hits everyone in its path', color: '#ff6a3d' },
-  legacy: { name: 'Legacy', role: 'Senior maintainer', hp: 100, speed: 5.9, superCost: 140, superName: 'Deprecated', superText: 'drops a wall that blocks bullets', color: '#3ddc84' },
-  standup: { name: 'Standup', role: 'Scrum lead', hp: 100, speed: 6.9, superCost: 130, superName: 'Timebox', superText: 'a field that slows enemies', color: '#3ec5ff' },
-  intern: { name: 'Intern', role: 'First week', hp: 100, speed: 6.3, superCost: 150, superName: 'Force push to main', superText: 'a blast that throws everyone back', color: '#ffd23f' },
+  hotfix: { ...COPY.fighters.hotfix, hp: 100, speed: 6.6, superCost: 160, color: '#ff6a3d' },
+  legacy: { ...COPY.fighters.legacy, hp: 100, speed: 5.9, superCost: 140, color: '#3ddc84' },
+  standup: { ...COPY.fighters.standup, hp: 100, speed: 6.9, superCost: 130, color: '#3ec5ff' },
+  intern: { ...COPY.fighters.intern, hp: 100, speed: 6.3, superCost: 150, color: '#ffd23f' },
 };
 
 // ---------------------------------------------------------------------------
@@ -568,54 +985,160 @@ export interface WeaponStats {
 }
 
 export const WEAPONS: Record<WeaponKind, WeaponStats> = {
-  // Damage is out of 100 HP (+ up to 100 armor): about three hits kill.
+  // Damage is out of 100 HP (+ up to 100 armor). Each gun owns a distance (docs/BALANCE.md, held by balance.test.ts):
+  // shotgun inside 6 m (one pump bare, two geared), SMG to 12 m, rifle 15-50 m, sniper beyond (2 hits bare, 3 geared at
+  // any range); the pistol is the baseline and rockets the rare power weapon (a direct hit downs a bare fighter).
   fists: { name: 'Fists', damage: 15, bullets: 1, spread: 0, speed: 30, range: 1.6, rate: 0.45, ammo: Infinity, mag: Infinity, reload: 0, falloff: { start: 9, end: 9, min: 1 } },
   pistol: { name: 'Pistol', damage: 34, bullets: 1, spread: 0.03, speed: 34, range: 90, rate: 0.35, ammo: 36, mag: 12, reload: 1.1, falloff: { start: 12, end: 40, min: 0.4 } },
-  smg: { name: 'SMG', damage: 22, bullets: 1, spread: 0.1, speed: 36, range: 90, rate: 0.09, ammo: 90, mag: 30, reload: 1.7, falloff: { start: 10, end: 35, min: 0.35 } },
-  shotgun: { name: 'Shotgun', damage: 14, bullets: 7, spread: 0.5, speed: 28, range: 45, rate: 0.85, ammo: 18, mag: 6, reload: 2.2, falloff: { start: 5, end: 18, min: 0.15 } },
-  rifle: { name: 'Rifle', damage: 30, bullets: 1, spread: 0.04, speed: 48, range: 120, rate: 0.16, ammo: 75, mag: 25, reload: 1.9, falloff: { start: 20, end: 60, min: 0.5 } },
-  sniper: { name: 'Sniper', damage: 80, bullets: 1, spread: 0, speed: 80, range: 160, rate: 1.4, ammo: 10, mag: 5, reload: 2.6, falloff: { start: 40, end: 100, min: 0.7 } },
+  smg: { name: 'SMG', damage: 22, bullets: 1, spread: 0.1, speed: 36, range: 90, rate: 0.09, ammo: 90, mag: 30, reload: 1.7, falloff: { start: 12, end: 30, min: 0.25 } },
+  shotgun: { name: 'Shotgun', damage: 13, bullets: 8, spread: 0.22, speed: 28, range: 30, rate: 0.8, ammo: 18, mag: 6, reload: 2.2, falloff: { start: 6, end: 15, min: 0.1 } },
+  rifle: { name: 'Rifle', damage: 28, bullets: 1, spread: 0.035, speed: 48, range: 120, rate: 0.16, ammo: 75, mag: 25, reload: 1.9, falloff: { start: 25, end: 70, min: 0.55 } },
+  sniper: { name: 'Sniper', damage: 80, bullets: 1, spread: 0, speed: 80, range: 160, rate: 1.5, ammo: 10, mag: 5, reload: 2.6, falloff: { start: 60, end: 120, min: 0.85 } },
   // A rocket flies straight where you aim at 16 m/s (you see it coming), drops a little over long
   // distances, and explodes on whatever it meets.
-  rockets: { name: 'Rockets', damage: 110, bullets: 1, spread: 0, speed: 16, range: 70, rate: 1.2, ammo: 4, mag: 1, reload: 2.4, lob: { radius: 3 }, falloff: { start: 999, end: 999, min: 1 } },
+  rockets: { name: 'Rockets', damage: 125, bullets: 1, spread: 0, speed: 16, range: 70, rate: 1.2, ammo: 4, mag: 1, reload: 2.4, lob: { radius: 3 }, falloff: { start: 999, end: 999, min: 1 } },
 };
 
-/** Loot weights inside buildings (one entry = one ticket). Rockets and snipers are rare. */
-export const LOOT_TABLE: string[] = [
-  'pistol', 'pistol', 'pistol', 'pistol',
-  'smg', 'smg', 'smg',
-  'shotgun', 'shotgun', 'shotgun',
-  'rifle', 'rifle',
-  'sniper',
-  'rockets',
-  'armor', 'armor', 'armor',
-  'medkit', 'medkit', 'medkit',
-  'bomb', 'bomb',
-  'ammo', 'ammo', 'ammo', 'ammo', 'ammo',
+/**
+ * Rarity: the same gun in three grades, shown by the colour of its loot beam and its name. A modest step, so a well-played
+ * common gun still wins against a badly played prime one: damage x1 / 1.06 / 1.12 (no gun needs a hit fewer on bare health
+ * up close), magazine x1 / 1.25 / 1.5, reload time x1 / 0.93 / 0.86.
+ */
+export const RARITY = { damage: [1, 1.06, 1.12], mag: [1, 1.25, 1.5], reload: [1, 0.93, 0.86] };
+/** Magazine size of a gun at a rarity (Infinity for fists). */
+export const magOf = (w: WeaponKind, rarity = 0) => (w === 'fists' ? Infinity : Math.max(1, Math.round(WEAPONS[w].mag * (RARITY.mag[rarity] ?? 1))));
+/** Rounds a gun carries when found (its magazine plus two spare): bigger with its magazine. */
+export const foundRounds = (w: WeaponKind, rarity = 0) => (w === 'fists' ? 0 : Math.round(WEAPONS[w].ammo * (RARITY.mag[rarity] ?? 1)));
+
+/** Seconds to draw the other gun: no shooting meanwhile, and a reload in progress starts over. */
+export const SWAP_TIME = 0.4;
+
+/**
+ * Vests I / II / III: points of armor (a second health bar that takes hits first; the Deadline ignores it). III matches
+ * the one vest of before, so a fully geared fight lasts as long as it did; I and II make the climb to it.
+ */
+export const VEST = { points: [0, 50, 75, 100] };
+/**
+ * Backpacks I / II: how much you carry. Spare rounds per gun in magazines (an ammo box tops up to this), and heals and
+ * bombs by count. No backpack is index 0.
+ */
+export const PACK = {
+  spareMags: [3, 4, 6],
+  bandage: [4, 6, 8],
+  medkit: [1, 2, 3],
+  coffee: [1, 2, 3],
+  bomb: [1, 2, 3],
+};
+/**
+ * Heals. Using one takes `time` seconds: you walk at `walk` of your speed and cannot shoot, and firing, rolling or drawing
+ * the other gun cancels it (taking a hit does not). A bandage is quick and small and cannot take you past `upTo`; a med kit
+ * is slow and big; coffee heals over `buzz` seconds and puts a little spring in your step. Bandages lie in stacks of `stack`.
+ */
+export const HEALS = {
+  walk: 0.5,
+  bandage: { time: 1.2, heal: 15, upTo: 75, stack: 2 },
+  medkit: { time: 3.5, heal: 65 },
+  coffee: { time: 0.8, buzz: 20, perSecond: 1.5, speed: 1.06 },
+};
+
+type LootWeights = Partial<Record<LootKind, number>>;
+/**
+ * Loot by place. Tier 1 is the quiet outskirts (lone houses, the lake, the windmill camp, the forest): pistols, SMGs and
+ * shotguns, Vest I, bandages, mostly common. Tier 2 is the farms, the quarry and the truck stop. Tier 3 is the risky places,
+ * Old Town and the Container Yard: rifles and snipers, Vest II and III, more prime guns. Weights are tickets.
+ */
+export const LOOT_TABLES: { kinds: LootWeights; rarity: number[]; vest: number[]; pack: number[] }[] = [
+  // (unused: tiers start at 1)
+  { kinds: {}, rarity: [1, 0, 0], vest: [0, 1, 0, 0], pack: [0, 1, 0] },
+  {
+    kinds: { pistol: 4, smg: 3, shotgun: 3, rifle: 1, armor: 3, bandage: 5, medkit: 1, coffee: 1, bomb: 1, ammo: 5, backpack: 2 },
+    rarity: [0.85, 0.15, 0], vest: [0, 0.75, 0.25, 0], pack: [0, 0.85, 0.15],
+  },
+  {
+    kinds: { pistol: 2, smg: 3, shotgun: 3, rifle: 3, sniper: 1, armor: 3, bandage: 3, medkit: 2, coffee: 2, bomb: 2, ammo: 4, backpack: 2 },
+    rarity: [0.6, 0.32, 0.08], vest: [0, 0.35, 0.5, 0.15], pack: [0, 0.6, 0.4],
+  },
+  {
+    kinds: { pistol: 1, smg: 3, shotgun: 2, rifle: 4, sniper: 2, rockets: 1, armor: 4, bandage: 2, medkit: 3, coffee: 2, bomb: 2, ammo: 4, backpack: 2 },
+    rarity: [0.35, 0.45, 0.2], vest: [0, 0.1, 0.45, 0.45], pack: [0, 0.4, 0.6],
+  },
 ];
+/** Which loot tier each named place has (anywhere else is tier 1). */
+export const PLACE_TIER: Record<string, number> = {
+  'Old Town': 3,
+  'Container Yard': 3,
+  'The Campus': 3,
+  'Mast Hill': 3,
+  Railyard: 2,
+  'Hollis Farm': 2,
+  'Redgate Farm': 2,
+  'Southfield Farm': 2,
+  Quarry: 2,
+  'Truck Stop': 2,
+  Lakeside: 1,
+  'Windmill Hill': 1,
+  Deadwood: 1,
+};
+/** The named place a point (metres) lies in: the riskiest one where two overlap, or null out in the fields. */
+export const placeAt = (x: number, y: number): District | null => {
+  let best: District | null = null;
+  let tier = 0;
+  for (const d of DISTRICTS) {
+    if (x < d.x0 || x >= d.x1 || y < d.y0 || y >= d.y1) continue;
+    const t = PLACE_TIER[d.name] ?? 1;
+    if (t > tier) {
+      best = d;
+      tier = t;
+    }
+  }
+  return best;
+};
+/** The loot tier at a point of the map: the riskiest place it lies in, or 1 out in the fields. */
+export const lootTierAt = (x: number, y: number) => {
+  let t = 1;
+  for (const d of DISTRICTS) if (x >= d.x0 && x < d.x1 && y >= d.y0 && y < d.y1) t = Math.max(t, PLACE_TIER[d.name] ?? 1);
+  return t;
+};
 
 /** Rockets and bombs: hold to throw farther, from `min` metres up to the weapon's range after `full` seconds. */
 export const THROW = { min: 4, full: 1.2 };
 /** Rockets: how fast they sink (m/s^2), the height they leave at, and when they explode on walls. */
 export const ROCKET = { gravity: 0.32, launchHeight: 1.35, wallHeight: 3.2 };
 
+/**
+ * How much lies on the map, sized for PLAYERS fighters: every loot spot in a building ('l') has one roll, and a second on
+ * the next open floor tile with chance `second`; a supply spot outdoors ('s') has a roll with chance `supply`. With ten
+ * fighters it was one roll per spot and 0.7 per supply spot (about 84 pieces, 8 per fighter); twenty need nearly twice as
+ * much for everyone to find a gun in the first building they land in.
+ */
+export const LOOT_SPOTS = { second: 1, supply: 0.9 };
+
 /** An ammo box gives the gun in your hands this many magazines of spare rounds. */
 export const AMMO_BOX_MAGS = 2;
 
 /** The dodge roll (Shift): metres, seconds, bullet-proof for the first `iframes` s, recharge. */
-export const ROLL = { distance: 4, time: 0.5, iframes: 0.3, cooldown: 3 };
+export const ROLL = { distance: 4, time: 0.5, iframes: 0.3, cooldown: 1.5 };
 
 /** Vaulting: how long you push into a fence or sill before you climb over, and how long the climb takes. */
 export const VAULT = { after: 0.15, time: 0.55, reach: 3.2 };
 
-/** Armor is a second health bar of up to 100 that takes hits first (the Deadline ignores it). */
+/** Armor is a second health bar of up to 100 (Vest III) that takes hits first (the Deadline ignores it). */
 export const ARMOR = { points: 100, absorb: 1 };
 export const ITEMS = {
   bomb: { damage: 80, radius: 2.6, range: 30 },
-  medkit: { heal: 50, over: 3 },
 };
-/** Everyone jumps with a pistol and one magazine, so you can fight under the parachute. */
-export const START_WEAPON = { kind: 'pistol' as const, mag: 12, spare: 0 };
+/**
+ * Everyone jumps with a pistol, one magazine in it and two more spare: nobody lands empty-handed. Nobody can fire in the
+ * plane, in free fall or under the canopy (see `updateFall`), so all of it is there on the ground.
+ */
+export const START_WEAPON = { kind: 'pistol' as const, mag: 12, spare: 24 };
+/**
+ * A new player's first rounds (`NEWBIE_ROUNDS`) are softer: the bots wait longer before they pick a fight with the person
+ * (`LANDING_GRACE.human` becomes `human`), aim `aimError` times looser at them, and never target them in the first
+ * `spareSeconds` after they touch down. From the next round on, the usual numbers.
+ */
+export const NEWBIE_ROUNDS = 3;
+export const NEWBIE = { human: 35, aimError: 1.35, spareSeconds: 8 };
 export const PLANT_REVEAL = 2.4;
 export const AUTO_AIM_RANGE = 28;
 export const REGEN = { after: 6, perSecond: 2.5 };
@@ -625,7 +1148,12 @@ export const LEAN = { offset: 0.7, speed: 0.6, rate: 6 };
 export const SUPERS = {
   deploy: { distance: 8, time: 0.28, damage: 35 },
   deprecated: { length: 6, thickness: 1, ahead: 2.5, life: 7 },
-  timebox: { radius: 4, life: 4, reach: 12, slow: 0.45 },
+  /**
+   * A canister thrown on an arc (hold G to aim, let go to throw; bots throw at once): it lands at the aim point, up to
+   * `range` m away, bursts for `damage` at the centre (falling off to 30 % at `burst` m, never the thrower) and leaves a
+   * field of `radius` m for `life` s in which enemies move at `slow` of their speed.
+   */
+  timebox: { range: 15, burst: 3, damage: 32, radius: 4, life: 4, slow: 0.45 },
   push: { radius: 4.5, damage: 30, knockback: 4 },
 };
 
@@ -634,46 +1162,145 @@ export const SUPERS = {
 // ---------------------------------------------------------------------------
 
 /**
- * The plane flies slowly, above the clouds. You free-fall through the cloud layer, the parachute
- * opens once you're below it, and you drift down. Heights are in metres, times in seconds.
+ * The plane flies slowly, above the clouds. You jump, fall through the cloud layer with real gravity and drag, the
+ * canopy deploys below it (or earlier, on Space) and slows you hard over about a second, then you glide down under it.
+ * Heights in metres, speeds in m/s, times in seconds. The canopy is the part to enjoy: a door-to-ground drop with the
+ * automatic pull takes about `glide` seconds, about 3.1 s of free fall to 40 m and then about 9 s under the canopy
+ * (it was 5 s), long enough to look over the map, pick a spot and see who else is coming down.
  */
 export const DROP = {
-  flight: 30,
-  freefall: 3.2,
-  chute: 5,
-  freefallSpeed: 14,
-  chuteSpeed: 7,
-  glide: 8.2,
+  flight: 20,
+  /** Past this point of the route everyone still aboard is pushed out. */
+  forceJump: 0.85,
+  /** Total seconds from the door to the ground with the canopy opened at `deployAlt` (what the sim tests hold it to). */
+  glide: 11.6,
   height: 75,
-  chuteHeight: 30,
   cloudLow: 44,
   cloudHigh: 58,
+  gravity: 9.8,
+  /**
+   * Terminal speed falling belly to earth, and under the open canopy flying at up to `chuteSpeed` (a slow, floating
+   * sink). Diving the canopy (`chuteDiveSpeed`) sinks at up to `chuteDiveSink`, about the old canopy's rate.
+   */
+  freefallTerminal: 20,
+  chuteTerminal: 3.7,
+  chuteDiveSink: 5.6,
+  /** The canopy opens by itself at this height; Space opens it earlier, once you have fallen this far (about a second). */
+  deployAlt: 44,
+  minFreefallDrop: 5,
+  /**
+   * The opening, in seconds since the pull: the bag leaves the pack and the lines pay out (drag up by 60 %) until
+   * `stretch`, then the cells inflate (drag ramps to the canopy's on a smoothstep) until `deployTime`.
+   */
+  stretch: 0.5,
+  deployTime: 1.25,
+  /** The last metres: the jumper flares (both toggles down) and the descent eases off for the touchdown. */
+  flareAlt: 2.5,
+  flareTerminal: 2.6,
+  /**
+   * Top steering speeds, and how fast the body's momentum follows the stick (1/s). Under the canopy it always flies:
+   * hands off it glides on at `chuteTrim` the way it was going, steered it flies at up to `chuteSpeed`, and holding the
+   * dive (the roll key) it trades height for `chuteDiveSpeed`, the way to reach a far spot first. A glide ratio of about
+   * 2 (2.3 diving) from the 40 m pull reaches about 55-65 m under the canopy, about 100 m from the door.
+   */
+  freefallSpeed: 14,
+  chuteSpeed: 8,
+  chuteTrim: 3,
+  chuteDiveSpeed: 14,
+  freefallResponse: 1.8,
+  chuteResponse: 1.6,
+  /** Share of the plane's speed you leave the door with (it bleeds off with the momentum response). */
+  exitThrow: 0.5,
+  /** The wind's drift (m/s), felt under the canopy, and the turbulence wobble (m/s^2) at full speed. */
+  wind: 0.6,
+  turbulence: 0.5,
+  /** Legacy: below this height (m) the canopy is open, for anything that still asks by height. */
+  chuteHeight: 40,
 };
 
-/** How high a falling player is, from the seconds of descent they have left. */
-export const fallHeight = (fall: number) =>
-  fall <= DROP.chute
-    ? 1 + (DROP.chuteHeight - 1) * (fall / DROP.chute)
-    : DROP.chuteHeight + (DROP.height - DROP.chuteHeight) * Math.min(1, (fall - DROP.chute) / DROP.freefall);
+/** Seconds the canopy has been opening, 0..1 of the way (0 before the pull). */
+export const deployProgress = (canopy: number) => (canopy < 0 ? 0 : Math.min(1, canopy / DROP.deployTime));
 
-/** Movement feel: you speed up and slow down over a fraction of a second, and turn smoothly. */
+/**
+ * The drag coefficient (per metre) at a moment of the opening: free fall's before the pull, up by 60 % while the bag
+ * and lines pay out, then a smoothstep up to the canopy's while the cells inflate, and the flare's near the ground.
+ * `chuteTerminal` is the open canopy's sink at its present airspeed (`chuteSink`).
+ */
+export const dragAt = (canopy: number, alt: number, chuteTerminal: number = DROP.chuteTerminal) => {
+  const g = DROP.gravity;
+  const kF = g / (DROP.freefallTerminal * DROP.freefallTerminal);
+  if (canopy < 0) return kF;
+  if (canopy < DROP.stretch) return kF * (1 + 0.6 * (canopy / DROP.stretch));
+  const s = Math.min(1, (canopy - DROP.stretch) / (DROP.deployTime - DROP.stretch));
+  const kC = g / (chuteTerminal * chuteTerminal);
+  const k = kF * 1.6 + (kC - kF * 1.6) * s * s * (3 - 2 * s);
+  if (s < 1 || alt > DROP.flareAlt) return k;
+  const kL = g / (DROP.flareTerminal * DROP.flareTerminal);
+  return k + (kL - k) * Math.min(1, (DROP.flareAlt - alt) / DROP.flareAlt * 2);
+};
+
+/** The open canopy's sink (m/s) at an airspeed: the floating rate up to `chuteSpeed`, rising to `chuteDiveSink` in a full dive. */
+export const chuteSink = (airspeed: number) => {
+  const d = Math.min(1, Math.max(0, (airspeed - DROP.chuteSpeed) / (DROP.chuteDiveSpeed - DROP.chuteSpeed)));
+  return DROP.chuteTerminal + (DROP.chuteDiveSink - DROP.chuteTerminal) * d;
+};
+
+/** Under an open (or opening) canopy: steering is gentle and you can shoot. */
+export const underCanopy = (p: { stage: string; canopy: number }) => p.stage === 'falling' && p.canopy >= 0;
+
 /** Swimming: a little under half running speed (a good swimmer's ~2 m/s). */
 export const SWIM = { speed: 0.42 };
-export const MOVE = { accel: 24, friction: 20, turn: 12 };
+/** Movement feel: about 0.16 s to top speed and 0.15 s to a stop (m/s^2), and the body's turn rate (rad/s). */
+export const MOVE = { accel: 40, friction: 45, turn: 12 };
 
-/** The Deadline: wait, then shrink, phase after phase, until nothing is left. */
 /**
- * About 3 min 45 s in all (224 s; it was 181 s). Outside the Deadline you lose this much a second, armor first, then
- * health (out of up to 200): 12 in the first phase, rising to 45 in the last, so even the first
- * circle kills a fully armored player in about 17 s.
+ * The Deadline: wait, then shrink, phase after phase, until nothing is left. Six phases on the 240 m map. The radii are the 176 m
+ * map's (80, 62, 40, 22, 9) times 1.36 (109, 84, 54, 30, 12); the start radius stays 0.72 of the map. The gates (50 bot-sim
+ * matches): dead air after the first ground minute at most 10 % (the hard one), round length median 4:00-5:30, p10 over 3:00,
+ * p90 under 6:30, at most one Deadline death a match. What the bot-sim showed: the first circle is shown early (waits 110 s,
+ * then closes over 90 s) so the field starts converging during the quiet stretch; the circles after it close slowly (up to
+ * 120 s) so there is always a line to walk; players dying, not the table, set the real length (nothing after the third phase
+ * changed a round's length in any run). Rules the sim tests hold it to:
+ *  - the edge never moves faster than `ZONE_EDGE_SPEED` (under half the slowest running speed and under swimming);
+ *  - from anywhere inside the current circle, the next one is never more than a third of that phase's wait + shrink away
+ *    at running speed;
+ *  - the damage ramps from a choice (3 a second in the first phase, armor first) to fatal (35 a second at the end).
+ * `ZONE_RULES` can cut a wait short, never the first one: see there.
  */
 export const ZONE_PHASES = [
-  { wait: 42, shrink: 32, radius: 60, dps: 12 },
-  { wait: 30, shrink: 25, radius: 32, dps: 16 },
-  { wait: 22, shrink: 17, radius: 13, dps: 22 },
-  { wait: 16, shrink: 15, radius: 4, dps: 30 },
-  { wait: 10, shrink: 15, radius: 0, dps: 45 },
+  { wait: 110, shrink: 90, radius: 109, dps: 3 },
+  { wait: 20, shrink: 120, radius: 84, dps: 5 },
+  { wait: 20, shrink: 80, radius: 54, dps: 8 },
+  { wait: 30, shrink: 45, radius: 30, dps: 13 },
+  { wait: 25, shrink: 25, radius: 12, dps: 20 },
+  { wait: 15, shrink: 12, radius: 0, dps: 35 },
 ];
+/**
+ * Waits that react to the match (decided in the sim, so online stays in sync):
+ *  - lull breaker: from the second phase on, once nobody has damaged anybody for `lull` seconds, the current wait drops
+ *    to at most `lullWait` seconds;
+ *  - endgame squeeze: with `squeezeAlive` or fewer left alive, every remaining wait is halved;
+ *  - endgame rush: once `alive` or fewer are left, a Deadline still on an earlier phase skips to `phase` (its circle,
+ *    damage and timings; with three left, the 40 m circle): it stops where it is, shows the new circle (picked with
+ *    `rushRoom` instead of 0.6 of the radius change as its room, so it stays near the middle of the old one), waits at
+ *    most `rushWait` s and closes in.
+ *    The last few otherwise spend whole stretches looking for each other on a circle drawn for twenty;
+ *  - from the second phase on, with `squeezeAlive` or fewer left, the lull breaker fires after `lullLate` s of quiet.
+ * Every shrink lasts its phase's `shrink` or longer, long enough that the far edge never moves faster than
+ * `ZONE_EDGE_SPEED` (a third of the slowest running speed, so from anywhere in the circle the next one is at most a
+ * third of the shrink away at running speed, and slower than swimming).
+ */
+export const ZONE_RULES = {
+  lull: 15,
+  lullWait: 6,
+  lullLate: 8,
+  squeezeAlive: 6,
+  rush: [{ alive: 4, phase: 2 }, { alive: 2, phase: 3 }],
+  rushRoom: 0.25,
+  rushWait: 5,
+};
 export const ZONE_START_RADIUS = WORLD * 0.72;
+/** The fastest the Deadline's far edge may move (m/s): a third of the slowest running speed. */
+export const ZONE_EDGE_SPEED = Math.min(...Object.values(FIGHTERS).map((f) => f.speed)) / 3;
 
-export const BOT_NAMES = ['merge_bot', 'lint_fail', 'null_ptr', 'race_cond', 'off_by_1', 'rm_rf', 'yolo_push', 'flaky_test', 'tech_debt'];
+export const BOT_NAMES = COPY.botNames;

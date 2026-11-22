@@ -6,7 +6,8 @@ import {
   DT,
   fenceVertical,
   LEAN,
-  fallHeight,
+  chuteSink,
+  dragAt,
   ROCKET,
   ROLL,
   railSides,
@@ -17,9 +18,18 @@ import {
   SHAPES,
   treeSpot,
   FIGHTERS,
+  foundRounds,
+  HEALS,
   ITEMS,
-  LOOT_TABLE,
+  LOOT_SPOTS,
+  LOOT_TABLES,
+  lootTierAt,
+  magOf,
   MAP,
+  PACK,
+  RARITY,
+  SWAP_TIME,
+  VEST,
   PLANT_REVEAL,
   PLAYER_RADIUS,
   PLAYERS,
@@ -32,12 +42,15 @@ import {
   VAULT,
   WEAPONS,
   WORLD,
+  ZONE_EDGE_SPEED,
   ZONE_PHASES,
+  ZONE_RULES,
   ZONE_START_RADIUS,
 } from './constants';
+import { BODY, buildingAt, CLIMB, EAVE, FEET, inRoofSlab, ladderAt, roofAt, roofBetween, ROOF_LAYER, roofHeightOf, supportAt } from './roofs';
 import { NO_INPUT } from './types';
 
-import type { FighterId, GameState, Input, Loot, LootKind, Player, Projectile, WeaponKind } from './types';
+import type { Field, FighterId, GameEvent, GameState, Gun, HealKind, Input, Loot, LootKind, Player, Projectile, WeaponKind } from './types';
 
 const CENTER = WORLD / 2;
 
@@ -87,11 +100,22 @@ const boxHit = (x: number, y: number, r: number, x0: number, y0: number, x1: num
 const circleHit = (x: number, y: number, r: number, cx: number, cy: number, cr: number) => (x - cx) ** 2 + (y - cy) ** 2 < (r + cr) ** 2;
 
 /**
+ * How tall each obstacle is: you only bump into it while your feet are below its top (a hop clears none of them; on a
+ * roof the walls are under you), and a bullet only stops on it below its bullet top. Trunks stop you at any height;
+ * rounds fly over everything else above 3 m as before, except a roof (see `inRoofSlab`).
+ */
+const MOVE_TOP: Record<string, number> = { '#': EAVE, w: EAVE, v: EAVE, d: 1.1, u: 0.9, f: 1.1, t: Infinity, k: 1.3, r: 1.3 };
+const BULLET_TOP: Record<string, number> = { '#': EAVE, w: 0.9, v: EAVE, t: 3, k: 1.3, r: 1.3 };
+const TEMP_WALL_TOP = 3;
+
+/**
  * Does a circle (x, y, r) overlap what stands on tile (tx, ty)? Each obstacle has its real shape
  * (see SHAPES). `bullet` leaves out windows and fences, which stop you but not bullets.
  */
-const tileHit = (state: GameState, tx: number, ty: number, x: number, y: number, r: number, bullet: boolean) => {
+const tileHit = (state: GameState, tx: number, ty: number, x: number, y: number, r: number, bullet: boolean, z = 0) => {
   const t = tileAt(tx, ty);
+  // Above its top an obstacle is not in the way (on a roof, the walls are under your feet).
+  if (z >= ((bullet ? BULLET_TOP : MOVE_TOP)[t] ?? Infinity) - 0.05) return false;
   const x0 = tx * TILE;
   const y0 = ty * TILE;
   const c = TILE / 2;
@@ -129,23 +153,32 @@ const tileHit = (state: GameState, tx: number, ty: number, x: number, y: number,
   }
 };
 
-/** Walls, trunks, rocks, standing crates and Deprecated walls stop bullets. Windows, fences and plants don't. */
-export const solidAt = (state: GameState, x: number, y: number) => {
+/**
+ * Walls, trunks, rocks, standing crates, Deprecated walls and roofs stop bullets, each up to its own top; windows let them
+ * through above the sill; fences and plants never stop them. `h` is the height of the point (chest height by default,
+ * where every obstacle but a window sill and a roof is in the way, as before roofs had a height).
+ */
+export const solidAt = (state: GameState, x: number, y: number, h = 1.1) => {
   const tx = toTile(x);
   const ty = toTile(y);
   // Trunks can stand up to 0.4 m off their tile, so check the neighbours too.
-  for (let j = ty - 1; j <= ty + 1; j++) for (let i = tx - 1; i <= tx + 1; i++) if (tileHit(state, i, j, x, y, 0, true)) return true;
-  return state.walls.some((w) => Math.abs(x - w.x) <= w.w / 2 && Math.abs(y - w.y) <= w.h / 2);
+  for (let j = ty - 1; j <= ty + 1; j++) for (let i = tx - 1; i <= tx + 1; i++) if (tileHit(state, i, j, x, y, 0, true, h)) return true;
+  if (inRoofSlab(x, y, h)) return true;
+  return h < TEMP_WALL_TOP && state.walls.some((w) => Math.abs(x - w.x) <= w.w / 2 && Math.abs(y - w.y) <= w.h / 2);
 };
 
-export const circleBlocked = (state: GameState, x: number, y: number, r: number) => {
+/** A step of a bullet or a sight line from one point to the next: anything solid at the end, or a roof crossed between. */
+export const solidStep = (state: GameState, x0: number, y0: number, h0: number, x1: number, y1: number, h1: number) =>
+  solidAt(state, x1, y1, h1) || roofBetween(x0, y0, h0, x1, y1, h1);
+
+export const circleBlocked = (state: GameState, x: number, y: number, r: number, z = 0) => {
   // The tree line around the map is the edge of the world, whatever gaps its trunks leave.
   const edge = TILE * 2;
   if (x < edge + r || y < edge + r || x > WORLD - edge - r || y > WORLD - edge - r) return true;
   for (let ty = toTile(y - r) - 1; ty <= toTile(y + r) + 1; ty++) {
-    for (let tx = toTile(x - r) - 1; tx <= toTile(x + r) + 1; tx++) if (tileHit(state, tx, ty, x, y, r, false)) return true;
+    for (let tx = toTile(x - r) - 1; tx <= toTile(x + r) + 1; tx++) if (tileHit(state, tx, ty, x, y, r, false, z)) return true;
   }
-  return state.walls.some((w) => Math.abs(x - w.x) < w.w / 2 + r && Math.abs(y - w.y) < w.h / 2 + r);
+  return z < TEMP_WALL_TOP && state.walls.some((w) => Math.abs(x - w.x) < w.w / 2 + r && Math.abs(y - w.y) < w.h / 2 + r);
 };
 
 /**
@@ -154,7 +187,7 @@ export const circleBlocked = (state: GameState, x: number, y: number, r: number)
  * along walls and glide round trunks instead of stopping dead. Returns the vaultable tile you
  * pressed against, if any.
  */
-const pushOut = (state: GameState, pos: { x: number; y: number }, r: number) => {
+const pushOut = (state: GameState, pos: { x: number; y: number }, r: number, z = 0) => {
   let vaultable: string | null = null;
   for (let iter = 0; iter < 3; iter++) {
     let moved = false;
@@ -199,6 +232,7 @@ const pushOut = (state: GameState, pos: { x: number; y: number }, r: number) => 
     for (let ty = toTile(pos.y - r) - 1; ty <= toTile(pos.y + r) + 1; ty++) {
       for (let tx = toTile(pos.x - r) - 1; tx <= toTile(pos.x + r) + 1; tx++) {
         const t = tileAt(tx, ty);
+        if (z >= (MOVE_TOP[t] ?? Infinity) - 0.05) continue;
         const x0 = tx * TILE;
         const y0 = ty * TILE;
         const c = TILE / 2;
@@ -221,7 +255,22 @@ const pushOut = (state: GameState, pos: { x: number; y: number }, r: number) => 
         else if (t === 'r' && state.racks[tileIndex(tx, ty)] > 0) outCircle(x0 + c, y0 + c, SHAPES.crate);
       }
     }
-    for (const w of state.walls) outBox(w.x - w.w / 2, w.y - w.h / 2, w.x + w.w / 2, w.y + w.h / 2);
+    if (z < TEMP_WALL_TOP) for (const w of state.walls) outBox(w.x - w.w / 2, w.y - w.h / 2, w.x + w.w / 2, w.y + w.h / 2);
+    // Off the ground (higher than a hop) a house is solid from outside up to its roof, doorways included (your head
+    // would meet the lintel, and the gable ends rise to the ridge): you step onto a roof only from as high as its edge
+    // (less a small step), never into it from below.
+    if (z > 0.8) {
+      const here = buildingAt(pos.x, pos.y);
+      for (let ty = toTile(pos.y - r); ty <= toTile(pos.y + r); ty++) {
+        for (let tx = toTile(pos.x - r); tx <= toTile(pos.x + r); tx++) {
+          const b = buildingAt(tx * TILE + 1, ty * TILE + 1);
+          if (b < 0 || b === here) continue;
+          const nx = Math.max(tx * TILE, Math.min(pos.x, tx * TILE + TILE));
+          const ny = Math.max(ty * TILE, Math.min(pos.y, ty * TILE + TILE));
+          if (z < roofHeightOf(b, nx, ny) - 0.35) outBox(tx * TILE, ty * TILE, tx * TILE + TILE, ty * TILE + TILE);
+        }
+      }
+    }
     const edge = TILE * 2 + r;
     const cx = Math.min(WORLD - edge, Math.max(edge, pos.x));
     const cy = Math.min(WORLD - edge, Math.max(edge, pos.y));
@@ -243,28 +292,47 @@ const moveBy = (state: GameState, p: Player, dx: number, dy: number) => {
   for (let i = 0; i < steps; i++) {
     pos.x += dx / steps;
     pos.y += dy / steps;
-    vaultable = pushOut(state, pos, PLAYER_RADIUS) ?? vaultable;
+    vaultable = pushOut(state, pos, PLAYER_RADIUS, p.z) ?? vaultable;
   }
   p.x = pos.x;
   p.y = pos.y;
   return vaultable;
 };
 
-export const lineOfSight = (state: GameState, x0: number, y0: number, x1: number, y1: number) => {
+/**
+ * A clear straight line from (x0, y0) at height h0 to (x1, y1) at height h1 (chest heights by default): nothing solid
+ * on it, walls and roofs included, both ways the same. Doorways and windows are open.
+ */
+export const lineOfSight = (state: GameState, x0: number, y0: number, x1: number, y1: number, h0 = 1.1, h1 = 1.1) => {
   const d = Math.hypot(x1 - x0, y1 - y0);
   const steps = Math.ceil(d / 0.5);
+  let px = x0;
+  let py = y0;
+  let ph = h0;
   for (let i = 1; i < steps; i++) {
     const k = i / steps;
-    if (solidAt(state, x0 + (x1 - x0) * k, y0 + (y1 - y0) * k)) return false;
+    const x = x0 + (x1 - x0) * k;
+    const y = y0 + (y1 - y0) * k;
+    const h = h0 + (h1 - h0) * k;
+    if (solidStep(state, px, py, ph, x, y, h)) return false;
+    px = x;
+    py = y;
+    ph = h;
   }
-  return true;
+  // The last stretch: a roof between the last sample and the end (someone on the far side of a roof slab).
+  return !roofBetween(px, py, ph, x1, y1, h1);
 };
+
+/** Sight from one player's eyes (chest) to another's chest. */
+export const seesBody = (state: GameState, a: Player, b: Player) => lineOfSight(state, a.x, a.y, b.x, b.y, chestHeight(a), chestHeight(b));
 
 /** Can `viewer` see `target`? Plants hide you unless someone is very close or you just fired. */
 /** On the ground, or hanging under an open parachute: you can be seen, aimed at and hit. */
 export const targetable = (p: Player) => p.alive && (p.stage === 'ground' || p.stage === 'falling');
 /** How high a player's chest is above the ground (in the air: on the way down). */
-export const chestHeight = (p: Player) => (p.stage === 'falling' ? fallHeight(Math.max(0, p.fall)) + 1.1 : 1.1);
+export const chestHeight = (p: Player) => feetOf(p) + 1.1;
+/** How high a player's feet are: in the air their height, on the ground the roof or hop they are on. */
+export const feetOf = (p: Player) => (p.stage === 'falling' ? Math.max(0, p.alt) : p.z ?? 0);
 
 /** Where a player's body is for bullets: leaning out moves the exposed shoulder sideways. */
 export const hitPoint = (p: Player) => ({
@@ -281,14 +349,14 @@ export const canSee = (state: GameState, viewer: Player, target: Player) => {
   return true;
 };
 
-/** Nearest open spot to (x, y), searching outwards. */
+/** Nearest open spot to (x, y) outside every house (you come down beside one, not inside), searching outwards. */
 const freeSpot = (state: GameState, x: number, y: number) => {
   for (let ring = 0; ring < 12; ring++) {
     for (let i = 0; i < Math.max(1, ring * 8); i++) {
       const a = (i / Math.max(1, ring * 8)) * Math.PI * 2;
       const cx = Math.min(WORLD - 3, Math.max(3, x + Math.cos(a) * ring * 0.8));
       const cy = Math.min(WORLD - 3, Math.max(3, y + Math.sin(a) * ring * 0.8));
-      if (!circleBlocked(state, cx, cy, PLAYER_RADIUS + 0.1)) return { x: cx, y: cy };
+      if (!circleBlocked(state, cx, cy, PLAYER_RADIUS + 0.1) && buildingAt(cx, cy) < 0) return { x: cx, y: cy };
     }
   }
   return { x: CENTER, y: CENTER };
@@ -296,10 +364,54 @@ const freeSpot = (state: GameState, x: number, y: number) => {
 
 // ---------- setup
 
-const rollLoot = (state: GameState): LootKind => LOOT_TABLE[Math.floor(nextRandom(state) * LOOT_TABLE.length)] as LootKind;
+/** Index picked from weights (they need not sum to 1). */
+const pickWeighted = (state: GameState, weights: number[]) => {
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = nextRandom(state) * total;
+  for (let i = 0; i < weights.length; i++) {
+    r -= weights[i];
+    if (r < 0 && weights[i] > 0) return i;
+  }
+  return weights.length - 1;
+};
 
-const addLoot = (state: GameState, kind: LootKind, x: number, y: number, ammo?: number) => {
-  state.loot.push({ id: state.nextId++, kind, x, y, ammo: ammo ?? (isWeapon(kind) ? WEAPONS[kind].ammo : 0), active: true });
+/** A piece of loot for a place of loot tier `tier` (1 quiet .. 3 risky): its kind, grade and how much of it. */
+export const rollLoot = (state: GameState, tier: number): { kind: LootKind; tier: number; ammo: number } => {
+  const t = LOOT_TABLES[Math.max(1, Math.min(LOOT_TABLES.length - 1, tier))];
+  const kinds = Object.keys(t.kinds) as LootKind[];
+  const kind = kinds[pickWeighted(state, kinds.map((k) => t.kinds[k] ?? 0))];
+  if (isWeapon(kind)) {
+    const rarity = pickWeighted(state, t.rarity);
+    return { kind, tier: rarity, ammo: foundRounds(kind, rarity) };
+  }
+  if (kind === 'armor') {
+    const v = pickWeighted(state, t.vest);
+    return { kind, tier: v, ammo: VEST.points[v] };
+  }
+  if (kind === 'backpack') return { kind, tier: pickWeighted(state, t.pack), ammo: 0 };
+  if (kind === 'bandage') return { kind, tier: 0, ammo: HEALS.bandage.stack };
+  return { kind, tier: 0, ammo: kind === 'ammo' ? 0 : 1 };
+};
+
+const addLoot = (state: GameState, kind: LootKind, x: number, y: number, ammo?: number, tier = 0, z = 0) => {
+  const k: Loot = { id: state.nextId++, kind, x, y, ammo: ammo ?? (isWeapon(kind) ? foundRounds(kind, tier) : 0), tier, active: true };
+  if (z > 0) k.z = z;
+  state.loot.push(k);
+};
+/** Drop loot where a player stands: on a roof it stays on the roof (kept inside its edges), else on the ground. */
+const dropAt = (state: GameState, p: Player, kind: LootKind, x: number, y: number, ammo?: number, tier = 0) => {
+  const b = p.z >= ROOF_LAYER ? buildingAt(p.x, p.y) : -1;
+  if (b >= 0 && buildingAt(x, y) !== b) {
+    x = p.x;
+    y = p.y;
+  }
+  addLoot(state, kind, x, y, ammo, tier, b >= 0 ? roofHeightOf(b, x, y) : 0);
+};
+/** Close enough in height to reach: loot on a roof from the roof, loot on the floor from the floor. */
+const withinReach = (p: Player, k: Loot) => Math.abs((k.z ?? 0) - p.z) < 1.2;
+const addRolled = (state: GameState, x: number, y: number) => {
+  const r = rollLoot(state, lootTierAt(x, y));
+  addLoot(state, r.kind, x, y, r.ammo, r.tier);
 };
 
 /** One place in a match: a person (online or this browser) or a bot. `fighter: null` = pick at random. */
@@ -309,14 +421,16 @@ export interface Seat {
   bot: boolean;
 }
 
-/** Offline: you and nine bots. */
-export const createGame = (you: FighterId, seed = 1, youName = 'you', others: FighterId[] = []): GameState =>
-  createMatch(
+/** Offline: you and nineteen bots (PLAYERS - 1). */
+export const createGame = (you: FighterId, seed = 1, youName = 'you', others: FighterId[] = [], rookie = false): GameState => {
+  const state = createMatch(
     Array.from({ length: PLAYERS }, (_, i) => (i === 0 ? { name: youName, fighter: you, bot: false } : { name: BOT_NAMES[i - 1], fighter: others[i - 1] ?? null, bot: true })),
     seed,
   );
+  if (rookie) state.rookie = true;
+  return state;
+};
 
-/** Any match: up to ten seats in the given order (player i is seat i), everyone on one plane. */
 /** Crate health on a fresh map. */
 export const initialRacks = () => {
   const racks = new Array(SIZE * SIZE).fill(0);
@@ -324,6 +438,7 @@ export const initialRacks = () => {
   return racks;
 };
 
+/** Any match: up to PLAYERS seats in the given order (player i is seat i), everyone on one plane. */
 export const createMatch = (seats: Seat[], seed = 1): GameState => {
   const racks = initialRacks();
   const state: GameState = {
@@ -341,6 +456,7 @@ export const createMatch = (seats: Seat[], seed = 1): GameState => {
     zone: {
       phase: 0, state: 'wait', timer: ZONE_PHASES[0].wait, cx: CENTER, cy: CENTER, r: ZONE_START_RADIUS,
       fromX: CENTER, fromY: CENTER, fromR: ZONE_START_RADIUS, toX: CENTER, toY: CENTER, toR: ZONE_PHASES[0].radius, dps: 0,
+      calm: 0, halved: false,
     },
     winner: null,
     events: [],
@@ -349,7 +465,7 @@ export const createMatch = (seats: Seat[], seed = 1): GameState => {
 
   // The drone flies a random line across the campus.
   const a = nextRandom(state) * Math.PI * 2;
-  const off = (nextRandom(state) - 0.5) * WORLD * 0.3;
+  const off = (nextRandom(state) - 0.5) * WORLD * 0.24;
   const reach = WORLD * 0.62;
   state.drone = {
     x0: CENTER - Math.cos(a) * reach - Math.sin(a) * off,
@@ -366,32 +482,55 @@ export const createMatch = (seats: Seat[], seed = 1): GameState => {
 
   MAP.forEach((row, ty) =>
     [...row].forEach((c, tx) => {
-      if (c === 'l' || (c === 's' && nextRandom(state) < 0.7)) addLoot(state, rollLoot(state), tx * TILE + TILE / 2, ty * TILE + TILE / 2);
+      if (c === 'l' || (c === 's' && nextRandom(state) < LOOT_SPOTS.supply)) addRolled(state, tx * TILE + TILE / 2, ty * TILE + TILE / 2);
+      if (c === 'l' && nextRandom(state) < LOOT_SPOTS.second) {
+        // The second piece goes on an open floor tile next to the first (or beside it on the same tile).
+        const k = Math.floor(nextRandom(state) * 4);
+        const [dx, dy] = [[1, 0], [0, 1], [-1, 0], [0, -1]][k];
+        const open = MAP[ty + dy]?.[tx + dx] === '.';
+        addRolled(state, (tx + (open ? dx : 0)) * TILE + TILE / 2 + (open ? 0 : 0.6), (ty + (open ? dy : 0)) * TILE + TILE / 2);
+      }
     }),
   );
   return state;
 };
 
-const newPlayer = (id: number, name: string, fighter: FighterId, bot: boolean, x: number, y: number): Player => ({
+export const newPlayer = (id: number, name: string, fighter: FighterId, bot: boolean, x: number, y: number): Player => ({
   id, name, fighter, bot,
   stage: 'drone',
-  fall: 0,
+  alt: 0,
+  vz: 0,
+  canopy: -1,
   x, y,
   vx: 0,
   vy: 0,
+  z: 0,
+  jz: 0,
+  climb: 0,
   heading: 0,
   hp: FIGHTERS[fighter].hp,
   maxHp: FIGHTERS[fighter].hp,
   armor: 0,
   alive: true,
   weapon: START_WEAPON.kind,
+  rarity: 0,
   mag: START_WEAPON.mag,
   ammo: START_WEAPON.spare,
+  slot: 0,
+  holster: null,
+  swapping: 0,
+  vest: 0,
+  pack: 0,
+  bandages: 0,
+  medkits: 0,
+  coffees: 0,
+  bombs: 0,
+  using: null,
+  useLeft: 0,
+  buzz: 0,
   reload: 0,
   cooldown: 0,
-  item: null,
   superCharge: 0,
-  healLeft: 0,
   sinceCombat: 99,
   revealed: 0,
   dashTime: 0,
@@ -426,6 +565,73 @@ const newPlayer = (id: number, name: string, fighter: FighterId, bot: boolean, x
 
 // ---------- the drop
 
+/** The per-match wind: from the drone's route (no random draw, so the map's dice stay as they were), across it. */
+export const windOf = (state: GameState) => {
+  const d = state.drone;
+  const a = Math.atan2(d.y1 - d.y0, d.x1 - d.x0) + 1.2;
+  return { x: Math.cos(a) * DROP.wind, y: Math.sin(a) * DROP.wind };
+};
+
+/**
+ * One tick of a jumper in the air. Vertical: gravity against quadratic drag (`dragAt`), so you speed up to terminal
+ * velocity and the canopy's opening slows you hard over about a second; the open canopy sinks faster the faster it
+ * flies (`chuteSink`). Horizontal: momentum that follows the stick at the response rate, the wind once the canopy
+ * flies, and a small deterministic turbulence wobble. The open canopy never stops in the air: hands off it glides on
+ * the way it was going, and holding the dive (the roll key) it speeds up and drops faster. Space after a second of
+ * free fall pulls early; at `deployAlt` it opens by itself.
+ */
+export const updateFall = (state: GameState, p: Player, input: Input) => {
+  const out = DROP.height - p.alt;
+  const pressed = input.jump && !p.prev.jump;
+  // No firing in the air (the first magazine used to be gone before landing): a fresh press tells the player why.
+  if (input.fire && !p.prev.fire && !p.bot) state.events.push({ type: 'fireBlocked', player: p.id });
+  if (p.canopy < 0 && (p.alt <= DROP.deployAlt || (pressed && out >= DROP.minFreefallDrop))) p.canopy = 0;
+  else if (p.canopy >= 0) p.canopy += DT;
+  // How far the canopy has inflated (its numbers blend in), and its speed through the air (relative to the wind).
+  const open = p.canopy < DROP.stretch ? 0 : Math.min(1, (p.canopy - DROP.stretch) / (DROP.deployTime - DROP.stretch));
+  const w = windOf(state);
+  const ux = p.vx - w.x * open;
+  const uy = p.vy - w.y * open;
+  const air = Math.hypot(ux, uy);
+  // Vertical.
+  const k = dragAt(p.canopy, p.alt, chuteSink(air));
+  p.vz += (DROP.gravity - k * p.vz * Math.abs(p.vz)) * DT;
+  p.alt -= p.vz * DT;
+  // Horizontal. Free fall: the stick asks for a velocity. Canopy: the stick (or, hands off, the way it already flies)
+  // gives the direction, never slower than trim; the dive asks for its top speed.
+  const response = DROP.freefallResponse + (DROP.chuteResponse - DROP.freefallResponse) * open;
+  const len = Math.hypot(input.mx, input.my);
+  const m = Math.min(1, len);
+  const steered = len > 0.01;
+  const fs = steered ? DROP.freefallSpeed / Math.max(1, len) : 0;
+  const diving = input.roll && open >= 1;
+  const dir = steered ? { x: input.mx / len, y: input.my / len } : air > 0.3 ? { x: ux / air, y: uy / air } : { x: 0, y: 0 };
+  const cs = diving ? DROP.chuteDiveSpeed * (steered ? Math.max(m, 0.5) : 1) : Math.max(DROP.chuteTrim, steered ? DROP.chuteSpeed * m : 0);
+  const want = {
+    x: input.mx * fs * (1 - open) + (dir.x * cs + w.x) * open,
+    y: input.my * fs * (1 - open) + (dir.y * cs + w.y) * open,
+  };
+  // Turbulence: two incommensurate sines per axis, different for everyone, scaled by how fast the air rushes past.
+  const t = state.tick * DT;
+  const gust = DROP.turbulence * Math.min(1, p.vz / DROP.freefallTerminal + 0.3);
+  const ax = (Math.sin(t * 1.9 + p.id * 2.1) + 0.6 * Math.sin(t * 4.7 + p.id)) * gust;
+  const ay = (Math.sin(t * 2.3 + p.id * 1.3) + 0.6 * Math.sin(t * 5.3 + p.id * 0.7)) * gust;
+  const r = 1 - Math.exp(-response * DT);
+  p.vx += (want.x - p.vx) * r + ax * DT;
+  p.vy += (want.y - p.vy) * r + ay * DT;
+  p.x = Math.min(WORLD - 4, Math.max(4, p.x + p.vx * DT));
+  p.y = Math.min(WORLD - 4, Math.max(4, p.y + p.vy * DT));
+  if (p.canopy >= DROP.deployTime) {
+    // Under the open canopy you can look where you aim, but nothing fires: the pistol's rounds are there on the ground.
+    p.cooldown = Math.max(0, p.cooldown - DT);
+    updateReload(p);
+    if (Math.hypot(input.aimX - p.x, input.aimY - p.y) > 0.05) p.heading = Math.atan2(input.aimY - p.y, input.aimX - p.x);
+  } else if (Math.hypot(p.vx, p.vy) > 1) {
+    // Falling, you face the way you are going (the body turns to track).
+    p.heading = Math.atan2(p.vy, p.vx);
+  }
+};
+
 const updateDrop = (state: GameState, inputs: Input[]) => {
   const d = state.drone;
   d.t = Math.min(1, d.t + DT / DROP.flight);
@@ -441,66 +647,184 @@ const updateDrop = (state: GameState, inputs: Input[]) => {
       p.y = dy;
       // Holding jump works too: you go as soon as the drone is over the campus.
       const jump = input.jump || input.fire;
-      if ((jump && overCampus) || d.t >= 0.92) {
+      if ((jump && overCampus) || d.t >= DROP.forceJump) {
         p.stage = 'falling';
-        p.fall = DROP.freefall + DROP.chute;
+        p.alt = DROP.height;
+        p.vz = 0;
+        p.canopy = -1;
+        // Out of the door with part of the plane's speed: it bleeds off as the air takes you.
+        const throwK = (DROP.exitThrow * Math.hypot(d.x1 - d.x0, d.y1 - d.y0)) / DROP.flight;
+        const len = Math.hypot(d.x1 - d.x0, d.y1 - d.y0) || 1;
+        p.vx = ((d.x1 - d.x0) / len) * throwK;
+        p.vy = ((d.y1 - d.y0) / len) * throwK;
+        p.heading = Math.atan2(d.y1 - d.y0, d.x1 - d.x0);
         p.x = Math.min(WORLD - 4, Math.max(4, p.x));
         p.y = Math.min(WORLD - 4, Math.max(4, p.y));
         state.events.push({ type: 'jump', player: p.id });
       }
     } else if (p.stage === 'falling') {
-      // Steer on the way down: fast in free fall, gentle under the parachute.
-      const len = Math.hypot(input.mx, input.my);
-      const chute = p.fall <= DROP.chute;
-      const speed = chute ? DROP.chuteSpeed : DROP.freefallSpeed;
-      p.vx = len > 0.01 ? (input.mx / Math.max(1, len)) * speed : 0;
-      p.vy = len > 0.01 ? (input.my / Math.max(1, len)) * speed : 0;
-      p.x = Math.min(WORLD - 4, Math.max(4, p.x + p.vx * DT));
-      p.y = Math.min(WORLD - 4, Math.max(4, p.y + p.vy * DT));
-      if (chute) {
-        // Under the canopy you can aim and shoot at whoever is in the air or below.
-        p.cooldown = Math.max(0, p.cooldown - DT);
-        updateReload(p);
-        if (Math.hypot(input.aimX - p.x, input.aimY - p.y) > 0.05) p.heading = Math.atan2(input.aimY - p.y, input.aimX - p.x);
-        if (input.fire && p.cooldown <= 0) shoot(state, p, input);
-      } else if (len > 0.01) p.heading = Math.atan2(input.my, input.mx);
-      p.fall -= DT;
-      if (p.fall <= 0) {
-        const spot = freeSpot(state, p.x, p.y);
-        p.x = spot.x;
-        p.y = spot.y;
-        p.stage = 'ground';
-        state.events.push({ type: 'land', player: p.id, x: p.x, y: p.y });
-      }
+      const was = { x: p.x, y: p.y, alt: p.alt };
+      updateFall(state, p, input);
+      // A house is solid in the air too: coming down over it you land on its roof; drifting into its walls below the
+      // eaves you are stopped there (and come down beside it, never inside).
+      const roof = roofAt(p.x, p.y);
+      if (roof >= 0 && p.alt <= roof && was.alt > roof - 0.01) {
+        land(state, p, roof);
+      } else if (roof >= 0 && p.alt <= roof) {
+        p.x = was.x;
+        p.y = was.y;
+        p.vx = 0;
+        p.vy = 0;
+        if (p.alt <= 0) land(state, p, 0);
+      } else if (p.alt <= 0) land(state, p, 0);
     }
     p.prev = { ...input };
   }
   if (state.players.every((p) => p.stage === 'ground')) state.phase = 'play';
 };
 
+/** Touch down from the sky: on a roof at its height (`z` > 0), else on the nearest open spot of the ground. */
+const land = (state: GameState, p: Player, z: number) => {
+  if (z <= 0) {
+    const spot = freeSpot(state, p.x, p.y);
+    p.x = spot.x;
+    p.y = spot.y;
+  }
+  p.alt = 0;
+  p.z = z;
+  p.jz = 0;
+  p.vz = 0;
+  p.vx = 0;
+  p.vy = 0;
+  p.canopy = -1;
+  p.stage = 'ground';
+  p.landedTick = state.tick;
+  state.events.push(z > 0 ? { type: 'land', player: p.id, x: p.x, y: p.y, z } : { type: 'land', player: p.id, x: p.x, y: p.y });
+};
+
 // ---------- the Deadline
 
-const pickNextCircle = (state: GameState) => {
+/** Tiles that stop a bullet or hide you: rocks, crates, props, walls, fences and trees (a house wall counts). */
+const COVER_TILES = 'krv#ftw';
+
+/**
+ * Does a circle centred here pass the centre rules (map-v2.md section 7)? `phase` counts from 0 (the first circle is phase 0):
+ *  1. the centre is not water, not a prop and not inside a building;
+ *  2. from the third circle on, at most a quarter of its area is water (the river must not eat the late game);
+ *  3. from the fourth on, at least 6 cover tiles lie within 15 m of the centre, and the centre is not on a bridge deck or the Weir;
+ *  (rule 4, 12 m inside the edge tree ring, is applied when the centre is drawn).
+ */
+export const circleCentreOk = (x: number, y: number, radius: number, phase: number) => {
+  const t = tileAt(toTile(x), toTile(y));
+  if (t === 'o' || t === 'd' || t === 'v' || buildingAt(x, y) >= 0) return false;
+  if (phase >= 2) {
+    // Sample the disc on a grid (at most 8 per radius): the share of samples that are water.
+    let wet = 0;
+    let all = 0;
+    const step = Math.max(TILE, radius / 8);
+    for (let dy = -radius; dy <= radius; dy += step) {
+      for (let dx = -radius; dx <= radius; dx += step) {
+        if (dx * dx + dy * dy > radius * radius) continue;
+        all += 1;
+        if (tileAt(toTile(x + dx), toTile(y + dy)) === 'o') wet += 1;
+      }
+    }
+    if (all && wet / all > 0.25) return false;
+  }
+  if (phase >= 3) {
+    let cover = 0;
+    for (let ty = toTile(y - 15); ty <= toTile(y + 15); ty++) {
+      for (let tx = toTile(x - 15); tx <= toTile(x + 15); tx++) {
+        if (COVER_TILES.includes(tileAt(tx, ty)) && Math.hypot((tx + 0.5) * TILE - x, (ty + 0.5) * TILE - y) <= 15) cover += 1;
+      }
+    }
+    if (cover < 6) return false;
+  }
+  return true;
+};
+
+const pickNextCircle = (state: GameState, roomShare = 0.6) => {
   const z = state.zone;
   const def = ZONE_PHASES[z.phase];
   if (!def) return;
-  const room = Math.max(0, z.r - def.radius) * 0.6;
-  const a = nextRandom(state) * Math.PI * 2;
-  const d = Math.sqrt(nextRandom(state)) * room;
-  z.toX = Math.min(WORLD - 8, Math.max(8, z.cx + Math.cos(a) * d));
-  z.toY = Math.min(WORLD - 8, Math.max(8, z.cy + Math.sin(a) * d));
+  const room = Math.max(0, z.r - def.radius) * roomShare;
+  // Up to 8 draws; the first centre that passes the rules wins, else the last one drawn.
+  const lo = def.radius + 12;
+  const hi = WORLD - def.radius - 12;
+  // The first draw is the match's own random stream (as before, two numbers); the redraws come from a stream of their own, so
+  // a rejected centre does not shift every other random number of the match.
+  let redraw = (state.seed ^ 0x9e3779b9) | 0;
+  const again = () => {
+    let t = (redraw = (redraw + 0x6d2b79f5) | 0);
+    t = Math.imul(t ^ (t >>> 15), 1 | t);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  // (The first circle, drawn when the match is made, is 109 m wide and its centre is within 38 m of the map's middle: it keeps its one draw.)
+  for (let draw = 0; draw < (z.phase === 0 ? 1 : 8); draw++) {
+    const a = (draw === 0 ? nextRandom(state) : again()) * Math.PI * 2;
+    const d = Math.sqrt(draw === 0 ? nextRandom(state) : again()) * room;
+    const x = z.cx + Math.cos(a) * d;
+    const y = z.cy + Math.sin(a) * d;
+    // The circle stays 12 m inside the edge tree ring (the first circle is too big for that and keeps the old 8 m margin).
+    const [min, max] = lo <= hi ? [lo, hi] : [8, WORLD - 8];
+    z.toX = Math.min(max, Math.max(min, x));
+    z.toY = Math.min(max, Math.max(min, y));
+    if (circleCentreOk(z.toX, z.toY, def.radius, z.phase)) break;
+  }
   z.toR = def.radius;
+};
+
+/** How long this shrink lasts: its phase's `shrink`, or longer if the far edge would outpace `ZONE_EDGE_SPEED`. */
+export const shrinkTime = (z: GameState['zone'], shrink: number) =>
+  Math.max(shrink, (z.fromR - z.toR + Math.hypot(z.toX - z.fromX, z.toY - z.fromY)) / ZONE_EDGE_SPEED);
+
+/** The last few left: skip a Deadline still on an earlier phase ahead to a circle sized for them (see `ZONE_RULES`). */
+const rushZone = (state: GameState, alive: number) => {
+  const z = state.zone;
+  if (z.state === 'done') return;
+  let target = -1;
+  for (const r of ZONE_RULES.rush) if (alive <= r.alive) target = Math.max(target, r.phase);
+  if (target <= z.phase || target >= ZONE_PHASES.length) return;
+  const left = z.state === 'wait' ? z.timer : Infinity;
+  z.phase = target;
+  z.state = 'wait';
+  z.timer = Math.min(left, ZONE_RULES.rushWait, ZONE_PHASES[target].wait);
+  z.halved = false;
+  z.fromX = z.cx;
+  z.fromY = z.cy;
+  z.fromR = z.r;
+  pickNextCircle(state, ZONE_RULES.rushRoom);
+  state.events.push({ type: 'zone', phase: z.phase, state: 'wait' });
 };
 
 const updateZone = (state: GameState) => {
   const z = state.zone;
+  const alive = alivePlayers(state).length;
+  rushZone(state, alive);
   const def = ZONE_PHASES[Math.min(z.phase, ZONE_PHASES.length - 1)];
   z.timer -= DT;
+  z.calm += DT;
+  if (z.state === 'wait') {
+    // A quiet stretch brings the next squeeze forward (never in the first phase, which is for landing and gearing up),
+    // and sooner once only a few are left.
+    const lull = alive <= ZONE_RULES.squeezeAlive ? ZONE_RULES.lullLate : ZONE_RULES.lull;
+    if (z.phase >= 1 && z.calm >= lull && z.timer > ZONE_RULES.lullWait) {
+      z.timer = ZONE_RULES.lullWait;
+      state.events.push({ type: 'zone', phase: z.phase, state: 'wait' });
+    }
+    // The last few: every wait from here on is half as long.
+    if (!z.halved && alive <= ZONE_RULES.squeezeAlive) {
+      z.halved = true;
+      z.timer /= 2;
+    }
+  }
   if (z.state === 'wait' && z.timer <= 0) {
-    Object.assign(z, { state: 'shrink', timer: def.shrink, fromX: z.cx, fromY: z.cy, fromR: z.r, dps: def.dps });
+    Object.assign(z, { state: 'shrink', fromX: z.cx, fromY: z.cy, fromR: z.r, dps: def.dps });
+    z.timer = shrinkTime(z, def.shrink);
     state.events.push({ type: 'zone', phase: z.phase, state: 'shrink' });
   } else if (z.state === 'shrink') {
-    const k = 1 - Math.max(0, z.timer) / def.shrink;
+    const k = 1 - Math.max(0, z.timer) / shrinkTime(z, def.shrink);
     z.cx = z.fromX + (z.toX - z.fromX) * k;
     z.cy = z.fromY + (z.toY - z.fromY) * k;
     z.r = z.fromR + (z.toR - z.fromR) * k;
@@ -510,6 +834,7 @@ const updateZone = (state: GameState) => {
       else {
         z.state = 'wait';
         z.timer = ZONE_PHASES[z.phase].wait;
+        z.halved = false;
         pickNextCircle(state);
       }
       state.events.push({ type: 'zone', phase: z.phase, state: z.state });
@@ -558,6 +883,7 @@ const hurt = (state: GameState, target: Player, amount: number, by: number | nul
     a.sinceCombat = 0;
     a.superCharge = Math.min(1, a.superCharge + amount / FIGHTERS[a.fighter].superCost);
     target.lastHitBy = by;
+    state.zone.calm = 0;
   }
   if (!quiet) state.events.push({ type: 'hit', target: target.id, by, x: target.x, y: target.y, damage: amount, armor: soaked > 0, ko: target.hp <= 0 });
   if (target.hp <= 0) knockOut(state, target);
@@ -574,10 +900,21 @@ const knockOut = (state: GameState, p: Player) => {
   p.killedBy = by;
   if (by !== null && state.players[by].alive) state.players[by].kills += 1;
   state.events.push({ type: 'ko', victim: p.id, by, with: p.killedWith, x: p.x, y: p.y });
-  // Everything you carried is up for grabs.
-  if (p.weapon !== 'fists' && roundsLeft(p) > 0) addLoot(state, p.weapon, p.x + 0.8, p.y, roundsLeft(p));
-  if (p.item) addLoot(state, p.item, p.x - 0.8, p.y);
-  if (p.armor > 50) addLoot(state, 'armor', p.x, p.y + 0.8);
+  // Everything you carried is up for grabs, in a ring round where you fell.
+  const drops: [LootKind, number, number][] = [];
+  if (p.weapon !== 'fists' && roundsLeft(p) > 0) drops.push([p.weapon, roundsLeft(p), p.rarity]);
+  if (p.holster && p.holster.weapon !== 'fists' && p.holster.mag + p.holster.ammo > 0) drops.push([p.holster.weapon, p.holster.mag + p.holster.ammo, p.holster.rarity]);
+  if (p.armor >= 1 && p.vest > 0) drops.push(['armor', Math.round(p.armor), p.vest]);
+  if (p.pack > 0) drops.push(['backpack', 0, p.pack]);
+  if (p.bandages > 0) drops.push(['bandage', p.bandages, 0]);
+  if (p.medkits > 0) drops.push(['medkit', p.medkits, 0]);
+  if (p.coffees > 0) drops.push(['coffee', p.coffees, 0]);
+  if (p.bombs > 0) drops.push(['bomb', p.bombs, 0]);
+  drops.forEach(([kind, ammo, tier], i) => {
+    const a = (i / drops.length) * Math.PI * 2;
+    const r = drops.length > 1 ? 0.9 : 0;
+    dropAt(state, p, kind, p.x + Math.cos(a) * r, p.y + Math.sin(a) * r, ammo, tier);
+  });
   const alive = alivePlayers(state);
   if (alive.length <= 1) {
     state.phase = 'over';
@@ -604,15 +941,27 @@ const hitRack = (state: GameState, tx: number, ty: number, amount: number) => {
     const x = tx * TILE + TILE / 2;
     const y = ty * TILE + TILE / 2;
     state.events.push({ type: 'rackBroken', x, y });
-    if (nextRandom(state) < 0.4) addLoot(state, rollLoot(state), x, y);
+    if (nextRandom(state) < 0.4) addRolled(state, x, y);
   }
 };
 
-const explode = (state: GameState, owner: number, x: number, y: number, radius: number, damage: number) => {
-  state.events.push({ type: 'explosion', x, y, radius });
+/**
+ * How far a blast at (x, y), height `h` (0 = on the ground), is from a fighter on foot: the height apart beyond the body's
+ * own height counts too (on the same level it is the plain distance, as before), and through a roof it never reaches
+ * (Infinity). Every blast (bombs, rockets, the slow-field canister and its field) measures with this.
+ */
+export const blastDistance = (o: Player, x: number, y: number, h: number) => {
+  const dz = Math.max(0, Math.abs(o.z + 0.9 - (h + 0.9)) - 0.9);
+  if (dz > 0 && roofBetween(x, y, h + 0.3, o.x, o.y, o.z + 1.1)) return Infinity;
+  return Math.hypot(o.x - x, o.y - y, dz);
+};
+
+/** A blast at (x, y) at height `h` (0 = on the ground): it reaches up and down too, but never through a roof. */
+const explode = (state: GameState, owner: number, x: number, y: number, radius: number, damage: number, h = 0) => {
+  state.events.push(h > 0.5 ? { type: 'explosion', x, y, radius, z: h } : { type: 'explosion', x, y, radius });
   for (const o of state.players) {
     if (!o.alive || o.stage !== 'ground') continue;
-    const d = Math.hypot(o.x - x, o.y - y);
+    const d = blastDistance(o, x, y, h);
     if (d > radius + PLAYER_RADIUS) continue;
     const self = o.id === owner ? 0.5 : 1;
     o.lastHitWith = 'explosion';
@@ -629,7 +978,9 @@ const aimedAt = (state: GameState, p: Player, aimX: number, aimY: number) => {
   let bd = 2.5;
   for (const o of state.players) {
     if (o.id === p.id || !targetable(o)) continue;
-    const d = Math.hypot(o.x - aimX, o.y - aimY);
+    let d = Math.hypot(o.x - aimX, o.y - aimY);
+    // Two people near the aim point at different heights (one on a roof, one under it): the one in sight.
+    if (d < bd && feetOf(o) !== feetOf(p) && !seesBody(state, p, o)) d += 2.5;
     if (d < bd) {
       best = o;
       bd = d;
@@ -638,7 +989,19 @@ const aimedAt = (state: GameState, p: Player, aimX: number, aimY: number) => {
   return best;
 };
 
-const fireBullet = (state: GameState, p: Player, angle: number, aim?: { x: number; y: number }) => {
+/** A gun's damage per bullet at the rarity in hand (fists are fists). */
+const gunDamage = (p: Player) => WEAPONS[p.weapon].damage * (p.weapon === 'fists' ? 1 : (RARITY.damage[p.rarity] ?? 1));
+
+/**
+ * Rounds that land the tick they are fired. The sniper's round flies at 80 m/s, so at 100 m it would hit more than a second
+ * after the contrail was drawn, and the target would die long after the line had passed through it. It is resolved with
+ * the same flight, wall, height and falloff rules as any bullet, just all at once, so the hit, the damage number and a
+ * kill all land on the frame of the shot, and the line ends where the round did.
+ */
+const INSTANT: ReadonlySet<WeaponKind> = new Set<WeaponKind>(['sniper']);
+
+/** Fires one round. Returns how far it flew if it was resolved at once (INSTANT), else undefined. */
+const fireBullet = (state: GameState, p: Player, angle: number, aim?: { x: number; y: number }): number | undefined => {
   const w = WEAPONS[p.weapon];
   // Leaning out, the muzzle is out past the corner too.
   const o = hitPoint(p);
@@ -646,14 +1009,23 @@ const fireBullet = (state: GameState, p: Player, angle: number, aim?: { x: numbe
   const y = o.y + Math.sin(angle) * 0.6;
   const target = aim ? aimedAt(state, p, aim.x, aim.y) : null;
   const h0 = chestHeight(p);
+  // At nobody: the round goes to chest height over the aim point (from a roof, down at what you point at).
+  const toAim = aim ? Math.max(1, Math.hypot(aim.x - x, aim.y - y)) : 1;
   state.projectiles.push({
     id: state.nextId++, owner: p.id, kind: 'bullet', weapon: p.weapon,
     x, y,
     vx: Math.cos(angle) * w.speed, vy: Math.sin(angle) * w.speed,
-    damage: w.damage, life: w.range / w.speed,
+    damage: gunDamage(p), life: w.range / w.speed,
     sx: x, sy: y, tx: 0, ty: 0, t: 0, duration: 0, radius: 0,
-    h: h0, h0, h1: target ? chestHeight(target) : h0, hd: target ? Math.max(1, Math.hypot(target.x - x, target.y - y)) : 1,
+    h: h0, h0, h1: target ? chestHeight(target) : aim ? 1.1 : h0, hd: target ? Math.max(1, Math.hypot(target.x - x, target.y - y)) : toAim,
   });
+  if (!INSTANT.has(p.weapon)) return undefined;
+  const pr = state.projectiles[state.projectiles.length - 1];
+  while (updateProjectile(state, pr)) {
+    /* keep flying until it hits something or runs out of range */
+  }
+  state.projectiles.pop();
+  return Math.hypot(pr.x - pr.sx, pr.y - pr.sy);
 };
 
 /** Damage after the distance the bullet flew: full up close, down to `min` of it far away. */
@@ -679,7 +1051,7 @@ const fireRocket = (state: GameState, p: Player, angle: number, pitch: number) =
   state.projectiles.push({
     id: state.nextId++, owner: p.id, kind: 'rocket', weapon: 'rockets',
     x, y, vx: Math.cos(angle) * flat, vy: Math.sin(angle) * flat,
-    damage: w.damage, life: w.range / w.speed,
+    damage: gunDamage(p), life: w.range / w.speed,
     sx: x, sy: y, tx: 0, ty: 0, t: 0, duration: 0, radius: w.lob!.radius, rocket: true,
     h: chestHeight(p) + (ROCKET.launchHeight - 1.1), vh: Math.sin(pt) * w.speed,
   });
@@ -694,20 +1066,60 @@ const lob = (state: GameState, p: Player, aimX: number, aimY: number, range: num
     sx: p.x, sy: p.y, tx: p.x + Math.cos(a) * d, ty: p.y + Math.sin(a) * d,
     t: 0, duration: 0.35 + d / 22, radius, rocket,
   });
+  // It comes down on whatever is there: a roof, unless you threw it from that house's floor (then it lands inside).
+  const pr = state.projectiles[state.projectiles.length - 1];
+  const b = buildingAt(pr.tx, pr.ty);
+  if (b >= 0 && !(buildingAt(p.x, p.y) === b && p.z < ROOF_LAYER)) pr.h1 = roofHeightOf(b, pr.tx, pr.ty);
+};
+
+/**
+ * Where the slow-field canister comes down: at the aim point, at least 2 m out and at most its range (along the facing
+ * when the aim point is on top of you). The HUD's landing preview uses the same rule.
+ */
+export const superThrowTarget = (p: { x: number; y: number; heading: number }, aimX: number, aimY: number) => {
+  const toAim = Math.hypot(aimX - p.x, aimY - p.y);
+  const a = toAim > 0.3 ? Math.atan2(aimY - p.y, aimX - p.x) : p.heading;
+  const d = Math.max(2, Math.min(SUPERS.timebox.range, toAim));
+  return { x: p.x + Math.cos(a) * d, y: p.y + Math.sin(a) * d };
+};
+
+const throwCanister = (state: GameState, p: Player, aimX: number, aimY: number) => {
+  const s = SUPERS.timebox;
+  const at = superThrowTarget(p, aimX, aimY);
+  lob(state, p, at.x, at.y, s.range, s.damage, s.burst);
+  state.projectiles[state.projectiles.length - 1].field = true;
+};
+
+/** The canister lands (on a roof at height `h`, else the ground): a modest burst (never the thrower) and the slow field, both kept to its side of a roof. */
+const slowBurst = (state: GameState, owner: number, x: number, y: number, h = 0) => {
+  const s = SUPERS.timebox;
+  state.events.push(h > 0.5 ? { type: 'slowBurst', owner, x, y, burst: s.burst, radius: s.radius, z: h } : { type: 'slowBurst', owner, x, y, burst: s.burst, radius: s.radius });
+  for (const o of state.players) {
+    if (!o.alive || o.stage !== 'ground' || o.id === owner) continue;
+    const d = blastDistance(o, x, y, h);
+    if (d > s.burst + PLAYER_RADIUS) continue;
+    o.lastHitWith = 'super';
+    hurt(state, o, s.damage * (1 - 0.7 * Math.min(1, d / s.burst)), owner);
+  }
+  const f: Field = { x, y, r: s.radius, life: s.life, owner };
+  if (h > 0.5) f.z = h;
+  state.fields.push(f);
 };
 
 /** Rounds this player has for the gun in hand (magazine + spare). */
 export const roundsLeft = (p: Player) => (p.weapon === 'fists' ? Infinity : p.mag + p.ammo);
 
+/** Seconds a full reload of the gun in hand takes (quicker on better grades). */
+export const reloadTime = (p: Player) => WEAPONS[p.weapon].reload * (RARITY.reload[p.rarity] ?? 1);
+
 const startReload = (state: GameState, p: Player) => {
-  const w = WEAPONS[p.weapon];
-  if (p.weapon === 'fists' || p.reload > 0 || p.ammo <= 0 || p.mag >= w.mag) return;
-  p.reload = w.reload;
+  if (p.weapon === 'fists' || p.reload > 0 || p.ammo <= 0 || p.mag >= magOf(p.weapon, p.rarity)) return;
+  p.reload = reloadTime(p);
   state.events.push({ type: 'reload', player: p.id, weapon: p.weapon, x: p.x, y: p.y });
 };
 
 const shoot = (state: GameState, p: Player, input: Input) => {
-  if (p.reload > 0) return;
+  if (p.reload > 0 || p.swapping > 0) return;
   // Out of rounds altogether: the empty gun stays in your hands and you hit with it.
   const empty = p.weapon !== 'fists' && p.mag <= 0 && p.ammo <= 0;
   if (p.weapon !== 'fists' && p.mag <= 0 && !empty) {
@@ -724,12 +1136,17 @@ const shoot = (state: GameState, p: Player, input: Input) => {
   const keep = p.weapon;
   p.weapon = kind; // fireBullet reads the weapon
   const at = { x: input.aimX, y: input.aimY };
+  // The shot comes first in the event list, so a hit or a kill it causes this tick reads as its result.
+  const shot: GameEvent = { type: 'shot', owner: p.id, x: p.x, y: p.y, angle: aim, weapon: kind };
+  state.events.push(shot);
   if (kind === 'rockets') fireRocket(state, p, aim, input.pitch ?? 0);
   else if (w.bullets > 1) {
     for (let i = 0; i < w.bullets; i++) fireBullet(state, p, aim - w.spread / 2 + (w.spread * i) / (w.bullets - 1), at);
-  } else fireBullet(state, p, aim + (nextRandom(state) - 0.5) * w.spread, at);
+  } else {
+    const len = fireBullet(state, p, aim + (nextRandom(state) - 0.5) * w.spread, at);
+    if (len !== undefined && shot.type === 'shot') shot.len = len;
+  }
   p.weapon = keep;
-  state.events.push({ type: 'shot', owner: p.id, x: p.x, y: p.y, angle: aim, weapon: kind });
   if (kind !== 'fists') p.shots += w.bullets;
   if (kind !== 'fists') {
     p.mag -= 1;
@@ -743,7 +1160,7 @@ const updateReload = (p: Player) => {
   p.reload -= DT;
   if (p.reload > 0) return;
   p.reload = 0;
-  const take = Math.min(WEAPONS[p.weapon].mag - p.mag, p.ammo);
+  const take = Math.min(magOf(p.weapon, p.rarity) - p.mag, p.ammo);
   p.mag += take;
   p.ammo -= take;
 };
@@ -765,17 +1182,14 @@ const useSuper = (state: GameState, p: Player, input: Input) => {
       state.walls.push({ x: p.x + cos * s.ahead, y: p.y + sin * s.ahead, w: across ? s.thickness : s.length, h: across ? s.length : s.thickness, life: s.life });
       break;
     }
-    case 'standup': {
-      const s = SUPERS.timebox;
-      const d = Math.min(s.reach, Math.hypot(input.aimX - p.x, input.aimY - p.y));
-      state.fields.push({ x: p.x + cos * d, y: p.y + sin * d, r: s.radius, life: s.life, owner: p.id });
+    case 'standup':
+      throwCanister(state, p, input.aimX, input.aimY);
       break;
-    }
     case 'intern': {
       const s = SUPERS.push;
       state.events.push({ type: 'explosion', x: p.x, y: p.y, radius: s.radius });
       for (const o of state.players) {
-        if (!o.alive || o.id === p.id || o.stage !== 'ground') continue;
+        if (!o.alive || o.id === p.id || o.stage !== 'ground' || Math.abs(o.z - p.z) > 1.5) continue;
         const dx = o.x - p.x;
         const dy = o.y - p.y;
         const d = Math.hypot(dx, dy);
@@ -798,7 +1212,7 @@ export const lootUnder = (state: GameState, p: Player): Loot | null => {
   let bestD = 1.2;
   for (const k of state.loot) {
     const d = Math.hypot(k.x - p.x, k.y - p.y);
-    if (k.active && d < bestD) {
+    if (k.active && d < bestD && withinReach(p, k)) {
       best = k;
       bestD = d;
     }
@@ -806,46 +1220,201 @@ export const lootUnder = (state: GameState, p: Player): Loot | null => {
   return best;
 };
 
+/** Spare rounds a gun can hold with this backpack. */
+export const spareCap = (p: Player, g: { weapon: WeaponKind; rarity: number }) => (g.weapon === 'fists' ? 0 : magOf(g.weapon, g.rarity) * PACK.spareMags[p.pack]);
+/** How many of a carried item (heals, bombs) this backpack holds. */
+export const carryCap = (p: Player, kind: HealKind | 'bomb') => PACK[kind][p.pack];
+const CARRIED = { bandage: 'bandages', medkit: 'medkits', coffee: 'coffees', bomb: 'bombs' } as const;
+/** How many of a carried item you have. */
+export const carried = (p: Player, kind: HealKind | 'bomb') => p[CARRIED[kind]];
+/** Points a vest on the floor still has. */
+export const vestPoints = (k: Loot) => (k.ammo > 0 ? k.ammo : VEST.points[k.tier ?? 3] ?? VEST.points[3]);
+
+const handGun = (p: Player): Gun => ({ weapon: p.weapon, rarity: p.rarity, mag: p.mag, ammo: p.ammo });
+const toHand = (p: Player, g: Gun) => {
+  p.weapon = g.weapon;
+  p.rarity = g.rarity;
+  p.mag = g.mag;
+  p.ammo = g.ammo;
+  p.reload = 0;
+};
+const gunRounds = (g: Gun | null) => (g ? g.mag + g.ammo : 0);
+
+/** Draw the other gun: what is in your hands goes to its slot. Cancels a heal and a reload; a moment before you can fire. */
+const swapGuns = (state: GameState, p: Player) => {
+  if (!p.holster) return;
+  const was = handGun(p);
+  toHand(p, p.holster);
+  p.holster = was;
+  p.slot = 1 - p.slot;
+  p.swapping = SWAP_TIME;
+  p.using = null;
+  p.useLeft = 0;
+  p.charging = null;
+  p.charge = 0;
+  state.events.push({ type: 'swap', player: p.id, weapon: p.weapon });
+};
+
+/**
+ * Take a piece of loot. A gun goes into an empty slot (and into your hands); with both slots full it replaces the gun in your
+ * hands, which drops. Ammo tops up the gun in your hands (else the other) to what the backpack holds. A vest replaces yours
+ * (yours drops if anything is left of it). A backpack only ever upgrades. Heals and bombs stack up to the backpack's room;
+ * whatever does not fit stays on the floor. Returns false when nothing could be taken.
+ */
 const takeLoot = (state: GameState, p: Player, k: Loot) => {
+  const tier = k.tier ?? 0;
   if (isWeapon(k.kind)) {
-    // Swap: drop what you hold (if it still has rounds) where you stand.
-    if (p.weapon !== 'fists' && roundsLeft(p) > 0) addLoot(state, p.weapon, p.x, p.y + 0.4, roundsLeft(p));
-    p.weapon = k.kind;
-    p.mag = Math.min(WEAPONS[k.kind].mag, k.ammo);
-    p.ammo = k.ammo - p.mag;
-    p.reload = 0;
+    const mag = Math.min(magOf(k.kind, tier), k.ammo);
+    const gun: Gun = { weapon: k.kind, rarity: tier, mag, ammo: k.ammo - mag };
+    if (p.weapon === 'fists') toHand(p, gun);
+    else if (!p.holster) {
+      p.holster = handGun(p);
+      toHand(p, gun);
+      p.slot = 1 - p.slot;
+      p.swapping = SWAP_TIME;
+    } else {
+      // Both slots full: swap the one in your hands for it, and drop yours where you stand.
+      if (roundsLeft(p) > 0) dropAt(state, p, p.weapon, p.x, p.y + 0.4, roundsLeft(p), p.rarity);
+      toHand(p, gun);
+    }
+    p.using = null;
   } else if (k.kind === 'ammo') {
-    if (p.weapon === 'fists') return;
-    p.ammo += WEAPONS[p.weapon].mag * AMMO_BOX_MAGS;
-    if (p.mag <= 0) startReload(state, p);
+    const box = (g: { weapon: WeaponKind; rarity: number; ammo: number }) => {
+      if (g.weapon === 'fists') return 0;
+      const room = spareCap(p, g) - g.ammo;
+      return room > 0 ? Math.min(room, magOf(g.weapon, g.rarity) * AMMO_BOX_MAGS) : 0;
+    };
+    const inHand = box(p);
+    if (inHand > 0) {
+      p.ammo += inHand;
+      if (p.mag <= 0) startReload(state, p);
+    } else if (p.holster && box(p.holster) > 0) p.holster.ammo += box(p.holster);
+    else return false;
   } else if (k.kind === 'armor') {
-    p.armor = ARMOR.points;
+    if (p.armor >= 1 && p.vest > 0) dropAt(state, p, 'armor', p.x, p.y + 0.4, Math.round(p.armor), p.vest);
+    p.vest = k.tier ?? 3;
+    p.armor = vestPoints(k);
+  } else if (k.kind === 'backpack') {
+    if (tier <= p.pack) return false;
+    p.pack = tier;
   } else {
-    if (p.item) addLoot(state, p.item, p.x, p.y + 0.4);
-    p.item = k.kind;
+    const kind = k.kind as HealKind | 'bomb';
+    const have = carried(p, kind);
+    const count = Math.max(1, k.ammo);
+    const take = Math.min(count, carryCap(p, kind) - have);
+    if (take <= 0) return false;
+    p[CARRIED[kind]] = have + take;
+    if (take < count) {
+      // The rest of the stack stays where it was.
+      k.ammo = count - take;
+      state.events.push({ type: 'pickup', player: p.id, kind: k.kind });
+      return true;
+    }
   }
   k.active = false;
   state.events.push({ type: 'pickup', player: p.id, kind: k.kind });
+  return true;
 };
 
-/** Picked up without pressing anything: a gun when you only have fists, armor when you need it, an item into an empty slot. */
-const autoTakes = (p: Player, k: Loot) =>
-  (isWeapon(k.kind) && (p.weapon === 'fists' || roundsLeft(p) === 0)) ||
-  (k.kind === 'ammo' && p.weapon !== 'fists' && p.ammo < WEAPONS[p.weapon].mag * 2) ||
-  (k.kind === 'armor' && p.armor < ARMOR.points * 0.5) ||
-  ((k.kind === 'medkit' || k.kind === 'bomb') && p.item === null);
-
-const useItem = (state: GameState, p: Player, input: Input) => {
-  if (p.item === 'bomb') {
-    lob(state, p, input.aimX, input.aimY, ITEMS.bomb.range, ITEMS.bomb.damage, ITEMS.bomb.radius);
-    p.revealed = 1;
-  } else if (p.item === 'medkit') {
-    p.healLeft += ITEMS.medkit.heal;
+/**
+ * Picked up without pressing anything: a gun when you have only fists, an empty gun or a free slot (not a second of the
+ * kind in your hands), ammo when you run low, a vest or backpack that is better than yours, heals and bombs you have room for.
+ */
+export const autoTakes = (p: Player, k: Loot) => {
+  if (isWeapon(k.kind)) return p.weapon === 'fists' || roundsLeft(p) === 0 || (!p.holster && k.kind !== p.weapon);
+  if (k.kind === 'ammo') {
+    const low = (g: Gun) => g.weapon !== 'fists' && g.ammo < Math.min(spareCap(p, g), magOf(g.weapon, g.rarity) * 2);
+    return low(handGun(p)) || (!!p.holster && low(p.holster));
   }
-  p.item = null;
+  if (k.kind === 'armor') return vestPoints(k) > p.armor + 0.5;
+  if (k.kind === 'backpack') return (k.tier ?? 0) > p.pack;
+  const kind = k.kind as HealKind | 'bomb';
+  return carried(p, kind) < carryCap(p, kind);
+};
+
+/** Throw a bomb (bots throw at once at the aim point; people hold to charge, see updatePlayer). */
+const useItem = (state: GameState, p: Player, input: Input) => {
+  if (p.bombs <= 0) return;
+  lob(state, p, input.aimX, input.aimY, ITEMS.bomb.range, ITEMS.bomb.damage, ITEMS.bomb.radius);
+  p.revealed = 1;
+  p.bombs -= 1;
+};
+
+/** Which heal the heal button uses now: a med kit when badly hurt, else a bandage, else coffee (null = nothing to use). */
+export const healChoice = (p: Player): HealKind | null => {
+  const missing = p.maxHp - p.hp;
+  const bandageOk = p.bandages > 0 && p.hp < HEALS.bandage.upTo;
+  if (missing >= 40 && p.medkits > 0) return 'medkit';
+  if (bandageOk) return 'bandage';
+  if (missing > 0.5 && p.medkits > 0) return 'medkit';
+  if (p.coffees > 0) return 'coffee';
+  return null;
+};
+
+const startHeal = (state: GameState, p: Player, kind: HealKind) => {
+  if (p.using || carried(p, kind) <= 0) return;
+  if (kind === 'bandage' && p.hp >= HEALS.bandage.upTo) return;
+  if (kind === 'medkit' && p.hp >= p.maxHp) return;
+  p.using = kind;
+  p.useLeft = HEALS[kind].time;
+  p.reload = 0;
+  p.charging = null;
+  p.charge = 0;
+  state.events.push({ type: 'heal', player: p.id, kind, done: false });
+};
+
+const finishHeal = (state: GameState, p: Player) => {
+  const kind = p.using!;
+  p.using = null;
+  p.useLeft = 0;
+  p[CARRIED[kind]] -= 1;
+  if (kind === 'bandage') p.hp = Math.max(p.hp, Math.min(HEALS.bandage.upTo, p.hp + HEALS.bandage.heal));
+  else if (kind === 'medkit') p.hp = Math.min(p.maxHp, p.hp + HEALS.medkit.heal);
+  else p.buzz = HEALS.coffee.buzz;
+  state.events.push({ type: 'heal', player: p.id, kind, done: true });
 };
 
 // ---------- per tick
+
+/**
+ * Feet: on a surface they follow it (up and down a roof's slope); off it (a hop, or walking off a roof's edge) gravity
+ * pulls them down to whatever is under them, the ground or another roof. A drop of more than a metre is a thud.
+ */
+const updateFeet = (state: GameState, p: Player, hop: boolean) => {
+  const under = supportAt(p.x, p.y, p.z);
+  if (p.jz === 0 && p.z <= under + 0.35 && p.z >= under - 0.6) {
+    p.z = under;
+    if (!hop) return;
+    p.jz = FEET.jump;
+    state.events.push({ type: 'hop', player: p.id, x: p.x, y: p.y });
+  }
+  const was = p.z;
+  p.jz -= FEET.gravity * DT;
+  p.z += p.jz * DT;
+  // You come down onto a roof only from above it; under it (never reached from the side) the floor is what holds you.
+  let below = supportAt(p.x, p.y, was);
+  if (below > was + 0.35) below = 0;
+  if (p.z <= below) {
+    if (p.jz * p.jz > 2 * FEET.gravity * FEET.landDrop) state.events.push(below > 0 ? { type: 'thud', player: p.id, x: p.x, y: p.y, z: below } : { type: 'thud', player: p.id, x: p.x, y: p.y });
+    p.z = below;
+    p.jz = 0;
+  }
+};
+
+/** Start up a ladder: from its foot (in line with its rungs) to the roof just inside the wall. */
+const startClimb = (state: GameState, p: Player, l: NonNullable<ReturnType<typeof ladderAt>>) => {
+  const cx = l.tx * TILE + TILE / 2;
+  const cy = l.ty * TILE + TILE / 2;
+  p.climb = CLIMB.time;
+  p.vaultFrom = { x: cx + l.nx * (TILE / 2 + PLAYER_RADIUS + 0.05), y: cy + l.ny * (TILE / 2 + PLAYER_RADIUS + 0.05) };
+  p.vaultTo = { x: cx - l.nx * 0.3, y: cy - l.ny * 0.3 };
+  p.vx = 0;
+  p.vy = 0;
+  p.jz = 0;
+  p.pushing = 0;
+  p.using = null;
+  state.events.push({ type: 'vault', player: p.id, x: p.x, y: p.y });
+};
 
 const updatePlayer = (state: GameState, p: Player, input: Input) => {
   const pressed = (k: 'super' | 'use' | 'reload' | 'roll') => input[k] && !p.prev[k];
@@ -854,13 +1423,13 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
   p.slowed = Math.max(0, p.slowed - DT);
   p.sinceCombat += DT;
 
-  if (p.healLeft > 0) {
-    const h = Math.min(p.healLeft, (ITEMS.medkit.heal / ITEMS.medkit.over) * DT);
-    p.healLeft -= h;
-    p.hp = Math.min(p.maxHp, p.hp + h);
-  } else if (p.sinceCombat >= REGEN.after) {
-    p.hp = Math.min(p.maxHp, p.hp + REGEN.perSecond * DT);
+  p.swapping = Math.max(0, p.swapping - DT);
+  if (p.buzz > 0) {
+    // Coffee: a steady trickle of health, fight or no fight.
+    p.buzz = Math.max(0, p.buzz - DT);
+    p.hp = Math.min(p.maxHp, p.hp + HEALS.coffee.perSecond * DT);
   }
+  if (p.sinceCombat >= REGEN.after) p.hp = Math.min(p.maxHp, p.hp + REGEN.perSecond * DT);
 
   // Turn towards the aim at a limited rate, never snapping. Swimming, you face where you swim.
   const swimming = inWater(p.x, p.y);
@@ -873,8 +1442,22 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     p.heading += Math.max(-maxTurn, Math.min(maxTurn, d));
   }
 
+  // Two gun slots: 1 / 2 draw one, X (or the wheel, or SWAP) the other one.
+  const slotPress = input.slot && input.slot !== (p.prev.slot ?? 0) ? input.slot - 1 : -1;
+  if ((input.cycle && !p.prev.cycle) || (slotPress >= 0 && slotPress !== p.slot)) swapGuns(state, p);
+
+  // Heals: a moment of standing nearly still with something in your hands that is not a gun.
+  if (swimming && p.using) p.using = null;
+  if (p.using) {
+    p.useLeft -= DT;
+    if (p.useLeft <= 0) finishHeal(state, p);
+  } else if (!swimming && input.heal && !p.prev.heal) {
+    const kind = healChoice(p);
+    if (kind) startHeal(state, p, kind);
+  } else if (!swimming && input.coffee && !p.prev.coffee && p.coffees > 0) startHeal(state, p, 'coffee');
+
   updateReload(p);
-  if (pressed('reload')) startReload(state, p);
+  if (pressed('reload') && !p.using) startReload(state, p);
   p.rollCooldown = Math.max(0, p.rollCooldown - DT);
 
   // The dodge roll: the way you're moving (or facing), sliding along whatever it meets.
@@ -882,6 +1465,7 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     const len = Math.hypot(input.mx, input.my);
     p.rollDir = len > 0.01 ? Math.atan2(input.my, input.mx) : p.heading;
     p.rolling = ROLL.time;
+    p.using = null;
     p.rollCooldown = ROLL.cooldown;
     state.events.push({ type: 'roll', player: p.id, x: p.x, y: p.y });
   }
@@ -891,7 +1475,23 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     p.vx = Math.cos(p.rollDir) * v;
     p.vy = Math.sin(p.rollDir) * v;
     moveBy(state, p, p.vx * DT, p.vy * DT);
+    updateFeet(state, p, false);
     p.heading = p.rollDir;
+    p.prev = { ...input };
+    return;
+  }
+
+  if (p.climb > 0) {
+    // Up the ladder (three quarters of the time), then over the eave onto the roof. No shooting meanwhile.
+    p.climb = Math.max(0, p.climb - DT);
+    const k = 1 - p.climb / CLIMB.time;
+    const top = roofAt(p.vaultTo.x, p.vaultTo.y);
+    const up = Math.min(1, k / 0.75);
+    const over = Math.max(0, (k - 0.75) / 0.25);
+    p.x = p.vaultFrom.x + (p.vaultTo.x - p.vaultFrom.x) * over;
+    p.y = p.vaultFrom.y + (p.vaultTo.y - p.vaultFrom.y) * over;
+    p.z = top * up;
+    p.jz = 0;
     p.prev = { ...input };
     return;
   }
@@ -912,7 +1512,7 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     const v = SUPERS.deploy.distance / SUPERS.deploy.time;
     moveBy(state, p, Math.cos(p.dashAngle) * v * DT, Math.sin(p.dashAngle) * v * DT);
     for (const o of state.players) {
-      if (!o.alive || o.id === p.id || p.dashHit.includes(o.id)) continue;
+      if (!o.alive || o.id === p.id || p.dashHit.includes(o.id) || Math.abs(feetOf(o) - p.z) > 1.5) continue;
       if (Math.hypot(o.x - p.x, o.y - p.y) < PLAYER_RADIUS * 2.2) {
         p.dashHit.push(o.id);
         o.lastHitWith = 'super';
@@ -924,7 +1524,8 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     const len = Math.hypot(input.mx, input.my);
     p.lean += ((swimming ? 0 : Math.max(-1, Math.min(1, input.lean))) - p.lean) * Math.min(1, LEAN.rate * DT);
     const top =
-      FIGHTERS[p.fighter].speed * (p.slowed > 0 ? SUPERS.timebox.slow : 1) * (Math.abs(p.lean) > 0.3 ? LEAN.speed : 1) * (swimming ? SWIM.speed : 1);
+      FIGHTERS[p.fighter].speed * (p.slowed > 0 ? SUPERS.timebox.slow : 1) * (Math.abs(p.lean) > 0.3 ? LEAN.speed : 1) * (swimming ? SWIM.speed : 1) *
+      (p.using ? HEALS.walk : 1) * (p.buzz > 0 ? HEALS.coffee.speed : 1);
     const wantX = len > 0.01 ? (input.mx / Math.max(1, len)) * top : 0;
     const wantY = len > 0.01 ? (input.my / Math.max(1, len)) * top : 0;
     const rate = (len > 0.01 ? MOVE.accel : MOVE.friction) * DT;
@@ -953,28 +1554,53 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
         p.vy -= into * ny;
       }
     }
-    // Keep pushing into a fence, window or low furniture and you climb over it.
+    // Keep pushing into a fence, window or low furniture and you climb over it; into a ladder, and you climb up it.
     const pushingInto = vaultable && len > 0.01 && c > 1e-5 && (input.mx * cx + input.my * cy) / (len * c) < -0.6;
-    p.pushing = pushingInto ? p.pushing + DT : 0;
-    if (pushingInto && p.pushing >= VAULT.after) tryVault(state, p, -cx / c, -cy / c);
+    const ladder = p.z < 0.3 && p.jz === 0 && len > 0.01 && !swimming ? ladderAt(p.x, p.y, PLAYER_RADIUS + 0.3) : null;
+    const climbing = !!ladder && -(input.mx * ladder.nx + input.my * ladder.ny) / len > 0.6;
+    p.pushing = pushingInto || climbing ? p.pushing + DT : 0;
+    if (climbing && p.pushing >= CLIMB.after) startClimb(state, p, ladder);
+    else if (pushingInto && p.pushing >= VAULT.after) tryVault(state, p, -cx / c, -cy / c);
   }
+  if (p.climb <= 0) updateFeet(state, p, !swimming && input.jump && !p.prev.jump);
 
   // People charge rockets and bombs: hold to throw farther, let go to throw. Bots throw at once.
   if (swimming) {
     // Both hands are swimming: no shooting, no throwing.
     p.charging = null;
     p.charge = 0;
+  } else if (input.fire && p.using) {
+    // Pulling the trigger puts the heal away (a fresh press, so holding fire through a heal you started does not).
+    if (!p.prev.fire) p.using = null;
   } else if (input.fire && p.cooldown <= 0) shoot(state, p, input);
   else if (input.fire && p.weapon !== 'fists' && p.mag <= 0 && p.ammo <= 0 && !p.prev.fire) state.events.push({ type: 'dryFire', player: p.id });
   if (p.charging === 'rockets') {
     p.charging = null;
     p.charge = 0;
   }
-  if (pressed('super') && !swimming && p.superCharge >= 1 && p.dashTime <= 0) useSuper(state, p, input);
+  // The slow-field canister (people): hold G to aim (the HUD shows the arc and where it lands), let go to throw.
+  // Bots, and every other super, go off on the press.
+  const aimsSuper = !p.bot && p.fighter === 'standup';
+  if (p.charging === 'super' && (swimming || p.superCharge < 1)) p.charging = null;
+  if (aimsSuper && p.charging === 'super' && !input.super) {
+    p.charging = null;
+    useSuper(state, p, input);
+  } else if (pressed('super') && !swimming && p.superCharge >= 1 && p.dashTime <= 0) {
+    if (aimsSuper) p.charging = 'super';
+    else useSuper(state, p, input);
+  }
 
   const k = lootUnder(state, p);
-  if (k && autoTakes(p, k)) takeLoot(state, p, k);
-  else if (!p.bot && !swimming && p.item === 'bomb' && !k && (input.use || p.charging === 'bomb')) {
+  // Walking over a pile, take whatever of it is wanted (the nearest first).
+  let auto: Loot | null = k && autoTakes(p, k) ? k : null;
+  if (!auto) {
+    for (const o of state.loot) if (o.active && Math.hypot(o.x - p.x, o.y - p.y) < 1.2 && withinReach(p, o) && autoTakes(p, o)) {
+      auto = o;
+      break;
+    }
+  }
+  if (auto) takeLoot(state, p, auto);
+  else if (!p.bot && !swimming && p.bombs > 0 && !k && !p.using && (input.use || p.charging === 'bomb')) {
     // A bomb: hold F to throw it farther, let go to throw.
     if (input.use) {
       p.charging = 'bomb';
@@ -986,13 +1612,13 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
       const a = input.throwAt && toAim > 0.3 ? Math.atan2(input.aimY - p.y, input.aimX - p.x) : p.heading;
       lob(state, p, p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, ITEMS.bomb.range, ITEMS.bomb.damage, ITEMS.bomb.radius);
       p.revealed = 1;
-      p.item = null;
+      p.bombs -= 1;
       p.charge = 0;
       p.charging = null;
     }
   } else if (pressed('use')) {
     if (k) takeLoot(state, p, k);
-    else if (p.item && !swimming) useItem(state, p, input);
+    else if (p.bombs > 0 && !swimming && !p.using) useItem(state, p, input);
   }
   p.prev = { ...input };
 };
@@ -1024,7 +1650,8 @@ const updateProjectile = (state: GameState, pr: Projectile) => {
     pr.x = pr.sx + (pr.tx - pr.sx) * pr.t;
     pr.y = pr.sy + (pr.ty - pr.sy) * pr.t;
     if (pr.t >= 1) {
-      explode(state, pr.owner, pr.tx, pr.ty, pr.radius, pr.damage);
+      if (pr.field) slowBurst(state, pr.owner, pr.tx, pr.ty, pr.h1 ?? 0);
+      else explode(state, pr.owner, pr.tx, pr.ty, pr.radius, pr.damage, pr.h1 ?? 0);
       return false;
     }
     return true;
@@ -1034,18 +1661,25 @@ const updateProjectile = (state: GameState, pr: Projectile) => {
   if (pr.life <= 0) return false;
   const steps = Math.max(1, Math.ceil((Math.hypot(pr.vx, pr.vy) * DT) / 0.4));
   for (let s = 0; s < steps; s++) {
+    const px = pr.x;
+    const py = pr.y;
+    const ph = pr.h ?? 1.1;
     pr.x += (pr.vx * DT) / steps;
     pr.y += (pr.vy * DT) / steps;
-    // A round fired up at someone in the air climbs over the roofs and trees in between.
+    // A round climbs to someone higher up (in the air, on a roof) or dips to someone lower, in a straight line.
     if (pr.h0 !== undefined) pr.h = pr.h0 + ((pr.h1 ?? pr.h0) - pr.h0) * Math.min(1, Math.hypot(pr.x - pr.sx, pr.y - pr.sy) / (pr.hd ?? 1));
-    if ((pr.h ?? 1.1) < 3 && solidAt(state, pr.x, pr.y)) {
+    const ht = pr.h ?? 1.1;
+    if (ht <= 0.02 || solidStep(state, px, py, ph, pr.x, pr.y, ht)) {
       hitRack(state, toTile(pr.x), toTile(pr.y), pr.damage);
-      state.events.push({ type: 'impact', x: pr.x, y: pr.y });
+      state.events.push(ht === 1.1 ? { type: 'impact', x: pr.x, y: pr.y } : { type: 'impact', x: pr.x, y: pr.y, z: ht });
       return false;
     }
     for (const o of state.players) {
       if (o.id === pr.owner || !targetable(o)) continue;
       const h = hitPoint(o);
+      // The body runs from the feet to the top of the head: a round over or under it misses.
+      const feet = feetOf(o);
+      if (ht < feet - 0.1 || ht > feet + BODY.top) continue;
       if (Math.hypot(h.x - pr.x, h.y - pr.y) < PLAYER_RADIUS + 0.15) {
         o.lastHitWith = pr.weapon;
         state.players[pr.owner].hits += 1;
@@ -1060,18 +1694,21 @@ const updateProjectile = (state: GameState, pr: Projectile) => {
 const updateRocket = (state: GameState, pr: Projectile) => {
   pr.life -= DT;
   const boom = () => {
-    explode(state, pr.owner, pr.x, pr.y, pr.radius, pr.damage);
+    explode(state, pr.owner, pr.x, pr.y, pr.radius, pr.damage, Math.max(0, (pr.h ?? 0) - 1.1));
     return false;
   };
   if (pr.life <= 0) return boom();
   const steps = Math.max(1, Math.ceil((Math.hypot(pr.vx, pr.vy) * DT) / 0.3));
   for (let s = 0; s < steps; s++) {
+    const px = pr.x;
+    const py = pr.y;
+    const ph = pr.h ?? ROCKET.launchHeight;
     pr.x += (pr.vx * DT) / steps;
     pr.y += (pr.vy * DT) / steps;
     pr.vh = (pr.vh ?? 0) - (ROCKET.gravity * DT) / steps;
     pr.h = (pr.h ?? ROCKET.launchHeight) + (pr.vh * DT) / steps;
     if (pr.h <= 0.05) return boom();
-    if (pr.h < ROCKET.wallHeight && solidAt(state, pr.x, pr.y)) {
+    if (solidStep(state, px, py, ph, pr.x, pr.y, pr.h)) {
       hitRack(state, toTile(pr.x), toTile(pr.y), pr.damage);
       return boom();
     }
@@ -1105,7 +1742,7 @@ export const step = (state: GameState, inputs: Input[]): GameState => {
   state.projectiles = state.projectiles.filter((pr) => updateProjectile(state, pr));
   for (const fld of state.fields) {
     fld.life -= DT;
-    for (const o of state.players) if (o.alive && o.id !== fld.owner && Math.hypot(o.x - fld.x, o.y - fld.y) < fld.r) o.slowed = 0.2;
+    for (const o of state.players) if (o.alive && o.id !== fld.owner && o.stage === 'ground' && blastDistance(o, fld.x, fld.y, fld.z ?? 0) < fld.r) o.slowed = 0.2;
   }
   state.fields = state.fields.filter((fld) => fld.life > 0);
   for (const w of state.walls) w.life -= DT;

@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 
 /*
- * Merge Conflict theme: a night office lit by a diff.
+ * Studio theme: a night office lit by a diff.
  * HEAD green, incoming red, the yellow of a conflict marker, on deep navy.
  */
 @theme {
@@ -67,5 +67,306 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* The elimination banner: slams in a little too big, settles, holds, then lifts away (1.4 s in all). */
+@keyframes elimIn {
+  0% {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+  9% {
+    opacity: 1;
+    transform: scale(0.94);
+  }
+  16% {
+    transform: scale(1.03);
+  }
+  22%,
+  82% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px) scale(1);
+  }
+}
+/* The place banner: drops in a little, holds, fades (1.6 s in all). */
+@keyframes placeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  12% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  78% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+}
+/* The same without the scale (reduced motion): a plain fade in and out. */
+@keyframes elimFade {
+  0% {
+    opacity: 0;
+  }
+  8%,
+  82% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+/* The kill counter jumps when it goes up. */
+@keyframes killPulse {
+  0% {
+    transform: scale(1.7);
+    color: var(--color-gold);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Menus and the settings panel slide in from the left. */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* The pre-match 3-2-1: each number punches in big, settles, then fades as the next one comes. */
+@keyframes countPop {
+  0% {
+    opacity: 0;
+    transform: scale(1.8);
+  }
+  18% {
+    opacity: 1;
+    transform: scale(0.94);
+  }
+  30% {
+    transform: scale(1);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+/* The match comes up out of the pre-match launch's black. */
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+/* The lobby's Ready button breathes until you press it (scale and glow: panel-cut's clip-path would cut a shadow). */
+@keyframes readyPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.05);
+    filter: brightness(1.18);
+  }
+}
+
+/* ---------- Transitions (src/components/Transitions.tsx). Transforms and opacity only, so they keep moving on the
+   compositor while the page builds the next scene. The reduced-motion rule above shortens all of them to nothing. */
+
+/* The screen wipe: three slanted bands sweep across (gold, the tone colour, then ink with the next screen's name), hold
+   for a beat while the screen changes underneath, and sweep off. 520 ms in all. */
+.lcs-wipe {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  overflow: hidden;
+  pointer-events: none;
+  animation: lcsWipeLife 0.52s linear both;
+}
+.lcs-wipe > * {
+  position: absolute;
+  top: -10%;
+  bottom: -10%;
+  left: -50vw;
+  width: 200vw;
+  transform: translateX(-140%) skewX(-16deg);
+  animation: lcsBand 0.44s cubic-bezier(0.75, 0, 0.25, 1) both;
+}
+.lcs-wipe .w1 { background: var(--color-gold); }
+.lcs-wipe .w2 { background: var(--lcs-tone, var(--color-green)); animation-delay: 0.035s; }
+.lcs-wipe .w3 {
+  animation-delay: 0.07s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.35) 0 1px, transparent 1px 3px),
+    linear-gradient(90deg, #070a14, #121a2b 50%, #070a14);
+}
+.lcs-wipe .w3 span {
+  transform: skewX(16deg);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: clamp(2.6rem, 11vw, 7.5rem);
+  line-height: 1;
+  color: var(--color-cream);
+  text-shadow: -4px 0 rgba(255, 61, 110, 0.85), 4px 0 rgba(62, 197, 255, 0.85), 0 0 40px rgba(255, 210, 63, 0.35);
+  animation: lcsWipeWord 0.44s ease-out 0.07s both;
+}
+@keyframes lcsWipeLife { from { opacity: 1; } to { opacity: 1; } }
+@keyframes lcsBand {
+  0% { transform: translateX(-140%) skewX(-16deg); }
+  40%, 54% { transform: translateX(0) skewX(-16deg); }
+  100% { transform: translateX(140%) skewX(-16deg); }
+}
+@keyframes lcsWipeWord {
+  0%, 25% { opacity: 0; transform: skewX(16deg) translateX(-40px); }
+  42% { opacity: 1; transform: skewX(16deg) translateX(6px); }
+  50% { transform: skewX(16deg) translateX(-3px); }
+  56% { opacity: 1; transform: skewX(16deg) translateX(0); }
+  70%, 100% { opacity: 0; transform: skewX(16deg) translateX(30px); }
+}
+
+/* A title glitching in: torn slices jump sideways for a moment, the colour split settles. 450 ms. */
+.lcs-glitch-in { animation: lcsGlitchIn 0.45s steps(1, end) both; }
+@keyframes lcsGlitchIn {
+  0% { opacity: 0; transform: translateX(-14px); clip-path: inset(42% 0 40% 0); }
+  12% { opacity: 1; transform: translateX(10px); clip-path: inset(0 0 62% 0); text-shadow: -6px 0 #ff3d6e, 6px 0 #3ec5ff; }
+  24% { transform: translateX(-6px); clip-path: inset(58% 0 0 0); }
+  36% { transform: translateX(4px); clip-path: inset(20% 0 30% 0); text-shadow: -3px 0 #ff3d6e, 3px 0 #3ec5ff; }
+  50% { transform: translateX(-2px); clip-path: inset(0 0 0 0); }
+  66% { transform: none; text-shadow: -1px 0 rgba(255, 61, 110, 0.6), 1px 0 rgba(62, 197, 255, 0.6); }
+  100% { opacity: 1; transform: none; clip-path: inset(0 0 0 0); }
+}
+
+/* The countdown number: slams in from huge, overshoots, settles, then fades as the next one comes (1 s). */
+@keyframes lcsSlam {
+  0% { opacity: 0; transform: scale(2.8); }
+  12% { opacity: 1; transform: scale(0.88); }
+  22% { transform: scale(1.06); }
+  32% { transform: scale(1); }
+  78% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.86); }
+}
+/* The same slam, landing and staying (the round report's placement). */
+@keyframes lcsLand {
+  0% { opacity: 0.4; transform: scale(1.9); }
+  30% { opacity: 1; transform: scale(0.9); }
+  55% { transform: scale(1.05); }
+  100% { opacity: 1; transform: scale(1); }
+}
+/* A round-report stat: its band wipes in from the left, then the number lands. */
+@keyframes lcsBandIn {
+  from { transform: skewX(-12deg) scaleX(0); }
+  to { transform: skewX(-12deg) scaleX(1); }
+}
+@keyframes lcsStatLand {
+  0% { opacity: 0; transform: scale(1.6); }
+  35% { opacity: 1; transform: scale(0.92); }
+  60% { transform: scale(1.04); }
+  100% { opacity: 1; transform: scale(1); }
+}
+/* A shock ring out from an impact. */
+@keyframes lcsRing {
+  0% { opacity: 0.95; transform: scale(0.15); }
+  100% { opacity: 0; transform: scale(2.4); }
+}
+/* A light streak across the screen. */
+@keyframes lcsStreak {
+  0% { opacity: 0; transform: translateX(-60vw) scaleX(0.4); }
+  20% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(60vw) scaleX(1.2); }
+}
+/* A short shake for an impact (the overlay only, never the game's camera). */
+@keyframes lcsShake {
+  0%, 100% { transform: none; }
+  20% { transform: translate(-7px, 3px); }
+  40% { transform: translate(6px, -4px); }
+  60% { transform: translate(-4px, 2px); }
+  80% { transform: translate(2px, -1px); }
+}
+@keyframes lcsFlash {
+  from { opacity: var(--lcs-flash, 0.85); }
+  to { opacity: 0; }
+}
+/* The match opening out of the launch's black: two shutters part from a bright line in the middle. */
+@keyframes lcsShutterUp { 0%, 18% { transform: none; } 100% { transform: translateY(-101%); } }
+@keyframes lcsShutterDown { 0%, 18% { transform: none; } 100% { transform: translateY(101%); } }
+@keyframes lcsSeam {
+  0% { opacity: 1; transform: scaleX(0); }
+  25% { opacity: 1; transform: scaleX(1); }
+  100% { opacity: 0; transform: scaleX(1) scaleY(6); }
+}
+/* Slow rays behind a win. */
+@keyframes lcsRays { to { transform: rotate(360deg); } }
+/* A light sweeping once across a card. */
+@keyframes lcsSweep {
+  from { transform: translateX(-120%) skewX(-20deg); }
+  to { transform: translateX(260%) skewX(-20deg); }
+}
+
+/* Progression: the level number pops, a white band sweeps over a reward chip, squares burst from a milestone chip. */
+@keyframes levelPop {
+  from {
+    transform: scale(1.25);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+@keyframes chipSweep {
+  from {
+    transform: translateX(-160%);
+  }
+  to {
+    transform: translateX(260%);
+  }
+}
+@keyframes burstOut {
+  from {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(var(--bx), var(--by)) scale(0.4);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lcs-sweep,
+  .lcs-burst {
+    display: none;
   }
 }

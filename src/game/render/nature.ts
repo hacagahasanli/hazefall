@@ -1,9 +1,12 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-import { BUILDINGS, MAP, SIZE, TILE, tileHash, WORLD } from '../sim/constants';
+import { BUILDINGS, MAP, MARKET_SQUARE, SIZE, TILE, tileHash, WORLD } from '../sim/constants';
 
+import { chunkedInstances } from './chunks';
 import { routeDistance } from './roads';
+
+import type { ChunkedKind, ChunkView, InstanceData } from './chunks';
 
 /**
  * Procedural nature, built in code (no asset pack): a painted terrain with soft transitions,
@@ -80,9 +83,9 @@ const sampleGrid = (g: Float32Array, x: number, y: number) => {
 const sstep = (a: number, b: number, v: number) => smooth(Math.max(0, Math.min(1, (v - a) / (b - a))));
 const mix = (a: number[], b: number[], k: number) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
 
-/** The ground texture: 6 px per metre (roads and paths are geometry), meadow greens with dry patches, soft dirt, mud. */
+/** The ground texture: 4.4 px per metre (roads and paths are geometry), meadow greens with dry patches, soft dirt, mud. */
 export const paintTerrain = () => {
-  const px = 6;
+  const px = 4.4; // 1056 px across, as before (6 px a metre over the old 176 m)
   const n = WORLD * px;
   const c = document.createElement('canvas');
   c.width = c.height = n;
@@ -138,6 +141,15 @@ export const paintTerrain = () => {
       // Under the road strip (roads.ts): packed gravel, which shows only as a soft shoulder.
       const wRoad = sstep(0.3, 0.6, sampleGrid(road, tx, ty) + e);
       if (wRoad > 0) col = mix(col, [ASPHALT[0] + grain * 0.5, ASPHALT[1] + grain * 0.5, ASPHALT[2] + grain * 0.5], wRoad);
+      // The Market Square's kerb: one tile of darker paving round its outline, left open where Route 1 comes in and goes out.
+      {
+        const q = MARKET_SQUARE;
+        if (tx >= q.x0 && tx < q.x0 + q.w && ty >= q.y0 && ty < q.y0 + q.h) {
+          const ring = tx < q.x0 + 1 || tx >= q.x0 + q.w - 1 || ty < q.y0 + 1 || ty >= q.y0 + q.h - 1;
+          const roadGap = tx >= 60 && tx < 62 && (ty < q.y0 + 1 || ty >= q.y0 + q.h - 1);
+          if (ring && !roadGap) col = [col[0] * 0.8, col[1] * 0.8, col[2] * 0.8];
+        }
+      }
       // Floors inside buildings: hard-edged planks.
       const ftx = Math.floor(tx);
       const fty = Math.floor(ty);
@@ -173,17 +185,47 @@ export const natureUniforms = {
   uTime: { value: 0 },
   uFocus: { value: new THREE.Vector3() },
   uFade: { value: 0 },
+  /** Shoulder-camera foliage fade: camera position, chest position, 1 when active (see `setFoliageFade`). */
+  uLens: { value: new THREE.Vector3() },
+  uChest: { value: new THREE.Vector3() },
+  uLensOn: { value: 0 },
+  /** The view's reach scale (per quality tier): grass and tall grass shrink away at `reach x uReach` metres. */
+  uReach: { value: 1 },
 };
+
+/** Crown fade rule (C4): leaves within 3 m of the lens, or within 1 m of the lens-to-chest segment, thin to 25 %. */
+export const FOLIAGE_FADE = { nearM: 3, nearSoftM: 0.6, segM: 1, segSoftM: 0.6, minAlpha: 0.25, minY: 0.0 } as const;
+/** CPU mirror of the shader's crown fade (the shader also skips brown trunk faces: vColor.g < vColor.r): opacity (0.25..1) of a leaf at `p` for lens `cam` and `chest`. */
+export const foliageAlpha = (p: [number, number, number], cam: [number, number, number], chest: [number, number, number]) => {
+  const F = FOLIAGE_FADE;
+  if (p[1] <= F.minY) return 1;
+  const ab = [chest[0] - cam[0], chest[1] - cam[1], chest[2] - cam[2]];
+  const ap = [p[0] - cam[0], p[1] - cam[1], p[2] - cam[2]];
+  const len2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2];
+  const t = len2 > 1e-6 ? Math.min(1, Math.max(0, (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / len2)) : 0;
+  const ds = Math.hypot(ap[0] - ab[0] * t, ap[1] - ab[1] * t, ap[2] - ab[2] * t);
+  const dc = Math.hypot(ap[0], ap[1], ap[2]);
+  const k = Math.max(1 - sstep(F.nearM, F.nearM + F.nearSoftM, dc), 1 - sstep(F.segM, F.segM + F.segSoftM, ds));
+  return 1 + (F.minAlpha - 1) * k;
+};
+
+/** How far (m, at reach scale 1) the lawn's tufts and the tall grass are drawn. */
+export const GRASS_REACH = 70;
+export const TALL_GRASS_REACH = 150;
 
 /**
  * Adds wind sway (bigger the higher above `pivot` a vertex is) and, for canopies, a dithered
  * cut-out within `uFade` metres of the player above 2.2 m, so you can always see your fighter.
  */
-const windy = (m: THREE.MeshStandardMaterial, amount: number, pivot: number, cutout: boolean, bend = 0) => {
+const windy = (m: THREE.MeshStandardMaterial, amount: number, pivot: number, cutout: boolean, bend = 0, reach = 0, lensFade = cutout) => {
+  // Blades (reach > 0: the grasses) are single triangles drawn from both sides, lit from above on either side.
+  const blades = reach > 0;
+  if (blades) m.side = THREE.DoubleSide;
   m.onBeforeCompile = (sh) => {
+    if (blades) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', ''));
     Object.assign(sh.uniforms, natureUniforms);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', `#include <common>\nuniform float uTime;\nuniform vec3 uPeople[${PEOPLE}];\nvarying vec3 vWorld;`)
+      .replace('#include <common>', `#include <common>\nuniform float uTime;\nuniform float uReach;\nuniform vec3 uPeople[${PEOPLE}];\nvarying vec3 vWorld;`)
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
@@ -191,6 +233,9 @@ const windy = (m: THREE.MeshStandardMaterial, amount: number, pivot: number, cut
         #ifdef USE_INSTANCING
           base = instanceMatrix[3].xyz;
         #endif
+        ${reach > 0 ? `// Small things shrink into the ground towards the edge of their reach (the chunks beyond it are not drawn).
+        float reach = ${reach.toFixed(1)} * uReach;
+        transformed *= smoothstep(reach, reach * 0.7, distance(base, cameraPosition));` : ''}
         float bend = max(0.0, transformed.y - ${pivot.toFixed(2)});
         float ph = base.x * 0.37 + base.z * 0.29;
         float gust = 0.6 + 0.4 * sin(uTime * 0.7 + base.x * 0.05);
@@ -217,24 +262,34 @@ const windy = (m: THREE.MeshStandardMaterial, amount: number, pivot: number, cut
         #endif
         vWorld = (modelMatrix * wp).xyz;`,
       );
+    const F = FOLIAGE_FADE;
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform vec3 uFocus;\nuniform float uFade;\nvarying vec3 vWorld;')
+      .replace('#include <common>', '#include <common>\nuniform vec3 uFocus;\nuniform float uFade;\nuniform vec3 uLens;\nuniform vec3 uChest;\nuniform float uLensOn;\nvarying vec3 vWorld;')
       .replace(
         '#include <clipping_planes_fragment>',
-        cutout
-          ? `#include <clipping_planes_fragment>
-          if (uFade > 0.0 && vWorld.y > 2.2) {
+        `#include <clipping_planes_fragment>
+${cutout ? `          if (uFade > 0.0 && vWorld.y > 2.2) {
             float d = distance(vWorld.xz, uFocus.xz) / uFade;
             if (d < 1.0) {
               vec2 q = mod(floor(gl_FragCoord.xy), 4.0);
               float bayer = mod(q.x * 2.0 + q.y * 3.0 + q.x * q.y, 4.0) / 4.0 + 0.1;
               if (bayer > d * d * 1.2) discard;
             }
-          }`
-          : '#include <clipping_planes_fragment>',
+          }` : ''}
+${lensFade ? `          if (uLensOn > 0.5 && vWorld.y > ${F.minY.toFixed(1)} && vColor.g >= vColor.r) {
+            // Camera-to-chest rule, leaf faces only (mirrors foliageAlpha in nature.ts): thin to minAlpha with a screen-space alpha hash.
+            vec3 ab = uChest - uLens;
+            vec3 ap = vWorld - uLens;
+            float tt = clamp(dot(ap, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
+            float fk = max(1.0 - smoothstep(${F.nearM.toFixed(1)}, ${(F.nearM + F.nearSoftM).toFixed(1)}, length(ap)),
+                           1.0 - smoothstep(${F.segM.toFixed(1)}, ${(F.segM + F.segSoftM).toFixed(1)}, length(ap - ab * tt)));
+            float fa = mix(1.0, ${F.minAlpha.toFixed(2)}, fk);
+            float hash = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+            if (hash > fa) discard;
+          }` : ''}`
       );
   };
-  m.customProgramCacheKey = () => `windy-${amount}-${pivot}-${cutout}`;
+  m.customProgramCacheKey = () => `windy-${amount}-${pivot}-${cutout}-${reach}-${lensFade}`;
   return m;
 };
 
@@ -280,8 +335,9 @@ const merge = (parts: THREE.BufferGeometry[]) => {
 const hsl = (h: number, s: number, l: number) => new THREE.Color().setHSL(h, s, Math.max(0, Math.min(1, l)), THREE.SRGBColorSpace);
 
 /** A lumpy blob: an icosphere pushed in and out, slightly flattened. */
-const blob = (r: number, seed: number, rough: number, flat = 0.85) => {
-  const g = new THREE.IcosahedronGeometry(r, 1);
+const blob = (r: number, seed: number, rough: number, flat = 0.85, detail = 1) => {
+  // Detail 0 keeps the corners of detail 1 (which get the same jitter), so the far version has the same silhouette.
+  const g = new THREE.IcosahedronGeometry(r, detail);
   return { g, displace: (v: THREE.Vector3) => {
     const k = 1 + jitter3(v.x, v.y, v.z, seed) * rough;
     v.multiplyScalar(k);
@@ -295,17 +351,19 @@ const blob = (r: number, seed: number, rough: number, flat = 0.85) => {
 
 interface TreeKind {
   geo: THREE.BufferGeometry;
+  /** The same tree with fewer faces, for far away and the view from the plane. */
+  far: THREE.BufferGeometry;
   /** Kinds a tile can pick from, by weight. */
   weight: number;
 }
 
-const broadleaf = (seed: number, hue: number, birch: boolean): THREE.BufferGeometry => {
+const broadleaf = (seed: number, hue: number, birch: boolean, far = false): THREE.BufferGeometry => {
   const r = rng(seed);
   const parts: THREE.BufferGeometry[] = [];
   const trunkH = 2.4 + r() * 1.2;
   const bark = birch ? (y: number) => hsl(0.1, 0.06, 0.82 - (Math.sin(y * 9) > 0.7 ? 0.55 : 0)) : () => hsl(0.07, 0.35, 0.22 + r() * 0.06);
   const lean = (r() - 0.5) * 0.25;
-  const trunk = new THREE.CylinderGeometry(birch ? 0.14 : 0.2, birch ? 0.22 : 0.34, trunkH + 1, 6, 3);
+  const trunk = new THREE.CylinderGeometry(birch ? 0.14 : 0.2, birch ? 0.22 : 0.34, trunkH + 1, far ? 5 : 6, far ? 2 : 3);
   trunk.translate(0, (trunkH + 1) / 2, 0);
   parts.push(piece(trunk, (_x, y) => bark(y), (v) => {
     v.x += lean * v.y * v.y * 0.12;
@@ -318,7 +376,9 @@ const broadleaf = (seed: number, hue: number, birch: boolean): THREE.BufferGeome
     br.rotateZ(0.8);
     br.rotateY(a);
     br.translate(lean * 0.4, trunkH - 0.2, 0);
-    parts.push(piece(br, (_x, y) => bark(y)));
+    // From afar the branches are lost in the crown.
+    if (far) br.dispose();
+    else parts.push(piece(br, (_x, y) => bark(y)));
   }
   // The crown: several lumpy blobs, darker underneath and inside, sunlit on top.
   const crownY = trunkH + 1.3;
@@ -327,7 +387,7 @@ const broadleaf = (seed: number, hue: number, birch: boolean): THREE.BufferGeome
     const rr = (birch ? 0.9 : 1.15) + r() * 0.7;
     const a = (i / n) * Math.PI * 2 + r();
     const d = i === 0 ? 0 : 0.7 + r() * 0.6;
-    const { g, displace } = blob(rr, seed * 7 + i, 0.38, 0.78);
+    const { g, displace } = blob(rr, seed * 7 + i, 0.38, 0.78, far ? 0 : 1);
     g.translate(Math.cos(a) * d + lean * 0.8, crownY + (i === 0 ? 0.6 : (r() - 0.3) * 0.9), Math.sin(a) * d);
     const top = crownY + 1.6;
     parts.push(
@@ -340,7 +400,7 @@ const broadleaf = (seed: number, hue: number, birch: boolean): THREE.BufferGeome
   return merge(parts);
 };
 
-const conifer = (seed: number): THREE.BufferGeometry => {
+const conifer = (seed: number, far = false): THREE.BufferGeometry => {
   const r = rng(seed);
   const parts: THREE.BufferGeometry[] = [];
   const trunk = new THREE.CylinderGeometry(0.14, 0.26, 2.2, 6);
@@ -351,7 +411,7 @@ const conifer = (seed: number): THREE.BufferGeometry => {
   let rad = 2.0 + r() * 0.5;
   for (let i = 0; i < tiers; i++) {
     const h = 2.1 - i * 0.18;
-    const cone = new THREE.ConeGeometry(rad, h, 8, 2);
+    const cone = new THREE.ConeGeometry(rad, h, 8, far ? 1 : 2);
     cone.translate(0, y + h / 2, 0);
     const s = seed * 13 + i;
     parts.push(
@@ -371,13 +431,39 @@ const conifer = (seed: number): THREE.BufferGeometry => {
   return merge(parts);
 };
 
+/**
+ * The tree from far away (past 90 m from the camera, and always for the outer forest): one flattened lump with no trunk
+ * (a 20-face icosahedron, the broadleaf's colour) or one 6-sided cone (12 faces, the conifer's colour). At most 20 triangles.
+ */
+const lowTree = (kind: 'broadleaf' | 'conifer', hue: number, seed: number): THREE.BufferGeometry => {
+  const g: THREE.BufferGeometry = kind === 'conifer' ? new THREE.ConeGeometry(2.3, 8.2, 6, 1) : new THREE.IcosahedronGeometry(2.6, 0);
+  if (kind === 'conifer') g.translate(0, 4.6, 0);
+  else {
+    g.scale(1.15, 0.85, 1.15);
+    g.translate(0, 5.1, 0);
+  }
+  const ng = g.toNonIndexed();
+  g.dispose();
+  ng.deleteAttribute('uv');
+  const n = ng.getAttribute('position').count;
+  const col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const y = ng.getAttribute('position').getY(i);
+    const c = kind === 'conifer' ? hsl(0.36, 0.42, 0.14 + (y / 9) * 0.12 + tileHash(Math.floor(i / 3), seed, 3) * 0.05) : hsl(hue, 0.45, 0.17 + (y / 8) * 0.14 + tileHash(Math.floor(i / 3), seed, 3) * 0.05);
+    col.set([c.r, c.g, c.b], i * 3);
+  }
+  ng.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  ng.computeVertexNormals();
+  return ng;
+};
+
 const TREE_KINDS = (): TreeKind[] => [
-  { geo: broadleaf(11, 0.27, false), weight: 3 },
-  { geo: broadleaf(23, 0.24, false), weight: 3 },
-  { geo: broadleaf(37, 0.3, false), weight: 2 },
-  { geo: broadleaf(41, 0.2, true), weight: 1 },
-  { geo: conifer(53), weight: 2 },
-  { geo: conifer(67), weight: 2 },
+  { geo: broadleaf(11, 0.27, false), far: lowTree('broadleaf', 0.27, 11), weight: 3 },
+  { geo: broadleaf(23, 0.24, false), far: lowTree('broadleaf', 0.24, 23), weight: 3 },
+  { geo: broadleaf(37, 0.3, false), far: lowTree('broadleaf', 0.3, 37), weight: 2 },
+  { geo: broadleaf(41, 0.2, true), far: lowTree('broadleaf', 0.2, 41), weight: 1 },
+  { geo: conifer(53), far: lowTree('conifer', 0.36, 53), weight: 2 },
+  { geo: conifer(67), far: lowTree('conifer', 0.36, 67), weight: 2 },
 ];
 
 const leafMaterial = () => windy(new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 }), 0.035, 2.4, true);
@@ -389,20 +475,26 @@ export interface Placement {
   seed: number;
 }
 
-const instanced = (geo: THREE.BufferGeometry, m: THREE.Material, mats: THREE.Matrix4[], shadow = true) => {
-  const im = new THREE.InstancedMesh(geo, m, Math.max(1, mats.length));
-  mats.forEach((mm, i) => im.setMatrixAt(i, mm));
-  im.count = mats.length;
-  im.castShadow = shadow;
-  im.receiveShadow = true;
-  im.frustumCulled = false;
-  return im;
+/**
+ * A set of chunked kinds (see chunks.ts) as one group: `update(view)` picks the chunks to draw for this frame's camera.
+ */
+export interface NatureSet {
+  group: THREE.Group;
+  kinds: ChunkedKind[];
+  update: (v: ChunkView) => void;
+}
+const natureSet = (kinds: ChunkedKind[]): NatureSet => {
+  const group = new THREE.Group();
+  kinds.forEach((k) => group.add(...k.meshes));
+  return { group, kinds, update: (v) => kinds.forEach((k) => k.update(v)) };
 };
+const item = (m: THREE.Matrix4, color?: THREE.Color): InstanceData => ({ x: m.elements[12], z: m.elements[14], matrix: m, color });
 
 const placeMatrix = (x: number, y: number, s: number, rot: number, sy = s) =>
   new THREE.Matrix4().compose(new THREE.Vector3(x, 0, y), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rot, 0)), new THREE.Vector3(s, sy, s));
 
-export const buildTrees = (spots: Placement[]) => {
+/** `lowOnly`: every tree is the cheap far variant (the outer forest, which is never seen close), one draw call per kind. */
+export const buildTrees = (spots: Placement[], lowOnly = false) => {
   const kinds = TREE_KINDS();
   const total = kinds.reduce((a, k) => a + k.weight, 0);
   const lists = kinds.map(() => [] as THREE.Matrix4[]);
@@ -413,24 +505,22 @@ export const buildTrees = (spots: Placement[]) => {
     const s = 0.85 + tileHash(Math.round(p.x * 10), Math.round(p.y * 10), 4) * 0.4;
     lists[i].push(placeMatrix(p.x, p.y, s, p.seed * 40, s * (0.9 + p.seed * 0.25)));
   }
-  const g = new THREE.Group();
   const m = leafMaterial();
-  kinds.forEach((k, i) => g.add(instanced(k.geo, m, lists[i])));
-  return g;
+  return natureSet(kinds.map((k, i) => (lowOnly ? chunkedInstances(k.far, m, lists[i].map((mm) => item(mm)), { height: 12, radius: 4 }) : chunkedInstances(k.geo, m, lists[i].map((mm) => item(mm)), { height: 12, radius: 4, farGeo: k.far }))));
 };
 
 // ---------------------------------------------------------------------------
 // Bushes and rocks
 // ---------------------------------------------------------------------------
 
-const bushGeo = (seed: number) => {
+const bushGeo = (seed: number, far = false) => {
   const r = rng(seed);
   const parts: THREE.BufferGeometry[] = [];
   for (let i = 0; i < 5; i++) {
     const rr = 0.55 + r() * 0.45;
     const a = r() * Math.PI * 2;
     const d = i === 0 ? 0 : 0.45 + r() * 0.35;
-    const { g, displace } = blob(rr, seed + i, 0.4, 0.75);
+    const { g, displace } = blob(rr, seed + i, 0.4, 0.75, far ? 0 : 1);
     g.translate(Math.cos(a) * d, rr * 0.55, Math.sin(a) * d);
     parts.push(piece(g, (_x, y, _z, f) => hsl(0.28 + (tileHash(f, seed, 1) - 0.5) * 0.04, 0.45, 0.16 + y * 0.12 + tileHash(f, i, seed) * 0.05), displace));
   }
@@ -438,13 +528,11 @@ const bushGeo = (seed: number) => {
 };
 
 export const buildBushes = (spots: Placement[]) => {
-  const kinds = [bushGeo(5), bushGeo(19), bushGeo(31)];
-  const lists = kinds.map(() => [] as THREE.Matrix4[]);
-  for (const p of spots) lists[Math.floor(p.seed * kinds.length)].push(placeMatrix(p.x, p.y, 1.05 + p.seed * 0.3, p.seed * 50));
-  const g = new THREE.Group();
-  const m = windy(new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 }), 0.03, 0.2, false, 0.35);
-  kinds.forEach((k, i) => g.add(instanced(k, m, lists[i])));
-  return g;
+  const seeds = [5, 19, 31];
+  const lists = seeds.map(() => [] as THREE.Matrix4[]);
+  for (const p of spots) lists[Math.floor(p.seed * seeds.length)].push(placeMatrix(p.x, p.y, 1.05 + p.seed * 0.3, p.seed * 50));
+  const m = windy(new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 }), 0.03, 0.2, false, 0.35, 0, true);
+  return natureSet(seeds.map((sd, i) => chunkedInstances(bushGeo(sd), m, lists[i].map((mm) => item(mm)), { height: 2.5, radius: 2, farGeo: bushGeo(sd, true) })));
 };
 
 const rockGeo = (seed: number) => {
@@ -475,10 +563,8 @@ export const buildRocks = (spots: Placement[]) => {
   const kinds = [rockGeo(3), rockGeo(17), rockGeo(29)];
   const lists = kinds.map(() => [] as THREE.Matrix4[]);
   for (const p of spots) lists[Math.floor(p.seed * kinds.length)].push(placeMatrix(p.x, p.y, 1.05 + p.seed * 0.2, p.seed * 60));
-  const g = new THREE.Group();
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 });
-  kinds.forEach((k, i) => g.add(instanced(k, m, lists[i])));
-  return g;
+  return natureSet(kinds.map((k, i) => chunkedInstances(k, m, lists[i].map((mm) => item(mm)), { height: 1.5, radius: 2 })));
 };
 
 // ---------------------------------------------------------------------------
@@ -494,14 +580,14 @@ const tuftGeo = () => {
     const g = new THREE.BufferGeometry();
     const tx = (r() - 0.5) * 0.12;
     const tz = (r() - 0.5) * 0.12;
-    // Both windings, so each side is a front face lit from above (no DoubleSide normal flip).
-    g.setAttribute('position', new THREE.Float32BufferAttribute([-w, 0, 0, w, 0, 0, tx, h, tz, w, 0, 0, -w, 0, 0, tx, h, tz], 3));
+    // One triangle per blade, drawn from both sides; the material keeps the normal pointing up on the back face too.
+    g.setAttribute('position', new THREE.Float32BufferAttribute([-w, 0, 0, w, 0, 0, tx, h, tz], 3));
     g.rotateY(r() * Math.PI);
     g.translate((r() - 0.5) * 0.28, 0, (r() - 0.5) * 0.28);
-    const col = new Float32Array(18);
+    const col = new Float32Array(9);
     const base = hsl(0.26, 0.45, 0.27);
     const tip = hsl(0.22 + r() * 0.04, 0.55, 0.45 + r() * 0.08);
-    col.set([base.r, base.g, base.b, base.r, base.g, base.b, tip.r, tip.g, tip.b, base.r, base.g, base.b, base.r, base.g, base.b, tip.r, tip.g, tip.b]);
+    col.set([base.r, base.g, base.b, base.r, base.g, base.b, tip.r, tip.g, tip.b]);
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     parts.push(g);
   }
@@ -535,10 +621,8 @@ export const buildGrass = () => {
       }
     }
   }
-  const m = windy(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }), 0.25, 0, false, 0.9);
-  const im = instanced(tuftGeo(), m, mats, false);
-  colors.forEach((c, i) => im.setColorAt(i, c));
-  return im;
+  const m = windy(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }), 0.25, 0, false, 0.9, GRASS_REACH);
+  return natureSet([chunkedInstances(tuftGeo(), m, mats.map((mm, i) => item(mm, colors[i])), { height: 1, radius: 1, reach: GRASS_REACH, castShadow: false, colors: true })]);
 };
 
 /**
@@ -562,10 +646,8 @@ export const buildTallGrass = () => {
       }
     }
   }
-  const m = windy(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }), 0.12, 0, false, 1.1);
-  const im = instanced(tuftGeo(), m, mats, true);
-  colors.forEach((c, i) => im.setColorAt(i, c));
-  return im;
+  const m = windy(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }), 0.12, 0, false, 1.1, TALL_GRASS_REACH);
+  return natureSet([chunkedInstances(tuftGeo(), m, mats.map((mm, i) => item(mm, colors[i])), { height: 2, radius: 1, reach: TALL_GRASS_REACH, colors: true })]);
 };
 
 /** A forest beyond the edge of the map, so the world doesn't end in a flat green plane. */
@@ -573,7 +655,9 @@ export const outerForest = (): Placement[] => {
   const out: Placement[] = [];
   const r = rng(808);
   const margin = 26;
-  for (let i = 0; i < 1400; i++) {
+  // 1400 trees round the old 176 m map; the same density round whatever the map is now.
+  const n = Math.round(1400 * (((WORLD + margin * 2) ** 2 - WORLD ** 2) / ((176 + margin * 2) ** 2 - 176 ** 2)));
+  for (let i = 0; i < n; i++) {
     const x = -margin + r() * (WORLD + margin * 2);
     const y = -margin + r() * (WORLD + margin * 2);
     if (x > 0 && y > 0 && x < WORLD && y < WORLD) continue;
@@ -594,4 +678,15 @@ export const updateNature = (time: number, focusX: number, focusY: number, fade:
   natureUniforms.uTime.value = time;
   natureUniforms.uFocus.value.set(focusX, 0, focusY);
   natureUniforms.uFade.value = fade;
+  natureUniforms.uLensOn.value = 0; // off until the shoulder camera calls setFoliageFade later in the frame
+};
+
+/**
+ * Shoulder camera only: crowns near the lens or crossing the lens-to-chest segment fade to 25 %. Uniforms are shared by
+ * all merged tree chunks, so this costs no draw calls. Call it after `updateNature` each frame (updateNature clears it).
+ */
+export const setFoliageFade = (camX: number, camY: number, camZ: number, chestX: number, chestY: number, chestZ: number) => {
+  natureUniforms.uLens.value.set(camX, camY, camZ);
+  natureUniforms.uChest.value.set(chestX, chestY, chestZ);
+  natureUniforms.uLensOn.value = 1;
 };

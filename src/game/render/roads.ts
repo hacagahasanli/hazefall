@@ -1,6 +1,21 @@
 import * as THREE from 'three';
 
-import { ROUTES, TILE } from '../sim/constants';
+import { MARKET_SQUARE, ROUTES, TILE } from '../sim/constants';
+
+import type { Route } from '../sim/constants';
+
+/**
+ * The roads as they are painted: Route 1 (and any road along the map's y axis) stops at the Market Square's north edge and starts again
+ * at its south edge, so the square's paving runs across unbroken. (The tiles, the collision and the walking speed are unchanged.)
+ */
+const PAINTED: Route[] = ROUTES.flatMap((r) => {
+  const [a, b] = r.points;
+  const q = MARKET_SQUARE;
+  const north = q.y0 * TILE;
+  const south = (q.y0 + q.h) * TILE;
+  if (r.kind !== 'asphalt' || a.x !== b.x || a.x < q.x0 * TILE || a.x > (q.x0 + q.w) * TILE || a.y >= north || b.y <= south) return [r];
+  return [{ kind: r.kind, points: [a, { x: a.x, y: north }] }, { kind: r.kind, points: [{ x: a.x, y: south }, b] }];
+});
 
 /**
  * Roads and dirt paths as real geometry, not painted into the terrain texture: the asphalt has
@@ -104,7 +119,7 @@ export const buildRoads = () => {
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
     });
   const asphaltMap = asphaltTexture();
-  for (const r of ROUTES) {
+  for (const r of PAINTED) {
     if (r.kind === 'asphalt') {
       const fr = frames(r.points, 0.5);
       const wobble = (f: Frame) => 0.92 + 0.08 * Math.sin(f.s * 0.37) * Math.sin(f.s * 0.11);
@@ -127,6 +142,21 @@ export const buildRoads = () => {
       }
       if (cur.length > 1) dash.push(cur);
       for (const d of dash) if (d.length > 1) group.add(new THREE.Mesh(strip(d, -0.07, 0.07, 0.036, () => shade(0xf2c230, 1)), flat(false)));
+    } else if (r.kind === 'rail') {
+      // A railway: a ballast bed with sleepers (dark cross strips) and two steel rails.
+      const fr = frames(r.points, 0.4);
+      group.add(new THREE.Mesh(strip(fr, -1.5, 1.5, 0.02, (f) => shade(0x7b756c, 0.9 + 0.1 * Math.sin(f.s * 1.7))), flat(false)));
+      const ties: Frame[][] = [];
+      let cur: Frame[] = [];
+      for (const f of fr) {
+        if (Math.floor(f.s / 0.8) % 2 === 0) cur.push(f);
+        else if (cur.length) {
+          ties.push(cur);
+          cur = [];
+        }
+      }
+      for (const d of ties) if (d.length > 1) group.add(new THREE.Mesh(strip(d, -1.15, 1.15, 0.03, () => shade(0x4a3a2c, 1)), flat(false)));
+      for (const off of [-0.72, 0.72]) group.add(new THREE.Mesh(strip(fr, off - 0.06, off + 0.06, 0.06, () => shade(0x9aa0ab, 1)), flat(false)));
     } else {
       const fr = frames(r.points, 0.4);
       const dirt = (f: Frame) => 0.85 + 0.15 * Math.sin(f.s * 0.9) * Math.sin(f.s * 0.23);
@@ -143,7 +173,7 @@ export const buildRoads = () => {
 
 /** Distance from (x, y) to the nearest road or path centre line, for keeping grass off them. */
 export const routeDistance = (() => {
-  const segs = ROUTES.flatMap((r) => r.points.slice(1).map((p, i) => ({ a: r.points[i], b: p, half: r.kind === 'asphalt' ? 2.9 : 1.3 })));
+  const segs = ROUTES.flatMap((r) => r.points.slice(1).map((p, i) => ({ a: r.points[i], b: p, half: r.kind === 'asphalt' ? 2.9 : r.kind === 'rail' ? 1.6 : 1.3 })));
   // A spatial hash: each tile lists the segments within a few metres of it, so a query checks a
   // handful instead of all of them (this runs for every one of the ~60k grass tufts).
   const buckets = new Map<number, typeof segs>();

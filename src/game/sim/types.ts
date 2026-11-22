@@ -2,8 +2,18 @@
 
 export type FighterId = 'hotfix' | 'legacy' | 'standup' | 'intern';
 export type WeaponKind = 'fists' | 'pistol' | 'smg' | 'shotgun' | 'rifle' | 'sniper' | 'rockets';
-export type ItemKind = 'bomb' | 'medkit';
-export type LootKind = Exclude<WeaponKind, 'fists'> | ItemKind | 'armor' | 'ammo';
+/** Heals you carry (as many as your backpack holds): a bandage is small and quick, a med kit big and slow, coffee a boost over time. */
+export type HealKind = 'bandage' | 'medkit' | 'coffee';
+export type ItemKind = 'bomb' | HealKind;
+export type LootKind = Exclude<WeaponKind, 'fists'> | ItemKind | 'armor' | 'ammo' | 'backpack';
+
+/** A gun in a slot: what it is, its rarity (0 common, 1 tuned, 2 prime), rounds in the magazine and spare rounds. */
+export interface Gun {
+  weapon: WeaponKind;
+  rarity: number;
+  mag: number;
+  ammo: number;
+}
 
 export interface Input {
   /** Movement, each -1..1 (x right, y down the map). */
@@ -29,6 +39,14 @@ export interface Input {
   scope?: boolean;
   /** Mouse aim: the aim point is where to throw (a bomb lands under the cursor). */
   throwAt?: boolean;
+  /** Draw the gun in slot 1 or 2 (0 = no change). */
+  slot?: number;
+  /** Switch to the other gun (X, the mouse wheel, the touch SWAP button). */
+  cycle?: boolean;
+  /** Heal: a med kit when badly hurt, else a bandage; coffee when there is nothing to heal. */
+  heal?: boolean;
+  /** Drink a coffee. */
+  coffee?: boolean;
   /** Aim point on the map. */
   aimX: number;
   aimY: number;
@@ -43,27 +61,52 @@ export interface Player {
   bot: boolean;
   /** Where in the drop: on the plane, falling (free fall, then under the parachute), or on the ground. */
   stage: 'drone' | 'falling' | 'ground';
-  fall: number; // seconds of the descent left; the parachute is open for the last DROP.chute seconds
+  /** In the air: height above the ground (m), descent speed (m/s, down is positive) and seconds since the canopy's pull (-1 before). */
+  alt: number;
+  vz: number;
+  canopy: number;
   x: number;
   y: number;
   /** Velocity: movement accelerates and slows down instead of snapping. */
   vx: number;
   vy: number;
+  /** On the ground: feet above the ground (m; a roof or a hop lifts them) and vertical speed (m/s, up is positive). */
+  z: number;
+  jz: number;
+  /** Climbing a ladder onto a roof: seconds left (uses vaultFrom/vaultTo for where from and to). */
+  climb: number;
   heading: number;
   hp: number;
   maxHp: number;
   armor: number;
   alive: boolean;
+  /** The gun in your hands: kind and rarity (0 common, 1 tuned, 2 prime). */
   weapon: WeaponKind;
+  rarity: number;
   /** Rounds in the magazine, and spare rounds carried for this gun. */
   mag: number;
   ammo: number;
+  /** Which of the two slots is in your hands (0 = slot 1), and the gun in the other one (null = empty). */
+  slot: number;
+  holster: Gun | null;
+  /** Seconds left of drawing the other gun (no shooting meanwhile). */
+  swapping: number;
+  /** The vest you wear (0 none, 1..3) and the backpack (0 none, 1..2). `armor` is what is left of the vest. */
+  vest: number;
+  pack: number;
+  bandages: number;
+  medkits: number;
+  coffees: number;
+  bombs: number;
+  /** Using a heal: which, and seconds left (you walk slowly and cannot shoot; firing, rolling or swapping cancels it). */
+  using: HealKind | null;
+  useLeft: number;
+  /** Coffee: seconds of its boost left (healing over time and a little faster on your feet). */
+  buzz: number;
   /** Seconds of reloading left (0 = not reloading). */
   reload: number;
   cooldown: number;
-  item: ItemKind | null;
   superCharge: number; // 0..1
-  healLeft: number;
   sinceCombat: number;
   revealed: number;
   dashTime: number;
@@ -85,9 +128,9 @@ export interface Player {
   /** Deadline damage taken in the current second, and how far into that second we are. */
   zoneSum: number;
   zoneClock: number;
-  /** Holding to throw a rocket or a bomb farther: seconds held, and what is being charged. */
+  /** Holding to throw a rocket or a bomb farther (seconds held), or aiming the slow-field canister: what is being charged. */
   charge: number;
-  charging: 'rockets' | 'bomb' | null;
+  charging: 'rockets' | 'bomb' | 'super' | null;
   kills: number;
   damage: number;
   placement: number; // 0 while alive
@@ -103,6 +146,8 @@ export interface Player {
   hits: number;
   distance: number;
   prev: Input;
+  /** The tick this fighter touched down (absent until they do). */
+  landedTick?: number;
 }
 
 export interface Projectile {
@@ -126,6 +171,8 @@ export interface Projectile {
   radius: number;
   /** A rocket flies under its own power; kept for old snapshots. */
   rocket?: boolean;
+  /** The slow-field canister (a super): bursts and leaves a slow field instead of exploding. */
+  field?: boolean;
   /**
    * Height above the ground (m). Bullets: from the shooter's height to the target's over `hd`
    * metres (so a round fired up at a parachute climbs to it). Rockets: their own height, with
@@ -143,9 +190,13 @@ export interface Loot {
   kind: LootKind;
   x: number;
   y: number;
-  /** Ammo left in a dropped weapon. */
+  /** Rounds left in a dropped weapon, points left in a vest, how many in a stack of heals. */
   ammo: number;
+  /** A gun's rarity (0 common, 1 tuned, 2 prime), a vest's tier (1..3) or a backpack's (1..2). */
+  tier?: number;
   active: boolean;
+  /** Height it lies at (dropped on a roof); absent = on the ground or a floor. */
+  z?: number;
 }
 
 export interface TempWall {
@@ -162,6 +213,8 @@ export interface Field {
   r: number;
   life: number;
   owner: number;
+  /** Height it lies at (on a roof); absent = the ground. */
+  z?: number;
 }
 
 export interface Zone {
@@ -178,6 +231,10 @@ export interface Zone {
   toY: number;
   toR: number;
   dps: number;
+  /** Seconds since anybody last damaged another player (drives the lull breaker). */
+  calm: number;
+  /** This wait was already halved by the endgame squeeze. */
+  halved: boolean;
 }
 
 export interface Drone {
@@ -189,21 +246,35 @@ export interface Drone {
 }
 
 export type GameEvent =
-  | { type: 'shot'; owner: number; x: number; y: number; angle: number; weapon: WeaponKind }
+  /** `len`: for a round that lands the tick it is fired (the sniper), how far it flew before it stopped, so the contrail ends there. */
+  | { type: 'shot'; owner: number; x: number; y: number; angle: number; weapon: WeaponKind; len?: number }
   | { type: 'hit'; target: number; by: number | null; x: number; y: number; damage: number; armor: boolean; ko: boolean }
-  | { type: 'impact'; x: number; y: number }
-  | { type: 'explosion'; x: number; y: number; radius: number }
+  /** `z`: the height it happened at (absent = the old default height). */
+  | { type: 'impact'; x: number; y: number; z?: number }
+  | { type: 'explosion'; x: number; y: number; radius: number; z?: number }
   | { type: 'rackBroken'; x: number; y: number }
   | { type: 'super'; owner: number; fighter: FighterId; x: number; y: number; angle: number }
   | { type: 'pickup'; player: number; kind: LootKind }
+  /** Drew the other gun. */
+  | { type: 'swap'; player: number; weapon: WeaponKind }
+  /** Started (`done` false) or finished (true) using a heal. */
+  | { type: 'heal'; player: number; kind: HealKind; done: boolean }
   /** Once a second while someone stands outside the Deadline: what it took that second. */
   | { type: 'zoneHurt'; player: number; x: number; y: number; amount: number }
   | { type: 'reload'; player: number; weapon: WeaponKind; x: number; y: number }
   | { type: 'dryFire'; player: number }
   | { type: 'vault'; player: number; x: number; y: number }
   | { type: 'roll'; player: number; x: number; y: number }
+  /** A jump on foot pushed off (the jump key, or Space where the mouse shoots). */
+  | { type: 'hop'; player: number; x: number; y: number }
+  /** The slow-field canister burst: the burst radius and the field's. */
+  | { type: 'slowBurst'; owner: number; x: number; y: number; burst: number; radius: number; z?: number }
   | { type: 'jump'; player: number }
-  | { type: 'land'; player: number; x: number; y: number }
+  /** The trigger was pulled in the plane, in free fall or under the canopy (nothing fires there): the hint "Land first, then shoot". */
+  | { type: 'fireBlocked'; player: number }
+  | { type: 'land'; player: number; x: number; y: number; z?: number }
+  /** Feet coming down hard on foot (off a roof's edge, from a ladder's top): a thump, not a parachute landing. */
+  | { type: 'thud'; player: number; x: number; y: number; z?: number }
   | { type: 'ko'; victim: number; by: number | null; with: string | null; x: number; y: number }
   | { type: 'zone'; phase: number; state: Zone['state'] }
   | { type: 'win'; player: number };
@@ -224,4 +295,6 @@ export interface GameState {
   zone: Zone;
   winner: number | null;
   events: GameEvent[];
+  /** A new player's first rounds: the bots go easy on the person (see `NEWBIE`). Part of the match setup, so the sim stays deterministic. */
+  rookie?: boolean;
 }

@@ -1,6 +1,6 @@
 # Last Commit Standing: design
 
-A Merge Conflict game. **Top-down battle royale for 10 players in short rounds (~4 minutes: the Deadline takes about 3 min 45 s from landing to the last circle).**
+A Nalbaki Games game. **Top-down battle royale for 20 players in short rounds (~4 minutes: the Deadline takes about 3 min 45 s from landing to the last circle).**
 The Deadline closes in, the office shrinks, and the last developer standing ships.
 
 Everything here is original: names, characters, abilities, items, art and rules. The genre (a
@@ -13,7 +13,7 @@ one of them is copied.
 Title ──▶ Pick a fighter ──▶ Lobby (online: invite / quick match · offline: vs bots)
                                    │
                                    ▼
-              Drop-in: 10 fighters spawn around the edge of the campus
+              Drop-in: 20 fighters spawn around the edge of the campus
                                    │
         ┌──────────────────────────┴──────────────────────────┐
         │  Loot: smash server racks for Power Cells,          │
@@ -58,7 +58,7 @@ and the same movement. They differ in how they fight.
 |---|---|---|---|---|
 | **Hotfix** (on-call engineer) | 3200 | fast | **Patch burst**: 3 quick shots, mid range | **Deploy**: a fast dash that damages everyone it passes through |
 | **Legacy** (senior maintainer) | 4800 | slow | **Monolith**: wide close-range spread | **Deprecated**: drops a wall segment that blocks bullets for 6 s |
-| **Standup** (scrum lead) | 2600 | normal | **Ping**: one long-range precise shot | **Timebox**: a field that slows enemies inside it for 4 s |
+| **Standup** (scrum lead) | 2600 | normal | **Ping**: one long-range precise shot | **Timebox**: a canister thrown on an arc (up to 15 m) that bursts for up to 32 damage and leaves a field that slows enemies inside it for 4 s |
 | **Intern** (first week) | 3000 | normal | **Lob**: a bomb arcing over walls | **Force push to main**: a big blast around them that knocks enemies back |
 
 ## Items
@@ -75,18 +75,18 @@ and the same movement. They differ in how they fight.
 | Space | attack; aims at the nearest visible enemy (mouse aim with T) |
 | Q | super, when charged |
 | E | use / throw an item |
-| Esc Esc | pause menu (offline) |
+| Esc or P | pause menu (offline) |
 
 ## Online
 
 Same architecture as Floor 42: one deterministic simulation shared by the browser and a
 Colyseus server that decides every hit; clients predict their own movement and reconcile.
-Rooms of 10, bots fill empty seats so a match always starts. Invite links for private matches.
+Rooms of up to 10 people, bots fill the other seats up to 20 so a match always starts. Invite links for private matches.
 
 ## Milestones
 
-1. **Prototype (now):** offline vs 9 bots, the campus, 4 fighters, the Deadline, minimap, items,
+1. **Prototype (now):** offline vs 19 bots, the campus, 4 fighters, the Deadline, minimap, items,
    results. Reis plays and picks what stays.
 2. Game feel and sound pass (our `web-game-feel` and `web-game-audio` skills).
-3. Online rooms of 10 with bot fill (our `web-multiplayer-netcode` skill).
-4. Duos (5 teams of 2), more maps, cosmetics.
+3. Online rooms of up to 10 people, bots filling the round to 20, (our `web-multiplayer-netcode` skill).
+4. Duos (10 teams of 2), more maps, cosmetics.

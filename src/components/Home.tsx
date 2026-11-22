@@ -3,9 +3,9 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 
-import { DISTRICTS, FIGHTERS, WORLD } from '~/game/sim/constants';
+import { DISTRICTS, FIGHTERS, PLAYERS, WORLD } from '~/game/sim/constants';
 
-import { SupportCard } from '~/components/SupportLink';
+import { Support } from '~/components/SupportLink';
 
 import type { FighterId } from '~/game/sim/types';
 
@@ -168,33 +168,21 @@ export const Home = () => {
       <div className="pointer-events-none fixed inset-0 bg-ink-deep/55 lg:hidden" />
 
       <div className="relative mx-auto flex min-h-[100dvh] max-w-7xl flex-col justify-between gap-10 px-5 pb-8 pt-8 sm:px-8">
-        <header className="flex items-center justify-between text-xs font-semibold tracking-[0.3em] text-blue">
-          <span>
-            <span className="text-green">&lt;&lt;&lt;&lt;</span> MERGE CONFLICT PRESENTS <span className="text-orange">&gt;&gt;&gt;&gt;</span>
-          </span>
-          <span className="hidden items-center gap-2 text-cream/60 sm:flex">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-green" /> BATTLEGROUND · 10 PLAYERS
-          </span>
-        </header>
 
         <section className="grid items-center gap-10 lg:grid-cols-[1fr_auto]">
           <div className="flex max-w-xl flex-col gap-6">
-            <div className="flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-widest">
-              <span className="panel-cut bg-orange/90 px-3 py-1 text-ink-deep">Season 1 · The Deadline</span>
-              <span className="panel-cut bg-cream/10 px-3 py-1 text-cream/80">Free · in your browser</span>
-            </div>
             <h1 className="font-display text-6xl leading-[0.95] drop-shadow-[0_4px_24px_rgba(0,0,0,0.6)] sm:text-8xl">
               LAST COMMIT
               <br />
               <span className="text-gold">STANDING</span>
             </h1>
             <p className="max-w-md text-lg text-cream/85">
-              Ten developers jump from the cargo plane over the countryside. Land, loot a gun, take cover, and stay inside the
+              Twenty developers jump from the cargo plane over the countryside. Land, loot a gun, take cover, and stay inside the
               Deadline as it closes in. The last commit standing ships.
             </p>
             <div className="flex flex-wrap gap-6 text-sm">
               {[
-                ['10', 'players drop'],
+                [String(PLAYERS), 'players drop'],
                 ['176 m', 'battleground'],
                 ['~4 min', 'to the last circle'],
                 ['1', 'winner'],
@@ -217,7 +205,7 @@ export const Home = () => {
                 How to play
               </a>
             </div>
-            <SupportCard />
+            <Support variant="menu" />
           </div>
 
           <aside className="panel-cut hidden w-[320px] flex-col gap-2 bg-ink-deep/80 p-3 backdrop-blur lg:flex">
@@ -272,7 +260,7 @@ export const Home = () => {
 
         <section id="how" className="grid gap-3 sm:grid-cols-3">
           {[
-            ['01', 'Drop', 'The plane crosses the map. Jump when you like, free-fall through the clouds, steer your parachute down. You land with a pistol and one magazine.'],
+            ['01', 'Drop', 'The plane crosses the map. Jump when you like, free-fall through the clouds, steer your parachute down. You land with a pistol and two spare magazines. Shooting starts once you are on the ground.'],
             ['02', 'Loot', 'Guns, armor, ammo, med kits and bombs lie in the houses, barns and the yards. Walk over them or press F. Every gun sounds and kicks like itself.'],
             ['03', 'Survive', 'The Deadline closes in phase by phase and hurts more each time. Hide in tall grass, lean round corners with Q and E, vault fences. Be the last one.'],
           ].map(([n, title, text]) => (

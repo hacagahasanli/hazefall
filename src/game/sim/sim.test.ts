@@ -1,5 +1,5 @@
 import { createBot } from './bot';
-import { BUILDINGS, DROP, DT, FIGHTERS, ITEMS, MAP, PLAYER_RADIUS, RIVER, riverCentre, SHAPES, SIZE, TILE, treeSpot, WEAPONS, WORLD, ZONE_PHASES } from './constants';
+import { BUILDINGS, DROP, DT, FIGHTERS, ITEMS, MAP, PLAYER_RADIUS, RIVER, riverCentre, SHAPES, SIZE, SWIM, TILE, treeSpot, WEAPONS, WORLD, ZONE_EDGE_SPEED, ZONE_PHASES, ZONE_RULES, ZONE_START_RADIUS } from './constants';
 import { canSee, circleBlocked, createGame, falloffDamage, hitPoint, inPlant, inWater, lootUnder, solidAt, step } from './step';
 import { NO_INPUT } from './types';
 
@@ -164,12 +164,12 @@ describe('the drop', () => {
 });
 
 describe('loot and fighting', () => {
-  it('you jump with a pistol and one magazine; with it empty, walking over a gun picks it up', () => {
+  it('you jump with a pistol, a magazine and two spare; with it empty, walking over a gun picks it up', () => {
     const s = landed();
     clearAround(s);
     const p = s.players[0];
     expect(p.weapon).toBe('pistol');
-    expect(p.mag + p.ammo).toBe(12);
+    expect(p.mag + p.ammo).toBe(36);
     Object.assign(p, { mag: 0, ammo: 0 });
     s.loot.push({ id: 999, kind: 'rifle', x: p.x + 0.3, y: p.y, ammo: WEAPONS.rifle.ammo, active: true });
     step(s, idle());
@@ -178,7 +178,7 @@ describe('loot and fighting', () => {
 
   it('bullets have no range limit, they just hit softer far away; about three hits kill', () => {
     expect(falloffDamage('rifle', 30, 5)).toBe(30);
-    expect(falloffDamage('rifle', 30, 80)).toBeCloseTo(15);
+    expect(falloffDamage('rifle', 30, 80)).toBeCloseTo(30 * WEAPONS.rifle.falloff.min);
     expect(falloffDamage('pistol', 34, 25)).toBeLessThan(34);
     expect(Math.ceil(100 / WEAPONS.pistol.damage)).toBe(3);
     expect(WEAPONS.rifle.range).toBeGreaterThan(100);
@@ -224,7 +224,7 @@ describe('loot and fighting', () => {
     const s = landed();
     clearAround(s);
     const p = s.players[0];
-    Object.assign(p, { item: 'bomb', heading: 0, x: OPEN.x, y: OPEN.y });
+    Object.assign(p, { bombs: 1, heading: 0, x: OPEN.x, y: OPEN.y });
     const hold = idle();
     hold[0] = { ...NO_INPUT, use: true, throwAt: true, aimX: p.x + 25, aimY: p.y };
     for (let i = 0; i < 3; i++) step(s, hold);
@@ -253,11 +253,11 @@ describe('loot and fighting', () => {
     expect(Math.abs(h.x - p.x)).toBeLessThan(0.01);
   });
 
-  it('E swaps your gun for the one on the floor and drops yours', () => {
+  it('with both slots full, F swaps the gun in your hands for the one on the floor and drops yours', () => {
     const s = landed();
     clearAround(s);
     const p = s.players[0];
-    Object.assign(p, { weapon: 'smg', mag: 30, ammo: 10 });
+    Object.assign(p, { weapon: 'smg', mag: 30, ammo: 10, holster: { weapon: 'pistol', rarity: 0, mag: 12, ammo: 0 } });
     s.loot.push({ id: 999, kind: 'sniper', x: p.x, y: p.y, ammo: 8, active: true });
     step(s, idle());
     expect(p.weapon).toBe('smg');
@@ -386,12 +386,13 @@ describe('moving among things', () => {
 });
 
 describe('the river', () => {
-  it('crosses the whole map, twelve metres wide, with three bridges you walk over on a deck', () => {
+  it('crosses the whole map, twelve metres wide, with five crossings (footbridge, two bridges, the road bridge, the weir) you walk over on a deck', () => {
     for (let x = 2; x < SIZE - 2; x++) {
       const col = MAP.map((row) => row[x]);
       const wet = col.filter((t) => t === 'o' || t === 'd').length;
       expect(wet).toBeGreaterThanOrEqual(6);
     }
+    expect(RIVER.bridges).toHaveLength(5);
     for (const [bx, bw] of RIVER.bridges) {
       for (let x = bx; x < bx + bw; x++) expect(MAP.some((row) => row[x] === 'o')).toBe(false); // dry all the way over
       const c = Math.round(riverCentre(bx));
@@ -404,7 +405,7 @@ describe('the river', () => {
     const p = s.players[0];
     const x = 40;
     const c = riverCentre(x / TILE) * TILE;
-    Object.assign(p, { stage: 'ground', fall: 0, x, y: c - RIVER.half * TILE - 1.5, vx: 0, vy: 0, cooldown: 0 });
+    Object.assign(p, { stage: 'ground', alt: 0, x, y: c - RIVER.half * TILE - 1.5, vx: 0, vy: 0, cooldown: 0 });
     s.players.slice(1).forEach((o) => Object.assign(o, { x: 160, y: 20 }));
     const inputs = idle();
     inputs[0] = { ...NO_INPUT, my: 1, fire: true, aimX: p.x, aimY: p.y - 20 };
@@ -435,19 +436,30 @@ describe('the drop', () => {
     const ty = MAP.findIndex((row) => row.includes('b'));
     const tx = MAP[ty].indexOf('b');
     Object.assign(a, { stage: 'ground', x: tx * TILE + 12, y: ty * TILE + 1 });
-    Object.assign(b, { stage: 'falling', fall: DROP.chute - 1, x: tx * TILE + 1, y: ty * TILE + 1 });
+    Object.assign(b, { stage: 'falling', alt: 15, canopy: 2, x: tx * TILE + 1, y: ty * TILE + 1 });
     expect(canSee(s, a, b)).toBe(true);
   });
 
-  it('under the parachute you can shoot and be shot', () => {
+  it('under the parachute you cannot shoot, but someone on the ground can shoot you', () => {
     const s = createGame('hotfix', 1);
     const [a, b] = s.players;
-    for (const p of [a, b]) Object.assign(p, { stage: 'falling', fall: DROP.chute - 1 });
-    // Over the open river, so nothing stands between them.
+    for (const p of [a, b]) Object.assign(p, { stage: 'falling', alt: 15, canopy: 2 });
+    // Two in the air: the trigger does nothing and spends nothing.
     Object.assign(a, { x: 40, y: 89, cooldown: 0 });
     Object.assign(b, { x: 46, y: 89 });
-    s.players.slice(2).forEach((p) => Object.assign(p, { stage: 'falling', fall: DROP.chute + 2, x: 10, y: 10 }));
+    s.players.slice(2).forEach((p) => Object.assign(p, { stage: 'falling', alt: 60, canopy: -1, x: 10, y: 10 }));
     s.drone.t = 1;
+    const air = idle();
+    air[0] = { ...NO_INPUT, fire: true, aimX: b.x, aimY: b.y };
+    for (let i = 0; i < 30; i++) step(s, air);
+    expect(b.hp).toBe(b.maxHp);
+    expect(a.mag).toBe(12);
+    // Now the shooter is down on the ground.
+    // Over the open river, so nothing stands between them.
+    const ty = MAP.findIndex((row) => row.includes('....'));
+    const tx = MAP[ty].indexOf('....');
+    Object.assign(a, { stage: 'ground', alt: 0, canopy: -1, x: tx * TILE + 1, y: ty * TILE + 1, cooldown: 0 });
+    Object.assign(b, { alt: 1, x: tx * TILE + 6, y: ty * TILE + 1 });
     const inputs = idle();
     inputs[0] = { ...NO_INPUT, fire: true, aimX: b.x, aimY: b.y };
     const hp = b.hp;
@@ -471,11 +483,126 @@ describe('the Deadline', () => {
     expect(hurtOutside).toBe(true);
     expect(s.phase).toBe('over');
     expect(s.winner).not.toBeNull();
+  }, 30000);
+
+  const run = Math.min(...Object.values(FIGHTERS).map((f) => f.speed));
+
+  it('the edge never moves faster than half running speed, nor faster than swimming after the first circle', () => {
+    expect(ZONE_EDGE_SPEED).toBeLessThanOrEqual(run / 2);
+    expect(ZONE_EDGE_SPEED).toBeLessThanOrEqual(run * SWIM.speed);
+    let r = ZONE_START_RADIUS;
+    ZONE_PHASES.forEach((def) => {
+      // The next centre is picked up to 0.6 x the radius change away, so the far edge can move by up to 1.6 x that:
+      // the table's own shrink times already keep it under the cap, so none of them is stretched.
+      const edge = ((r - def.radius) * 1.6) / def.shrink;
+      expect(edge).toBeLessThanOrEqual(ZONE_EDGE_SPEED);
+      r = def.radius;
+    });
+  });
+
+  it('from anywhere in the circle the next one is at most a third of the time away, even with waits cut short', () => {
+    let r = Math.min(ZONE_START_RADIUS, Math.hypot(WORLD / 2, WORLD / 2));
+    ZONE_PHASES.forEach((def, i) => {
+      const worstRun = r + (r - def.radius) * 0.6 - def.radius;
+      // Worst case: the lull breaker (not in the first phase) and then the endgame squeeze both cut this wait.
+      const wait = (i > 0 ? Math.min(def.wait, ZONE_RULES.lullWait) : def.wait) / 2;
+      expect(worstRun / run).toBeLessThanOrEqual((wait + def.shrink) / 3);
+      r = def.radius;
+    });
+  });
+
+  it('hurts gently at first and fatally at the end: never less from one phase to the next', () => {
+    const full = 100 + 100;
+    expect(full / ZONE_PHASES[0].dps).toBeGreaterThan(45);
+    expect(full / ZONE_PHASES[ZONE_PHASES.length - 1].dps).toBeLessThanOrEqual(6);
+    ZONE_PHASES.slice(1).forEach((def, i) => expect(def.dps).toBeGreaterThan(ZONE_PHASES[i].dps));
+  });
+
+  it('a quiet stretch never shortens the first wait, but cuts a later wait to 10 s; a hit ends the quiet', () => {
+    const s = landed();
+    const start = s.tick;
+    while (s.zone.state === 'wait') step(s, idle());
+    // Nobody has fought for the whole first wait, and it still ran its full length.
+    expect((s.tick - start) * DT).toBeCloseTo(ZONE_PHASES[0].wait, 0);
+    while (s.zone.phase === 0) step(s, idle());
+    expect(s.zone.state).toBe('wait');
+    step(s, idle());
+    expect(s.zone.timer).toBeLessThanOrEqual(ZONE_RULES.lullWait);
+
+    const t = landed(2);
+    clearAround(t);
+    place(t, 0, OPEN.x, OPEN.y);
+    place(t, 1, OPEN.x + 3, OPEN.y);
+    expect(t.zone.calm).toBeGreaterThan(0);
+    for (let i = 0; i < 60 && !t.events.some((e) => e.type === 'hit'); i++) {
+      const inputs = idle();
+      inputs[0] = { ...NO_INPUT, fire: true, aimX: OPEN.x + 3, aimY: OPEN.y };
+      step(t, inputs);
+    }
+    expect(t.zone.calm).toBeLessThan(DT * 1.5);
+  }, 30000);
+
+  it('with five left, every wait from then on is half as long', () => {
+    const s = landed();
+    step(s, idle());
+    const before = s.zone.timer;
+    s.players.slice(ZONE_RULES.squeezeAlive).forEach((p) => (p.alive = false));
+    step(s, idle());
+    expect(s.zone.timer).toBeCloseTo((before - DT) / 2, 3);
+    while (s.zone.phase === 0) step(s, idle());
+    step(s, idle());
+    // The next wait starts halved (and the quiet since landing has cut it to 10 s first).
+    expect(s.zone.timer).toBeLessThanOrEqual(ZONE_RULES.lullWait / 2);
+  });
+});
+
+describe('the endgame rush', () => {
+  const rush = ZONE_RULES.rush[ZONE_RULES.rush.length - 1];
+  const run = Math.min(...Object.values(FIGHTERS).map((f) => f.speed));
+
+  it('with the last few left, an early Deadline skips to a small circle near the middle of the old one', () => {
+    const s = landed();
+    for (let i = 0; i < 60 * (ZONE_PHASES[0].wait + 20); i++) step(s, idle());
+    expect(s.zone.phase).toBe(0);
+    expect(s.zone.state).toBe('shrink');
+    const { cx, cy, r } = s.zone;
+    s.players.slice(rush.alive).forEach((p) => (p.alive = false));
+    step(s, idle());
+    expect(s.zone.phase).toBe(rush.phase);
+    expect(s.zone.state).toBe('wait');
+    expect(s.zone.timer).toBeLessThanOrEqual(ZONE_RULES.rushWait);
+    expect(s.zone.toR).toBe(ZONE_PHASES[rush.phase].radius);
+    expect(Math.hypot(s.zone.toX - cx, s.zone.toY - cy)).toBeLessThanOrEqual((r - s.zone.toR) * ZONE_RULES.rushRoom + 1e-6);
+    // It stops where it was while the new circle shows.
+    expect(s.zone.r).toBeCloseTo(r, 0);
+  }, 30000);
+
+  it('the rushed shrink is fair: the edge stays under the cap and the new circle is in reach from anywhere', () => {
+    const s = landed();
+    for (let i = 0; i < 60 * 30; i++) step(s, idle());
+    s.players.slice(rush.alive).forEach((p) => (p.alive = false));
+    step(s, idle());
+    const { cx, cy, r, toX, toY, toR } = s.zone;
+    let time = s.zone.timer;
+    let fastest = 0;
+    while (s.zone.phase === rush.phase && s.phase === 'play') {
+      const before = { cx: s.zone.cx, cy: s.zone.cy, r: s.zone.r };
+      // Nobody here moves, so keep the three standing outside alive while the shrink is timed.
+      s.players.forEach((p) => (p.hp = p.maxHp));
+      step(s, idle());
+      if (s.zone.phase !== rush.phase) break;
+      time += DT;
+      fastest = Math.max(fastest, (before.r - s.zone.r + Math.hypot(s.zone.cx - before.cx, s.zone.cy - before.cy)) / DT);
+    }
+    expect(fastest).toBeLessThanOrEqual(ZONE_EDGE_SPEED + 1e-6);
+    // From the far side of the circle (inside the map) to the new one: at most a third of the time at running speed.
+    const far = Math.min(r, Math.hypot(WORLD / 2, WORLD / 2)) + Math.hypot(toX - cx, toY - cy) - toR;
+    expect(far / run).toBeLessThanOrEqual(time / 3 + DT);
   });
 });
 
 describe('bots', () => {
-  it('ten bots play a full round to a single winner', () => {
+  it('twenty bots play a full round to a single winner', () => {
     const s = createGame('hotfix', 11);
     const bots = s.players.map((p) => createBot(p.id, 100 + p.id));
     let shots = 0;
@@ -487,6 +614,65 @@ describe('bots', () => {
     expect(shots).toBeGreaterThan(20);
     expect(s.players.filter((p) => p.placement === 1)).toHaveLength(1);
     expect(s.players.some((p) => p.weapon !== 'fists' || p.kills > 0)).toBe(true);
-    expect(WORLD).toBe(176);
+    expect(WORLD).toBe(240);
+  }, 30000);
+});
+
+describe('the sniper lands the tick it is fired', () => {
+  const duel = (dist: number, hp = 50) => {
+    const s = landed(3);
+    clearAround(s);
+    const [a, b] = s.players;
+    place(s, 0, OPEN.x, OPEN.y);
+    place(s, 1, OPEN.x + dist, OPEN.y);
+    Object.assign(a, { weapon: 'sniper', rarity: 0, mag: 5, ammo: 10, cooldown: 0, swapping: 0, reload: 0 });
+    Object.assign(b, { hp, armor: 0 });
+    const inputs = idle();
+    inputs[0] = { ...NO_INPUT, fire: true, aimX: b.x, aimY: b.y };
+    step(s, inputs);
+    return { s, a, b };
+  };
+
+  it('a hit, the damage and the kill all come on the frame of the shot, not a second later', () => {
+    const { s, b } = duel(50);
+    expect(b.alive).toBe(false);
+    const kinds = s.events.map((e) => e.type);
+    expect(kinds).toContain('shot');
+    expect(kinds).toContain('hit');
+    expect(kinds.indexOf('shot')).toBeLessThan(kinds.indexOf('hit'));
+    expect(s.projectiles.filter((p) => p.kind === 'bullet')).toHaveLength(0);
+  });
+
+  it('the shot says where the round stopped: at the body, not through it', () => {
+    const { s } = duel(50);
+    const shot = s.events.find((e) => e.type === 'shot');
+    expect(shot?.type === 'shot' && shot.len).toBeGreaterThan(48);
+    expect(shot?.type === 'shot' && shot.len).toBeLessThan(50.5);
+  });
+
+  it('a round fired at nobody still reports how far it went', () => {
+    const t = landed(3);
+    clearAround(t);
+    place(t, 0, OPEN.x, OPEN.y);
+    Object.assign(t.players[0], { weapon: 'sniper', rarity: 0, mag: 5, ammo: 10, cooldown: 0, swapping: 0, reload: 0 });
+    const inputs = idle();
+    inputs[0] = { ...NO_INPUT, fire: true, aimX: OPEN.x + 10, aimY: OPEN.y };
+    step(t, inputs);
+    const shot = t.events.find((e) => e.type === 'shot');
+    expect(t.events.some((e) => e.type === 'hit')).toBe(false);
+    expect(shot?.type === 'shot' && shot.len).toBeGreaterThan(20);
+  });
+
+  it('the other guns still fly: a rifle round is in the air after the shot', () => {
+    const s = landed(3);
+    clearAround(s);
+    place(s, 0, OPEN.x, OPEN.y);
+    Object.assign(s.players[0], { weapon: 'rifle', rarity: 0, mag: 5, ammo: 10, cooldown: 0, swapping: 0, reload: 0 });
+    const inputs = idle();
+    inputs[0] = { ...NO_INPUT, fire: true, aimX: OPEN.x + 10, aimY: OPEN.y };
+    step(s, inputs);
+    expect(s.projectiles.filter((p) => p.kind === 'bullet')).toHaveLength(1);
+    const shot = s.events.find((e) => e.type === 'shot');
+    expect(shot?.type === 'shot' && shot.len).toBeUndefined();
   });
 });

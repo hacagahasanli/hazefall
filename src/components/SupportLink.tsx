@@ -1,33 +1,32 @@
-import { SUPPORT_URL } from '~/lib/links';
+'use client';
 
-/** A small, quiet link to the studio's donation page. Opens in a new tab; never shown during play. */
-export const SupportLink = ({ className = '' }: { className?: string }) => (
+import { SUPPORT_URL } from '~/lib/links';
+import { track } from '~/lib/telemetry';
+
+/*
+ * Site only: the portal build renders PortalGame from portal/main.tsx and never imports this file, and Match only shows
+ * the `support` it is given (the lobby passes SupportLink, the portal passes nothing), so no outbound link reaches
+ * dist/portal (scripts/portal-report.mjs checks it).
+ *
+ * Support is one small "Support us" button that opens the studio's support page (nalbakigames.com/support) in a new tab.
+ */
+
+type Variant = 'menu' | 'pause' | 'results';
+
+const VARIANT_WHERE: Record<Variant, string> = { menu: 'menu', results: 'results', pause: 'pause' };
+
+export const Support = ({ variant, className = '' }: { variant: Variant; className?: string }) => (
   <a
     href={SUPPORT_URL}
     target="_blank"
     rel="noopener"
-    className={`text-xs font-semibold uppercase tracking-widest text-cream/60 underline-offset-4 transition hover:text-gold hover:underline focus-visible:text-gold focus-visible:underline ${className}`}
+    onClick={() => track('support_click', { where: VARIANT_WHERE[variant] })}
+    className={`inline-flex items-center gap-2 self-start rounded-full border-[1.5px] border-[#FF4D2E] bg-black/50 px-4 py-2 text-sm font-bold text-[#F2EFE8] backdrop-blur transition hover:-translate-y-0.5 hover:bg-[#FF4D2E]/20 hover:shadow-[0_6px_22px_-6px_rgba(255,77,46,0.7)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F2EFE8] motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${className}`}
   >
-    ☕ Support the studio
+    <span aria-hidden="true" className="text-[#FF4D2E]">&hearts;</span> Support us
   </a>
 );
 
-/** The home-page version: a small warm card under the Play button. Free forever, no ads; the button opens the studio's donate page. */
-export const SupportCard = () => (
-  <div className="panel-cut group mt-1 flex max-w-md items-center gap-3 border border-gold/20 bg-ink/70 p-3 backdrop-blur-sm transition hover:border-gold/50 sm:gap-4 sm:p-4">
-    {/* The studio mark: a small static image, so a plain <img> with a fixed size is right (no layout shift). */}
-    {/* eslint-disable-next-line @next/next/no-img-element */}
-    <img src="/studio-logo.png" alt="" width={56} height={56} className="h-12 w-12 shrink-0 transition duration-300 group-hover:-rotate-6 group-hover:scale-110 sm:h-14 sm:w-14" />
-    <div className="flex min-w-0 flex-1 flex-col items-start gap-2">
-      <p className="text-sm leading-snug text-cream/80">Free forever, no ads. If this game made your day, buy the studio a coffee ☕</p>
-      <a
-        href={SUPPORT_URL}
-        target="_blank"
-        rel="noopener"
-        className="panel-cut bg-gold/90 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-ink-deep transition hover:-translate-y-0.5 hover:bg-gold hover:shadow-[0_4px_18px_rgba(255,210,63,0.35)] focus-visible:-translate-y-0.5 focus-visible:bg-gold motion-reduce:transition-none motion-reduce:hover:translate-y-0"
-      >
-        ☕ Support the studio
-      </a>
-    </div>
-  </div>
-);
+/** What Match is handed by the lobby and the web build: `pill` in the pause menu (one line), `card` on the round report, `menu` on the main menu. */
+export const SupportLink = ({ variant = 'pill' }: { variant?: 'pill' | 'card' | 'menu' }) =>
+  variant === 'card' ? <Support variant="results" /> : variant === 'menu' ? <Support variant="menu" /> : <Support variant="pause" />;

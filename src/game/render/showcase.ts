@@ -1,15 +1,20 @@
 import * as THREE from 'three';
 
 import { DROP, FIGHTERS, WORLD } from '../sim/constants';
+import { isTouchUi } from '../../lib/device';
 import { createGame } from '../sim/step';
 
 import { buildRig, poseChute, poseTopDown } from './characters';
-import { buildChute, HARNESS_BACK } from './chute';
+import { buildChute, chuteQuaternion, hangChute, newChuteMotion } from './chute';
 import { buildGun } from './guns';
 import { buildPlane } from './plane';
 import { buildProps } from './props';
 import { buildWorld } from './world';
 
+import type { Look } from '../cosmetics';
+import { phoneRatio, sceneTier } from './quality';
+
+import type { Tier } from './quality';
 import type { FighterId } from '../sim/types';
 
 /**
@@ -17,10 +22,19 @@ import type { FighterId } from '../sim/types';
  * over the town, the cargo plane crossing overhead, the four fighters drifting down under their
  * parachutes, and the blue Deadline standing round the map.
  */
-export const startShowcase = (canvas: HTMLCanvasElement, onReady: () => void) => {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-  renderer.shadowMap.enabled = true;
+export const startShowcase = (canvas: HTMLCanvasElement, onReady: () => void, opts: { tier?: Tier; still?: boolean } = {}) => {
+  // Kept cheap behind a menu: on the low tier a lighter picture without shadows at half the frame rate; `still` (reduced
+  // motion) draws a few frames and then holds the picture.
+  const low = opts.tier === 'low';
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: !low, powerPreference: 'high-performance' });
+  // Phones: a fixed pixel budget (phoneRatio), so the backdrop is sharp; elsewhere the low tier draws lighter still.
+  const coarse = isTouchUi();
+  renderer.setPixelRatio(
+    coarse
+      ? phoneRatio(sceneTier(opts.tier ?? 'medium'), canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, window.devicePixelRatio)
+      : low ? Math.min(window.devicePixelRatio, 1) * 0.75 : Math.min(window.devicePixelRatio, opts.tier === 'medium' ? 1.25 : 1.5),
+  );
+  renderer.shadowMap.enabled = !low;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.1;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -62,7 +76,7 @@ export const startShowcase = (canvas: HTMLCanvasElement, onReady: () => void) =>
     const chute = buildChute(FIGHTERS[id].color);
     scene.add(rig.root, chute);
     // Spread over the right of the view, clear of the title on the left.
-    return { rig, chute, i, offset: [2, 11, 20, 29][i], depth: [6, -4, 10, -1][i], phase: i * 0.27 };
+    return { rig, chute, motion: newChuteMotion(0), q: new THREE.Quaternion(), i, offset: [2, 11, 20, 29][i], depth: [6, -4, 10, -1][i], phase: i * 0.27 };
   });
 
   const resize = () => {
@@ -80,7 +94,14 @@ export const startShowcase = (canvas: HTMLCanvasElement, onReady: () => void) =>
   let time = 0;
   let ready = false;
   const look = new THREE.Vector3();
+  let frames = 0;
   const frame = (now: number) => {
+    frames++;
+    if (opts.still && frames > 20) return;
+    if (low && frames % 2 === 1 && ready) {
+      raf = requestAnimationFrame(frame);
+      return;
+    }
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     time += dt;
@@ -104,12 +125,15 @@ export const startShowcase = (canvas: HTMLCanvasElement, onReady: () => void) =>
       const h = 44 - f * 32;
       const x = look.x + j.offset + Math.sin(time * 0.4 + j.i) * 1.5;
       const z = look.z + 24 + j.depth;
-      poseChute(j.rig, { dt, time, seed: j.i, steerX: Math.sin(time * 0.4 + j.i) * 2, steerZ: 0, shooting: false });
+      const turn = Math.sin(time * 0.4 + j.i) * 0.5;
       j.rig.root.position.set(x, h, z);
       j.rig.root.rotation.y = Math.PI + Math.sin(time * 0.3 + j.i) * 0.4; // facing the camera, turning a little
+      j.motion.yaw = Math.PI / 2 - j.rig.root.rotation.y;
+      j.motion.bank = turn * 0.3;
+      j.motion.pitch = Math.sin(time * 0.9 + j.i) * 0.03;
+      poseChute(j.rig, { dt, time, seed: j.i, canopy: 9, brakeL: Math.max(0, turn), brakeR: Math.max(0, -turn), turn, bank: j.motion.bank, pitch: j.motion.pitch, flare: 0, shooting: false });
       j.rig.root.updateMatrixWorld(true);
-      j.rig.root.localToWorld(j.chute.position.set(0, j.rig.shoulderL.y, HARNESS_BACK));
-      j.chute.rotation.set(0, j.rig.root.rotation.y, Math.sin(time * 1.1 + j.i) * 0.06);
+      hangChute(j.chute, j.rig, chuteQuaternion(j.motion, j.q), { canopy: 9, time, seed: j.i, brakeL: Math.max(0, turn), brakeR: Math.max(0, -turn) });
     }
     world.update(state, -999, -999);
     props.update(time, dt);
@@ -142,7 +166,7 @@ export const startShowcase = (canvas: HTMLCanvasElement, onReady: () => void) =>
  * Portraits of the four fighters for the menu cards: each one standing ready with a rifle,
  * rendered once offscreen to an image.
  */
-export const renderPortraits = (): Record<FighterId, string> => {
+export const renderPortraits = (look?: Look): Record<FighterId, string> => {
   const W = 360;
   const H = 440;
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
@@ -162,7 +186,7 @@ export const renderPortraits = (): Record<FighterId, string> => {
     const rim = new THREE.DirectionalLight(new THREE.Color(FIGHTERS[id].color), 2.2);
     rim.position.set(-3, 2, -2);
     scene.add(key, rim);
-    const rig = buildRig(id);
+    const rig = buildRig(id, look?.outfit[id]);
     scene.add(rig.root);
     rig.vest.visible = true;
     // Let the pose settle (it eases into place).
@@ -174,7 +198,7 @@ export const renderPortraits = (): Record<FighterId, string> => {
     }
     rig.root.rotation.y = 0.35;
     rig.root.updateMatrixWorld(true);
-    const gun = buildGun('rifle').root;
+    const gun = buildGun('rifle', look?.finish).root;
     rig.hand.getWorldPosition(gun.position);
     rig.hand.getWorldQuaternion(gun.quaternion);
     scene.add(gun);

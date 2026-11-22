@@ -1,8 +1,13 @@
 import * as THREE from 'three';
 
-import { riserGrip } from './chute';
+import { skinRig } from './merge';
+
+import { BODY_ROLL, BODY_ROLL_MAX, HARNESS_BACK, swingSpring, toggleGrip } from './chute';
 import { mat, mesh, PALETTE } from './palette';
 
+import { GLOW_MATERIAL, GOLD_MATERIAL, outfitParts } from '../cosmetics';
+
+import type { OutfitParts, PartColor } from '../cosmetics';
 import type { FighterId as CharacterId, WeaponKind } from '../sim/types';
 
 /**
@@ -40,8 +45,10 @@ export interface Rig {
   /** Where the hips and legs face on the map (they lag the upper body and follow the run). */
   hipYaw: number;
   hipInit: boolean;
-  /** The pendulum swing under the parachute (angular velocities). */
+  /** The body's tilt springs in the air (angular velocities): the free-fall attitude, then the swing under the canopy. */
   chuteSwing: { vx: number; vz: number };
+  /** In the air, where the body pivots: 0 at the hips (free fall) .. 1 at the harness (hanging from the canopy). */
+  airPivot: number;
 }
 
 interface Spec {
@@ -57,7 +64,7 @@ interface Spec {
   top: number;
   pants: number;
   shoes: number;
-  extras: (ctx: { head: THREE.Group; torso: THREE.Group; spec: Spec }) => void;
+  extras: (ctx: { head: THREE.Group; torso: THREE.Group; spec: Spec; c: (part: string) => THREE.Material }) => void;
 }
 
 const ico = (r: number, detail = 1) => new THREE.IcosahedronGeometry(r, detail);
@@ -86,39 +93,39 @@ const SPECS: Record<CharacterId, Spec> = {
     top: PALETTE.orange,
     pants: PALETTE.ink,
     shoes: PALETTE.white,
-    extras: ({ head, torso, spec }) => {
+    extras: ({ head, torso, spec, c }) => {
       // Hood: a shell open at the face.
       const hood = mesh(
         new THREE.SphereGeometry(spec.headR * 1.32, 8, 6, Math.PI / 2 + 0.7, Math.PI * 2 - 1.4, 0, Math.PI * 0.72),
-        mat(PALETTE.orange),
+        c('hood').clone(),
       );
       (hood.material as THREE.Material).side = THREE.DoubleSide;
       hood.position.y = 0.02;
       head.add(hood);
       // On-call headset with a gold mic.
-      const band = mesh(new THREE.TorusGeometry(spec.headR * 1.38, 0.022, 4, 10, Math.PI), mat(PALETTE.ink));
+      const band = mesh(new THREE.TorusGeometry(spec.headR * 1.38, 0.022, 4, 10, Math.PI), c('headset'));
       band.position.y = 0.02;
       head.add(band);
       for (const sx of [-1, 1]) {
-        const cup = mesh(cyl(0.07, 0.06, 8), mat(PALETTE.ink));
+        const cup = mesh(cyl(0.07, 0.06, 8), c('headset'));
         cup.rotation.z = Math.PI / 2;
         cup.position.set(sx * spec.headR * 1.36, 0.0, 0);
         head.add(cup);
       }
-      const boom = mesh(box(0.02, 0.02, 0.22), mat(PALETTE.ink));
+      const boom = mesh(box(0.02, 0.02, 0.22), c('headset'));
       boom.position.set(-spec.headR * 1.2, -0.08, 0.1);
       boom.rotation.y = -0.5;
       head.add(boom);
-      const mic = mesh(ico(0.03, 0), mat(PALETTE.gold, { emissive: 0x3a2a00 }));
+      const mic = mesh(ico(0.03, 0), c('mic'));
       mic.position.set(-spec.headR * 0.75, -0.11, 0.2);
       head.add(mic);
       // Hoodie strings and pocket.
       for (const sx of [-1, 1]) {
-        const s = mesh(cyl(0.012, 0.2, 4), mat(PALETTE.white), false);
+        const s = mesh(cyl(0.012, 0.2, 4), c('strings'), false);
         s.position.set(sx * 0.07, spec.torsoH - 0.14, spec.torsoD / 2 + 0.01);
         torso.add(s);
       }
-      const pocket = mesh(box(0.34, 0.14, 0.03), mat(0xb8441f));
+      const pocket = mesh(box(0.34, 0.14, 0.03), c('pocket'));
       pocket.position.set(0, 0.16, spec.torsoD / 2);
       torso.add(pocket);
     },
@@ -136,12 +143,12 @@ const SPECS: Record<CharacterId, Spec> = {
     top: PALETTE.green,
     pants: 0x5a4a3a,
     shoes: 0x4a3426,
-    extras: ({ head, torso, spec }) => {
-      const shirt = mesh(box(0.3, spec.torsoH * 0.92, 0.04), mat(PALETTE.paper));
+    extras: ({ head, torso, spec, c }) => {
+      const shirt = mesh(box(0.3, spec.torsoH * 0.92, 0.04), c('shirt'));
       shirt.position.set(0, spec.torsoH / 2, spec.torsoD / 2);
       torso.add(shirt);
       for (let i = 0; i < 3; i++) {
-        const b = mesh(cyl(0.025, 0.02, 6), mat(PALETTE.ink), false);
+        const b = mesh(cyl(0.025, 0.02, 6), c('buttons'), false);
         b.rotation.x = Math.PI / 2;
         b.position.set(0.19, 0.18 + i * 0.18, spec.torsoD / 2 + 0.01);
         torso.add(b);
@@ -158,7 +165,7 @@ const SPECS: Record<CharacterId, Spec> = {
         const side = mesh(box(0.08, 0.14, 0.24), mat(0xb8b0a4));
         side.position.set(sx * spec.headR * 0.95, 0.02, -0.03);
         head.add(side);
-        const lens = mesh(new THREE.TorusGeometry(0.065, 0.016, 4, 10), mat(PALETTE.ink), false);
+        const lens = mesh(new THREE.TorusGeometry(0.065, 0.016, 4, 10), c('lens'), false);
         lens.position.set(sx * 0.085, 0.05, spec.headR * 0.98);
         head.add(lens);
       }
@@ -177,7 +184,7 @@ const SPECS: Record<CharacterId, Spec> = {
     top: PALETTE.blue,
     pants: PALETTE.ink,
     shoes: PALETTE.gold,
-    extras: ({ head, torso, spec }) => {
+    extras: ({ head, torso, spec, c }) => {
       // The hair cloud is the silhouette.
       const puffs: [number, number, number, number][] = [
         [0, 0.2, -0.04, 0.2],
@@ -197,12 +204,12 @@ const SPECS: Record<CharacterId, Spec> = {
       }
       // Lanyard and badge.
       for (const sx of [-1, 1]) {
-        const strap = mesh(cyl(0.012, 0.3, 4), mat(PALETTE.red), false);
+        const strap = mesh(cyl(0.012, 0.3, 4), c('lanyard'), false);
         strap.position.set(sx * 0.07, spec.torsoH - 0.12, spec.torsoD / 2 + 0.01);
         strap.rotation.z = sx * 0.4;
         torso.add(strap);
       }
-      const badge = mesh(box(0.11, 0.14, 0.02), mat(PALETTE.gold));
+      const badge = mesh(box(0.11, 0.14, 0.02), c('badge'));
       badge.position.set(0, spec.torsoH - 0.3, spec.torsoD / 2 + 0.02);
       torso.add(badge);
     },
@@ -220,32 +227,32 @@ const SPECS: Record<CharacterId, Spec> = {
     top: PALETTE.paper,
     pants: PALETTE.blue,
     shoes: PALETTE.red,
-    extras: ({ head, torso, spec }) => {
-      const stripe = mesh(box(spec.torsoW + 0.01, 0.08, spec.torsoD + 0.01), mat(PALETTE.red));
+    extras: ({ head, torso, spec, c }) => {
+      const stripe = mesh(box(spec.torsoW + 0.01, 0.08, spec.torsoD + 0.01), c('stripe'));
       stripe.position.y = spec.torsoH * 0.55;
       torso.add(stripe);
       // Beanie with a pompom.
       const beanie = mesh(
         new THREE.SphereGeometry(spec.headR * 1.08, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2),
-        mat(PALETTE.red),
+        c('beanie'),
       );
       beanie.position.y = 0.04;
       head.add(beanie);
-      const cuff = mesh(cyl(spec.headR * 1.1, 0.07, 9), mat(0xa82e2e));
+      const cuff = mesh(cyl(spec.headR * 1.1, 0.07, 9), c('cuff'));
       cuff.position.y = 0.05;
       head.add(cuff);
-      const pom = mesh(ico(0.07, 0), mat(PALETTE.gold));
+      const pom = mesh(ico(0.07, 0), c('pom'));
       pom.position.y = spec.headR * 1.15;
       head.add(pom);
       // The backpack, bigger than it should be.
-      const pack = mesh(box(0.62, 0.74, 0.4), mat(PALETTE.gold));
+      const pack = mesh(box(0.62, 0.74, 0.4), c('bag'));
       pack.position.set(0, spec.torsoH * 0.5, -spec.torsoD / 2 - 0.2);
       torso.add(pack);
-      const flap = mesh(box(0.5, 0.26, 0.06), mat(0xc98a1b));
+      const flap = mesh(box(0.5, 0.26, 0.06), c('bagTrim'));
       flap.position.set(0, spec.torsoH * 0.36, -spec.torsoD / 2 - 0.42);
       torso.add(flap);
       for (const sx of [-1, 1]) {
-        const strap = mesh(box(0.06, spec.torsoH * 0.95, 0.04), mat(0xc98a1b), false);
+        const strap = mesh(box(0.06, spec.torsoH * 0.95, 0.04), c('bagTrim'), false);
         strap.position.set(sx * 0.15, spec.torsoH * 0.5, spec.torsoD / 2 + 0.01);
         torso.add(strap);
       }
@@ -253,15 +260,62 @@ const SPECS: Record<CharacterId, Spec> = {
   },
 };
 
-export const buildRig = (id: CharacterId): Rig => {
+/**
+ * Fighters only: a faint cool light on the edges that turn away from the camera, so a body separates from the grass or
+ * the wall behind it. It is a share of the fighter's own lit colour (at most about a third, on the very rim), so it never
+ * glows in the dark and never shows through anything.
+ */
+const rimCache = new Map<THREE.Material, THREE.Material>();
+const withRim = (m: THREE.Material) => {
+  let r = rimCache.get(m);
+  if (r) return r;
+  const c = m.clone();
+  const base = m.onBeforeCompile;
+  c.onBeforeCompile = (sh, renderer) => {
+    base.call(m, sh, renderer);
+    sh.fragmentShader = sh.fragmentShader.replace(
+      '#include <emissivemap_fragment>',
+      `#include <emissivemap_fragment>
+      float rimK = 1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0);
+      totalEmissiveRadiance += diffuseColor.rgb * vec3(0.8, 0.88, 1.0) * (rimK * rimK * rimK * 0.35);`,
+    );
+  };
+  const key = m.customProgramCacheKey();
+  c.customProgramCacheKey = () => `${key}-rim`;
+  rimCache.set(m, c);
+  return c;
+};
+
+/** The two shared special materials, one each: Terminal's glow and Legend's polished gold. Both bake into the rig's one draw call. */
+const SPECIAL = (() => {
+  const flat = { flatShading: true };
+  return {
+    gold: new THREE.MeshStandardMaterial({ ...flat, color: GOLD_MATERIAL.color, metalness: GOLD_MATERIAL.metalness, roughness: GOLD_MATERIAL.roughness, emissive: GOLD_MATERIAL.emissive }),
+    glow: new THREE.MeshStandardMaterial({ ...flat, color: GLOW_MATERIAL.color, roughness: 0.6, emissive: GLOW_MATERIAL.emissive, emissiveIntensity: GLOW_MATERIAL.emissiveIntensity }),
+  };
+})();
+
+/** The mic's own look in the Standard outfit: gold with a faint glow (it keeps it in Legend). */
+const MIC_STANDARD = mat(PALETTE.gold, { emissive: 0x3a2a00 });
+const partMat = (p: OutfitParts, part: string): THREE.Material => {
+  const col: PartColor = p[part];
+  if (col === 'gold' || col === 'glow') return SPECIAL[col];
+  if (part === 'mic' && col === 0xffc93c) return MIC_STANDARD;
+  return mat(col);
+};
+
+/** `outfit` is a key from cosmetics.ts (`standard` by default): it recolours parts only, never the shapes. */
+export const buildRig = (id: CharacterId, outfit = 'standard'): Rig => {
   const s = SPECS[id];
+  const parts = outfitParts(outfit, id);
+  const c = (part: string) => partMat(parts, part);
   const root = new THREE.Group();
   const body = new THREE.Group();
   root.add(body);
 
   const torso = new THREE.Group();
   torso.position.y = s.legLen;
-  const torsoMesh = mesh(box(s.torsoW, s.torsoH, s.torsoD), mat(s.top));
+  const torsoMesh = mesh(box(s.torsoW, s.torsoH, s.torsoD), c('top'));
   torsoMesh.position.y = s.torsoH / 2;
   torso.add(torsoMesh);
   body.add(torso);
@@ -272,24 +326,27 @@ export const buildRig = (id: CharacterId): Rig => {
   addEyes(head, s.headR);
   body.add(head);
 
-  s.extras({ head, torso, spec: s });
+  s.extras({ head, torso, spec: s, c });
 
   // ---- kit: everyone is dressed for a fight (the Intern brought their own huge backpack).
   const olive = mat(0x4f5638);
   const oliveDark = mat(0x3b412a);
   const strapMat = mat(0x2a2d24);
-  const tan = mat(0xa08c64);
+  // The shared pack, its flap and pouches and the roll take the outfit's kit colours; holster, belt pouches and vest stay.
+  const packMat = id === 'intern' ? olive : c('pack');
+  const flapMat = id === 'intern' ? oliveDark : c('flap');
+  const rollMat = id === 'intern' ? mat(0xa08c64) : c('roll');
   const back = -s.torsoD / 2;
   if (id !== 'intern') {
-    const pack = mesh(box(s.torsoW * 0.78, s.torsoH * 0.72, 0.26), olive);
+    const pack = mesh(box(s.torsoW * 0.78, s.torsoH * 0.72, 0.26), packMat);
     pack.position.set(0, s.torsoH * 0.52, back - 0.13);
-    const flap = mesh(box(s.torsoW * 0.7, s.torsoH * 0.22, 0.05), oliveDark);
+    const flap = mesh(box(s.torsoW * 0.7, s.torsoH * 0.22, 0.05), flapMat);
     flap.position.set(0, s.torsoH * 0.78, back - 0.27);
-    const pouchL = mesh(box(0.1, s.torsoH * 0.36, 0.18), oliveDark);
+    const pouchL = mesh(box(0.1, s.torsoH * 0.36, 0.18), flapMat);
     pouchL.position.set(-s.torsoW * 0.44, s.torsoH * 0.42, back - 0.12);
     const pouchR = pouchL.clone();
     pouchR.position.x = s.torsoW * 0.44;
-    const roll = mesh(new THREE.CylinderGeometry(0.09, 0.09, s.torsoW * 0.82, 10).rotateZ(Math.PI / 2), tan);
+    const roll = mesh(new THREE.CylinderGeometry(0.09, 0.09, s.torsoW * 0.82, 10).rotateZ(Math.PI / 2), rollMat);
     roll.position.set(0, s.torsoH * 0.93, back - 0.13);
     torso.add(pack, flap, pouchL, pouchR, roll);
   }
@@ -299,9 +356,9 @@ export const buildRig = (id: CharacterId): Rig => {
     strap.position.set(sx * s.torsoW * 0.26, s.torsoH * 0.62, s.torsoD / 2 + 0.012);
     torso.add(strap);
   }
-  const belt = mesh(box(s.torsoW + 0.04, 0.08, s.torsoD + 0.04), strapMat);
+  const belt = mesh(box(s.torsoW + 0.04, 0.08, s.torsoD + 0.04), c('belt'));
   belt.position.y = 0.05;
-  const buckle = mesh(box(0.07, 0.06, 0.02), mat(0x9a9a8a), false);
+  const buckle = mesh(box(0.07, 0.06, 0.02), c('buckle'), false);
   buckle.position.set(0, 0.05, s.torsoD / 2 + 0.03);
   const holster = mesh(box(0.08, 0.2, 0.13), oliveDark);
   holster.position.set(s.torsoW / 2 + 0.05, -0.05, 0.02);
@@ -338,15 +395,15 @@ export const buildRig = (id: CharacterId): Rig => {
   const makeArm = () => {
     const half = s.armLen / 2;
     const upper = new THREE.Group();
-    const u = mesh(cyl(s.armR, half + 0.02), mat(s.top));
+    const u = mesh(cyl(s.armR, half + 0.02), c('top'));
     u.position.y = -half / 2;
     upper.add(u);
-    const elbow = mesh(ico(s.armR * 1.02, 0), mat(s.top));
+    const elbow = mesh(ico(s.armR * 1.02, 0), c('top'));
     elbow.position.y = -half;
     upper.add(elbow);
     const fore = new THREE.Group();
     fore.position.y = -half;
-    const f = mesh(cyl(s.armR * 0.92, half), mat(s.top));
+    const f = mesh(cyl(s.armR * 0.92, half), c('top'));
     f.position.y = -half / 2;
     fore.add(f);
     const hand = mesh(ico(s.armR * 1.15, 0), mat(s.skin));
@@ -368,18 +425,18 @@ export const buildRig = (id: CharacterId): Rig => {
   const makeLeg = () => {
     const half = s.legLen / 2;
     const thigh = new THREE.Group();
-    const t = mesh(cyl(s.legR * 1.08, half + 0.02), mat(s.pants));
+    const t = mesh(cyl(s.legR * 1.08, half + 0.02), c('pants'));
     t.position.y = -half / 2;
     thigh.add(t);
-    const knee = mesh(ico(s.legR * 1.05, 0), mat(s.pants));
+    const knee = mesh(ico(s.legR * 1.05, 0), c('pants'));
     knee.position.y = -half;
     thigh.add(knee);
     const shin = new THREE.Group();
     shin.position.y = -half;
-    const sh = mesh(cyl(s.legR * 0.95, half), mat(s.pants));
+    const sh = mesh(cyl(s.legR * 0.95, half), c('pants'));
     sh.position.y = -half / 2;
     shin.add(sh);
-    const shoe = mesh(box(s.legR * 2.2, s.legR * 1.2, s.legR * 3.2), mat(s.shoes));
+    const shoe = mesh(box(s.legR * 2.2, s.legR * 1.2, s.legR * 3.2), c('shoes'));
     // The sole, not the middle of the shoe, sits at the end of the leg: on a bridge deck the
     // feet rest on the planks instead of sinking into them.
     shoe.position.set(0, -half + s.legR * 0.6, s.legR * 0.7);
@@ -406,10 +463,15 @@ export const buildRig = (id: CharacterId): Rig => {
   weapon.add(hand);
   body.add(weapon);
 
+  // Drawn as a skinned mesh (the groups above are its bones): a fighter is two or three draw calls instead of ~40.
+  skinRig(root, new Set([weapon]), [vest]);
+  root.traverse((o) => {
+    if (o instanceof THREE.SkinnedMesh && !Array.isArray(o.material)) o.material = withRim(o.material);
+  });
   return {
     root, body, armL, armR, foreL: left.fore, foreR: right.fore, armLen: s.armLen,
     shinL: ll.shin, shinR: lr.shin, legLen: s.legLen,
-    head, vest, hipYaw: 0, hipInit: false, chuteSwing: { vx: 0, vz: 0 },
+    head, vest, hipYaw: 0, hipInit: false, chuteSwing: { vx: 0, vz: 0 }, airPivot: 0,
     shoulderL: armL.position.clone(), shoulderR: armR.position.clone(),
     legL, legR, weapon, hand, chestY, phase: 0, turn: 0,
   };
@@ -439,6 +501,12 @@ export interface PoseInput {
   pushing: number;
 }
 
+/** Clamp `x` to [lo, hi]; one argument is a symmetric limit +-hi. */
+const clampN = (x: number, hi: number, lo = -hi) => Math.max(lo, Math.min(hi, x));
+const smoothN = (x: number) => {
+  const t = clampN(x, 1, 0);
+  return t * t * (3 - 2 * t);
+};
 const damp = (cur: number, target: number, k: number, dt: number) => cur + (target - cur) * (1 - Math.exp(-k * dt));
 
 /** Procedural animation: running, jumping, aiming, recoil, Force Push. */
@@ -536,13 +604,13 @@ const qA = new THREE.Quaternion();
  * Point an upper arm and forearm so the hand lands on `target` (both in body space). Elbows
  * bend down and outwards. If the target is out of reach the arm straightens towards it.
  */
-const reach = (upper: THREE.Group, fore: THREE.Group, shoulder: THREE.Vector3, target: THREE.Vector3, len: number, side: 1 | -1) => {
+const reach = (upper: THREE.Group, fore: THREE.Group, shoulder: THREE.Vector3, target: THREE.Vector3, len: number, side: 1 | -1, poleDir?: THREE.Vector3) => {
   const a = len / 2;
   const toT = vA.subVectors(target, shoulder);
   const d = Math.min(Math.max(toT.length(), 0.05), len * 0.999);
   const u = vD.copy(toT).normalize();
   // Elbow direction: out to the side and down, made perpendicular to the shoulder-hand line.
-  const pole = vB.set(side * 0.8, -1, -0.2);
+  const pole = poleDir ? vB.copy(poleDir) : vB.set(side * 0.8, -1, -0.2);
   pole.sub(vC.copy(u).multiplyScalar(pole.dot(u))).normalize();
   const cosA = Math.min(1, d / (2 * a));
   const sinA = Math.sqrt(1 - cosA * cosA);
@@ -777,38 +845,235 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   reach(rig.armL, rig.foreL, rig.shoulderL, tmpSupport, rig.armLen, -1);
 };
 
-/**
- * Hanging under the parachute: hands up on the risers, legs loose and swinging a little,
- * the body tilted the way you steer. With the gun out (you fired in the last moments) the right
- * hand brings the pistol down and forward while the left keeps hold of a riser.
- */
-export const poseChute = (rig: Rig, p: { dt: number; time: number; seed: number; steerX: number; steerZ: number; shooting: boolean }) => {
-  const { dt, time, seed } = p;
-  // Steering, -1..1 each way (the inputs come in m/s).
-  const sx = Math.max(-1, Math.min(1, p.steerX / 7));
-  const sz = Math.max(-1, Math.min(1, p.steerZ / 7));
-  rig.body.position.set(0, 0, 0);
-  // Hanging from the harness: the opening shock swings you from flat to upright, and the swing
-  // dies out like a pendulum (an under-damped spring). Steering banks the whole rig a little.
-  const want = { x: sz * 0.14, z: -sx * 0.2 };
+// ---------- in the air: free fall, the opening, hanging under the canopy
+//
+// Every air pose blends: each joint slerps towards its target at its own rate and the body's tilt rides on springs, so
+// the exit, the free fall, the pull, the opening and the canopy flow into each other without a snap. The wind's work on
+// the limbs is layered noise (three incommensurate sines per channel, seeded per fighter), scaled by airspeed, so it
+// never reads as a loop.
+
+const qT = new THREE.Quaternion();
+const qU = new THREE.Quaternion();
+const qF = new THREE.Quaternion();
+const vP = new THREE.Vector3();
+const vQ = new THREE.Vector3();
+const vT = new THREE.Vector3();
+const pole = new THREE.Vector3();
+
+/** Slerp a joint towards an Euler target (in the joint's own rotation order) at `rate` per second. */
+const toward = (o: THREE.Object3D, x: number, y: number, z: number, rate: number, dt: number) => {
+  qT.setFromEuler(tmpE.set(x, y, z, o.rotation.order));
+  o.quaternion.slerp(qT, 1 - Math.exp(-rate * dt));
+};
+
+/** Two-bone IK onto `target`, blended in at `rate` per second from wherever the arm is now. */
+const reachToward = (upper: THREE.Group, fore: THREE.Group, shoulder: THREE.Vector3, target: THREE.Vector3, len: number, side: 1 | -1, rate: number, dt: number, poleDir?: THREE.Vector3) => {
+  qU.copy(upper.quaternion);
+  qF.copy(fore.quaternion);
+  reach(upper, fore, shoulder, target, len, side, poleDir);
+  const a = 1 - Math.exp(-rate * dt);
+  upper.quaternion.copy(qU.slerp(upper.quaternion, a));
+  fore.quaternion.copy(qF.slerp(fore.quaternion, a));
+};
+
+/** Wind noise in -1..1: three sines at unrelated rates, so the pattern never visibly repeats. */
+const gust = (t: number, seed: number, k: number) =>
+  Math.sin(t * 1.37 * k + seed * 1.9) * 0.5 + Math.sin(t * 2.91 * k + seed * 3.7 + 1.3) * 0.3 + Math.sin(t * 6.43 * k + seed * 0.61 + 2.1) * 0.2;
+
+/** Drive the body's tilt springs towards (pitch, roll) and keep the chosen pivot still while it turns. */
+const airBody = (rig: Rig, dt: number, pitch: number, roll: number, yaw: number, w: number, zeta: number, pivotTo: number, rollCap = 0) => {
   const sw = rig.chuteSwing;
-  for (const k of ['x', 'z'] as const) {
-    const w = 7;
-    const zeta = 0.35;
-    sw[`v${k}`] += (w * w * (want[k] - rig.body.rotation[k]) - 2 * zeta * w * sw[`v${k}`]) * dt;
-    rig.body.rotation[k] += sw[`v${k}`] * dt;
+  // Integrated in small steps: the springs are stiff and a long frame (phones) must not overshoot numerically.
+  const n = Math.max(1, Math.ceil(dt / 0.012));
+  const h = dt / n;
+  for (let i = 0; i < n; i++) {
+    sw.vx += (w * w * (pitch - rig.body.rotation.x) - 2 * zeta * w * sw.vx) * h;
+    sw.vz += (w * w * (roll - rig.body.rotation.z) - 2 * zeta * w * sw.vz) * h;
+    rig.body.rotation.x += sw.vx * h;
+    rig.body.rotation.z += sw.vz * h;
+    // A hard ceiling on the roll, so a swing can never read as a flip.
+    if (rollCap > 0 && Math.abs(rig.body.rotation.z) > rollCap) {
+      rig.body.rotation.z = Math.sign(rig.body.rotation.z) * rollCap;
+      if (Math.sign(sw.vz) === Math.sign(rig.body.rotation.z)) sw.vz = 0;
+    }
   }
-  rig.body.rotation.y = 0;
-  const dangle = Math.sin(time * 1.7 + seed) * 0.18;
-  rig.legL.rotation.set(dangle - 0.1, 0, -0.05);
-  rig.legR.rotation.set(-dangle * 0.8 - 0.05, 0, 0.05);
-  rig.shinL.rotation.set(0.35 + dangle * 0.5, 0, 0);
-  rig.shinR.rotation.set(0.25 - dangle * 0.4, 0, 0);
-  // Each hand on its own riser, out at the side about head height, elbow bent; turning, the
-  // hand on that side pulls its riser down.
-  const tL = 0.42 - Math.max(0, -sx) * 0.18;
-  const tR = 0.42 - Math.max(0, sx) * 0.18;
-  reach(rig.armL, rig.foreL, rig.shoulderL, riserGrip(-1, rig.shoulderL.y, tL), rig.armLen, -1);
+  rig.body.rotation.y = damp(rig.body.rotation.y, yaw, 6, dt);
+  rig.airPivot = damp(rig.airPivot, pivotTo, 5, dt);
+  // The pivot: the hips in free fall, the harness under the canopy. Rotating about it, not the feet, keeps the body
+  // where the sim says it is (and keeps the shoulders under the risers).
+  vP.set(0, rig.legLen + 0.1, 0).lerp(vQ.set(0, rig.shoulderL.y, HARNESS_BACK), rig.airPivot);
+  vT.copy(vP).applyEuler(rig.body.rotation);
+  rig.body.position.copy(vP).sub(vT);
+};
+
+export interface FreefallPose {
+  dt: number;
+  time: number;
+  seed: number;
+  /** Stick along the body, -1 (back off) .. 1 (track forward), and across it, -1..1. */
+  track: number;
+  side: number;
+  /** How fast the body is turning (rad/s, map yaw): it banks and dips a shoulder into the turn. */
+  turn: number;
+  /** Airspeed as a share of terminal velocity: the wind's grip on the limbs. */
+  speed: number;
+  /** Seconds out of the door: the first moments roll out of the exit into the arch. */
+  sinceJump: number;
+}
+
+/**
+ * Free fall, belly to earth: hips pushed down into an arch, the arms out with the elbows bent about square and the hands
+ * near head height, the knees bent with the feet up and a little apart, the head up looking ahead. Tracking forward
+ * sweeps the arms back to the hips and straightens the legs (head down, the body planing); backing off reaches the arms
+ * forward and tucks the knees; a turn dips the inside shoulder and drops that arm. The wind works every limb and the
+ * torso, harder the faster you fall. Out of the door you tumble over from upright into the arch on the body's spring.
+ */
+export const poseFreefall = (rig: Rig, p: FreefallPose) => {
+  const { dt, time: t, seed } = p;
+  const w = Math.min(1, 0.25 + p.speed);
+  const fwd = Math.max(0, p.track);
+  const back = Math.max(0, -p.track);
+  const exit = Math.max(0, 1 - p.sinceJump / 0.9);
+  rig.weapon.visible = false;
+  // The torso: arched and flat, pitched by the track, banked by the turn; the exit adds a roll off the door.
+  const bank = Math.max(-0.5, Math.min(0.5, -p.turn * 0.32)) + p.side * 0.12;
+  const pitch = 1.32 + fwd * 0.28 - back * 0.22 + gust(t, seed, 0.7) * 0.05 * w;
+  const roll = bank + gust(t, seed + 5, 0.6) * 0.06 * w + exit * Math.sin(p.sinceJump * 5) * 0.35;
+  airBody(rig, dt, pitch, roll, gust(t, seed + 9, 0.5) * 0.05 * w, 5.5, 0.75, 0);
+  // Arms: hands out by the head (the box), swept back (track) or reaching forward (backing off).
+  const arm = (upper: THREE.Group, fore: THREE.Group, shoulder: THREE.Vector3, side: 1 | -1, s: number) => {
+    const dip = side * p.turn * 0.12; // the inside arm (the one the body banks towards) drops towards the ground
+    vT.set(
+      side * (0.5 - fwd * 0.1 + back * 0.02) + gust(t, s, 1.1) * 0.04 * w,
+      0.34 - fwd * 0.92 + back * 0.32 + gust(t, s + 2, 1.3) * 0.05 * w,
+      -0.05 + fwd * 0.02 + back * 0.12 + dip + gust(t, s + 4, 1.7) * 0.05 * w,
+    ).add(shoulder);
+    // Elbows out to the side and a little towards the feet and the sky (swept back: out and up).
+    pole.set(side * 0.7, -0.8 + fwd * 1.0, -0.45);
+    reachToward(upper, fore, shoulder, vT, rig.armLen, side, exit > 0 ? 6 : 10, dt, pole);
+  };
+  arm(rig.armL, rig.foreL, rig.shoulderL, -1, seed);
+  arm(rig.armR, rig.foreR, rig.shoulderR, 1, seed + 11);
+  // Legs: thighs a little back (towards the sky) and apart, knees bent; tracking straightens them out behind.
+  const leg = (thigh: THREE.Group, shin: THREE.Group, side: 1 | -1, s: number) => {
+    const flick = gust(t, s, 1.6) * 0.07 * w;
+    toward(thigh, 0.3 - fwd * 0.2 + back * 0.15 + flick, 0, side * (0.32 - fwd * 0.14) + gust(t, s + 3, 0.9) * 0.04 * w, 9, dt);
+    // The feet flutter in the airflow.
+    toward(shin, 1.15 - fwd * 0.85 + back * 0.35 + gust(t, s + 6, 2.4) * 0.1 * w, 0, 0, 10, dt);
+  };
+  leg(rig.legL, rig.shinL, -1, seed + 21);
+  leg(rig.legR, rig.shinR, 1, seed + 31);
+  // The head up against the arch, looking ahead and down; it turns into a turn first.
+  rig.head.rotation.x = damp(rig.head.rotation.x, -0.72 - fwd * 0.2 + gust(t, seed + 41, 0.8) * 0.04, 6, dt);
+  rig.head.rotation.y = damp(rig.head.rotation.y, Math.max(-0.4, Math.min(0.4, p.turn * 0.25)), 6, dt);
+};
+
+export interface ChutePose {
+  dt: number;
+  time: number;
+  seed: number;
+  /** Seconds since the pull (see DROP.stretch, DROP.deployTime). */
+  canopy: number;
+  /** Toggle pulls, 0..1 each (both: the flare). */
+  brakeL: number;
+  brakeR: number;
+  /** The canopy's turn, -1..1 (positive turns towards the rig's L side), and its bank and pitch (rad). */
+  turn: number;
+  bank: number;
+  pitch: number;
+  /** Near the ground: 0..1 into the flare and landing stance. */
+  flare: number;
+  /** Diving the canopy (Shift), 0..1 by airspeed: the legs stream back and together. */
+  dive?: number;
+  /** The settings' reduced motion: a calmer swing, half the idle leg noise. */
+  reducedMotion?: boolean;
+  shooting: boolean;
+}
+
+/**
+ * The opening and the canopy flight, in one pose so the stages blend:
+ * - the pull (until the lines stretch): still in the arch, the right hand reaches back to the pack, throws the pilot
+ *   chute out to the side and comes back up, the left arm holding the body level;
+ * - the opening shock: the body swings on its spring from flat to hanging upright under the harness, the legs kick
+ *   down and forward with it, the hands go up to the toggles, the head looks up to check the canopy;
+ * - flying: hanging from the harness, the swing follows the canopy's bank and pitch with a pendulum's lag, the legs
+ *   dangle each on its own and trail the swing, a turn pulls that side's toggle down and twists the body and head into
+ *   the turn; near the ground both toggles come down (the flare) and the legs come together for the touchdown.
+ * With the gun out the right hand brings the pistol down and forward while the left keeps its toggle.
+ */
+export const poseChute = (rig: Rig, p: ChutePose) => {
+  const { dt, time: t, seed, canopy: k } = p;
+  const stretched = k >= 0.5;
+  // Body: flat (a little head-up as you look for the handle) until the lines stretch, then hanging, following the canopy.
+  const sw = rig.chuteSwing;
+  if (!stretched) airBody(rig, dt, 1.1, 0, 0, 5.5, 0.75, 0);
+  else {
+    // The body swings under the wing on a spring that rings only while the canopy opens, then settles in about a swing.
+    const sp = swingSpring(k, p.reducedMotion);
+    airBody(rig, dt, p.pitch * 0.7 + gust(t, seed, 0.35) * 0.03, p.bank * BODY_ROLL + gust(t, seed + 3, 0.3) * 0.03, clampN(p.turn * 0.18, 0.1745), sp.w, sp.zeta, 1, BODY_ROLL_MAX);
+  }
+  // Head: down at the handle during the pull, up at the canopy as it opens, then looking ahead and into turns.
+  const check = k > 0.6 && k < 2.2 ? 1 : 0;
+  rig.head.rotation.x = damp(rig.head.rotation.x, !stretched ? -0.2 : check ? -0.75 : 0.12 + p.flare * 0.25, 5, dt);
+  rig.head.rotation.y = damp(rig.head.rotation.y, stretched ? clampN(p.turn * 0.45, 0.436) : 0, 7, dt);
+
+  // Legs.
+  if (!stretched) {
+    toward(rig.legL, 0.15, 0, -0.12, 8, dt);
+    toward(rig.legR, 0.15, 0, 0.12, 8, dt);
+    toward(rig.shinL, 0.9, 0, 0, 8, dt);
+    toward(rig.shinR, 0.9, 0, 0, 8, dt);
+  } else {
+    // Sitting in the leg straps: hips flexed, knees softly bent, the legs a little apart and not mirrored. The wind
+    // works each joint on its own noise; the legs trail the swing (thrown back when the body swings forward), the
+    // inside knee comes up in a turn and both feet drift to the outside; a dive streams them back and together; the
+    // flare brings the feet forward and together, knees bent to absorb.
+    const fe = smoothN(p.flare);
+    const dv = clampN(p.dive ?? 0, 1, 0);
+    const life = (p.reducedMotion ? 0.5 : 1) * (1 - 0.8 * fe);
+    const swingS = clampN(sw.vx / 1.5, 1);
+    const turn = clampN(p.turn, 1);
+    const leg = (side: 1 | -1, hipBase: number, kneeBase: number, s: number) => {
+      const inside = Math.max(0, -side * turn);
+      const outside = Math.max(0, side * turn);
+      let hip = hipBase + (-0.15 - hipBase) * dv + gust(t, s, 0.5) * 0.08 * life + 0.3 * swingS - 0.2 * inside;
+      let knee = kneeBase + (0.35 - kneeBase) * dv + gust(t, s + 6, 0.8) * 0.12 * life + (swingS > 0 ? -0.2 * swingS : -0.3 * swingS) + 0.35 * inside - 0.15 * outside;
+      hip = clampN(hip + (-0.75 - hip) * fe, 0.15, -0.95);
+      knee = clampN(knee + (0.55 - knee) * fe, 1.3, 0.15);
+      return { hip, knee, spread: side * (0.1 + (0.03 - 0.1) * dv) + 0.12 * turn };
+    };
+    const L = leg(-1, -0.42, 0.62, seed + 7);
+    const R = leg(1, -0.58, 0.85, seed + 13);
+    let zL = L.spread * (1 - fe) - 0.03 * fe;
+    let zR = R.spread * (1 - fe) + 0.03 * fe;
+    // The feet never cross or touch.
+    if (zR - zL < 0.06) {
+      const push = (0.06 - (zR - zL)) / 2;
+      zL -= push;
+      zR += push;
+    }
+    toward(rig.legL, L.hip, 0, zL, 5, dt);
+    toward(rig.legR, R.hip, 0, zR, 5, dt);
+    toward(rig.shinL, L.knee, 0, 0, 6, dt);
+    toward(rig.shinR, R.knee, 0, 0, 6, dt);
+  }
+
+  // Arms.
+  if (!stretched) {
+    // The pull: the right hand goes to the pilot chute's pouch at the bottom of the pack, then throws it out wide.
+    const reachBack = k < 0.18;
+    if (reachBack) vT.set(0.2, rig.legLen + 0.12, HARNESS_BACK - 0.12);
+    else vT.set(0.75, rig.shoulderR.y + 0.25, -0.35);
+    pole.set(0.8, -0.6, -0.4);
+    reachToward(rig.armR, rig.foreR, rig.shoulderR, vT, rig.armLen, 1, 16, dt, pole);
+    vT.set(-0.52, rig.shoulderL.y + 0.3, -0.12);
+    pole.set(-0.7, -0.8, -0.45);
+    reachToward(rig.armL, rig.foreL, rig.shoulderL, vT, rig.armLen, -1, 10, dt, pole);
+    rig.weapon.visible = false;
+    return;
+  }
+  const up = k < 0.9 ? 9 : 12;
+  reachToward(rig.armL, rig.foreL, rig.shoulderL, toggleGrip(-1, rig.shoulderL.y, Math.min(1, p.brakeL + p.flare), vT), rig.armLen, -1, up, dt);
   rig.weapon.visible = p.shooting;
   if (p.shooting) {
     const h = HOLD.pistol;
@@ -817,30 +1082,17 @@ export const poseChute = (rig: Rig, p: { dt: number; time: number; seed: number;
     rig.hand.position.set(0, 0, h.grip);
     rig.weapon.updateMatrix();
     tmpGrip.set(0, -0.02, h.grip).applyMatrix4(rig.weapon.matrix);
-    reach(rig.armR, rig.foreR, rig.shoulderR, tmpGrip, rig.armLen, 1);
+    reachToward(rig.armR, rig.foreR, rig.shoulderR, tmpGrip, rig.armLen, 1, 18, dt);
   } else {
-    reach(rig.armR, rig.foreR, rig.shoulderR, riserGrip(1, rig.shoulderR.y, tR), rig.armLen, 1);
+    reachToward(rig.armR, rig.foreR, rig.shoulderR, toggleGrip(1, rig.shoulderR.y, Math.min(1, p.brakeR + p.flare), vT), rig.armLen, 1, up, dt);
   }
 };
 
-/**
- * Free fall, face down: arms out and bent up towards the sky, knees bent with the feet up behind,
- * the limbs fluttering in the wind. The caller tips the root so the body lies flat.
- */
-export const poseFreefall = (rig: Rig, p: { dt: number; time: number; seed: number }) => {
-  const f = Math.sin(p.time * 7 + p.seed) * 0.06;
-  rig.body.position.set(0, 0, 0);
-  rig.body.rotation.set(1.3, 0, Math.sin(p.time * 0.8 + p.seed) * 0.04);
-  rig.weapon.visible = false;
-  // Limbs in the body's frame: -z is the back, which faces the sky.
-  rig.armL.quaternion.setFromEuler(tmpE.set(0.55 + f, 0, -1.25));
-  rig.armR.quaternion.setFromEuler(tmpE.set(0.55 - f, 0, 1.25));
-  rig.foreL.quaternion.setFromEuler(tmpE.set(1.1, 0, 0));
-  rig.foreR.quaternion.setFromEuler(tmpE.set(1.1, 0, 0));
-  rig.legL.rotation.set(0.35 - f, 0, -0.25);
-  rig.legR.rotation.set(0.35 + f, 0, 0.25);
-  rig.shinL.rotation.set(1.25, 0, 0);
-  rig.shinR.rotation.set(1.25, 0, 0);
+/** Upright again (on the ground, or a pose that is not an air pose): the air pivot and springs let go. */
+export const leaveAir = (rig: Rig) => {
+  rig.airPivot = 0;
+  rig.chuteSwing.vx = 0;
+  rig.chuteSwing.vz = 0;
 };
 
 /**
@@ -920,4 +1172,8 @@ export const poseSwim = (rig: Rig, p: { dt: number; time: number; speed: number;
 };
 
 /** A fighter's skin and sleeve colours (the first-person arms wear them). */
-export const fighterLook = (id: CharacterId) => ({ skin: SPECS[id].skin, top: SPECS[id].top });
+/** The skin and sleeve colours (first-person arms): the sleeve follows the outfit's top. */
+export const fighterLook = (id: CharacterId, outfit = 'standard') => {
+  const top = outfitParts(outfit, id).top;
+  return { skin: SPECS[id].skin, top: typeof top === 'number' ? top : SPECS[id].top };
+};

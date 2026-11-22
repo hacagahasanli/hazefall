@@ -1,0 +1,1086 @@
+LAYOUT MATRIX  2026-11-22T18:15  21 sizes  (. clean, N failures, ? could not be reached, - not applicable)
+
+                              568x320  640x360  667x375  844x390  915x412  932x430  800x450  390x844  1024x768 1080x607 1180x820 768x1024 860x484  907x510  1020x540 1216x684 1280x720 1366x768 1440x900 1920x108 1366x768 
+                                                                                                                                                                                                                  laptopT
+menu                          4        4        4        4        4        4        4        -        4        4        4        -        .        .        .        .        .        .        .        .        .        
+panel-fighter                 5        1        1        1        1        .        .        -        .        .        .        -        .        .        .        4        .        .        .        .        .        
+panel-settings                8        8        8        8        9        9        9        -        8        8        8        -        2        .        .        .        .        .        .        .        .        
+panel-settings-camera         8        8        8        8        8        8        8        -        7        7        7        -        .        .        .        .        .        .        .        .        .        
+panel-settings-graphics       12       13       13       13       13       13       13       -        12       12       12       -        .        .        .        .        .        .        .        .        .        
+panel-settings-audio          8        8        8        8        8        8        8        -        7        7        7        -        .        .        .        .        .        .        .        .        .        
+panel-settings-accessibility  10       11       11       11       11       11       11       -        10       10       10       -        .        .        .        .        .        .        .        .        .        
+panel-how                     1        1        1        1        1        .        .        -        .        .        .        -        .        .        .        .        .        .        .        .        .        
+panel-credits                 1        1        1        1        1        .        .        -        .        .        .        -        .        .        .        .        .        .        .        .        .        
+lobby-pre                     5        4        3        2        1        1        1        -        1        1        1        -        .        2        1        .        .        .        .        .        .        
+lobby-ready                   5        3        1        1        1        1        1        -        1        1        1        -        .        1        .        .        .        .        .        .        .        
+plane                         .        .        .        .        .        .        .        -        .        .        .        -        .        .        .        .        .        .        .        .        .        
+freefall                      8        5        5        3        3        3        3        -        3        3        3        -        .        .        .        .        .        .        .        .        .        
+canopy                        8        5        5        3        3        3        3        -        3        3        3        -        .        .        .        .        .        .        .        .        .        
+ground                        8        5        5        3        3        3        3        -        3        3        3        -        .        .        .        .        .        .        .        .        .        
+ground-full                   12       8        7        5        5        5        5        -        5        5        5        -        -        -        -        -        -        -        -        -        -        
+pause                         3        3        3        3        3        3        3        -        3        3        3        -        .        .        .        .        .        .        .        .        .        
+report                        2        .        .        .        .        .        .        -        .        .        .        -        .        .        .        2        .        .        .        .        .        
+portrait                      -        -        -        -        -        -        -        .        -        -        -        .        -        -        -        -        -        -        -        -        -        
+
+failures by check: target 753, clearance 20, zones 10, in-view 4
+
+== 568x320
+  menu               target      FighterBlaze is 276x29, floor 44
+  menu               target      Settings is 276x28, floor 44
+  menu               target      How to play is 276x28, floor 44
+  menu               target      Credits is 276x28, floor 44
+                     shot: shots/568x320-menu.jpg
+  panel-fighter      target      Outfit: Standard is 44x21, floor 44 (cut off by a scroll area, its own box is 44x44)
+  panel-fighter      target      Gun: Factory is 44x21, floor 44 (cut off by a scroll area, its own box is 44x44)
+  panel-fighter      target      Canopy: Classic is 44x21, floor 44 (cut off by a scroll area, its own box is 44x44)
+  panel-fighter      target      Smoke: Off is 44x21, floor 44 (cut off by a scroll area, its own box is 44x44)
+  panel-fighter      target      Back is 109x36, floor 44
+                     shot: shots/568x320-panel-fighter.jpg
+  panel-settings     target      Controls is 96x28, floor 44
+  panel-settings     target      Camera is 80x28, floor 44
+  panel-settings     target      Graphics is 93x28, floor 44
+  panel-settings     target      Audio is 66x28, floor 44
+  panel-settings     target      Accessibility is 125x28, floor 44
+  panel-settings     target      Invert Y is 48x28, floor 44
+  panel-settings     target      Reset all is 99x36, floor 44
+  panel-settings     target      Back is 109x36, floor 44
+                     shot: shots/568x320-panel-settings.jpg
+  panel-settings-camera target      Controls is 96x28, floor 44
+  panel-settings-camera target      Camera is 80x28, floor 44
+  panel-settings-camera target      Graphics is 93x28, floor 44
+  panel-settings-camera target      Audio is 66x28, floor 44
+  panel-settings-camera target      Accessibility is 125x28, floor 44
+  panel-settings-camera target      Third person is 117x28, floor 44
+  panel-settings-camera target      Reset all is 99x36, floor 44
+  panel-settings-camera target      Back is 109x36, floor 44
+                     shot: shots/568x320-panel-settings-camera.jpg
+  panel-settings-graphics target      Controls is 96x28, floor 44
+  panel-settings-graphics target      Camera is 80x28, floor 44
+  panel-settings-graphics target      Graphics is 93x28, floor 44
+  panel-settings-graphics target      Audio is 66x28, floor 44
+  panel-settings-graphics target      Accessibility is 125x28, floor 44
+  panel-settings-graphics target      Auto is 58x28, floor 44
+  panel-settings-graphics target      Low is 51x28, floor 44
+  panel-settings-graphics target      Med is 51x28, floor 44
+  panel-settings-graphics target      High is 55x28, floor 44
+  panel-settings-graphics target      Shadows is 48x28, floor 44
+  panel-settings-graphics target      Reset all is 99x36, floor 44
+  panel-settings-graphics target      Back is 109x36, floor 44
+                     shot: shots/568x320-panel-settings-graphics.jpg
+  panel-settings-audio target      Controls is 96x28, floor 44
+  panel-settings-audio target      Camera is 80x28, floor 44
+  panel-settings-audio target      Graphics is 93x28, floor 44
+  panel-settings-audio target      Audio is 66x28, floor 44
+  panel-settings-audio target      Accessibility is 125x28, floor 44
+  panel-settings-audio target      Mute is 48x8, floor 44 (cut off by a scroll area, its own box is 48x28)
+  panel-settings-audio target      Reset all is 99x36, floor 44
+  panel-settings-audio target      Back is 109x36, floor 44
+                     shot: shots/568x320-panel-settings-audio.jpg
+  panel-settings-accessibility target      Controls is 96x28, floor 44
+  panel-settings-accessibility target      Camera is 80x28, floor 44
+  panel-settings-accessibility target      Graphics is 93x28, floor 44
+  panel-settings-accessibility target      Audio is 66x28, floor 44
+  panel-settings-accessibility target      Accessibility is 125x28, floor 44
+  panel-settings-accessibility target      Reduced motion is 48x28, floor 44
+  panel-settings-accessibility target      Colour-blind friendly is 48x28, floor 44
+  panel-settings-accessibility target      Show key hints is 48x28, floor 44
+  panel-settings-accessibility target      Reset all is 99x36, floor 44
+  panel-settings-accessibility target      Back is 109x36, floor 44
+                     shot: shots/568x320-panel-settings-accessibility.jpg
+  panel-how          target      Back is 109x36, floor 44
+                     shot: shots/568x320-panel-how.jpg
+  panel-credits      target      Back is 109x36, floor 44
+                     shot: shots/568x320-panel-credits.jpg
+  lobby-pre          target      ← Menu is 84x36, floor 44
+  lobby-pre          clearance   ← Menu to You drop as: gap 1 px, needs 8
+  lobby-pre          clearance   ← Menu to BLAZE: overlap 29 px, needs 8
+  lobby-pre          clearance   Level 1, 0 of 230 XP to You drop as: overlap 4 px, needs 8
+  lobby-pre          clearance   Level 1, 0 of 230 XP to BLAZE: overlap 32 px, needs 8
+                     shot: shots/568x320-lobby-pre.jpg
+  lobby-ready        target      ← Menu is 84x36, floor 44
+  lobby-ready        clearance   ← Menu to You drop as: overlap 20 px, needs 8
+  lobby-ready        clearance   ← Menu to BLAZE: overlap 5 px, needs 8
+  lobby-ready        clearance   Level 1, 0 of 230 XP to You drop as: overlap 20 px, needs 8
+  lobby-ready        clearance   Level 1, 0 of 230 XP to BLAZE: overlap 10 px, needs 8
+                     shot: shots/568x320-lobby-ready.jpg
+  freefall           target      Fire is 69x69, floor 72
+  freefall           target      Dive is 39x39, floor 44
+  freefall           target      Jump is 39x39, floor 44
+  freefall           target      Reload is 36x36, floor 44
+  freefall           target      Pick up is 35x35, floor 44
+  freefall           target      ◀ Q is 29x29, floor 44
+  freefall           target      E ▶ is 29x29, floor 44
+  freefall           target      Pause is 30x30, floor 44
+                     shot: shots/568x320-freefall.jpg
+  canopy             target      Fire is 69x69, floor 72
+  canopy             target      Dive is 39x39, floor 44
+  canopy             target      Jump is 39x39, floor 44
+  canopy             target      Reload is 36x36, floor 44
+  canopy             target      Pick up is 35x35, floor 44
+  canopy             target      ◀ Q is 29x29, floor 44
+  canopy             target      E ▶ is 29x29, floor 44
+  canopy             target      Pause is 30x30, floor 44
+                     shot: shots/568x320-canopy.jpg
+  ground             target      Fire is 69x69, floor 72
+  ground             target      Roll is 39x39, floor 44
+  ground             target      Jump is 39x39, floor 44
+  ground             target      Reload is 36x36, floor 44
+  ground             target      Pick up is 35x35, floor 44
+  ground             target      ◀ Q is 29x29, floor 44
+  ground             target      E ▶ is 29x29, floor 44
+  ground             target      Pause is 30x30, floor 44
+                     shot: shots/568x320-ground.jpg
+  ground-full        target      Fire is 69x69, floor 72
+  ground-full        target      Roll is 39x39, floor 44
+  ground-full        target      Jump is 39x39, floor 44
+  ground-full        target      Reload is 36x36, floor 44
+  ground-full        target      Pick up is 35x35, floor 44
+  ground-full        target      Scope is 42x42, floor 44
+  ground-full        target      Swap to SMG is 32x32, floor 44
+  ground-full        target      Heal is 38x38, floor 44
+  ground-full        target      ◀ Q is 29x29, floor 44
+  ground-full        target      E ▶ is 29x29, floor 44
+  ground-full        target      Pause is 30x30, floor 44
+  ground-full        zones       HUD vitals enters the stick zone (170x11)
+                     shot: shots/568x320-ground-full.jpg
+  pause              target      Resume is 296x40, floor 44
+  pause              target      Settings is 296x40, floor 44
+  pause              target      Quit to menu is 296x40, floor 44
+                     shot: shots/568x320-pause.jpg
+  report             in-view     Play again is not visible: scrolled or clipped out of the 568x320 screen
+  report             in-view     (Main menu|Back to lobby) is not visible: scrolled or clipped out of the 568x320 screen
+                     shot: shots/568x320-report.jpg
+== 640x360
+  menu               target      FighterBlaze is 276x29, floor 44
+  menu               target      Settings is 276x28, floor 44
+  menu               target      How to play is 276x28, floor 44
+  menu               target      Credits is 276x28, floor 44
+                     shot: shots/640x360-menu.jpg
+  panel-fighter      target      Back is 109x36, floor 44
+                     shot: shots/640x360-panel-fighter.jpg
+  panel-settings     target      Controls is 96x28, floor 44
+  panel-settings     target      Camera is 80x28, floor 44
+  panel-settings     target      Graphics is 93x28, floor 44
+  panel-settings     target      Audio is 66x28, floor 44
+  panel-settings     target      Accessibility is 125x28, floor 44
+  panel-settings     target      Invert Y is 48x28, floor 44
+  panel-settings     target      Reset all is 99x36, floor 44
+  panel-settings     target      Back is 109x36, floor 44
+                     shot: shots/640x360-panel-settings.jpg
+  panel-settings-camera target      Controls is 96x28, floor 44
+  panel-settings-camera target      Camera is 80x28, floor 44
+  panel-settings-camera target      Graphics is 93x28, floor 44
+  panel-settings-camera target      Audio is 66x28, floor 44
+  panel-settings-camera target      Accessibility is 125x28, floor 44
+  panel-settings-camera target      Third person is 117x28, floor 44
+  panel-settings-camera target      Reset all is 99x36, floor 44
+  panel-settings-camera target      Back is 109x36, floor 44
+                     shot: shots/640x360-panel-settings-camera.jpg
+  panel-settings-graphics target      Controls is 96x28, floor 44
+  panel-settings-graphics target      Camera is 80x28, floor 44
+  panel-settings-graphics target      Graphics is 93x28, floor 44
+  panel-settings-graphics target      Audio is 66x28, floor 44
+  panel-settings-graphics target      Accessibility is 125x28, floor 44
+  panel-settings-graphics target      Auto is 58x28, floor 44
+  panel-settings-graphics target      Low is 51x28, floor 44
+  panel-settings-graphics target      Med is 51x28, floor 44
+  panel-settings-graphics target      High is 55x28, floor 44
+  panel-settings-graphics target      Shadows is 48x28, floor 44
+  panel-settings-graphics target      Show FPS is 48x28, floor 44
+  panel-settings-graphics target      Reset all is 99x36, floor 44
+  panel-settings-graphics target      Back is 109x36, floor 44
+                     shot: shots/640x360-panel-settings-graphics.jpg
+  panel-settings-audio target      Controls is 96x28, floor 44
+  panel-settings-audio target      Camera is 80x28, floor 44
+  panel-settings-audio target      Graphics is 93x28, floor 44
+  panel-settings-audio target      Audio is 66x28, floor 44
+  panel-settings-audio target      Accessibility is 125x28, floor 44
+  panel-settings-audio target      Mute is 48x28, floor 44
+  panel-settings-audio target      Reset all is 99x36, floor 44
+  panel-settings-audio target      Back is 109x36, floor 44
+                     shot: shots/640x360-panel-settings-audio.jpg
+  panel-settings-accessibility target      Controls is 96x28, floor 44
+  panel-settings-accessibility target      Camera is 80x28, floor 44
+  panel-settings-accessibility target      Graphics is 93x28, floor 44
+  panel-settings-accessibility target      Audio is 66x28, floor 44
+  panel-settings-accessibility target      Accessibility is 125x28, floor 44
+  panel-settings-accessibility target      Reduced motion is 48x28, floor 44
+  panel-settings-accessibility target      Colour-blind friendly is 48x28, floor 44
+  panel-settings-accessibility target      Show key hints is 48x28, floor 44
+  panel-settings-accessibility target      Larger HUD text is 48x28, floor 44
+  panel-settings-accessibility target      Reset all is 99x36, floor 44
+  panel-settings-accessibility target      Back is 109x36, floor 44
+                     shot: shots/640x360-panel-settings-accessibility.jpg
+  panel-how          target      Back is 109x36, floor 44
+                     shot: shots/640x360-panel-how.jpg
+  panel-credits      target      Back is 109x36, floor 44
+                     shot: shots/640x360-panel-credits.jpg
+  lobby-pre          target      ← Menu is 84x36, floor 44
+  lobby-pre          clearance   ← Menu to You drop as: overlap 17 px, needs 8
+  lobby-pre          clearance   Level 1, 0 of 230 XP to You drop as: overlap 20 px, needs 8
+  lobby-pre          clearance   Level 1, 0 of 230 XP to BLAZE: gap 6 px, needs 8
+                     shot: shots/640x360-lobby-pre.jpg
+  lobby-ready        target      ← Menu is 84x36, floor 44
+  lobby-ready        clearance   ← Menu to You drop as: gap 7 px, needs 8
+  lobby-ready        clearance   Level 1, 0 of 230 XP to You drop as: gap 2 px, needs 8
+                     shot: shots/640x360-lobby-ready.jpg
+  freefall           target      Reload is 40x40, floor 44
+  freefall           target      Pick up is 39x39, floor 44
+  freefall           target      ◀ Q is 32x32, floor 44
+  freefall           target      E ▶ is 32x32, floor 44
+  freefall           target      Pause is 34x34, floor 44
+                     shot: shots/640x360-freefall.jpg
+  canopy             target      Reload is 40x40, floor 44
+  canopy             target      Pick up is 39x39, floor 44
+  canopy             target      ◀ Q is 32x32, floor 44
+  canopy             target      E ▶ is 32x32, floor 44
+  canopy             target      Pause is 34x34, floor 44
+                     shot: shots/640x360-canopy.jpg
+  ground             target      Reload is 40x40, floor 44
+  ground             target      Pick up is 39x39, floor 44
+  ground             target      ◀ Q is 32x32, floor 44
+  ground             target      E ▶ is 32x32, floor 44
+  ground             target      Pause is 34x34, floor 44
+                     shot: shots/640x360-ground.jpg
+  ground-full        target      Reload is 40x40, floor 44
+  ground-full        target      Pick up is 39x39, floor 44
+  ground-full        target      Swap to SMG is 35x35, floor 44
+  ground-full        target      Heal is 42x42, floor 44
+  ground-full        target      ◀ Q is 32x32, floor 44
+  ground-full        target      E ▶ is 32x32, floor 44
+  ground-full        target      Pause is 34x34, floor 44
+  ground-full        zones       HUD vitals enters the stick zone (190x13)
+                     shot: shots/640x360-ground-full.jpg
+  pause              target      Resume is 296x40, floor 44
+  pause              target      Settings is 296x40, floor 44
+  pause              target      Quit to menu is 296x40, floor 44
+                     shot: shots/640x360-pause.jpg
+== 667x375
+  menu               target      FighterBlaze is 276x29, floor 44
+  menu               target      Settings is 276x28, floor 44
+  menu               target      How to play is 276x28, floor 44
+  menu               target      Credits is 276x28, floor 44
+                     shot: shots/667x375-menu.jpg
+  panel-fighter      target      Back is 109x36, floor 44
+                     shot: shots/667x375-panel-fighter.jpg
+  panel-settings     target      Controls is 96x28, floor 44
+  panel-settings     target      Camera is 80x28, floor 44
+  panel-settings     target      Graphics is 93x28, floor 44
+  panel-settings     target      Audio is 66x28, floor 44
+  panel-settings     target      Accessibility is 125x28, floor 44
+  panel-settings     target      Invert Y is 48x28, floor 44
+  panel-settings     target      Reset all is 99x36, floor 44
+  panel-settings     target      Back is 109x36, floor 44
+                     shot: shots/667x375-panel-settings.jpg
+  panel-settings-camera target      Controls is 96x28, floor 44
+  panel-settings-camera target      Camera is 80x28, floor 44
+  panel-settings-camera target      Graphics is 93x28, floor 44
+  panel-settings-camera target      Audio is 66x28, floor 44
+  panel-settings-camera target      Accessibility is 125x28, floor 44
+  panel-settings-camera target      Third person is 117x28, floor 44
+  panel-settings-camera target      Reset all is 99x36, floor 44
+  panel-settings-camera target      Back is 109x36, floor 44
+                     shot: shots/667x375-panel-settings-camera.jpg
+  panel-settings-graphics target      Controls is 96x28, floor 44
+  panel-settings-graphics target      Camera is 80x28, floor 44
+  panel-settings-graphics target      Graphics is 93x28, floor 44
+  panel-settings-graphics target      Audio is 66x28, floor 44
+  panel-settings-graphics target      Accessibility is 125x28, floor 44
+  panel-settings-graphics target      Auto is 58x28, floor 44
+  panel-settings-graphics target      Low is 51x28, floor 44
+  panel-settings-graphics target      Med is 51x28, floor 44
+  panel-settings-graphics target      High is 55x28, floor 44
+  panel-settings-graphics target      Shadows is 48x28, floor 44
+  panel-settings-graphics target      Show FPS is 48x28, floor 44
+  panel-settings-graphics target      Reset all is 99x36, floor 44
+  panel-settings-graphics target      Back is 109x36, floor 44
+                     shot: shots/667x375-panel-settings-graphics.jpg
+  panel-settings-audio target      Controls is 96x28, floor 44
+  panel-settings-audio target      Camera is 80x28, floor 44
+  panel-settings-audio target      Graphics is 93x28, floor 44
+  panel-settings-audio target      Audio is 66x28, floor 44
+  panel-settings-audio target      Accessibility is 125x28, floor 44
+  panel-settings-audio target      Mute is 48x28, floor 44
+  panel-settings-audio target      Reset all is 99x36, floor 44
+  panel-settings-audio target      Back is 109x36, floor 44
+                     shot: shots/667x375-panel-settings-audio.jpg
+  panel-settings-accessibility target      Controls is 96x28, floor 44
+  panel-settings-accessibility target      Camera is 80x28, floor 44
+  panel-settings-accessibility target      Graphics is 93x28, floor 44
+  panel-settings-accessibility target      Audio is 66x28, floor 44
+  panel-settings-accessibility target      Accessibility is 125x28, floor 44
+  panel-settings-accessibility target      Reduced motion is 48x28, floor 44
+  panel-settings-accessibility target      Colour-blind friendly is 48x28, floor 44
+  panel-settings-accessibility target      Show key hints is 48x28, floor 44
+  panel-settings-accessibility target      Larger HUD text is 48x28, floor 44
+  panel-settings-accessibility target      Reset all is 99x36, floor 44
+  panel-settings-accessibility target      Back is 109x36, floor 44
+                     shot: shots/667x375-panel-settings-accessibility.jpg
+  panel-how          target      Back is 109x36, floor 44
+                     shot: shots/667x375-panel-how.jpg
+  panel-credits      target      Back is 109x36, floor 44
+                     shot: shots/667x375-panel-credits.jpg
+  lobby-pre          target      ← Menu is 84x36, floor 44
+  lobby-pre          clearance   ← Menu to You drop as: overlap 2 px, needs 8
+  lobby-pre          clearance   Level 1, 0 of 230 XP to You drop as: overlap 7 px, needs 8
+                     shot: shots/667x375-lobby-pre.jpg
+  lobby-ready        target      ← Menu is 84x36, floor 44
+                     shot: shots/667x375-lobby-ready.jpg
+  freefall           target      Reload is 42x42, floor 44
+  freefall           target      Pick up is 40x40, floor 44
+  freefall           target      ◀ Q is 33x33, floor 44
+  freefall           target      E ▶ is 33x33, floor 44
+  freefall           target      Pause is 35x35, floor 44
+                     shot: shots/667x375-freefall.jpg
+  canopy             target      Reload is 42x42, floor 44
+  canopy             target      Pick up is 40x40, floor 44
+  canopy             target      ◀ Q is 33x33, floor 44
+  canopy             target      E ▶ is 33x33, floor 44
+  canopy             target      Pause is 35x35, floor 44
+                     shot: shots/667x375-canopy.jpg
+  ground             target      Reload is 42x42, floor 44
+  ground             target      Pick up is 40x40, floor 44
+  ground             target      ◀ Q is 33x33, floor 44
+  ground             target      E ▶ is 33x33, floor 44
+  ground             target      Pause is 35x35, floor 44
+                     shot: shots/667x375-ground.jpg
+  ground-full        target      Reload is 42x42, floor 44
+  ground-full        target      Pick up is 40x40, floor 44
+  ground-full        target      Swap to SMG is 37x37, floor 44
+  ground-full        target      ◀ Q is 33x33, floor 44
+  ground-full        target      E ▶ is 33x33, floor 44
+  ground-full        target      Pause is 35x35, floor 44
+  ground-full        zones       HUD vitals enters the stick zone (199x13)
+                     shot: shots/667x375-ground-full.jpg
+  pause              target      Resume is 296x40, floor 44
+  pause              target      Settings is 296x40, floor 44
+  pause              target      Quit to menu is 296x40, floor 44
+                     shot: shots/667x375-pause.jpg
+== 844x390
+  menu               target      FighterBlaze is 276x29, floor 44
+  menu               target      Settings is 276x28, floor 44
+  menu               target      How to play is 276x28, floor 44
+  menu               target      Credits is 276x28, floor 44
+                     shot: shots/844x390-menu.jpg
+  panel-fighter      target      Back is 109x36, floor 44
+                     shot: shots/844x390-panel-fighter.jpg
+  panel-settings     target      Controls is 96x28, floor 44
+  panel-settings     target      Camera is 80x28, floor 44
+  panel-settings     target      Graphics is 93x28, floor 44
+  panel-settings     target      Audio is 66x28, floor 44
+  panel-settings     target      Accessibility is 125x28, floor 44
+  panel-settings     target      Invert Y is 48x28, floor 44
+  panel-settings     target      Reset all is 99x36, floor 44
+  panel-settings     target      Back is 109x36, floor 44
+                     shot: shots/844x390-panel-settings.jpg
+  panel-settings-camera target      Controls is 96x28, floor 44
+  panel-settings-camera target      Camera is 80x28, floor 44
+  panel-settings-camera target      Graphics is 93x28, floor 44
+  panel-settings-camera target      Audio is 66x28, floor 44
+  panel-settings-camera target      Accessibility is 125x28, floor 44
+  panel-settings-camera target      Third person is 117x28, floor 44
+  panel-settings-camera target      Reset all is 99x36, floor 44
+  panel-settings-camera target      Back is 109x36, floor 44
+                     shot: shots/844x390-panel-settings-camera.jpg
+  panel-settings-graphics target      Controls is 96x28, floor 44
+  panel-settings-graphics target      Camera is 80x28, floor 44
+  panel-settings-graphics target      Graphics is 93x28, floor 44
+  panel-settings-graphics target      Audio is 66x28, floor 44
+  panel-settings-graphics target      Accessibility is 125x28, floor 44
+  panel-settings-graphics target      Auto is 58x28, floor 44
+  panel-settings-graphics target      Low is 51x28, floor 44
+  panel-settings-graphics target      Med is 51x28, floor 44
+  panel-settings-graphics target      High is 55x28, floor 44
+  panel-settings-graphics target      Shadows is 48x28, floor 44
+  panel-settings-graphics target      Show FPS is 48x28, floor 44
+  panel-settings-graphics target      Reset all is 99x36, floor 44
+  panel-settings-graphics target      Back is 109x36, floor 44
+                     shot: shots/844x390-panel-settings-graphics.jpg
+  panel-settings-audio target      Controls is 96x28, floor 44
+  panel-settings-audio target      Camera is 80x28, floor 44
+  panel-settings-audio target      Graphics is 93x28, floor 44
+  panel-settings-audio target      Audio is 66x28, floor 44
+  panel-settings-audio target      Accessibility is 125x28, floor 44
+  panel-settings-audio target      Mute is 48x28, floor 44
+  panel-settings-audio target      Reset all is 99x36, floor 44
+  panel-settings-audio target      Back is 109x36, floor 44
+                     shot: shots/844x390-panel-settings-audio.jpg
+  panel-settings-accessibility target      Controls is 96x28, floor 44
+  panel-settings-accessibility target      Camera is 80x28, floor 44
+  panel-settings-accessibility target      Graphics is 93x28, floor 44
+  panel-settings-accessibility target      Audio is 66x28, floor 44
+  panel-settings-accessibility target      Accessibility is 125x28, floor 44
+  panel-settings-accessibility target      Reduced motion is 48x28, floor 44
+  panel-settings-accessibility target      Colour-blind friendly is 48x28, floor 44
+  panel-settings-accessibility target      Show key hints is 48x28, floor 44
+  panel-settings-accessibility target      Larger HUD text is 48x28, floor 44
+  panel-settings-accessibility target      Reset all is 99x36, floor 44
+  panel-settings-accessibility target      Back is 109x36, floor 44
+                     shot: shots/844x390-panel-settings-accessibility.jpg
+  panel-how          target      Back is 109x36, floor 44
+                     shot: shots/844x390-panel-how.jpg
+  panel-credits      target      Back is 109x36, floor 44
+                     shot: shots/844x390-panel-credits.jpg
+  lobby-pre          target      ← Menu is 84x36, floor 44
+  lobby-pre          clearance   Level 1, 0 of 230 XP to You drop as: gap 8 px, needs 8
+                     shot: shots/844x390-lobby-pre.jpg
+  lobby-ready        target      ← Menu is 84x36, floor 44
+                     shot: shots/844x390-lobby-ready.jpg
+  freefall           target      ◀ Q is 38x38, floor 44
+  freefall           target      E ▶ is 38x38, floor 44
+  freefall           target      Pause is 40x40, floor 44
+                     shot: shots/844x390-freefall.jpg
+  canopy             target      ◀ Q is 38x38, floor 44
+  canopy             target      E ▶ is 38x38, floor 44
+  canopy             target      Pause is 40x40, floor 44
+                     shot: shots/844x390-canopy.jpg
+  ground             target      ◀ Q is 38x38, floor 44
+  ground             target      E ▶ is 38x38, floor 44
+  ground             target      Pause is 40x40, floor 44
+                     shot: shots/844x390-ground.jpg
+  ground-full        target      Swap to SMG is 42x42, floor 44
+  ground-full        target      ◀ Q is 38x38, floor 44
+  ground-full        target      E ▶ is 38x38, floor 44
+  ground-full        target      Pause is 40x40, floor 44
+  ground-full        zones       HUD vitals enters the stick zone (226x15)
+                     shot: shots/844x390-ground-full.jpg
+  pause              target      Resume is 296x40, floor 44
+  pause              target      Settings is 296x40, floor 44
+  pause              target      Quit to menu is 296x40, floor 44
+                     shot: shots/844x390-pause.jpg
+== 915x412
+  menu               target      FighterBlaze is 284x29, floor 44
+  menu               target      Settings is 284x28, floor 44
+  menu               target      How to play is 284x28, floor 44
+  menu               target      Credits is 284x28, floor 44
+                     shot: shots/915x412-menu.jpg
+  panel-fighter      target      Back is 109x36, floor 44
+                     shot: shots/915x412-panel-fighter.jpg
+  panel-settings     target      Controls is 96x28, floor 44
+  panel-settings     target      Camera is 80x28, floor 44
+  panel-settings     target      Graphics is 93x28, floor 44
+  panel-settings     target      Audio is 66x28, floor 44
+  panel-settings     target      Accessibility is 125x28, floor 44
+  panel-settings     target      Invert Y is 48x28, floor 44
+  panel-settings     target      Left-handed is 48x16, floor 44 (cut off by a scroll area, its own box is 48x28)
+  panel-settings     target      Reset all is 99x36, floor 44
+  panel-settings     target      Back is 109x36, floor 44
+                     shot: shots/915x412-panel-settings.jpg
+  panel-settings-camera target      Controls is 96x28, floor 44
+  panel-settings-camera target      Camera is 80x28, floor 44
+  panel-settings-camera target      Graphics is 93x28, floor 44
+  panel-settings-camera target      Audio is 66x28, floor 44
+  panel-settings-camera target      Accessibility is 125x28, floor 44
+  panel-settings-camera target      Third person is 117x28, floor 44
+  panel-settings-camera target      Reset all is 99x36, floor 44
+  panel-settings-camera target      Back is 109x36, floor 44
+                     shot: shots/915x412-panel-settings-camera.jpg
+  panel-settings-graphics target      Controls is 96x28, floor 44
+  panel-settings-graphics target      Camera is 80x28, floor 44
+  panel-settings-graphics target      Graphics is 93x28, floor 44
+  panel-settings-graphics target      Audio is 66x28, floor 44
+  panel-settings-graphics target      Accessibility is 125x28, floor 44
+  panel-settings-graphics target      Auto is 58x28, floor 44
+  panel-settings-graphics target      Low is 51x28, floor 44
+  panel-settings-graphics target      Med is 51x28, floor 44
+  panel-settings-graphics target      High is 55x28, floor 44
+  panel-settings-graphics target      Shadows is 48x28, floor 44
+  panel-settings-graphics target      Show FPS is 48x28, floor 44
+  panel-settings-graphics target      Reset all is 99x36, floor 44
+  panel-settings-graphics target      Back is 109x36, floor 44
+                     shot: shots/915x412-panel-settings-graphics.jpg
+  panel-settings-audio target      Controls is 96x28, floor 44
+  panel-settings-audio target      Camera is 80x28, floor 44
+  panel-settings-audio target      Graphics is 93x28, floor 44
+  panel-settings-audio target      Audio is 66x28, floor 44
+  panel-settings-audio target      Accessibility is 125x28, floor 44
+  panel-settings-audio target      Mute is 48x28, floor 44
+  panel-settings-audio target      Reset all is 99x36, floor 44
+  panel-settings-audio target      Back is 109x36, floor 44
+                     shot: shots/915x412-panel-settings-audio.jpg
+  panel-settings-accessibility target      Controls is 96x28, floor 44
+  panel-settings-accessibility target      Camera is 80x28, floor 44
+  panel-settings-accessibility target      Graphics is 93x28, floor 44
+  panel-settings-accessibility target      Audio is 66x28, floor 44
+  panel-settings-accessibility target      Accessibility is 125x28, floor 44
+  panel-settings-accessibility target      Reduced motion is 48x28, floor 44
+  panel-settings-accessibility target      Colour-blind friendly is 48x28, floor 44
+  panel-settings-accessibility target      Show key hints is 48x28, floor 44
+  panel-settings-accessibility target      Larger HUD text is 48x28, floor 44
+  panel-settings-accessibility target      Reset all is 99x36, floor 44
+  panel-settings-accessibility target      Back is 109x36, floor 44
+                     shot: shots/915x412-panel-settings-accessibility.jpg
+  panel-how          target      Back is 109x36, floor 44
+                     shot: shots/915x412-panel-how.jpg
+  panel-credits      target      Back is 109x36, floor 44
+                     shot: shots/915x412-panel-credits.jpg
+  lobby-pre          target      ← Menu is 84x36, floor 44
+                     shot: shots/915x412-lobby-pre.jpg
+  lobby-ready        target      ← Menu is 84x36, floor 44
+                     shot: shots/915x412-lobby-ready.jpg
+  freefall           target      ◀ Q is 38x38, floor 44
+  freefall           target      E ▶ is 38x38, floor 44
+  freefall           target      Pause is 40x40, floor 44
+                     shot: shots/915x412-freefall.jpg
+  canopy             target      ◀ Q is 38x38, floor 44
+  canopy             target      E ▶ is 38x38, floor 44
+  canopy             target      Pause is 40x40, floor 44
+                     shot: shots/915x412-canopy.jpg
+  ground             target      ◀ Q is 38x38, floor 44
+  ground             target      E ▶ is 38x38, floor 44
+  ground             target      Pause is 40x40, floor 44
+                     shot: shots/915x412-ground.jpg
+  ground-full        target      Swap to SMG is 42x42, floor 44
+  ground-full        target      ◀ Q is 38x38, floor 44
+  ground-full        target      E ▶ is 38x38, floor 44
+  ground-full        target      Pause is 40x40, floor 44
+  ground-full        zones       HUD vitals enters the stick zone (226x15)
+                     shot: shots/915x412-ground-full.jpg
+  pause              target      Resume is 296x40, floor 44
+  pause              target      Settings is 296x40, floor 44
+  pause              target      Quit to menu is 296x40, floor 44
+                     shot: shots/915x412-pause.jpg
+== 932x430
+  menu               target      FighterBlaze is 290x29, floor 44
+  menu               target      Settings is 290x28, floor 44
+  menu               target      How to play is 290x28, floor 44
+  menu               target      Credits is 290x28, floor 44
+                     shot: shots/932x430-menu.jpg
+  panel-settings     target      Controls is 96x28, floor 44
+  panel-settings     target      Camera is 80x28, floor 44
+  panel-settings     target      Graphics is 93x28, floor 44
+  panel-settings     target      Audio is 66x28, floor 44
+  panel-settings     target      Accessibility is 125x28, floor 44
+  panel-settings     target      Invert Y is 48x28, floor 44
+  panel-settings     target      Left-handed is 48x28, floor 44
+  panel-settings     target      Reset all is 99x36, floor 44
+  panel-settings     target      Back is 109x36, floor 44
+                     shot: shots/932x430-panel-settings.jpg
+  panel-settings-camera target      Controls is 96x28, floor 44
+  panel-settings-camera target      Camera is 80x28, floor 44
+  panel-settings-camera target      Graphics is 93x28, floor 44
+  panel-settings-camera target      Audio is 66x28, floor 44
+  panel-settings-camera target      Accessibility is 125x28, floor 44
+  panel-settings-camera target      Third person is 117x28, floor 44
+  panel-settings-camera target      Reset all is 99x36, floor 44
+  panel-settings-camera target      Back is 109x36, floor 44
+                     shot: shots/932x430-panel-settings-camera.jpg
+  panel-settings-graphics target      Controls is 96x28, floor 44
+  panel-settings-graphics target      Camera is 80x28, floor 44
+  panel-settings-graphics target      Graphics is 93x28, floor 44
+  panel-settings-graphics target      Audio is 66x28, floor 44
+  panel-settings-graphics target      Accessibility is 125x28, floor 44
+  panel-settings-graphics target      Auto is 58x28, floor 44
+  panel-settings-graphics target      Low is 51x28, floor 44
+  panel-settings-graphics target      Med is 51x28, floor 44
+  panel-settings-graphics target      High is 55x28, floor 44
+  panel-settings-graphics target      Shadows is 48x28, floor 44
+  panel-settings-graphics target      Show FPS is 48x28, floor 44
+  panel-settings-graphics target      Reset all is 99x36, floor 44
+  panel-settings-graphics target      Back is 109x36, floor 44
+                     shot: shots/932x430-panel-settings-graphics.jpg
+  panel-settings-audio target      Controls is 96x28, floor 44
+  panel-settings-audio target      Camera is 80x28, floor 44
+  panel-settings-audio target      Graphics is 93x28, floor 44
+  panel-settings-audio target      Audio is 66x28, floor 44
+  panel-settings-audio target      Accessibility is 125x28, floor 44
+  panel-settings-audio target      Mute is 48x28, floor 44
+  panel-settings-audio target      Reset all is 99x36, floor 44
+  panel-settings-audio target      Back is 109x36, floor 44
+                     shot: shots/932x430-panel-settings-audio.jpg
+  panel-settings-accessibility target      Controls is 96x28, floor 44
+  panel-settings-accessibility target      Camera is 80x28, floor 44
+  panel-settings-accessibility target      Graphics is 93x28, floor 44
+  panel-settings-accessibility target      Audio is 66x28, floor 44
+  panel-settings-accessibility target      Accessibility is 125x28, floor 44
+  panel-settings-accessibility target      Reduced motion is 48x28, floor 44
+  panel-settings-accessibility target      Colour-blind friendly is 48x28, floor 44
+  panel-settings-accessibility target      Show key hints is 48x28, floor 44
+  panel-settings-accessibility target      Larger HUD text is 48x28, floor 44
+  panel-settings-accessibility target      Reset all is 99x36, floor 44
+  panel-settings-accessibility target      Back is 109x36, floor 44
+                     shot: shots/932x430-panel-settings-accessibility.jpg
+  lobby-pre          target      ← Menu is 84x36, floor 44
+                     shot: shots/932x430-lobby-pre.jpg
+  lobby-ready        target      ← Menu is 84x36, floor 44
+                     shot: shots/932x430-lobby-ready.jpg
+  freefall           target      ◀ Q is 38x38, floor 44
+  freefall           target      E ▶ is 38x38, floor 44
+  freefall           target      Pause is 40x40, floor 44
+                     shot: shots/932x430-freefall.jpg
+  canopy             target      ◀ Q is 38x38, floor 44
+  canopy             target      E ▶ is 38x38, floor 44
+  canopy             target      Pause is 40x40, floor 44
+                     shot: shots/932x430-canopy.jpg
+  ground             target      ◀ Q is 38x38, floor 44
+  ground             target      E ▶ is 38x38, floor 44
+  ground             target      Pause is 40x40, floor 44
+                     shot: shots/932x430-ground.jpg
+  ground-full        target      Swap to SMG is 42x42, floor 44
+  ground-full        target      ◀ Q is 38x38, floor 44
+  ground-full        target      E ▶ is 38x38, floor 44
+  ground-full        target      Pause is 40x40, floor 44
+  ground-full        zones       HUD vitals enters the stick zone (226x15)
+                     shot: shots/932x430-ground-full.jpg
+  pause              target      Resume is 296x40, floor 44
+  pause              target      Settings is 296x40, floor 44
+  pause              target      Quit to menu is 296x40, floor 44
+                     shot: shots/932x430-pause.jpg
+== 800x450
+  menu               target      FighterBlaze is 276x29, floor 44
+  menu               target      Settings is 276x28, floor 44
+  menu               target      How to play is 276x28, floor 44
+  menu               target      Credits is 276x28, floor 44
+                     shot: shots/800x450-menu.jpg
+  panel-settings     target      Controls is 96x28, floor 44
+  panel-settings     target      Camera is 80x28, floor 44
+  panel-settings     target      Graphics is 93x28, floor 44
+  panel-settings     target      Audio is 66x28, floor 44
+  panel-settings     target      Accessibility is 125x28, floor 44
+  panel-settings     target      Invert Y is 48x28, floor 44
+  panel-settings     target      Left-handed is 48x28, floor 44
+  panel-settings     target      Reset all is 99x36, floor 44
+  panel-settings     target      Back is 109x36, floor 44
+                     shot: shots/800x450-panel-settings.jpg
+  panel-settings-camera target      Controls is 96x28, floor 44
+  panel-settings-camera target      Camera is 80x28, floor 44
+  panel-settings-camera target      Graphics is 93x28, floor 44
+  panel-settings-camera target      Audio is 66x28, floor 44
+  panel-settings-camera target      Accessibility is 125x28, floor 44
+  panel-settings-camera target      Third person is 117x28, floor 44
+  panel-settings-camera target      Reset all is 99x36, floor 44
+  panel-settings-camera target      Back is 109x36, floor 44
+                     shot: shots/800x450-panel-settings-camera.jpg
+  panel-settings-graphics target      Controls is 96x28, floor 44
+  panel-settings-graphics target      Camera is 80x28, floor 44
+  panel-settings-graphics target      Graphics is 93x28, floor 44
+  panel-settings-graphics target      Audio is 66x28, floor 44
+  panel-settings-graphics target      Accessibility is 125x28, floor 44
+  panel-settings-graphics target      Auto is 58x28, floor 44
+  panel-settings-graphics target      Low is 51x28, floor 44
+  panel-settings-graphics target      Med is 51x28, floor 44
+  panel-settings-graphics target      High is 55x28, floor 44
+  panel-settings-graphics target      Shadows is 48x28, floor 44
+  panel-settings-graphics target      Show FPS is 48x28, floor 44
+  panel-settings-graphics target      Reset all is 99x36, floor 44
+  panel-settings-graphics target      Back is 109x36, floor 44
+                     shot: shots/800x450-panel-settings-graphics.jpg
+  panel-settings-audio target      Controls is 96x28, floor 44
+  panel-settings-audio target      Camera is 80x28, floor 44
+  panel-settings-audio target      Graphics is 93x28, floor 44
+  panel-settings-audio target      Audio is 66x28, floor 44
+  panel-settings-audio target      Accessibility is 125x28, floor 44
+  panel-settings-audio target      Mute is 48x28, floor 44
+  panel-settings-audio target      Reset all is 99x36, floor 44
+  panel-settings-audio target      Back is 109x36, floor 44
+                     shot: shots/800x450-panel-settings-audio.jpg
+  panel-settings-accessibility target      Controls is 96x28, floor 44
+  panel-settings-accessibility target      Camera is 80x28, floor 44
+  panel-settings-accessibility target      Graphics is 93x28, floor 44
+  panel-settings-accessibility target      Audio is 66x28, floor 44
+  panel-settings-accessibility target      Accessibility is 125x28, floor 44
+  panel-settings-accessibility target      Reduced motion is 48x28, floor 44
+  panel-settings-accessibility target      Colour-blind friendly is 48x28, floor 44
+  panel-settings-accessibility target      Show key hints is 48x28, floor 44
+  panel-settings-accessibility target      Larger HUD text is 48x28, floor 44
+  panel-settings-accessibility target      Reset all is 99x36, floor 44
+  panel-settings-accessibility target      Back is 109x36, floor 44
+                     shot: shots/800x450-panel-settings-accessibility.jpg
+  lobby-pre          target      ← Menu is 84x36, floor 44
+                     shot: shots/800x450-lobby-pre.jpg
+  lobby-ready        target      ← Menu is 84x36, floor 44
+                     shot: shots/800x450-lobby-ready.jpg
+  freefall           target      ◀ Q is 38x38, floor 44
+  freefall           target      E ▶ is 38x38, floor 44
+  freefall           target      Pause is 40x40, floor 44
+                     shot: shots/800x450-freefall.jpg
+  canopy             target      ◀ Q is 38x38, floor 44
+  canopy             target      E ▶ is 38x38, floor 44
+  canopy             target      Pause is 40x40, floor 44
+                     shot: shots/800x450-canopy.jpg
+  ground             target      ◀ Q is 38x38, floor 44
+  ground             target      E ▶ is 38x38, floor 44
+  ground             target      Pause is 40x40, floor 44
+                     shot: shots/800x450-ground.jpg
+  ground-full        target      Swap to SMG is 42x42, floor 44
+  ground-full        target      ◀ Q is 38x38, floor 44
+  ground-full        target      E ▶ is 38x38, floor 44
+  ground-full        target      Pause is 40x40, floor 44
+  ground-full        zones       HUD vitals enters the stick zone (226x15)
+                     shot: shots/800x450-ground-full.jpg
+  pause              target      Resume is 296x40, floor 44
+  pause              target      Settings is 296x40, floor 44
+  pause              target      Quit to menu is 296x40, floor 44
+                     shot: shots/800x450-pause.jpg
+== 1024x768
+  menu               target      FighterBlaze is 325x39, floor 44
+  menu               target      Settings is 325x38, floor 44
+  menu               target      How to play is 325x38, floor 44
+  menu               target      Credits is 325x38, floor 44
+                     shot: shots/1024x768-menu.jpg
+  panel-settings     target      Controls is 96x36, floor 44
+  panel-settings     target      Camera is 80x36, floor 44
+  panel-settings     target      Graphics is 93x36, floor 44
+  panel-settings     target      Audio is 66x36, floor 44
+  panel-settings     target      Accessibility is 125x36, floor 44
+  panel-settings     target      Invert Y is 48x28, floor 44
+  panel-settings     target      Left-handed is 48x28, floor 44
+  panel-settings     target      Reset all is 99x36, floor 44
+                     shot: shots/1024x768-panel-settings.jpg
+  panel-settings-camera target      Controls is 96x36, floor 44
+  panel-settings-camera target      Camera is 80x36, floor 44
+  panel-settings-camera target      Graphics is 93x36, floor 44
+  panel-settings-camera target      Audio is 66x36, floor 44
+  panel-settings-camera target      Accessibility is 125x36, floor 44
+  panel-settings-camera target      Third person is 117x28, floor 44
+  panel-settings-camera target      Reset all is 99x36, floor 44
+                     shot: shots/1024x768-panel-settings-camera.jpg
+  panel-settings-graphics target      Controls is 96x36, floor 44
+  panel-settings-graphics target      Camera is 80x36, floor 44
+  panel-settings-graphics target      Graphics is 93x36, floor 44
+  panel-settings-graphics target      Audio is 66x36, floor 44
+  panel-settings-graphics target      Accessibility is 125x36, floor 44
+  panel-settings-graphics target      Auto is 58x28, floor 44
+  panel-settings-graphics target      Low is 51x28, floor 44
+  panel-settings-graphics target      Med is 51x28, floor 44
+  panel-settings-graphics target      High is 55x28, floor 44
+  panel-settings-graphics target      Shadows is 48x28, floor 44
+  panel-settings-graphics target      Show FPS is 48x28, floor 44
+  panel-settings-graphics target      Reset all is 99x36, floor 44
+                     shot: shots/1024x768-panel-settings-graphics.jpg
+  panel-settings-audio target      Controls is 96x36, floor 44
+  panel-settings-audio target      Camera is 80x36, floor 44
+  panel-settings-audio target      Graphics is 93x36, floor 44
+  panel-settings-audio target      Audio is 66x36, floor 44
+  panel-settings-audio target      Accessibility is 125x36, floor 44
+  panel-settings-audio target      Mute is 48x28, floor 44
+  panel-settings-audio target      Reset all is 99x36, floor 44
+                     shot: shots/1024x768-panel-settings-audio.jpg
+  panel-settings-accessibility target      Controls is 96x36, floor 44
+  panel-settings-accessibility target      Camera is 80x36, floor 44
+  panel-settings-accessibility target      Graphics is 93x36, floor 44
+  panel-settings-accessibility target      Audio is 66x36, floor 44
+  panel-settings-accessibility target      Accessibility is 125x36, floor 44
+  panel-settings-accessibility target      Reduced motion is 48x28, floor 44
+  panel-settings-accessibility target      Colour-blind friendly is 48x28, floor 44
+  panel-settings-accessibility target      Show key hints is 48x28, floor 44
+  panel-settings-accessibility target      Larger HUD text is 48x28, floor 44
+  panel-settings-accessibility target      Reset all is 99x36, floor 44
+                     shot: shots/1024x768-panel-settings-accessibility.jpg
+  lobby-pre          target      ← Menu is 84x36, floor 44
+                     shot: shots/1024x768-lobby-pre.jpg
+  lobby-ready        target      ← Menu is 84x36, floor 44
+                     shot: shots/1024x768-lobby-ready.jpg
+  freefall           target      ◀ Q is 38x38, floor 44
+  freefall           target      E ▶ is 38x38, floor 44
+  freefall           target      Pause is 40x40, floor 44
+                     shot: shots/1024x768-freefall.jpg
+  canopy             target      ◀ Q is 38x38, floor 44
+  canopy             target      E ▶ is 38x38, floor 44
+  canopy             target      Pause is 40x40, floor 44
+                     shot: shots/1024x768-canopy.jpg
+  ground             target      ◀ Q is 38x38, floor 44
+  ground             target      E ▶ is 38x38, floor 44
+  ground             target      Pause is 40x40, floor 44
+                     shot: shots/1024x768-ground.jpg
+  ground-full        target      Swap to SMG is 42x42, floor 44
+  ground-full        target      ◀ Q is 38x38, floor 44
+  ground-full        target      E ▶ is 38x38, floor 44
+  ground-full        target      Pause is 40x40, floor 44
+  ground-full        zones       HUD vitals enters the stick zone (226x15)
+                     shot: shots/1024x768-ground-full.jpg
+  pause              target      Resume is 296x40, floor 44
+  pause              target      Settings is 296x40, floor 44
+  pause              target      Quit to menu is 296x40, floor 44
+                     shot: shots/1024x768-pause.jpg
+== 1080x607
+  menu               target      FighterBlaze is 346x29, floor 44
+  menu               target      Settings is 346x28, floor 44
+  menu               target      How to play is 346x28, floor 44
+  menu               target      Credits is 346x28, floor 44
+                     shot: shots/1080x607-menu.jpg
+  panel-settings     target      Controls is 96x36, floor 44
+  panel-settings     target      Camera is 80x36, floor 44
+  panel-settings     target      Graphics is 93x36, floor 44
+  panel-settings     target      Audio is 66x36, floor 44
+  panel-settings     target      Accessibility is 125x36, floor 44
+  panel-settings     target      Invert Y is 48x28, floor 44
+  panel-settings     target      Left-handed is 48x28, floor 44
+  panel-settings     target      Reset all is 99x36, floor 44
+                     shot: shots/1080x607-panel-settings.jpg
+  panel-settings-camera target      Controls is 96x36, floor 44
+  panel-settings-camera target      Camera is 80x36, floor 44
+  panel-settings-camera target      Graphics is 93x36, floor 44
+  panel-settings-camera target      Audio is 66x36, floor 44
+  panel-settings-camera target      Accessibility is 125x36, floor 44
+  panel-settings-camera target      Third person is 117x28, floor 44
+  panel-settings-camera target      Reset all is 99x36, floor 44
+                     shot: shots/1080x607-panel-settings-camera.jpg
+  panel-settings-graphics target      Controls is 96x36, floor 44
+  panel-settings-graphics target      Camera is 80x36, floor 44
+  panel-settings-graphics target      Graphics is 93x36, floor 44
+  panel-settings-graphics target      Audio is 66x36, floor 44
+  panel-settings-graphics target      Accessibility is 125x36, floor 44
+  panel-settings-graphics target      Auto is 58x28, floor 44
+  panel-settings-graphics target      Low is 51x28, floor 44
+  panel-settings-graphics target      Med is 51x28, floor 44
+  panel-settings-graphics target      High is 55x28, floor 44
+  panel-settings-graphics target      Shadows is 48x28, floor 44
+  panel-settings-graphics target      Show FPS is 48x28, floor 44
+  panel-settings-graphics target      Reset all is 99x36, floor 44
+                     shot: shots/1080x607-panel-settings-graphics.jpg
+  panel-settings-audio target      Controls is 96x36, floor 44
+  panel-settings-audio target      Camera is 80x36, floor 44
+  panel-settings-audio target      Graphics is 93x36, floor 44
+  panel-settings-audio target      Audio is 66x36, floor 44
+  panel-settings-audio target      Accessibility is 125x36, floor 44
+  panel-settings-audio target      Mute is 48x28, floor 44
+  panel-settings-audio target      Reset all is 99x36, floor 44
+                     shot: shots/1080x607-panel-settings-audio.jpg
+  panel-settings-accessibility target      Controls is 96x36, floor 44
+  panel-settings-accessibility target      Camera is 80x36, floor 44
+  panel-settings-accessibility target      Graphics is 93x36, floor 44
+  panel-settings-accessibility target      Audio is 66x36, floor 44
+  panel-settings-accessibility target      Accessibility is 125x36, floor 44
+  panel-settings-accessibility target      Reduced motion is 48x28, floor 44
+  panel-settings-accessibility target      Colour-blind friendly is 48x28, floor 44
+  panel-settings-accessibility target      Show key hints is 48x28, floor 44
+  panel-settings-accessibility target      Larger HUD text is 48x28, floor 44
+  panel-settings-accessibility target      Reset all is 99x36, floor 44
+                     shot: shots/1080x607-panel-settings-accessibility.jpg
+  lobby-pre          target      ← Menu is 84x36, floor 44
+                     shot: shots/1080x607-lobby-pre.jpg
+  lobby-ready        target      ← Menu is 84x36, floor 44
+                     shot: shots/1080x607-lobby-ready.jpg
+  freefall           target      ◀ Q is 38x38, floor 44
+  freefall           target      E ▶ is 38x38, floor 44
+  freefall           target      Pause is 40x40, floor 44
+                     shot: shots/1080x607-freefall.jpg
+  canopy             target      ◀ Q is 38x38, floor 44
+  canopy             target      E ▶ is 38x38, floor 44
+  canopy             target      Pause is 40x40, floor 44
+                     shot: shots/1080x607-canopy.jpg
+  ground             target      ◀ Q is 38x38, floor 44
+  ground             target      E ▶ is 38x38, floor 44
+  ground             target      Pause is 40x40, floor 44
+                     shot: shots/1080x607-ground.jpg
+  ground-full        target      Swap to SMG is 42x42, floor 44
+  ground-full        target      ◀ Q is 38x38, floor 44
+  ground-full        target      E ▶ is 38x38, floor 44
+  ground-full        target      Pause is 40x40, floor 44
+  ground-full        zones       HUD vitals enters the stick zone (226x15)
+                     shot: shots/1080x607-ground-full.jpg
+  pause              target      Resume is 296x40, floor 44
+  pause              target      Settings is 296x40, floor 44
+  pause              target      Quit to menu is 296x40, floor 44
+                     shot: shots/1080x607-pause.jpg
+== 1180x820
+  menu               target      FighterBlaze is 376x39, floor 44
+  menu               target      Settings is 376x38, floor 44
+  menu               target      How to play is 376x38, floor 44
+  menu               target      Credits is 376x38, floor 44
+                     shot: shots/1180x820-menu.jpg
+  panel-settings     target      Controls is 96x36, floor 44
+  panel-settings     target      Camera is 80x36, floor 44
+  panel-settings     target      Graphics is 93x36, floor 44
+  panel-settings     target      Audio is 66x36, floor 44
+  panel-settings     target      Accessibility is 125x36, floor 44
+  panel-settings     target      Invert Y is 48x28, floor 44
+  panel-settings     target      Left-handed is 48x28, floor 44
+  panel-settings     target      Reset all is 99x36, floor 44
+                     shot: shots/1180x820-panel-settings.jpg
+  panel-settings-camera target      Controls is 96x36, floor 44
+  panel-settings-camera target      Camera is 80x36, floor 44
+  panel-settings-camera target      Graphics is 93x36, floor 44
+  panel-settings-camera target      Audio is 66x36, floor 44
+  panel-settings-camera target      Accessibility is 125x36, floor 44
+  panel-settings-camera target      Third person is 117x28, floor 44
+  panel-settings-camera target      Reset all is 99x36, floor 44
+                     shot: shots/1180x820-panel-settings-camera.jpg
+  panel-settings-graphics target      Controls is 96x36, floor 44
+  panel-settings-graphics target      Camera is 80x36, floor 44
+  panel-settings-graphics target      Graphics is 93x36, floor 44
+  panel-settings-graphics target      Audio is 66x36, floor 44
+  panel-settings-graphics target      Accessibility is 125x36, floor 44
+  panel-settings-graphics target      Auto is 58x28, floor 44
+  panel-settings-graphics target      Low is 51x28, floor 44
+  panel-settings-graphics target      Med is 51x28, floor 44
+  panel-settings-graphics target      High is 55x28, floor 44
+  panel-settings-graphics target      Shadows is 48x28, floor 44
+  panel-settings-graphics target      Show FPS is 48x28, floor 44
+  panel-settings-graphics target      Reset all is 99x36, floor 44
+                     shot: shots/1180x820-panel-settings-graphics.jpg
+  panel-settings-audio target      Controls is 96x36, floor 44
+  panel-settings-audio target      Camera is 80x36, floor 44
+  panel-settings-audio target      Graphics is 93x36, floor 44
+  panel-settings-audio target      Audio is 66x36, floor 44
+  panel-settings-audio target      Accessibility is 125x36, floor 44
+  panel-settings-audio target      Mute is 48x28, floor 44
+  panel-settings-audio target      Reset all is 99x36, floor 44
+                     shot: shots/1180x820-panel-settings-audio.jpg
+  panel-settings-accessibility target      Controls is 96x36, floor 44
+  panel-settings-accessibility target      Camera is 80x36, floor 44
+  panel-settings-accessibility target      Graphics is 93x36, floor 44
+  panel-settings-accessibility target      Audio is 66x36, floor 44
+  panel-settings-accessibility target      Accessibility is 125x36, floor 44
+  panel-settings-accessibility target      Reduced motion is 48x28, floor 44
+  panel-settings-accessibility target      Colour-blind friendly is 48x28, floor 44
+  panel-settings-accessibility target      Show key hints is 48x28, floor 44
+  panel-settings-accessibility target      Larger HUD text is 48x28, floor 44
+  panel-settings-accessibility target      Reset all is 99x36, floor 44
+                     shot: shots/1180x820-panel-settings-accessibility.jpg
+  lobby-pre          target      ← Menu is 84x36, floor 44
+                     shot: shots/1180x820-lobby-pre.jpg
+  lobby-ready        target      ← Menu is 84x36, floor 44
+                     shot: shots/1180x820-lobby-ready.jpg
+  freefall           target      ◀ Q is 38x38, floor 44
+  freefall           target      E ▶ is 38x38, floor 44
+  freefall           target      Pause is 40x40, floor 44
+                     shot: shots/1180x820-freefall.jpg
+  canopy             target      ◀ Q is 38x38, floor 44
+  canopy             target      E ▶ is 38x38, floor 44
+  canopy             target      Pause is 40x40, floor 44
+                     shot: shots/1180x820-canopy.jpg
+  ground             target      ◀ Q is 38x38, floor 44
+  ground             target      E ▶ is 38x38, floor 44
+  ground             target      Pause is 40x40, floor 44
+                     shot: shots/1180x820-ground.jpg
+  ground-full        target      Swap to SMG is 42x42, floor 44
+  ground-full        target      ◀ Q is 38x38, floor 44
+  ground-full        target      E ▶ is 38x38, floor 44
+  ground-full        target      Pause is 40x40, floor 44
+  ground-full        zones       HUD vitals enters the stick zone (226x15)
+                     shot: shots/1180x820-ground-full.jpg
+  pause              target      Resume is 296x40, floor 44
+  pause              target      Settings is 296x40, floor 44
+  pause              target      Quit to menu is 296x40, floor 44
+                     shot: shots/1180x820-pause.jpg
+== 860x484
+  panel-settings     target      Shoot: J. Press to change. is 80x23, floor 24 (cut off by a scroll area, its own box is 80x28)
+  panel-settings     target      Jump / parachute: Space. Press t is 80x23, floor 24 (cut off by a scroll area, its own box is 80x28)
+                     shot: shots/860x484-panel-settings.jpg
+== 907x510
+  lobby-pre          clearance   Level 1, 0 of 230 XP to You drop as: overlap 20 px, needs 8
+  lobby-pre          clearance   Level 1, 0 of 230 XP to BLAZE: overlap 2 px, needs 8
+                     shot: shots/907x510-lobby-pre.jpg
+  lobby-ready        clearance   Level 1, 0 of 230 XP to You drop as: overlap 6 px, needs 8
+                     shot: shots/907x510-lobby-ready.jpg
+== 1020x540
+  lobby-pre          clearance   Level 1, 0 of 230 XP to You drop as: gap 0 px, needs 8
+                     shot: shots/1020x540-lobby-pre.jpg
+== 1216x684
+  panel-fighter      target      BlazeYOU is 197x11, floor 24 (cut off by a scroll area, its own box is 197x176)
+  panel-fighter      target      Bastion is 197x11, floor 24 (cut off by a scroll area, its own box is 197x176)
+  panel-fighter      target      Tempo is 197x11, floor 24 (cut off by a scroll area, its own box is 197x176)
+  panel-fighter      target      Rookie is 197x11, floor 24 (cut off by a scroll area, its own box is 197x176)
+                     shot: shots/1216x684-panel-fighter.jpg
+  report             in-view     Play again is not fully in view (646..702 of 684)
+  report             in-view     Main menu is not fully in view (646..702 of 684)
+                     shot: shots/1216x684-report.jpg
+
+info (clean or not):
+  568x320 lobby-pre: controls+HUD cover about 6% of the screen
+  568x320 plane: buttons 1: Jump 69 | controls+HUD cover about 31% of the screen
+  568x320 freefall: buttons 8: Fire 69, Dive 39, Jump 39, Reload 36, Pick up 35, Super 44, ◀ Q 29, E ▶ 29 | controls+HUD cover about 21% of the screen
+  568x320 canopy: buttons 8: Fire 69, Dive 39, Jump 39, Reload 36, Pick up 35, Super 44, ◀ Q 29, E ▶ 29 | controls+HUD cover about 21% of the screen
+  568x320 ground: buttons 8: Fire 69, Roll 39, Jump 39, Reload 36, Pick up 35, Super 44, ◀ Q 29, E ▶ 29 | controls+HUD cover about 21% of the screen
+  568x320 ground-full: buttons 11: Fire 69, Roll 39, Jump 39, Reload 36, Pick up 35, Scope 42, Super 44, Swap to SMG 32, Heal 38, ◀ Q 29, E ▶ 29 | controls+HUD cover about 25% of the screen
+  640x360 lobby-pre: controls+HUD cover about 5% of the screen
+  640x360 plane: buttons 1: Jump 77 | controls+HUD cover about 30% of the screen
+  640x360 freefall: buttons 8: Fire 77, Dive 44, Jump 44, Reload 40, Pick up 39, Super 49, ◀ Q 32, E ▶ 32 | controls+HUD cover about 21% of the screen
+  640x360 canopy: buttons 8: Fire 77, Dive 44, Jump 44, Reload 40, Pick up 39, Super 49, ◀ Q 32, E ▶ 32 | controls+HUD cover about 21% of the screen
+  640x360 ground: buttons 8: Fire 77, Roll 44, Jump 44, Reload 40, Pick up 39, Super 49, ◀ Q 32, E ▶ 32 | controls+HUD cover about 21% of the screen
+  640x360 ground-full: buttons 11: Fire 77, Roll 44, Jump 44, Reload 40, Pick up 39, Scope 47, Super 49, Swap to SMG 35, Heal 42, ◀ Q 32, E ▶ 32 | controls+HUD cover about 24% of the screen
+  667x375 lobby-pre: controls+HUD cover about 4% of the screen
+  667x375 plane: buttons 1: Jump 81 | controls+HUD cover about 30% of the screen
+  667x375 freefall: buttons 8: Fire 81, Dive 46, Jump 46, Reload 42, Pick up 40, Super 51, ◀ Q 33, E ▶ 33 | controls+HUD cover about 21% of the screen
+  667x375 canopy: buttons 8: Fire 81, Dive 46, Jump 46, Reload 42, Pick up 40, Super 51, ◀ Q 33, E ▶ 33 | controls+HUD cover about 21% of the screen
+  667x375 ground: buttons 8: Fire 81, Roll 46, Jump 46, Reload 42, Pick up 40, Super 51, ◀ Q 33, E ▶ 33 | controls+HUD cover about 21% of the screen
+  667x375 ground-full: buttons 11: Fire 81, Roll 46, Jump 46, Reload 42, Pick up 40, Scope 49, Super 51, Swap to SMG 37, Heal 44, ◀ Q 33, E ▶ 33 | controls+HUD cover about 25% of the screen
+  844x390 lobby-pre: controls+HUD cover about 3% of the screen
+  844x390 plane: buttons 1: Jump 92 | controls+HUD cover about 27% of the screen
+  844x390 freefall: buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38 | controls+HUD cover about 21% of the screen
+  844x390 canopy: buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38 | controls+HUD cover about 21% of the screen
+  844x390 ground: buttons 8: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38 | controls+HUD cover about 21% of the screen
+  844x390 ground-full: buttons 11: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Scope 56, Super 58, Swap to SMG 42, Heal 50, ◀ Q 38, E ▶ 38 | controls+HUD cover about 24% of the screen
+  915x412 lobby-pre: controls+HUD cover about 3% of the screen
+  915x412 plane: buttons 1: Jump 92 | controls+HUD cover about 25% of the screen
+  915x412 freefall: buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38 | controls+HUD cover about 18% of the screen
+  915x412 canopy: buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38 | controls+HUD cover about 18% of the screen
+  915x412 ground: buttons 8: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38 | controls+HUD cover about 18% of the screen
+  915x412 ground-full: buttons 11: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Scope 56, Super 58, Swap to SMG 42, Heal 50, ◀ Q 38, E ▶ 38 | controls+HUD cover about 21% of the screen
+  932x430 lobby-pre: controls+HUD cover about 3% of the screen
+  932x430 plane: buttons 1: Jump 92 | controls+HUD cover about 25% of the screen
+  932x430 freefall: buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38 | controls+HUD cover about 17% of the screen
+  932x430 canopy: buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38 | controls+HUD cover about 17% of the screen
+  932x430 ground: buttons 8: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38 | controls+HUD cover about 17% of the screen
+  932x430 ground-full: buttons 11: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Scope 56, Super 58, Swap to SMG 42, Heal 50, ◀ Q 38, E ▶ 38 | controls+HUD cover about 20% of the screen
+  800x450 lobby-pre: controls+HUD cover about 3% of the screen
+  800x450 plane: buttons 1: Jump 92 | controls+HUD cover about 29% of the screen
+  800x450 freefall: buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38 | controls+HUD cover about 19% of the screen
+  800x450 canopy: buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38 | controls+HUD cover about 19% of the screen
+  800x450 ground: buttons 8: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38 | controls+HUD cover about 19% of the screen
+  800x450 ground-full: buttons 11: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Scope 56, Super 58, Swap to SMG 42, Heal 50, ◀ Q 38, E ▶ 38 | controls+HUD cover about 22% of the screen
+  1024x768 lobby-pre: controls+HUD cover about 2% of the screen
+  1024x768 plane: buttons 1: Jump 92 | controls+HUD cover about 16% of the screen
+  1024x768 freefall: buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38 | controls+HUD cover about 9% of the screen
+  1024x768 canopy: buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38 | controls+HUD cover about 9% of the screen
+  1024x768 ground: buttons 8: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38 | controls+HUD cover about 9% of the screen
+  1024x768 ground-full: buttons 11: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Scope 56, Super 58, Swap to SMG 42, Heal 50, ◀ Q 38, E ▶ 38 | controls+HUD cover about 10% of the screen
+  1080x607 lobby-pre: controls+HUD cover about 2% of the screen
+  1080x607 plane: buttons 1: Jump 92 | controls+HUD cover about 19% of the screen
+  1080x607 freefall: buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38 | controls+HUD cover about 10% of the screen
+  1080x607 canopy: buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38 | controls+HUD cover about 10% of the screen
+  1080x607 ground: buttons 8: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38 | controls+HUD cover about 10% of the screen
+  1080x607 ground-full: buttons 11: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Scope 56, Super 58, Swap to SMG 42, Heal 50, ◀ Q 38, E ▶ 38 | controls+HUD cover about 12% of the screen
+  1180x820 lobby-pre: controls+HUD cover about 1% of the screen
+  1180x820 plane: buttons 1: Jump 92 | controls+HUD cover about 13% of the screen
+  1180x820 freefall: buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38 | controls+HUD cover about 7% of the screen
+  1180x820 canopy: buttons 8: Fire 92, Dive 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38 | controls+HUD cover about 7% of the screen
+  1180x820 ground: buttons 8: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Super 58, ◀ Q 38, E ▶ 38 | controls+HUD cover about 7% of the screen
+  1180x820 ground-full: buttons 11: Fire 92, Roll 52, Jump 52, Reload 48, Pick up 46, Scope 56, Super 58, Swap to SMG 42, Heal 50, ◀ Q 38, E ▶ 38 | controls+HUD cover about 8% of the screen
+  860x484 lobby-pre: controls+HUD cover about 4% of the screen
+  860x484 plane: controls+HUD cover about 35% of the screen
+  860x484 freefall: controls+HUD cover about 15% of the screen
+  860x484 canopy: controls+HUD cover about 15% of the screen
+  860x484 ground: controls+HUD cover about 15% of the screen
+  907x510 lobby-pre: controls+HUD cover about 4% of the screen
+  907x510 plane: controls+HUD cover about 31% of the screen
+  907x510 freefall: controls+HUD cover about 13% of the screen
+  907x510 canopy: controls+HUD cover about 13% of the screen
+  907x510 ground: controls+HUD cover about 13% of the screen
+  1020x540 lobby-pre: controls+HUD cover about 3% of the screen
+  1020x540 plane: controls+HUD cover about 26% of the screen
+  1020x540 freefall: controls+HUD cover about 11% of the screen
+  1020x540 canopy: controls+HUD cover about 11% of the screen
+  1020x540 ground: controls+HUD cover about 11% of the screen
+  1216x684 lobby-pre: controls+HUD cover about 2% of the screen
+  1216x684 plane: controls+HUD cover about 17% of the screen
+  1216x684 freefall: controls+HUD cover about 7% of the screen
+  1216x684 canopy: controls+HUD cover about 7% of the screen
+  1216x684 ground: controls+HUD cover about 7% of the screen
+  1280x720 lobby-pre: controls+HUD cover about 2% of the screen
+  1280x720 plane: controls+HUD cover about 16% of the screen
+  1280x720 freefall: controls+HUD cover about 7% of the screen
+  1280x720 canopy: controls+HUD cover about 7% of the screen
+  1280x720 ground: controls+HUD cover about 7% of the screen
+  1366x768 lobby-pre: controls+HUD cover about 2% of the screen
+  1366x768 plane: controls+HUD cover about 14% of the screen
+  1366x768 freefall: controls+HUD cover about 6% of the screen
+  1366x768 canopy: controls+HUD cover about 6% of the screen
+  1366x768 ground: controls+HUD cover about 6% of the screen
+  1440x900 lobby-pre: controls+HUD cover about 1% of the screen
+  1440x900 plane: controls+HUD cover about 11% of the screen
+  1440x900 freefall: controls+HUD cover about 5% of the screen
+  1440x900 canopy: controls+HUD cover about 5% of the screen
+  1440x900 ground: controls+HUD cover about 5% of the screen
+  1920x1080 lobby-pre: controls+HUD cover about 1% of the screen
+  1920x1080 plane: controls+HUD cover about 7% of the screen
+  1920x1080 freefall: controls+HUD cover about 3% of the screen
+  1920x1080 canopy: controls+HUD cover about 3% of the screen
+  1920x1080 ground: controls+HUD cover about 3% of the screen
+  1366x768-touchlaptop lobby-pre: controls+HUD cover about 2% of the screen
+  1366x768-touchlaptop plane: controls+HUD cover about 14% of the screen
+  1366x768-touchlaptop freefall: controls+HUD cover about 6% of the screen
+  1366x768-touchlaptop canopy: controls+HUD cover about 6% of the screen
+  1366x768-touchlaptop ground: controls+HUD cover about 6% of the screen

@@ -1,28 +1,49 @@
 import * as THREE from 'three';
 
+import { COPY } from '../copy/studio';
+import { isTouchUi } from '../../lib/device';
+import { autoAimReach, cameraProfile, inAutoAimReach } from '../../lib/phoneUi';
 import { createSfx } from '../sfx';
+import { actionFor, DEFAULT_SETTINGS, keyLabel, keyMap } from '../settings';
 
 import type { VolumeKind } from '../sfx';
-import { ARMOR, ROLL, BUILDINGS, DISTRICTS, DROP, DT, fallHeight, FIGHTERS, ITEMS, MAP, SIZE, SUPERS, TILE, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
-import { canSee, inPlant, inWater, lineOfSight, lootUnder, solidAt, throwDistance } from '../sim/step';
+import type { Action, Settings } from '../settings';
+import { ARMOR, HEALS, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITEMS, MAP, PLACE_TIER, placeAt, PLAYERS, PROPS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
+import { canSee, carryCap, chestHeight, feetOf, healChoice, inPlant, inWater, lineOfSight, lootUnder, reloadTime, solidAt, superThrowTarget, throwDistance } from '../sim/step';
+import { buildingAt, roofAt } from '../sim/roofs';
 import { createOfflineSession } from '../net/session';
+import { arrowTo, LOOT_HINT } from './hints';
+import { canopyById, CLASSIC } from '../canopies';
+import { botLook, DEFAULT_LOOK } from '../cosmetics';
+import { createDropSmoke, MAX_JUMPERS, smokeColor } from './smoke';
+import type { RoundFacts } from '../progress';
 import { NO_INPUT } from '../sim/types';
 
-import { buildRig, fighterLook, poseChute, poseDeath, poseFreefall, poseRig, poseSwim, poseTopDown } from './characters';
+import { buildRig, fighterLook, leaveAir, poseChute, poseDeath, poseFreefall, poseRig, poseSwim, poseTopDown } from './characters';
+import { shootJump } from './keyRoles';
 import { buildGun } from './guns';
 import { mat, mesh, PALETTE } from './palette';
 import { createVfx } from './vfx';
-import { setPeople } from './nature';
-import { buildChute, HARNESS_BACK } from './chute';
+import { createHitOverlay, flinchCurve, hitstopFor } from './feedback';
+import { setFoliageFade, setPeople, updateNature } from './nature';
+import { buildChute, chuteQuaternion, hangChute, moveChute, newChuteMotion } from './chute';
+import { PICKUP_ICON } from './icons';
 import { paintMapImage } from './mapImage';
 import { buildPlane } from './plane';
 import { buildProps, DECK_Y, WATER_Y } from './props';
+import { chunkedInstances } from './chunks';
+import { mergeRigid } from './merge';
+import { createPerfOverlay, PERF_KEY, perfRequested } from './perfOverlay';
+import { FpsGuard, lowerTier, phoneRatio, ResolutionGuard, TIERS } from './quality';
 import { buildWorld } from './world';
+import { buildLadders } from './ladders';
 
 import type { Rig } from './characters';
 import type { GunKind } from './guns';
+import type { Look } from '../cosmetics';
+import type { Tier } from './quality';
 import type { NetStatus, Session } from '../net/session';
-import type { FighterId, GameEvent, GameState, Input, ItemKind, LootKind, Player, WeaponKind } from '../sim/types';
+import type { FighterId, GameEvent, GameState, HealKind, Input, Loot, LootKind, Player, WeaponKind } from '../sim/types';
 
 // ---------------------------------------------------------------------------
 // HUD snapshot for React (throttled to 10 Hz)
@@ -41,7 +62,24 @@ export interface HudState {
   ammo: number;
   /** 0..1 while reloading, else null. */
   reloading: number | null;
-  item: ItemKind | null;
+  /** Both gun slots in key order (slot 1, slot 2): what is in it (null = empty), its grade, rounds, and which one is in your hands. */
+  slots: { name: string | null; kind: WeaponKind | null; rarity: number; mag: number; ammo: number; active: boolean }[];
+  /** Seconds left of drawing the other gun (0 = ready). */
+  swapping: number;
+  /** Vest tier (0..3) and its full points; backpack tier (0..2). */
+  vest: number;
+  vestMax: number;
+  pack: number;
+  /** What you carry, and how much of each the backpack holds. */
+  bag: { bandages: number; medkits: number; coffees: number; bombs: number; cap: { bandage: number; medkit: number; coffee: number; bomb: number } };
+  /** A heal in progress: which and how far along (0..1), else null. */
+  using: { kind: HealKind; name: string; progress: number } | null;
+  /** Seconds of coffee left. */
+  buzz: number;
+  /** What the heal button would use now (its label), or null. */
+  healNext: string | null;
+  /** The grade of the loot the prompt names (0 common, 1 tuned, 2 prime), to colour it; null for anything else. */
+  promptGrade: number | null;
   superCharge: number;
   superName: string;
   /** 0..1 how recharged the dodge roll is. */
@@ -63,6 +101,8 @@ export interface HudState {
   killedWith: string | null;
   killerFighter: FighterId | null;
   placement: number;
+  /** What the round showed beyond the stats (for the daily goals). */
+  facts: RoundFacts;
   kills: number;
   damage: number;
   won: boolean;
@@ -81,35 +121,73 @@ export interface HudState {
   scoped: boolean;
   /** Holding a sniper (the touch SCOPE button shows). */
   sniper: boolean;
+  /** Touch buttons that only show when they can do something: the magazine is not full and there are rounds to put in it,
+   * something to pick up is within reach (or a bomb is in hand), and the canopy has started to open. */
+  canReload: boolean;
+  canUse: boolean;
+  chute: boolean;
   /** First person on the ground (the crosshair shows), and whether the mouse is captured. */
   firstPerson: boolean;
+  /** Over the shoulder: crosshair in the middle, mouse look. */
+  shoulder: boolean;
   mouseLocked: boolean;
+  /** The quality tier being drawn. */
+  tier: Tier;
+  /** Your latest elimination, while its banner shows (about 1.4 s): who, and how many are left. */
+  elim: { id: number; name: string; left: number } | null;
+  /** The named place you just walked into, while its banner shows (1.6 s, once per place per round). */
+  place: { id: number; name: string } | null;
 }
 
 export type AimMode = 'auto' | 'mouse';
-export type TouchButton = 'fire' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR' | 'scope';
+export type TouchButton = 'fire' | 'jump' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR' | 'scope' | 'swap' | 'heal';
 
 export interface MatchOptions {
   fighter: FighterId;
+  /**
+   * Built behind the pre-match screen: the map loads and draws a few frames (so shaders are compiled), then the match
+   * waits frozen, silent and undrawn until `setHeld(false)`, so the launch cuts straight into the plane.
+   */
+  held?: boolean;
   name: string;
-  /** Auto-aim (Space shoots the nearest visible enemy) or mouse aim (point and click). */
+  /** Auto-aim (the shoot key fires at the nearest visible enemy) or mouse aim (point and click). */
   aimMode: AimMode;
   minimap: HTMLCanvasElement;
   onHud: (hud: HudState) => void;
+  /** An offline round for a new player (their first rounds): the bots go easy on them (see `NEWBIE`). */
+  rookie?: boolean;
+  /** The very first round: the shoot key is named once on the ground (the key legend is hidden for it). */
+  firstRound?: boolean;
+  /** What you wear (outfit per fighter, gun finish, canopy, smoke; see cosmetics.ts). Offline, the bots wear seeded looks; online everyone shows the default. */
+  look?: Look;
   /** An online round (host or guest). Without one, an offline round with bots. */
   session?: Session;
+  /** The quality tier to start with (default 'high'), and whether it was picked automatically (then a low frame rate steps it down once per step). */
+  tier?: Tier;
+  autoTier?: boolean;
+  /** Called when the frame-rate guard steps the tier down. */
+  onTier?: (tier: Tier) => void;
+  /** The player's settings (keys, camera, graphics, audio, accessibility); change them live with `applySettings`. */
+  settings?: Settings;
+  /** The mute key was pressed: the owner of the settings flips `muted` (without it the game mutes by itself). */
+  onMuteKey?: () => void;
 }
 
 const GUN_MODEL: Record<Exclude<WeaponKind, 'fists'>, GunKind> = {
   pistol: 'pistol', smg: 'smg', shotgun: 'shotgun', rifle: 'rifle', sniper: 'sniper', rockets: 'launcher',
 };
-/** Loot rarity colours: common white, uncommon green, rare blue, epic violet. */
-const RARITY: Record<LootKind, number> = {
-  pistol: 0xe8eef7, medkit: 0xe8eef7,
-  smg: 0x3ddc84, shotgun: 0x3ddc84, bomb: 0x3ddc84,
-  rifle: 0x3ec5ff, armor: 0x3ec5ff, ammo: 0x3ddc84,
-  sniper: 0xc77dff, rockets: 0xc77dff,
-};
+/**
+ * Loot beams by grade: common white, tuned blue, prime gold (a gun's rarity, a vest's tier I/II/III, a backpack's I/II).
+ * Heals, ammo and bombs are supplies: a soft green. Higher grades also get a taller, brighter beam, so it reads without colour.
+ */
+export const GRADE_COLOR = [0xe8eef7, 0x3ec5ff, 0xffb020];
+export const GRADE_CSS = ['#e8eef7', '#3ec5ff', '#ffb020'];
+const SUPPLY_COLOR = 0x3ddc84;
+/** Landing danger: a landing within this many metres of you, while you are in the air or just down, is heard (sound only). */
+const NEAR_LANDING = 30;
+/** 0 common, 1 tuned / Vest II / Backpack II, 2 prime / Vest III; null for supplies. */
+const lootGrade = (l: Pick<Loot, 'kind' | 'tier'>): number | null =>
+  l.kind in WEAPONS ? Math.min(2, l.tier ?? 0) : l.kind === 'armor' ? Math.max(0, (l.tier ?? 3) - 1) : l.kind === 'backpack' ? Math.max(0, (l.tier ?? 1) - 1) : null;
 
 /** A soft round glow, drawn once, shared by every loot spot. */
 const glowTexture = (() => {
@@ -142,13 +220,29 @@ const beamGeometry = (() => {
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   return g;
 })();
+/** The lens through the sniper's scope (degrees), and the widest the over-the-shoulder view goes. */
+const SHOULDER_ARM_MIN = 2.2;
+const SCOPE_FOV = { first: 16, shoulder: 30 } as const;
+const SHOULDER_FOV_MAX = 78;
+
 const SOUND: Record<Exclude<WeaponKind, 'fists' | 'rockets'>, 'pistol' | 'smg' | 'shotgun' | 'rifle' | 'sniper'> = {
   pistol: 'pistol', smg: 'smg', shotgun: 'shotgun', rifle: 'rifle', sniper: 'sniper',
 };
 const LOOT_NAME: Record<LootKind, string> = {
   pistol: 'Pistol', smg: 'SMG', shotgun: 'Shotgun', rifle: 'Rifle', sniper: 'Sniper', rockets: 'Rockets',
-  armor: 'Armor vest', medkit: 'Med kit', bomb: 'Bomb', ammo: 'Ammo box',
+  armor: 'Vest', medkit: COPY.items.medkit, bomb: 'Bomb', ammo: 'Ammo box', bandage: COPY.items.bandage, coffee: COPY.items.coffee, backpack: 'Backpack',
 };
+const ROMAN = ['', 'I', 'II', 'III'];
+/** What a piece of loot is called on the prompt: "Tuned Rifle", "Vest III", "Backpack II", "Bandage x2". */
+export const lootLabel = (l: Pick<Loot, 'kind' | 'tier' | 'ammo'>) =>
+  l.kind in WEAPONS
+    ? (l.tier ?? 0) > 0 ? `${COPY.items.rarity[l.tier ?? 0]} ${LOOT_NAME[l.kind]}` : LOOT_NAME[l.kind]
+    : l.kind === 'armor'
+      ? `${LOOT_NAME.armor} ${ROMAN[l.tier ?? 3]}`
+      : l.kind === 'backpack'
+        ? `${LOOT_NAME.backpack} ${ROMAN[l.tier ?? 1]}`
+        : l.kind === 'bandage' && l.ammo > 1 ? `${LOOT_NAME.bandage} x${l.ammo}` : LOOT_NAME[l.kind];
+const HEAL_NAME: Record<HealKind, string> = { bandage: COPY.items.bandage, medkit: COPY.items.medkit, coffee: COPY.items.coffee };
 
 /** Map (x, y) is the ground plane (x, z) in Three.js. */
 const v3 = (x: number, y: number, h = 0) => new THREE.Vector3(x, h, y);
@@ -161,37 +255,76 @@ const at = <T extends THREE.Object3D>(o: T, x: number, y: number, z: number) => 
 // ---------------------------------------------------------------------------
 
 export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  /** Performance tier (see quality.ts): pixel ratio, shadows, antialiasing and view distance. */
+  // ?perf&tier=low forces a tier from the start (measuring only: antialiasing is fixed when the context is made).
+  const perfTier = perfRequested() ? new URLSearchParams(window.location.search).get('tier') : null;
+  let tier: Tier = perfTier === 'low' || perfTier === 'medium' || perfTier === 'high' ? perfTier : (opts.tier ?? 'high');
+  let settings: Settings = opts.settings ?? DEFAULT_SETTINGS;
+  let bound = keyMap(settings.keys);
+  // Phones draw a fixed pixel budget (phoneRatio) times the dynamic-resolution step; everything else the tier's own ratio.
+  const pixelRatio = () =>
+    touch
+      ? phoneRatio(tier, canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, window.devicePixelRatio) * settings.resolution * resGuard.scale
+      : Math.min(window.devicePixelRatio, TIERS[tier].dprCap, 2) * settings.resolution;
+  const shadowsOn = () => TIERS[tier].shadows && settings.shadows;
+  const fpsGuard = new FpsGuard();
+  const resGuard = new ResolutionGuard();
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: TIERS[tier].antialias, powerPreference: 'high-performance' });
   /** Phones and tablets: touch controls, always auto-aim, a lighter pixel ratio. */
-  const touch = window.matchMedia?.('(pointer: coarse)').matches || 'ontouchstart' in window;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, touch ? 1.5 : 2));
-  renderer.shadowMap.enabled = true;
+  const touch = isTouchUi();
+  renderer.setPixelRatio(pixelRatio());
+  renderer.shadowMap.enabled = shadowsOn();
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  /** Developer readout (?perf, or F8 in a development build): fps, frame time, draw calls, triangles. */
+  const perf = createPerfOverlay(renderer, () => tier);
+  if (perfRequested()) perf.show(true);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x9fd3f5);
-  scene.fog = new THREE.Fog(0x9fd3f5, 120, 300);
+  scene.fog = new THREE.Fog(0x9fd3f5, TIERS[tier].fogNear, TIERS[tier].fogFar);
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 600);
 
   // Offline the match runs here with bots; online the session is the host's or a guest's.
-  const session: Session = opts.session ?? createOfflineSession(opts.fighter, opts.name);
+  const session: Session = opts.session ?? createOfflineSession(opts.fighter, opts.name, !!opts.rookie);
   let state: GameState = session.state;
   const me = session.me;
+  // Who wears what. You wear what you picked; offline the bots wear looks picked from the match seed and their id (render only:
+  // the sim never sees them); online everyone shows the default until look ids go in the join message.
+  const matchSeed = state.seed;
+  const looks: Look[] = state.players.map((_, i) => (opts.session ? DEFAULT_LOOK : i === me ? (opts.look ?? DEFAULT_LOOK) : botLook(matchSeed, i)));
   const sfx = createSfx();
+  if (opts.settings) {
+    // The settings own the sound levels and the mute (the old per-sound mute key is cleared once).
+    if (sfx.muted) sfx.toggleMute();
+    sfx.setVolume('master', settings.master);
+    sfx.setVolume('guns', settings.guns);
+    sfx.setVolume('steps', settings.steps);
+    sfx.setMuted('player', settings.muted);
+  }
   const vfx = createVfx(scene);
+  /** Drop Smoke: the coloured trails of jumpers who have it (one instanced mesh, one draw call). */
+  const dropSmoke = createDropSmoke(scene, tier);
+  const smokeFeet = new THREE.Vector3();
+  const smokeA = new THREE.Vector3();
+  const smokeB = new THREE.Vector3();
+  /** The hitmarker and the damage-direction arcs, on a DOM layer over the canvas. */
+  const hitFx = canvas.parentElement ? createHitOverlay(canvas.parentElement) : null;
 
   // ---------- light
   scene.add(new THREE.HemisphereLight(0xcfeaff, 0x55703f, 1.5));
   const sun = new THREE.DirectionalLight(0xfff0d0, 2.4);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.castShadow = shadowsOn();
+  sun.shadow.mapSize.set(TIERS[tier].shadowMap, TIERS[tier].shadowMap);
   Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40, near: 1, far: 160 });
   scene.add(sun, sun.target);
 
   // ---------- the world: ground, houses, trees, bushes, rocks, fences, crates
+  const buildT0 = performance.now();
   const world = buildWorld(scene);
+  scene.add(buildLadders());
+  const buildMs = performance.now() - buildT0;
   // Cars, containers, tents, the windmill, the pond, animals and birds.
   const props = buildProps(scene);
 
@@ -220,12 +353,23 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       return () => ((k = (k * 16807) % 2147483647) - 1) / 2147483646;
     })();
     const parts: THREE.Matrix4[] = [];
+    // Clouds stay off the inner 70 % of the map square (over the edge forest and beyond), so no place is covered from the plane.
+    const inner = WORLD * 0.35;
+    const landmarks = PROPS.filter((p) => ['tower', 'crane', 'sign', 'mast', 'hq', 'lookout', 'windmill'].includes(p.kind)).map((p) => ({ x: (p.x0 + p.w / 2) * TILE, y: (p.y0 + p.h / 2) * TILE }));
     for (let c = 0; c < 70; c++) {
       // Spread wider than the map so the edges don't show from the plane.
-      const cx = -60 + rnd() * (WORLD + 120);
-      const cz = -60 + rnd() * (WORLD + 120);
+      let cx = -60 + rnd() * (WORLD + 120);
+      let cz = -60 + rnd() * (WORLD + 120);
+      const size0 = 5 + rnd() * 7;
+      // The puffs of a cloud reach about 1.3 x its size from its centre: keep the whole cloud outside the inner square.
+      // ...and 30 m clear of every landmark (the mast and the lookout stand in the edge band).
+      const coversLandmark = () => landmarks.some((l) => Math.hypot(cx - l.x, cz - l.y) < size0 * 1.3 + 30);
+      for (let tries = 0; tries < 50 && ((Math.abs(cx - WORLD / 2) < inner + size0 * 1.3 && Math.abs(cz - WORLD / 2) < inner + size0 * 1.3) || coversLandmark()); tries++) {
+        cx = -60 + rnd() * (WORLD + 120);
+        cz = -60 + rnd() * (WORLD + 120);
+      }
       const cy = DROP.cloudLow + 3 + rnd() * (DROP.cloudHigh - DROP.cloudLow - 6);
-      const size = 5 + rnd() * 7;
+      const size = size0;
       for (let i = 0; i < 7; i++) {
         const s = size * (0.45 + rnd() * 0.55);
         parts.push(
@@ -237,49 +381,69 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         );
       }
     }
-    const im = new THREE.InstancedMesh(puff, cloudMat, parts.length);
-    parts.forEach((m, i) => im.setMatrixAt(i, m));
-    clouds.add(im);
+    // Chunked like the trees: only the puffs the camera can see are drawn.
+    const set = chunkedInstances(puff, cloudMat, parts.map((m) => ({ x: m.elements[12], z: m.elements[14], matrix: m })), {
+      height: DROP.cloudHigh + 10,
+      bottom: DROP.cloudLow - 10,
+      radius: 14,
+      castShadow: false,
+    });
+    set.meshes.forEach((m) => {
+      m.receiveShadow = false;
+      clouds.add(m);
+    });
+    world.track(set);
   }
   scene.add(clouds);
 
   // ---------- players
   const rigs: Rig[] = state.players.map((p) => {
-    const r = buildRig(p.fighter);
+    const r = buildRig(p.fighter, looks[p.id]?.outfit[p.fighter] ?? 'standard');
+    r.root.name = 'rig';
     scene.add(r.root);
     return r;
   });
   // Parachutes hang from a point at the jumper's raised hands (see chute.ts).
   const chutes = state.players.map((p) => {
-    const g = buildChute(FIGHTERS[p.fighter].color);
+    // Your own canopy is the one you unlocked and picked; a bot may fly a seeded one, otherwise their fighter's colours.
+    const own = looks[p.id]?.canopy ?? CLASSIC;
+    const g = buildChute(FIGHTERS[p.fighter].color, own === CLASSIC ? undefined : canopyById(own));
+    g.name = 'chute';
     g.visible = false;
     scene.add(g);
     return g;
   });
   const guns: (THREE.Group | null)[] = state.players.map(() => null);
   const gunKinds: (WeaponKind | null)[] = state.players.map(() => null);
+  /**
+   * Health bars. Yours is drawn over everything; everyone else's is hidden by whatever hides them (walls, roofs, a
+   * canopy), so a bar never gives away someone you could not see, and it fades out with distance.
+   */
   const bars = state.players.map((p) => {
     const g = new THREE.Group();
-    const bg = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.18), new THREE.MeshBasicMaterial({ color: 0x0a0d18, depthTest: false, transparent: true }));
-    const fill = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.18), new THREE.MeshBasicMaterial({ color: p.id === me ? 0x3ddc84 : 0xff3d6e, depthTest: false }));
-    const armor = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.08), new THREE.MeshBasicMaterial({ color: 0x3ec5ff, depthTest: false }));
+    const own = p.id === me;
+    const bg = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.18), new THREE.MeshBasicMaterial({ color: 0x0a0d18, depthTest: !own, transparent: true, depthWrite: false }));
+    const fill = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.18), new THREE.MeshBasicMaterial({ color: own ? 0x3ddc84 : 0xff3d6e, depthTest: !own, transparent: true, depthWrite: false }));
+    const armor = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.08), new THREE.MeshBasicMaterial({ color: 0x3ec5ff, depthTest: !own, transparent: true, depthWrite: false }));
     armor.position.y = -0.14;
     bg.renderOrder = 20;
     fill.renderOrder = 21;
     armor.renderOrder = 21;
     g.add(bg, fill, armor);
+    g.name = 'bar';
     scene.add(g);
-    return { g, fill, armor };
+    return { g, bg, fill, armor };
   });
 
   // ---------- loot, projectiles, temp walls and fields (pooled / keyed)
-  const lootViews = new Map<number, THREE.Object3D>();
-  const lootModel = (kind: LootKind): THREE.Object3D => {
+  const lootModel = (l: Pick<Loot, 'kind' | 'tier'>): THREE.Object3D => {
     // Root sits on the ground; `item` floats and turns (see the loot loop), `glow` pulses.
+    const kind = l.kind;
     const g = new THREE.Group();
     const item = new THREE.Group();
     item.name = 'item';
-    const color = RARITY[kind];
+    const grade = lootGrade(l);
+    const color = grade === null ? SUPPLY_COLOR : GRADE_COLOR[grade];
     if (kind in GUN_MODEL) {
       const gun = buildGun(GUN_MODEL[kind as keyof typeof GUN_MODEL]).root;
       gun.scale.setScalar(1.7);
@@ -287,12 +451,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       gun.rotation.set(-0.5, Math.PI / 2, 0);
       item.add(gun);
     } else if (kind === 'armor') {
-      const vest = new THREE.MeshStandardMaterial({ color: 0x4a5a3a, roughness: 0.85 });
+      // Vest I olive canvas, II slate, III black with a gold-edged plate.
+      const vest = new THREE.MeshStandardMaterial({ color: [0x4a5a3a, 0x4a5a3a, 0x3b4656, 0x23262c][l.tier ?? 3], roughness: 0.85 });
       const strap = new THREE.MeshStandardMaterial({ color: 0x2a2f24, roughness: 0.9 });
       const body = mesh(new THREE.BoxGeometry(0.75, 0.85, 0.3), vest);
       const collar = mesh(new THREE.BoxGeometry(0.4, 0.12, 0.32), strap);
       collar.position.y = 0.45;
-      const plate = mesh(new THREE.BoxGeometry(0.5, 0.45, 0.06), mat(0x3a4a2e));
+      const plate = mesh(new THREE.BoxGeometry(0.5, 0.45, 0.06), mat([0x3a4a2e, 0x3a4a2e, 0x55606e, 0x8a6a22][l.tier ?? 3]));
       plate.position.set(0, 0.05, 0.17);
       const pouches = [-0.22, 0, 0.22].map((x) => at(mesh(new THREE.BoxGeometry(0.17, 0.2, 0.08), strap), x, -0.25, 0.18));
       item.add(body, collar, plate, ...pouches);
@@ -306,6 +471,33 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       crossA.position.z = crossB.position.z = 0.13;
       item.add(caseM, handle, crossA, crossB);
       item.rotation.x = -0.6;
+    } else if (kind === 'bandage') {
+      // A white roll of bandage with a loose end.
+      const roll = mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.26, 16).rotateZ(Math.PI / 2), mat(0xf4f1ea));
+      const tail = mesh(new THREE.BoxGeometry(0.24, 0.02, 0.3), mat(0xe8e3d8));
+      tail.position.set(0, -0.16, 0.16);
+      const band = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.06, 0.37), new THREE.MeshBasicMaterial({ color: 0xd8312a }));
+      item.add(roll, tail, band);
+      item.scale.setScalar(1.3);
+    } else if (kind === 'coffee') {
+      // A takeaway cup: sleeve, lid.
+      const cup = mesh(new THREE.CylinderGeometry(0.19, 0.14, 0.5, 16), mat(0xf1ede4));
+      const sleeve = mesh(new THREE.CylinderGeometry(0.185, 0.165, 0.2, 16), mat(0x8a5a32));
+      sleeve.position.y = -0.02;
+      const lid = mesh(new THREE.CylinderGeometry(0.205, 0.2, 0.07, 16), mat(0x2a2f38));
+      lid.position.y = 0.28;
+      item.add(cup, sleeve, lid);
+    } else if (kind === 'backpack') {
+      // A rucksack: body, flap, two side pockets; II is darker with a gold buckle.
+      const two = (l.tier ?? 1) >= 2;
+      const body = mesh(new THREE.BoxGeometry(0.6, 0.75, 0.34), mat(two ? 0x33414f : 0x5b6b3e));
+      const flap = mesh(new THREE.BoxGeometry(0.62, 0.3, 0.38), mat(two ? 0x26313c : 0x4a5832));
+      flap.position.y = 0.26;
+      const buckle = mesh(new THREE.BoxGeometry(0.1, 0.08, 0.04), mat(two ? 0xd8a23a : 0x9aa0a8));
+      buckle.position.set(0, 0.12, 0.2);
+      const pockets = [-0.34, 0.34].map((x) => at(mesh(new THREE.BoxGeometry(0.1, 0.3, 0.24), mat(two ? 0x26313c : 0x4a5832)), x, -0.15, 0));
+      item.add(body, flap, buckle, ...pockets);
+      item.rotation.x = -0.4;
     } else if (kind === 'ammo') {
       // A green metal ammo can with a handle and stencil band.
       const can = mesh(new THREE.BoxGeometry(0.62, 0.4, 0.3), mat(0x4f5a34));
@@ -322,22 +514,142 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       bomb.scale.setScalar(2.4);
       item.add(bomb);
     }
+    mergeRigid(item);
     item.position.y = 0.75;
     g.add(item);
-    const glow = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.4, 2.4),
-      new THREE.MeshBasicMaterial({ map: glowTexture(), color, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }),
-    );
-    glow.name = 'glow';
-    glow.rotation.x = -Math.PI / 2;
-    glow.position.y = 0.04;
-    const beam = new THREE.Mesh(
-      beamGeometry,
-      new THREE.MeshBasicMaterial({ color, vertexColors: true, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
-    );
-    g.add(glow, beam);
+    // The glow and the beam are drawn for all loot at once (see lootFx): the model carries their colour and size.
+    // Better grades stand taller and brighter: 2.6 m, 3.9 m, 5.2 m; supplies stay low.
+    g.userData.color = new THREE.Color(color);
+    g.userData.beam = grade === null ? 0.4 : [0.5, 0.65, 0.8][grade];
+    g.userData.beamH = grade === null ? 0.7 : [1, 1.5, 2][grade];
+    g.userData.glowS = grade === 2 ? 1.25 : 1;
     return g;
   };
+  /**
+   * The glow on the ground and the light beam over every item, for all loot at once: two instanced meshes, the rarity
+   * colour per instance. Both blend additively, so the glow's pulse is its colour scaled (the same as its opacity).
+   */
+  const lootFx = (() => {
+    let cap = 0;
+    const glowMat = new THREE.MeshBasicMaterial({ map: glowTexture(), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+    const beamMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const glowGeo = new THREE.PlaneGeometry(2.4, 2.4).rotateX(-Math.PI / 2).translate(0, 0.04, 0);
+    let glows: THREE.InstancedMesh | null = null;
+    let beams: THREE.InstancedMesh | null = null;
+    const grow = (n: number) => {
+      if (n <= cap) return;
+      cap = Math.max(64, n * 2);
+      for (const old of [glows, beams]) if (old) {
+        scene.remove(old);
+        old.dispose();
+      }
+      glows = new THREE.InstancedMesh(glowGeo, glowMat, cap);
+      beams = new THREE.InstancedMesh(beamGeometry, beamMat, cap);
+      for (const im of [glows, beams]) {
+        im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
+        im.frustumCulled = false;
+        im.count = 0;
+        scene.add(im);
+      }
+    };
+    const m = new THREE.Matrix4();
+    const c = new THREE.Color();
+    type Fx = { x: number; y: number; z: number; id: number; color: THREE.Color; beam: number; beamH: number; glowS: number };
+    return (list: Fx[]) => {
+      grow(list.length);
+      if (!glows || !beams) return;
+      list.forEach((l, i) => {
+        glows!.setMatrixAt(i, m.makeScale(l.glowS, 1, l.glowS).setPosition(l.x, l.z, l.y));
+        beams!.setMatrixAt(i, m.makeScale(1, l.beamH, 1).setPosition(l.x, l.z, l.y));
+        glows!.setColorAt(i, c.copy(l.color).multiplyScalar(0.6 + Math.sin(time * 3 + l.id) * 0.2));
+        // Additive: the beam's opacity is its colour scaled.
+        beams!.setColorAt(i, c.copy(l.color).multiplyScalar(l.beam));
+      });
+      for (const im of [glows, beams]) {
+        im.count = list.length;
+        im.visible = list.length > 0;
+        im.instanceMatrix.needsUpdate = true;
+        im.instanceColor!.needsUpdate = true;
+      }
+    };
+  })();
+  const lootFxList: Parameters<typeof lootFx>[0] = [];
+  /**
+   * The items themselves, instanced per kind (and tier, which changes a vest's or a backpack's look): each one's model is built once (merged to a mesh or two), and every
+   * frame each item's place, bob and turn go into that kind's instances. Loot costs a draw call or two per kind on
+   * screen, not per item.
+   */
+  /** From the plane nothing can be picked up: the loot models are not drawn (the glows and beams still are). */
+  let lootHidden = false;
+  const lootLooks = new Map<string, { tilt: THREE.Euler; color: THREE.Color; beam: number; beamH: number; glowS: number; add: (m: THREE.Matrix4) => void; flush: () => void }>();
+  const lootLook = (l: Pick<Loot, 'kind' | 'tier'>) => {
+    const key = `${l.kind}|${l.tier ?? ''}`;
+    let look = lootLooks.get(key);
+    if (look) return look;
+    const model = lootModel(l);
+    const item = model.getObjectByName('item')!;
+    const parts = item.children.filter((o): o is THREE.Mesh => o instanceof THREE.Mesh);
+    let cap = 0;
+    let n = 0;
+    let meshes: THREE.InstancedMesh[] = [];
+    const grow = () => {
+      cap = Math.max(16, cap * 2);
+      meshes.forEach((im) => {
+        scene.remove(im);
+        im.dispose();
+      });
+      meshes = parts.map((p) => {
+        const im = new THREE.InstancedMesh(p.geometry, p.material, cap);
+        im.castShadow = p.castShadow;
+        im.receiveShadow = p.receiveShadow;
+        im.frustumCulled = false;
+        im.count = 0;
+        im.name = 'loot';
+        scene.add(im);
+        return im;
+      });
+    };
+    const local = parts.map((p) => {
+      p.updateMatrix();
+      return p.matrix.clone();
+    });
+    const tmp = new THREE.Matrix4();
+    look = {
+      tilt: item.rotation.clone(),
+      color: model.userData.color as THREE.Color,
+      beam: model.userData.beam as number,
+      beamH: model.userData.beamH as number,
+      glowS: model.userData.glowS as number,
+      add: (m) => {
+        if (n >= cap) {
+          // Growing drops what was written this frame: keep it.
+          const keep = meshes.map((im) => (im.instanceMatrix.array as Float32Array).slice(0, n * 16));
+          grow();
+          meshes.forEach((im, i) => (im.instanceMatrix.array as Float32Array).set(keep[i] ?? []));
+        }
+        meshes.forEach((im, i) => im.setMatrixAt(n, tmp.multiplyMatrices(m, local[i])));
+        n++;
+      },
+      flush: () => {
+        for (const im of meshes) {
+          im.count = n;
+          im.visible = n > 0 && !lootHidden;
+          im.instanceMatrix.needsUpdate = true;
+        }
+        n = 0;
+      },
+    };
+    lootLooks.set(key, look);
+    return look;
+  };
+  const lootDraw = () => lootLooks.forEach((l) => l.flush());
+  const lootEuler = new THREE.Euler();
+  const lootM = new THREE.Matrix4();
+  const lootQ = new THREE.Quaternion();
+  const lootPos = new THREE.Vector3();
+  const lootOne = new THREE.Vector3(1, 1, 1);
+  const lootFrustum = new THREE.Frustum();
+  const tmpM4 = new THREE.Matrix4();
   // Bullets: a brass round with a copper tip, and a short faint heat trail behind it.
   const bulletGeo = new THREE.CylinderGeometry(0.055, 0.055, 0.3, 8).rotateZ(Math.PI / 2);
   const tipGeo = new THREE.ConeGeometry(0.055, 0.12, 8).rotateZ(-Math.PI / 2).translate(0.21, 0, 0);
@@ -366,14 +678,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     return m;
   });
   let nextContrail = 0;
-  const contrail = (x: number, y: number, angle: number, h: number) => {
-    // March along the line until something solid or someone stops the round.
-    let d = 0.8;
-    for (; d < 160; d += 0.5) {
+  const contrail = (x: number, y: number, angle: number, h: number, len?: number) => {
+    // The sim says where the round stopped (it lands the tick it is fired): the line ends exactly there. Without it (an old
+    // snapshot), march along the line until something solid or someone stops the round.
+    let d = len !== undefined ? Math.max(0.8, len + 0.6) : 0.8;
+    for (; len === undefined && d < 160; d += 0.5) {
       const px = x + Math.cos(angle) * d;
       const py = y + Math.sin(angle) * d;
-      if (h < 3 && solidAt(state, px, py)) break;
-      if (state.players.some((o) => o.alive && o.stage !== 'drone' && Math.hypot(o.x - px, o.y - py) < 0.6 && Math.hypot(o.x - x, o.y - y) > 1)) break;
+      if (solidAt(state, px, py, h)) break;
+      if (state.players.some((o) => o.alive && o.stage !== 'drone' && Math.hypot(o.x - px, o.y - py) < 0.6 && Math.hypot(o.x - x, o.y - y) > 1 && Math.abs(chestHeight(o) - h) < 1)) break;
     }
     const m = contrails[nextContrail++ % contrails.length];
     m.position.set(x + Math.cos(angle) * 0.8, h, y + Math.sin(angle) * 0.8);
@@ -388,11 +701,29 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     scene.add(m);
     return m;
   });
+  /** The slow-field canister in flight: a dark steel can with a glowing blue band and caps, tumbling end over end. */
+  const canisters = Array.from({ length: 4 }, () => {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.5, 14), mat(0x2b3045));
+    const glow = new THREE.MeshBasicMaterial({ color: 0x6fe3ff });
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.12, 14), glow);
+    const capA = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.06, 12), glow);
+    capA.position.y = 0.28;
+    const capB = capA.clone();
+    capB.position.y = -0.28;
+    g.add(body, band, capA, capB);
+    g.visible = false;
+    scene.add(g);
+    return g;
+  });
   /**
    * A rocket you can see coming: an olive body with a red nose and four fins, a flickering
    * flame out of the back, and a trail of smoke behind it. Built along +z.
    */
-  const rocketMeshes = Array.from({ length: 8 }, () => {
+  // Only the first two rockets in flight carry a light, and those two lights always stay in the scene (dark when idle):
+  // a change in the number of lights recompiles every lit material, which froze the game for up to 1.6 s at the first rocket.
+  const ROCKET_LIGHTS = 2;
+  const rocketMeshes = Array.from({ length: 8 }, (_, ri) => {
     const g = new THREE.Group();
     const body = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.85, 12).rotateX(Math.PI / 2), mat(0x5a6a3a));
     const band = new THREE.Mesh(new THREE.CylinderGeometry(0.135, 0.135, 0.08, 12).rotateX(Math.PI / 2), mat(0xe9c46a));
@@ -411,9 +742,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const core = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.3, 8).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xfff3c4 }));
     core.position.z = -0.58;
     g.add(flame, core);
-    const light = new THREE.PointLight(0xff9a3c, 3, 6);
-    light.position.z = -0.7;
-    g.add(light);
+    if (ri < ROCKET_LIGHTS) {
+      const light = new THREE.PointLight(0xff9a3c, 0, 6);
+      scene.add(light);
+      g.userData.light = light;
+    }
     g.userData.flame = flame;
     g.scale.setScalar(1.3); // readable from the top-down camera
     g.traverse((o) => (o.castShadow = o instanceof THREE.Mesh && o !== flame && o !== core));
@@ -422,18 +755,44 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     return g;
   });
   let smokeClock = 0;
-  const tempWalls = Array.from({ length: 10 }, () => {
+  // One wall and one slow field per fighter: enough even if everyone uses their super at once.
+  const tempWalls = Array.from({ length: PLAYERS }, () => {
     const m = mesh(new THREE.BoxGeometry(1, 2.2, 1), mat(PALETTE.green));
     m.visible = false;
     scene.add(m);
     return m;
   });
-  const fields = Array.from({ length: 10 }, () => {
-    const m = new THREE.Mesh(new THREE.CircleGeometry(1, 40), new THREE.MeshBasicMaterial({ color: 0x3ec5ff, transparent: true, opacity: 0.22, depthWrite: false }));
-    m.rotation.x = -Math.PI / 2;
-    m.visible = false;
-    scene.add(m);
-    return m;
+  /** The slow field: a pale blue floor, a glassy dome over it and a bright edge that pulses; it fades out at the end. */
+  const fields = Array.from({ length: PLAYERS }, () => {
+    const g = new THREE.Group();
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x3ec5ff, transparent: true, opacity: 0.26, depthWrite: false }));
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0x8fe9ff, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }),
+    );
+    dome.scale.y = 0.55;
+    const edge = new THREE.Mesh(new THREE.RingGeometry(0.95, 1, 56).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xbff4ff, transparent: true, opacity: 0.7, depthWrite: false }));
+    edge.position.y = 0.02;
+    g.add(floor, dome, edge);
+    g.userData = { floor, dome, edge };
+    g.visible = false;
+    scene.add(g);
+    return g;
+  });
+  /** A slowed fighter: a cold blue shell round the body and a ring at the feet (one per fighter, pooled). */
+  const slowShells = Array.from({ length: PLAYERS }, () => {
+    const g = new THREE.Group();
+    const shell = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.5, 0.42, 1.9, 16, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0x6fe3ff, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }),
+    );
+    shell.position.y = 0.95;
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.7, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xbff4ff, transparent: true, opacity: 0.6, depthWrite: false }));
+    ring.position.y = 0.04;
+    g.add(shell, ring);
+    g.visible = false;
+    scene.add(g);
+    return g;
   });
 
   // ---------- throw preview: while you hold a rocket or a bomb, a dotted arc and a red landing
@@ -453,20 +812,54 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     m.renderOrder = 10;
   }
   scene.add(landRing, landDisc);
+  // The slow-field canister's landing (hold G): a light blue arc, the burst's ring and the field's faint edge.
+  const fieldEdge = new THREE.Mesh(new THREE.RingGeometry(0.96, 1, 56).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x6fe3ff, transparent: true, opacity: 0.45, depthWrite: false, depthTest: false }));
+  fieldEdge.renderOrder = 10;
+  fieldEdge.visible = false;
+  scene.add(fieldEdge);
+  const BOMB_ARC = 0xff5a3d;
+  const BOMB_RING = 0xff3d3d;
+  const SLOW_ARC = 0x8fe9ff;
+  const tint = (bomb: boolean) => {
+    arcDots.forEach((d) => (d.material as THREE.MeshBasicMaterial).color.setHex(bomb ? BOMB_ARC : SLOW_ARC));
+    (landRing.material as THREE.MeshBasicMaterial).color.setHex(bomb ? BOMB_RING : SLOW_ARC);
+    (landDisc.material as THREE.MeshBasicMaterial).color.setHex(bomb ? BOMB_RING : SLOW_ARC);
+    arcDots.forEach((d) => ((d.material as THREE.MeshBasicMaterial).opacity = bomb ? 0.85 : 0.55));
+  };
   const updateThrowPreview = (self: Player, x: number, y: number) => {
-    // Only a bomb gets the landing circle: rockets fly straight where you aim, like a gun.
-    const on = self.alive && self.stage === 'ground' && self.charging === 'bomb';
+    // Only a bomb and the slow-field canister get the landing circle: rockets fly straight where you aim, like a gun.
+    const ground = self.alive && self.stage === 'ground';
+    const bomb = ground && self.charging === 'bomb';
+    const slow = ground && self.charging === 'super';
+    const on = bomb || slow;
     landRing.visible = landDisc.visible = on;
+    fieldEdge.visible = slow;
     arcDots.forEach((d) => (d.visible = on));
     if (!on) return;
-    const range = ITEMS.bomb.range;
-    const radius = ITEMS.bomb.radius;
-    // With the mouse the bomb lands under the cursor (up to its range); otherwise hold to throw farther.
-    const toCursor = lastThrowAim ? Math.hypot(lastThrowAim.x - self.x, lastThrowAim.y - self.y) : 0;
-    const d = lastThrowAim ? Math.min(range, toCursor) : throwDistance(self.charge, range);
-    const a = lastThrowAim && toCursor > 0.3 ? Math.atan2(lastThrowAim.y - self.y, lastThrowAim.x - self.x) : self.heading;
-    const tx = x + Math.cos(a) * d;
-    const ty = y + Math.sin(a) * d;
+    tint(bomb);
+    let tx: number;
+    let ty: number;
+    let radius: number;
+    if (slow) {
+      // Where the sim will put it: the aim point, 2 to 15 m out.
+      const at = superThrowTarget({ x, y, heading: self.heading }, lastAim.x - self.x + x, lastAim.y - self.y + y);
+      tx = at.x;
+      ty = at.y;
+      radius = SUPERS.timebox.burst;
+    } else {
+      const range = ITEMS.bomb.range;
+      radius = ITEMS.bomb.radius;
+      // With the mouse the bomb lands under the cursor (up to its range); otherwise hold to throw farther.
+      const toCursor = lastThrowAim ? Math.hypot(lastThrowAim.x - self.x, lastThrowAim.y - self.y) : 0;
+      const d = lastThrowAim ? Math.min(range, toCursor) : throwDistance(self.charge, range);
+      const a = lastThrowAim && toCursor > 0.3 ? Math.atan2(lastThrowAim.y - self.y, lastThrowAim.x - self.x) : self.heading;
+      tx = x + Math.cos(a) * d;
+      ty = y + Math.sin(a) * d;
+    }
+    if (slow) {
+      fieldEdge.position.set(tx, 0.06, ty);
+      fieldEdge.scale.setScalar(SUPERS.timebox.radius);
+    }
     // The same arc the projectile flies (see the lob drawing below).
     arcDots.forEach((dot, k) => {
       const t = (k + 1) / (arcDots.length + 1);
@@ -481,8 +874,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
   // ---------- input: keyboard; aim is automatic unless mouse aim is on
   const keys = new Set<string>();
+  /** Keys pressed since the last input read: a tap shorter than a frame (or a slow frame) still counts once. */
+  const tapped = new Set<string>();
   let aimMode: AimMode = opts.aimMode;
   let paused = false;
+  let holding = !!opts.held;
+  let heldFrames = 0;
+  if (holding) sfx.setMuted('held', true);
   /** The mouse on the canvas in normalised device coordinates, and the left button. */
   const mouse = new THREE.Vector2(0, 0);
   let mouseDown = false;
@@ -490,6 +888,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   let rightDown = false;
   /** Mouse aim with a bomb: where it will land (null when throwing by holding). */
   let lastThrowAim: { x: number; y: number } | null = null;
+  /** The aim point of the last input read (the slow-field canister's landing preview follows it). */
+  const lastAim = { x: 0, y: 0 };
   const onMouseMove = (e: MouseEvent) => {
     const r = canvas.getBoundingClientRect();
     mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
@@ -504,6 +904,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     if (e.button === 2) rightDown = false;
   };
   const onContext = (e: Event) => e.preventDefault();
+  /** The mouse wheel swaps guns: one press per notch (a trackpad's flood of small deltas counts once per 250 ms). */
+  let wheelSwap = false;
+  let wheelAt = 0;
+  const onWheel = (e: WheelEvent) => {
+    if (Math.abs(e.deltaY) < 4 || performance.now() - wheelAt < 250) return;
+    wheelAt = performance.now();
+    wheelSwap = true;
+  };
+  canvas.addEventListener('wheel', onWheel, { passive: true });
   canvas.addEventListener('contextmenu', onContext);
   canvas.addEventListener('mousemove', onMouseMove);
   canvas.addEventListener('mousedown', onMouseDown);
@@ -514,18 +923,55 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** Where the mouse points on the battlefield, at chest height. */
   const mouseAim = () => {
     raycaster.setFromCamera(mouse, camera);
-    return raycaster.ray.intersectPlane(aimPlane, aimHit) ? { x: aimHit.x, y: aimHit.z } : null;
+    // Someone up high (on a roof, a ladder) under the cursor: aim at them, not at the ground far behind them.
+    const r = raycaster.ray;
+    let best: { x: number; y: number } | null = null;
+    let bd = 1;
+    for (const o of state.players) {
+      if (o.id === me || !o.alive || o.stage !== 'ground' || o.z < 0.5) continue;
+      const d = r.distanceToPoint(tmpAim.set(o.x, chestHeight(o), o.y));
+      if (d < bd) {
+        bd = d;
+        best = { x: o.x, y: o.y };
+      }
+    }
+    if (best) return best;
+    return r.intersectPlane(aimPlane, aimHit) ? { x: aimHit.x, y: aimHit.z } : null;
   };
+  const tmpAim = new THREE.Vector3();
   let muted = sfx.muted;
+  /** A round is being played: not paused, not held for the launch, you are alive and it is not over. */
+  const inRound = () => !paused && !holding && state.phase !== 'over' && !!state.players[me]?.alive;
+  const blurButtons = () => {
+    const a = typeof document === 'undefined' ? null : document.activeElement;
+    if (a instanceof HTMLButtonElement || (a instanceof HTMLElement && a.getAttribute('role') === 'button')) a.blur();
+  };
   const onDown = (e: KeyboardEvent) => {
     sfx.unlock();
-    if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyZ', 'Space', 'KeyQ', 'KeyE', 'KeyF', 'KeyG', 'ShiftLeft', 'ShiftRight', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
-    if (e.code === 'KeyM') muted = sfx.toggleMute();
-    if (e.code === 'KeyT' && !e.repeat) aimMode = aimMode === 'auto' ? 'mouse' : 'auto';
+    const action = actionFor(settings.keys, e.code);
+    if (action && action !== 'pause' && action !== 'mute' && action !== 'aim') e.preventDefault();
+    // In a round, a game key never presses a button that kept the focus (the HUD's, or one clicked before the round):
+    // Space would click it instead of jumping. Menus (paused, the report, the launch) keep their keyboard focus.
+    if (action && inRound()) blurButtons();
+    if (action === 'mute' && !e.repeat) {
+      if (opts.onMuteKey) opts.onMuteKey();
+      else muted = sfx.toggleMute();
+    }
+    if (action === 'aim' && !e.repeat) aimMode = aimMode === 'auto' ? 'mouse' : 'auto';
+    if (e.code === PERF_KEY && !e.repeat && process.env.NODE_ENV !== 'production') perf.toggle();
     keys.add(e.code);
+    if (!e.repeat) tapped.add(e.code);
   };
-  const onUp = (e: KeyboardEvent) => keys.delete(e.code);
-  const onBlur = () => keys.clear();
+  const onUp = (e: KeyboardEvent) => {
+    keys.delete(e.code);
+    // A button fires on Space's release: in a round, the release of a game key is the game's too.
+    const action = actionFor(settings.keys, e.code);
+    if (action && action !== 'pause' && action !== 'mute' && action !== 'aim' && inRound()) e.preventDefault();
+  };
+  const onBlur = () => {
+    keys.clear();
+    tapped.clear();
+  };
   window.addEventListener('keydown', onDown);
   window.addEventListener('keyup', onUp);
   window.addEventListener('blur', onBlur);
@@ -533,7 +979,17 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   // ---------- first person (prototype: ?view=fpp). On the ground the camera is your eyes, the
   // mouse is your neck (pointer lock), WASD walks the way you look, and you see your own arms
   // and gun. The drop (plane, free fall, parachute) stays in third person.
-  const fpp = new URLSearchParams(window.location.search).get('view') === 'fpp';
+  // First person is a setting (mouse and keyboard only: on a touch screen the camera stays above); ?view=fpp still forces it.
+  const fppParam = new URLSearchParams(window.location.search).get('view') === 'fpp';
+  let fpp = !touch && (fppParam || settings.camera === 'first');
+  /**
+   * Over the shoulder (a third view, mouse and keyboard only): the camera sits on a short arm behind your right shoulder,
+   * the mouse turns it (pointer lock) exactly as in first person, WASD walks the way it looks, and the crosshair in the
+   * middle of the screen is where your shots go. The arm pulls in at once when a wall or a ceiling is in the way and
+   * eases back out, so the camera never ends up inside a wall or hides you behind one.
+   */
+  const tpsParam = new URLSearchParams(window.location.search).get('view') === 'tps';
+  let shoulder = !touch && !fpp && (tpsParam || settings.camera === 'shoulder');
   let viewYaw = 0;
   let viewPitch = -0.04;
   let viewInit = false;
@@ -541,19 +997,42 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** First person once you're out of the plane: falling, under the canopy and on the ground. */
   /** Looking through the sniper's scope this frame (set every frame from the input). */
   let scoped = false;
+  /**
+   * How far into the scope the lens is (0 = normal view, 1 = fully zoomed), read from the lens itself so it eases with the
+   * zoom, and the share of mouse speed that goes with it: the view turns by the screen angle the hand asked for, so a slow
+   * move is a slow, small move of the crosshair at any zoom (set every frame in the camera step).
+   */
+  let zoomT = 0;
+  let lookScale = 1;
   const firstPerson = () => fpp && state.players[me].stage !== 'drone' && state.players[me].alive;
+  /** Over the shoulder once you're out of the plane. */
+  const shoulderView = () => shoulder && state.players[me].stage !== 'drone' && state.players[me].alive;
+  /** The mouse turns the view (first person or over the shoulder). */
+  const mouseLook = () => firstPerson() || shoulderView();
+  /** The shoulder camera's arm: how far out it is now (pulled in by walls, eased back out). */
+  let armNow = 3.2;
+  /** The arm length the view is easing to (without walls), and the side offset: both ease with the scope. */
+  let armWant = 3.2;
+  let sideNow = 0.62;
+  /** Where the crosshair points on the map this frame (the shoulder view aims there, not straight ahead of you). */
+  const crossAim = { x: 0, y: 0 };
+  /** First person: the fighter under the crosshair (in 3D, so someone on a roof or below one), else none (aim straight ahead). */
+  const fpAim = { x: 0, y: 0, on: false };
   const onLockChange = () => {
     locked = document.pointerLockElement === canvas;
   };
   const onLook = (e: MouseEvent) => {
     if (!locked) return;
-    // Through the scope the view moves as much less as it is zoomed, so aiming stays steady.
-    const sens = 0.0022 * (scoped ? 0.25 : 1);
-    viewYaw += e.movementX * sens;
-    viewPitch = Math.max(-1.1, Math.min(1.1, viewPitch - e.movementY * sens));
+    // Through the scope the view moves as much less as it is zoomed (lookScale follows the lens), so aiming stays steady.
+    // A browser sometimes reports one huge jump after a hiccup; a single event never turns the view more than ~100 px's worth.
+    const sens = 0.0022 * settings.sensitivity * lookScale;
+    const dx = Math.max(-100, Math.min(100, e.movementX));
+    const dy = Math.max(-100, Math.min(100, e.movementY));
+    viewYaw += dx * sens;
+    viewPitch = Math.max(-1.1, Math.min(1.1, viewPitch - dy * sens * (settings.invertY ? -1 : 1)));
   };
   const onLockClick = () => {
-    if (fpp && !locked && firstPerson()) void canvas.requestPointerLock();
+    if ((fpp || shoulder) && !locked && mouseLook()) void canvas.requestPointerLock();
   };
   document.addEventListener('pointerlockchange', onLockChange);
   document.addEventListener('mousemove', onLook);
@@ -563,7 +1042,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const viewmodel = new THREE.Group();
   viewmodel.visible = false;
   camera.add(viewmodel);
-  const look = fighterLook(opts.session ? state.players[me].fighter : opts.fighter);
+  const look = fighterLook(opts.session ? state.players[me].fighter : opts.fighter, looks[me].outfit[opts.session ? state.players[me].fighter : opts.fighter]);
   const vmMat = (c: number) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.8, flatShading: true });
   const vmLimb = (from: THREE.Vector3, to: THREE.Vector3, r: number, c: number) => {
     const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.1, from.distanceTo(to), 8), vmMat(c));
@@ -674,13 +1153,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
    * plants, no.
    */
   const onScreen = new THREE.Vector3();
+  /** Touch auto-aim reach (m): the farthest ground point of the desktop view, from the same numbers as its camera. */
+  const AUTO_AIM_REACH = autoAimReach();
   /** A clear shot at any part of them: the centre or either shoulder (a trunk or a car corner
    * on the centre line shouldn't hide someone whose body you can see). */
   const clearShot = (p: Player, o: Player) => {
     const d = Math.hypot(o.x - p.x, o.y - p.y) || 1;
     const sx = (-(o.y - p.y) / d) * 0.45;
     const sy = ((o.x - p.x) / d) * 0.45;
-    return [0, 1, -1].some((k) => lineOfSight(state, p.x, p.y, o.x + sx * k, o.y + sy * k));
+    return [0, 1, -1].some((k) => lineOfSight(state, p.x, p.y, o.x + sx * k, o.y + sy * k, chestHeight(p), chestHeight(o)));
   };
   let aimTarget: Player | null = null;
   const autoAim = (p: Player) => {
@@ -688,9 +1169,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     let bd = Infinity;
     for (const o of state.players) {
       if (o.id === p.id || !canSee(state, p, o)) continue;
-      // Anywhere on your screen, and a little past its edges.
-      onScreen.set(o.x, 1, o.y).project(camera);
-      if (Math.abs(onScreen.x) > 1.25 || Math.abs(onScreen.y) > 1.25 || onScreen.z > 1) continue;
+      if (touch) {
+        // Touch: by distance in the world (the desktop view's footprint), so a closer phone camera does not shorten the reach.
+        if (!inAutoAimReach(o.x - p.x, o.y - p.y, AUTO_AIM_REACH)) continue;
+      } else {
+        // Anywhere on your screen, and a little past its edges.
+        onScreen.set(o.x, 1, o.y).project(camera);
+        if (Math.abs(onScreen.x) > 1.25 || Math.abs(onScreen.y) > 1.25 || onScreen.z > 1) continue;
+      }
       const d = Math.hypot(o.x - p.x, o.y - p.y);
       if (d < bd && clearShot(p, o)) {
         best = o;
@@ -724,17 +1210,21 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const touchLatched = new Set<TouchButton>();
   const btn = (b: TouchButton) => touchHeld.has(b) || touchLatched.has(b);
   let lastMove = { x: 1, y: 0 };
+  /** Is any key bound to this action held? */
+  const held = (a: Action) => bound[a].some((k) => keys.has(k) || tapped.has(k));
+  /** The rebindable jump key (B by default) or the touch JUMP button: the jump on foot, and in the air the canopy too. */
+  const jumpKey = () => held('jump') || btn('jump');
   const readInput = (): Input => {
     const p = state.players[me];
-    if (firstPerson()) {
+    if (mouseLook()) {
       if (!viewInit) {
         viewYaw = p.stage === 'falling' ? Math.atan2(state.drone.y1 - state.drone.y0, state.drone.x1 - state.drone.x0) : p.heading;
         // Out of the plane you look down at the ground you're falling towards.
-        viewPitch = p.stage === 'falling' ? -0.75 : -0.04;
+        viewPitch = p.stage === 'falling' ? (shoulder ? -0.45 : -0.75) : shoulder ? -0.12 : -0.04;
         viewInit = true;
       }
-      const fwd = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - stick.y;
-      const side = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0) + stick.x;
+      const fwd = (held('up') ? 1 : 0) - (held('down') ? 1 : 0) - stick.y;
+      const side = (held('right') ? 1 : 0) - (held('left') ? 1 : 0) + stick.x;
       const c = Math.cos(viewYaw);
       const sn = Math.sin(viewYaw);
       let mx = fwd * c - side * sn;
@@ -746,47 +1236,52 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       }
       const input: Input = {
         mx, my,
-        fire: keys.has('Space') || mouseDown || btn('fire'),
-        jump: keys.has('Space') || btn('fire'),
-        super: keys.has('KeyG') || btn('super'),
-        use: keys.has('KeyF') || btn('use'),
-        lean: (keys.has('KeyE') || btn('leanR') ? 1 : 0) - (keys.has('KeyQ') || btn('leanL') ? 1 : 0),
-        roll: keys.has('ShiftLeft') || keys.has('ShiftRight') || btn('roll'),
-        reload: keys.has('KeyR') || btn('reload'),
+        ...shootJump({ ground: p.stage === 'ground', key: held('fire'), mouse: mouseDown, touchFire: btn('fire'), jumpKey: jumpKey() }),
+        super: held('super') || btn('super'),
+        use: held('use') || btn('use'),
+        lean: (held('leanR') || btn('leanR') ? 1 : 0) - (held('leanL') || btn('leanL') ? 1 : 0),
+        roll: held('roll') || btn('roll'),
+        reload: held('reload') || btn('reload'),
+        ...slotKeys(),
         snap: true,
         scope: scopeHeld(p),
         pitch: viewPitch,
-        aimX: p.x + c * 30,
-        aimY: p.y + sn * 30,
+        aimX: shoulder ? crossAim.x : fpAim.on ? fpAim.x : p.x + c * 30,
+        aimY: shoulder ? crossAim.y : fpAim.on ? fpAim.y : p.y + sn * 30,
       };
       lastThrowAim = null;
+      lastAim.x = input.aimX;
+      lastAim.y = input.aimY;
       touchLatched.clear();
+      tapped.clear();
       return input;
     }
-    if (fpp) viewInit = false;
+    if (fpp || shoulder) viewInit = false;
     const clamp = (v: number) => Math.max(-1, Math.min(1, v));
-    const mx = clamp((keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0) + stick.x);
-    const my = clamp((keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) + stick.y);
+    const mx = clamp((held('right') ? 1 : 0) - (held('left') ? 1 : 0) + stick.x);
+    const my = clamp((held('down') ? 1 : 0) - (held('up') ? 1 : 0) + stick.y);
     // Facing with no target: the direction you're actually moving (the velocity turns smoothly);
     // standing still, a tapped key turns you; after stopping you keep facing where you went.
     const sp = Math.hypot(p.vx, p.vy);
     if (sp > 0.8) lastMove = { x: p.vx / sp, y: p.vy / sp };
     else if (mx || my) lastMove = { x: mx, y: my };
     // On the ground or under the parachute you aim (and auto-aim) at people.
-    const canAim = p.stage === 'ground' || (p.stage === 'falling' && p.fall <= DROP.chute);
+    const canAim = p.stage === 'ground' || (p.stage === 'falling' && p.canopy >= DROP.deployTime);
     const pointed = aimMode === 'mouse' && !touch && canAim ? mouseAim() : null;
     const target = canAim && !pointed ? autoAim(p) : null;
     const aim = pointed ?? (target ? { x: target.x, y: target.y } : { x: p.x + lastMove.x * 6, y: p.y + lastMove.y * 6 });
+    // The same keys in every view: the shoot key (J) and the left button shoot, the jump key (Space) jumps. On touch a tap's
+    // emulated mouse press never shoots (FIRE does).
     const input = {
       mx, my,
-      fire: keys.has('Space') || (aimMode === 'mouse' && mouseDown) || btn('fire'),
-      jump: keys.has('Space') || btn('fire'),
+      ...shootJump({ ground: p.stage === 'ground', key: held('fire'), mouse: mouseDown && !touch, touchFire: btn('fire'), jumpKey: jumpKey() }),
       // Battle-royale keys: Q / E lean, F picks up or uses, G is the super.
-      super: keys.has('KeyG') || btn('super'),
-      use: keys.has('KeyF') || btn('use'),
-      lean: clamp((keys.has('KeyE') || btn('leanR') ? 1 : 0) - (keys.has('KeyQ') || btn('leanL') ? 1 : 0)),
-      roll: keys.has('ShiftLeft') || keys.has('ShiftRight') || btn('roll'),
-      reload: keys.has('KeyR') || btn('reload'),
+      super: held('super') || btn('super'),
+      use: held('use') || btn('use'),
+      lean: clamp((held('leanR') || btn('leanR') ? 1 : 0) - (held('leanL') || btn('leanL') ? 1 : 0)),
+      roll: held('roll') || btn('roll'),
+      reload: held('reload') || btn('reload'),
+      ...slotKeys(),
       scope: scopeHeld(p),
       // Mouse aim: a bomb lands under the cursor.
       throwAt: !!pointed,
@@ -794,17 +1289,64 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       aimY: aim.y,
     };
     lastThrowAim = pointed ? { x: pointed.x, y: pointed.y } : null;
+    lastAim.x = input.aimX;
+    lastAim.y = input.aimY;
     touchLatched.clear();
+    tapped.clear();
     return input;
+  };
+  /** Gun slots and heals: 1 / 2 draw a slot, X or the mouse wheel (one notch, latched until read) the other gun; C heals, V drinks coffee. */
+  const slotKeys = () => {
+    const cycle = held('swap') || btn('swap') || wheelSwap;
+    wheelSwap = false;
+    return {
+      slot: held('slot1') ? 1 : held('slot2') ? 2 : 0,
+      cycle,
+      heal: held('heal') || btn('heal'),
+      coffee: held('coffee'),
+    };
   };
   /** Looking through the scope: a sniper in hand, on your feet, right mouse / Z / the touch button held. */
   const scopeHeld = (p: Player) =>
-    p.weapon === 'sniper' && p.alive && p.stage === 'ground' && !inWater(p.x, p.y) && (rightDown || keys.has('KeyZ') || btn('scope'));
+    p.weapon === 'sniper' && p.alive && p.stage === 'ground' && !inWater(p.x, p.y) && (rightDown || held('scope') || btn('scope'));
 
   // ---------- events -> effects and sound
   const feed: { id: number; text: string; at: number }[] = [];
   let feedId = 0;
   let trauma = 0;
+  /**
+   * Hitstop, render only: for this long (real seconds) poses and particles hold still, the person
+   * hit shudders. The sim, your input and the camera never stop.
+   */
+  let hitstop = 0;
+  let hitstopVictim = -1;
+  /** When the last hitstop started (game time), so a spray of light hits holds at most every HITSTOP.lightGap. */
+  let lastStopAt = -9;
+  const stopFor = (s: number, victim: number) => {
+    // Off with reduced motion: the picture never holds still on a hit.
+    if (s <= 0 || settings.reducedMotion) return;
+    if (s >= hitstop) hitstopVictim = victim;
+    hitstop = Math.max(hitstop, s);
+    lastStopAt = time;
+  };
+  /**
+   * The flinch of whoever was hit (render only): the body snaps away from the shot and eases back, harder for a heavy
+   * hit. Game time of the hit, the push direction on the map, and its strength (0..1).
+   */
+  const flinch = state.players.map(() => ({ at: -9, dx: 0, dy: 0, k: 0 }));
+  /** The strongest hit-confirm tick of this tick's hits (played once, after the events). */
+  const TICK_RANK = { body: 0, armor: 1, break: 2 } as const;
+  let pendingTick: keyof typeof TICK_RANK | null = null;
+  let killedThisTick = false;
+  /** The place banner: which place you are in, the ones already shown this round, and the banner showing now. */
+  let inPlace: string | null = null;
+  const placesShown = new Set<string>();
+  let placeBanner: { id: number; name: string; at: number } | null = null;
+  let placeId = 0;
+  /** Your eliminations, for the banner. */
+  let elim: { id: number; name: string; left: number; at: number } | null = null;
+  let elimId = 0;
+  let hudNow = false;
   const camX = () => camera.position.x;
   const handle = (e: GameEvent) => {
     switch (e.type) {
@@ -828,31 +1370,68 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           else sfx.gunshot(SOUND[e.weapon], e.x - camX(), d);
         }
         if (e.owner === me && (e.weapon === 'shotgun' || e.weapon === 'sniper')) trauma = Math.min(1, trauma + 0.2);
-        if (e.weapon === 'sniper') contrail(e.x, e.y, e.angle, 1.15);
+        if (e.weapon === 'sniper') contrail(e.x, e.y, e.angle, chestHeight(state.players[e.owner]) + 0.05, e.len);
         break;
       }
       case 'hit':
-        vfx.burst(e.x, 1.1, 5 + Math.round(e.damage / 60), e.armor ? 'guard' : 'spark', { z: e.y, speed: 3, life: 0.3 });
+        vfx.burst(e.x, chestHeight(state.players[e.target]), 5 + Math.round(e.damage / 60), e.armor ? 'guard' : 'spark', { z: e.y, speed: 3, life: 0.3 });
         // Damage numbers for the hits you land, and for the ones you take.
         if (e.by === me || e.target === me) popDamage(e.target, e.x, e.y, e.damage, e.target === me ? 'taken' : e.ko ? 'ko' : e.armor ? 'armor' : 'dealt');
         if (e.target === me) trauma = Math.min(1, trauma + 0.25);
         sfx.hit(Math.min(20, e.damage / 30), e.x - camX());
         hitFlash[e.target] = 0.08;
+        if (e.by !== null && e.by !== e.target) {
+          const from = state.players[e.by];
+          const d = Math.hypot(e.x - from.x, e.y - from.y) || 1;
+          Object.assign(flinch[e.target], { at: time, dx: (e.x - from.x) / d, dy: (e.y - from.y) / d, k: 0.55 + 0.45 * Math.min(1, e.damage / 45) });
+        }
+        if (e.by === me && e.target !== me) {
+          // A hit you landed: a small nudge, the 2D tick, the hitmarker, and a short freeze on a heavy gun.
+          trauma = Math.min(1, trauma + 0.05);
+          const broke = e.armor && state.players[e.target].armor <= 0;
+          const tick = broke ? 'break' : e.armor ? 'armor' : 'body';
+          if (!e.ko && (pendingTick === null || TICK_RANK[tick] > TICK_RANK[pendingTick])) pendingTick = tick;
+          hitFx?.hit(e.ko ? 'kill' : broke ? 'break' : e.armor ? 'armor' : 'hit', e.target);
+          // A few milliseconds' hold on every hit you land (longer on a heavy gun); the kill's own hold comes with the ko.
+          if (!e.ko) stopFor(hitstopFor(state.players[me].weapon, false, time - lastStopAt), e.target);
+        }
+        if (e.target === me && e.by !== null && e.by !== me) {
+          const from = state.players[e.by];
+          hitFx?.hurt(e.by, from.x, from.y);
+        }
         break;
       case 'impact':
-        vfx.burst(e.x, 1, 3, 'dust', { z: e.y,  speed: 2, up: 1, gravity: 6, life: 0.25, size: 0.7 });
+        vfx.burst(e.x, e.z ?? 1, 3, 'dust', { z: e.y,  speed: 2, up: 1, gravity: 6, life: 0.25, size: 0.7 });
         break;
       case 'explosion':
-        vfx.burst(e.x, 1, 40, 'hot', { z: e.y,  speed: 9, up: 4, life: 0.6, size: 1.6 });
-        vfx.burst(e.x, 1, 18, 'dust', { z: e.y,  speed: 4, up: 2, gravity: -1, life: 1, size: 2.4 });
+        vfx.burst(e.x, (e.z ?? 0) + 1, 40, 'hot', { z: e.y,  speed: 9, up: 4, life: 0.6, size: 1.6 });
+        vfx.burst(e.x, (e.z ?? 0) + 1, 18, 'dust', { z: e.y,  speed: 4, up: 2, gravity: -1, life: 1, size: 2.4 });
         if (Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y) < 20) trauma = Math.min(1, trauma + 0.5);
         sfx.explosion(e.x - camX());
         break;
+      case 'slowBurst': {
+        // The canister bursts: a blue shockwave the size of the burst, a ring out to the field's edge, frost flying.
+        // On a roof it bursts up there (`z`).
+        const bz = e.z ?? 0;
+        vfx.ring(e.x, bz + 0.25, 0x6fe3ff, { grow: e.burst * 2.2, life: 0.35, z: e.y, flat: true });
+        vfx.ring(e.x, bz + 0.15, 0xbff4ff, { grow: e.radius * 2.1, life: 0.6, z: e.y, flat: true });
+        vfx.burst(e.x, bz + 0.8, 26, 'slow', { z: e.y, speed: 6, up: 3, life: 0.55, size: 1.3 });
+        vfx.burst(e.x, bz + 0.6, 10, 'glass', { z: e.y, speed: 3, up: 2, gravity: 4, life: 0.5, size: 1 });
+        if (Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y) < 14) trauma = Math.min(1, trauma + 0.25);
+        sfx.slowBurst(e.x - camX());
+        break;
+      }
       case 'rackBroken':
         vfx.burst(e.x, 1, 20, 'spark', { z: e.y,  speed: 5, up: 3, life: 0.5 });
         sfx.glass(e.x - camX());
         break;
       case 'super':
+        if (e.fighter === 'standup') {
+          // The canister leaves the hand: a whoosh and a small blue flick; the burst comes when it lands.
+          vfx.ring(e.x, 1.2, 0x6fe3ff, { grow: 2, life: 0.25, z: e.y, flat: true });
+          sfx.dash(e.x - camX());
+          break;
+        }
         vfx.ring(e.x, 0.2, 0xffd23f, { grow: 8, life: 0.4, z: e.y, flat: true });
         sfx.push(e.x - camX());
         break;
@@ -869,31 +1448,76 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       case 'dryFire':
         if (e.player === me) sfx.dryFire();
         break;
+      case 'fireBlocked':
+        // Nothing fires in the air: say so the first time in a round, for a moment.
+        if (e.player === me && airHintAt < 0) airHintAt = time;
+        break;
       case 'roll':
         sfx.vault(e.x - camX(), e.player === me ? 0 : Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y));
         vfx.burst(e.x, 0.2, 8, 'dust', { z: e.y, speed: 2.5, up: 0.8, gravity: 5, life: 0.4, size: 0.7 });
+        break;
+      case 'hop':
+        // A light push-off: the vault's sound, softer, and a puff of dust where you left the ground.
+        sfx.vault(e.x - camX(), e.player === me ? 0 : Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y));
+        vfx.burst(e.x, 0.1, 4, 'dust', { z: e.y, speed: 1.4, up: 0.5, gravity: 5, life: 0.3, size: 0.5 });
         break;
       case 'vault':
         sfx.vault(e.x - camX(), e.player === me ? 0 : Math.hypot(e.x - state.players[me].x, e.y - state.players[me].y));
         vfx.burst(e.x, 0.3, 6, 'dust', { z: e.y, speed: 2, up: 1, gravity: 5, life: 0.35, size: 0.6 });
         break;
       case 'pickup':
-        if (e.player === me) sfx.pickup();
+        if (e.player === me) {
+          sfx.pickup();
+          if (e.kind === 'rifle') facts.pickedRifle = true;
+        }
+        break;
+      case 'swap':
+        if (e.player === me) sfx.reload();
+        break;
+      case 'heal':
+        if (e.player === me && e.done) sfx.pickup();
+        break;
+      case 'thud':
+        vfx.burst(e.x, (e.z ?? 0) + 0.15, 8, 'dust', { z: e.y, speed: 2.4, up: 0.8, gravity: 4, life: 0.35 });
+        if (e.player === me) sfx.land();
         break;
       case 'land':
         landAt[e.player] = time;
-        dropChute(e.player, e.x, e.y);
-        vfx.burst(e.x, 0.2, 12, 'dust', { z: e.y,  speed: 3, up: 1, gravity: 4, life: 0.4 });
+        if (e.player === me) {
+          lootHint = lootHintFor(e.x, e.y, time);
+          facts.landedIn = DISTRICTS.find((d) => e.x >= d.x0 && e.x < d.x1 && e.y >= d.y0 && e.y < d.y1)?.name ?? null;
+        }
+        vfx.burst(e.x, (e.z ?? 0) + 0.2, 12, 'dust', { z: e.y,  speed: 3, up: 1, gravity: 4, life: 0.4 });
         if (e.player === me) sfx.land();
+        else {
+          // Landing danger: someone touching down close by while you are still in the air (or just down) is heard, a
+          // thud from their side. Sound only: nothing on the screen or the minimap gives them away.
+          const self = state.players[me];
+          const d = Math.hypot(e.x - self.x, e.y - self.y);
+          const exposed = self.stage === 'falling' || (self.stage === 'ground' && landAt[me] !== undefined && time - landAt[me] < 8);
+          if (self.alive && exposed && d < NEAR_LANDING) sfx.landNear(e.x - camX(), d);
+        }
         break;
       case 'ko': {
         deadAt[e.victim] = time;
         const v = state.players[e.victim];
         const by = e.by !== null ? state.players[e.by] : null;
-        feed.push({ id: feedId++, text: by ? `${by.name} ⟶ ${v.name}` : `${v.name} missed the Deadline`, at: time });
+        feed.push({ id: feedId++, text: by ? `${by.name} ⟶ ${v.name}` : COPY.zone.caught(v.name, e.victim === me), at: time });
         vfx.burst(e.x, 1, 30, 'ko', { z: e.y,  speed: 7, up: 4, life: 0.8 });
         sfx.ko(e.x - camX());
-        if (e.victim === me || e.by === me) trauma = 1;
+        if (e.victim === me) {
+          trauma = 1;
+          hudNow = true;
+        } else if (e.by === me) {
+          // Your elimination: a solid jolt (not the full one you get going down), a 90 ms freeze,
+          // the kill sound and the banner, at once.
+          trauma = Math.min(1, Math.max(trauma, 0.6));
+          stopFor(hitstopFor(state.players[me].weapon, true, time - lastStopAt), e.victim);
+          killedThisTick = true;
+          sfx.elim();
+          elim = { id: elimId++, name: v.name, left: state.players.filter((p) => p.alive).length, at: time };
+          hudNow = true;
+        }
         break;
       }
       case 'zone':
@@ -917,46 +1541,147 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const yaw = state.players.map((p) => ({ a: p.heading, v: 0 }));
   const lastShot: number[] = [];
   const deadAt: number[] = [];
-  const chuteAt: number[] = [];
-  const harness = new THREE.Vector3();
+  /**
+   * Per fighter in the air (render only, rebuilt from the sim state, so it works the same for bots and online):
+   * when they left the plane, the canopy's own motion, its last toggle pulls, and the canopy's orientation.
+   */
+  const air = state.players.map(() => ({ jumpAt: -1, pulled: false, motion: null as ReturnType<typeof newChuteMotion> | null, brakeL: 0, brakeR: 0, turn: 0, q: new THREE.Quaternion() }));
+  let airFrame = 0;
+  /**
+   * Wind streaks: thin lines rushing up past you in free fall (one draw call), longer and brighter the faster you fall,
+   * gone once the canopy flies. Offsets live in a box around the jumper and wrap round as they stream past.
+   */
+  const STREAKS = 70;
+  const streakOff = new Float32Array(STREAKS * 3);
+  for (let k = 0; k < STREAKS; k++) {
+    streakOff[k * 3] = (Math.random() - 0.5) * 26;
+    streakOff[k * 3 + 1] = (Math.random() - 0.5) * 26;
+    streakOff[k * 3 + 2] = (Math.random() - 0.5) * 26;
+  }
+  const streakGeo = new THREE.BufferGeometry();
+  streakGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(STREAKS * 6), 3).setUsage(THREE.DynamicDrawUsage));
+  const streakMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false });
+  const streaks = new THREE.LineSegments(streakGeo, streakMat);
+  streaks.frustumCulled = false;
+  streaks.visible = false;
+  streaks.name = 'wind streaks';
+  scene.add(streaks);
+  const updateStreaks = (dt: number, p: Player, x: number, h: number, y: number) => {
+    const speed = p.stage === 'falling' && p.canopy < DROP.stretch ? Math.min(1, Math.max(0, p.vz) / DROP.freefallTerminal) : 0;
+    streakMat.opacity = THREE.MathUtils.damp(streakMat.opacity, settings.reducedMotion ? 0 : speed * 0.45, 6, dt);
+    streaks.visible = streakMat.opacity > 0.01;
+    if (!streaks.visible) return;
+    const a = streakGeo.attributes.position as THREE.BufferAttribute;
+    const arr = a.array as Float32Array;
+    // The air moves up past you at your fall speed, and against your drift.
+    const ux = -p.vx;
+    const uy = Math.max(0, p.vz);
+    const uz = -p.vy;
+    const len = Math.hypot(ux, uy, uz) || 1;
+    const sl = 0.3 + 1.7 * speed;
+    const wrapC = (v: number) => ((((v + 13) % 26) + 26) % 26) - 13;
+    for (let k = 0; k < STREAKS; k++) {
+      const o = k * 3;
+      streakOff[o] = wrapC(streakOff[o] + ux * dt * 1.4);
+      streakOff[o + 1] = wrapC(streakOff[o + 1] + uy * dt * 1.4);
+      streakOff[o + 2] = wrapC(streakOff[o + 2] + uz * dt * 1.4);
+      const bx = x + streakOff[o];
+      const by = h + streakOff[o + 1];
+      const bz = y + streakOff[o + 2];
+      arr[k * 6] = bx;
+      arr[k * 6 + 1] = by;
+      arr[k * 6 + 2] = bz;
+      arr[k * 6 + 3] = bx - (ux / len) * sl;
+      arr[k * 6 + 4] = by - (uy / len) * sl;
+      arr[k * 6 + 5] = bz - (uz / len) * sl;
+    }
+    a.needsUpdate = true;
+  };
   /** When each player touched down (for the landing roll), and the canopies left on the ground. */
   const landAt: number[] = [];
+  /** What this round showed beyond the report's numbers: where you touched down, a rifle taken, the canopy's opening height. */
+  const facts: RoundFacts = { landedIn: null, pickedRifle: false, openedAlt: null };
+  /** When the "Land first, then shoot" hint was shown (-1: not yet this round; once per round). */
+  let airHintAt = -1;
+  /**
+   * Landing far from any loot: for a few seconds the nearest gun on the ground is pointed out (a prompt with an arrow and a
+   * ping on the minimap). Null when there is nothing to point at.
+   */
+  let lootHint: { x: number; y: number; until: number } | null = null;
+  const lootHintFor = (x: number, y: number, now: number) => {
+    let near = Infinity;
+    let gun: { x: number; y: number } | null = null;
+    let gunD = Infinity;
+    for (const k of state.loot) {
+      if (!k.active) continue;
+      const d = Math.hypot(k.x - x, k.y - y);
+      near = Math.min(near, d);
+      if (k.kind in WEAPONS && d < gunD) {
+        gunD = d;
+        gun = k;
+      }
+    }
+    return near > LOOT_HINT.radius && gun ? { x: gun.x, y: gun.y, until: now + LOOT_HINT.seconds } : null;
+  };
   const ROLL_TIME = 0.75;
-  const groundChutes: { g: THREE.Group; t: number; dir: number }[] = [];
-  const dropChute = (i: number, x: number, y: number) => {
-    const p = state.players[i];
-    const g = chutes[i].clone(true);
+  /**
+   * Canopies let go: the moment a canopy stops hanging over its fighter (touchdown, or knocked out in the air) a copy is
+   * left where it was drawn and collapses there in 0.7 s: it keels over ahead of the fighter, deflates (flattens and
+   * shrinks towards the harness), fades and is gone. It never turns about its own axis and never lies on the ground
+   * as an open disc. Knocked out in the air it also drops as it goes.
+   */
+  const COLLAPSE = 0.7;
+  const collapsing: { g: THREE.Group; deploy: THREE.Object3D; t: number; q0: THREE.Quaternion; p0: THREE.Vector3; s0: number; air: boolean }[] = [];
+  const keel = new THREE.Quaternion();
+  const xAxis = new THREE.Vector3(1, 0, 0);
+  const releaseChute = (i: number, air: boolean) => {
+    const src = chutes[i];
+    // userData.deploy is a scene node: keep it out of the clone (Object3D.clone serialises userData to JSON).
+    const deploy = src.userData.deploy as THREE.Object3D;
+    const parts = src.userData.parts as unknown;
+    delete src.userData.deploy;
+    delete src.userData.parts;
+    const g = src.clone(true);
+    src.userData.deploy = deploy;
+    src.userData.parts = parts;
+    g.name = 'chute (collapsing)';
     g.traverse((o) => {
-      if (o instanceof THREE.Mesh) o.material = (o.material as THREE.Material).clone();
-      if (o.userData.line) o.visible = false;
+      // Lines, risers, the bag and the pilot chute go at once; the fabric gets its own material so it can fade alone.
+      if (o.userData.line) {
+        o.visible = false;
+        return;
+      }
+      if (!(o instanceof THREE.Mesh)) return;
+      const m = (o.material as THREE.Material).clone();
+      m.transparent = true;
+      o.material = m;
     });
     g.visible = true;
-    g.position.set(x, 1, y);
-    g.userData.from = { x, y };
     scene.add(g);
-    groundChutes.push({ g, t: 0, dir: Math.hypot(p.vx, p.vy) > 0.3 ? Math.atan2(p.vy, p.vx) : p.heading + Math.PI });
+    collapsing.push({ g, deploy: g.children[0], t: 0, q0: src.quaternion.clone(), p0: src.position.clone(), s0: deploy.scale.x, air });
   };
-  /** The canopy settles down behind you, lies there a while, then fades. */
-  const updateGroundChutes = (dt: number) => {
-    for (let k = groundChutes.length - 1; k >= 0; k--) {
-      const c = groundChutes[k];
+  const updateCollapsing = (dt: number) => {
+    for (let k = collapsing.length - 1; k >= 0; k--) {
+      const c = collapsing[k];
       c.t += dt;
-      // It drifts on a few metres with the wind and sinks, flattening out as it lands.
-      const fall = Math.min(1, c.t / 1.4);
-      const e = 1 - (1 - fall) * (1 - fall);
-      const from = c.g.userData.from as { x: number; y: number };
-      // It drifts on a couple of metres and folds into a long, narrow strip of fabric lying behind
-      // you (about 3 x 1.3 m, the long side along the way you came), not a big round sheet.
-      c.g.position.set(from.x + Math.cos(c.dir) * 2.2 * e, 1 - e, from.y + Math.sin(c.dir) * 2.2 * e);
-      c.g.rotation.set(0, -c.dir, (1 - e) * 0.3);
-      c.g.scale.set(1 - e * 0.42, 1 - e * 0.95, 1 - e * 0.75);
-      const fade = c.t > 8 ? 1 - (c.t - 8) / 2 : 1;
+      const f = Math.min(1, c.t / COLLAPSE);
+      const e = 1 - Math.pow(1 - f, 3);
+      // Keels over ahead of the fighter (away from an over-the-shoulder camera), about its own left-right axis; no turn about the vertical.
+      c.g.quaternion.copy(c.q0).multiply(keel.setFromAxisAngle(xAxis, 1.3 * e));
+      c.g.position.copy(c.p0);
+      if (c.air) c.g.position.y = Math.max(0.1, c.p0.y - 6 * f * f);
+      // Deflates: the dome flattens and pulls in towards the harness.
+      c.deploy.scale.set(c.s0 * (1 - 0.55 * e), c.s0 * (1 - 0.85 * e), c.s0 * (1 - 0.55 * e));
+      const fade = f < 0.35 ? 1 : 1 - (f - 0.35) / 0.65;
       c.g.traverse((o) => {
-        if (o instanceof THREE.Mesh) (o.material as THREE.MeshStandardMaterial).opacity = Math.max(0, fade);
+        if (o instanceof THREE.Mesh) (o.material as THREE.MeshStandardMaterial).opacity = fade;
       });
-      if (fade <= 0) {
+      if (f >= 1) {
         scene.remove(c.g);
-        groundChutes.splice(k, 1);
+        c.g.traverse((o) => {
+          if (o instanceof THREE.Mesh) (o.material as THREE.Material).dispose();
+        });
+        collapsing.splice(k, 1);
       }
     }
   };
@@ -1005,6 +1730,66 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     return { sprite, life: 0, age: 0, x: 0, y: 0, h: 0, total: 0, target: -1, kind: 'dealt' as DamageKind };
   });
   let nextNum = 0;
+
+  /**
+   * The pick-up hint: a small keycap floating over the piece of loot you stand on that needs a press to take (a gun when
+   * both slots are full, say), with the pick-up key on it, or the USE button's icon on a phone. No words and no prompt.
+   */
+  const keycapCache = new Map<string, THREE.Texture>();
+  const keycapTexture = (label: string) => {
+    let tex = keycapCache.get(label);
+    if (tex) return tex;
+    const c = document.createElement('canvas');
+    c.width = c.height = 96;
+    const g = c.getContext('2d')!;
+    const box = (y: number, fill: string) => {
+      g.beginPath();
+      g.roundRect(10, y, 76, 70, 14);
+      g.fillStyle = fill;
+      g.fill();
+    };
+    box(18, 'rgba(10,13,24,0.85)');
+    box(8, '#e6ebf5');
+    g.fillStyle = g.strokeStyle = '#0a0d18';
+    if (label === 'touch') {
+      g.save();
+      g.translate(24, 19);
+      g.scale(2, 2);
+      g.lineWidth = 2.6;
+      g.lineCap = g.lineJoin = 'round';
+      g.stroke(new Path2D(PICKUP_ICON));
+      g.restore();
+    } else {
+      g.font = `900 ${label.length > 2 ? 26 : 46}px "Bungee", "Chakra Petch", system-ui, sans-serif`;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText(label, 48, 45);
+    }
+    tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    keycapCache.set(label, tex);
+    return tex;
+  };
+  const keycap = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthTest: false, depthWrite: false }));
+  keycap.renderOrder = 29;
+  keycap.visible = false;
+  keycap.scale.set(0.85, 0.85, 1);
+  scene.add(keycap);
+  const showKeycap = (k: Loot | null) => {
+    keycap.visible = !!k;
+    if (!k) return;
+    const label = touch ? 'touch' : keyLabel(settings.keys.use);
+    const m = keycap.material as THREE.SpriteMaterial;
+    if (m.map !== keycapTexture(label)) {
+      m.map = keycapTexture(label);
+      m.needsUpdate = true;
+    }
+    // At the item, drawn just to the right of it on screen (the sprite's own anchor), so your fighter standing on it never
+    // covers it; in first person low and centred, where you look down at your feet.
+    keycap.position.set(k.x, fpp ? 0.3 : 0.9, k.y);
+    keycap.center.set(fpp ? 0.5 : -0.55, 0.5);
+  };
+
   const popDamage = (target: number, x: number, y: number, damage: number, kind: DamageKind) => {
     let n = damageNums.find((d) => d.life > 0 && d.target === target && d.age < 0.35 && (d.kind === 'taken') === (kind === 'taken'));
     if (n) {
@@ -1037,7 +1822,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const m = n.sprite.material as THREE.SpriteMaterial;
       m.opacity = Math.min(1, n.life / 0.3);
       // A quick pop when it appears or grows.
-      const hgt = (n.sprite.userData.base as number) * (1 + Math.max(0, 0.12 - n.age) * 3);
+      let hgt = (n.sprite.userData.base as number) * (1 + Math.max(0, 0.12 - n.age) * 3);
+      // Sized for the high camera (~40 m away); up close in first person the same number would
+      // fill the screen, so there it keeps about the same size on screen at any distance.
+      if (firstPerson()) hgt *= Math.min(1, camera.position.distanceTo(n.sprite.position) / 34);
       n.sprite.scale.set(hgt * (n.sprite.userData.aspect as number), hgt, 1);
       n.sprite.position.set(n.x, n.h, n.y);
       if (n.life <= 0) n.sprite.visible = false;
@@ -1075,6 +1863,56 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       mmCtx.setLineDash([]);
     }
     const self = state.players[me];
+    // The gun to head for after a far landing: a pulsing gold ring (the plane's flight-line colour).
+    if (lootHint && time < lootHint.until && self.stage === 'ground') {
+      const pulse = 5 + 2 * Math.sin(time * 8);
+      mmCtx.strokeStyle = 'rgba(255,210,63,0.95)';
+      mmCtx.lineWidth = 2;
+      mmCtx.beginPath();
+      mmCtx.arc(lootHint.x * s, lootHint.y * s, pulse, 0, Math.PI * 2);
+      mmCtx.stroke();
+    }
+    // Place names: all of them while you are in the plane or the air (to pick where to go), only the one you stand in on the
+    // ground. White with a dark edge in the display face, about 9 CSS px tall whatever size the map is drawn at; a name that
+    // would cover a better one is left out.
+    {
+      // The big map in the plane shows every name; the small one under the canopy only the (at most) 3 nearest the jumper within 60 m.
+      const away = (d: (typeof DISTRICTS)[number]) => Math.hypot(Math.max(d.x0 - self.x, 0, self.x - d.x1), Math.max(d.y0 - self.y, 0, self.y - d.y1));
+      const shown =
+        self.stage === 'ground'
+          ? inPlace
+            ? DISTRICTS.filter((d) => d.name === inPlace)
+            : []
+          : self.stage === 'drone'
+            ? [...DISTRICTS]
+            : DISTRICTS.filter((d) => away(d) <= 60)
+                .sort((a, b) => away(a) - away(b))
+                .slice(0, 3);
+      if (shown.length) {
+        const css = mm.clientWidth || mm.width;
+        const px = Math.round((9 * mm.width) / css);
+        mmCtx.font = `900 ${px}px "Bungee", "Chakra Petch", system-ui, sans-serif`;
+        mmCtx.textAlign = 'center';
+        mmCtx.textBaseline = 'middle';
+        mmCtx.lineJoin = 'round';
+        mmCtx.lineWidth = Math.max(2, px / 3);
+        mmCtx.strokeStyle = 'rgba(10,13,24,0.9)';
+        mmCtx.fillStyle = '#ffffff';
+        const taken: { x0: number; y0: number; x1: number; y1: number }[] = [];
+        shown.sort((a, b) => (PLACE_TIER[b.name] ?? 1) - (PLACE_TIER[a.name] ?? 1) || away(a) - away(b));
+        for (const d of shown) {
+          const w = mmCtx.measureText(d.name).width + 4;
+          // A name that would run off the edge slides in (the nearest place must never lose its name to the map's edge).
+          const x = Math.min(mm.width - 1 - w / 2, Math.max(1 + w / 2, ((d.x0 + d.x1) / 2) * s));
+          const y = ((d.y0 + d.y1) / 2) * s;
+          const box = { x0: x - w / 2, y0: y - px * 0.6, x1: x + w / 2, y1: y + px * 0.6 };
+          if (w > mm.width - 2 || taken.some((t) => box.x0 < t.x1 && box.x1 > t.x0 && box.y0 < t.y1 && box.y1 > t.y0)) continue;
+          taken.push(box);
+          mmCtx.strokeText(d.name, x, y);
+          mmCtx.fillText(d.name, x, y);
+        }
+      }
+    }
     // Only you on the map: never where the others are.
     mmCtx.save();
     mmCtx.translate(self.x * s, self.y * s);
@@ -1099,9 +1937,18 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     }
   };
 
-  const prev = state.players.map((p) => ({ x: p.x, y: p.y, fall: p.fall }));
+  const prev = state.players.map((p) => ({ x: p.x, y: p.y, alt: p.alt, z: p.z }));
   let fallTime = 0;
+  /** The opening's camera dip: offset (m) and its rate, and last frame's descent speed. */
+  const camDip = { o: 0, v: 0 };
+  let camVz = 0;
+  /** 0 in free fall, eases to 1 once the canopy is open: the camera backs off and tilts up to keep the canopy in view. */
+  let chuteCam = 0;
+  /** The high camera leans ahead: a few metres the way you move and aim, eased (half-life ~0.35 s). */
+  const ahead = new THREE.Vector2();
   let shadowHalf = 0;
+  /** The phone camera's projection offset (fractions of the screen): wanted, and what the camera has now. */
+  const viewOff = { x: 0, y: 0, sx: 0, sy: 0 };
   /** Dev only: ?zoom=0.6 brings the top-down camera that much closer (for trailer clips). */
   const camZoom = process.env.NODE_ENV !== 'production' ? Number(new URLSearchParams(window.location.search).get('zoom') ?? 1) || 1 : 1;
   /** Dev only: ?cam=near brings the camera close to check animation. */
@@ -1131,9 +1978,55 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       }
     });
 
+  /** The hitmarker and damage arcs follow you (and the one you hit) on the screen. */
+  const fxAt = new THREE.Vector3();
+  const toScreen = (x: number, h: number, y: number) => {
+    fxAt.set(x, h, y).project(camera);
+    if (fxAt.z > 1) return null;
+    return { x: (fxAt.x * 0.5 + 0.5) * canvas.clientWidth, y: (0.5 - fxAt.y * 0.5) * canvas.clientHeight };
+  };
+  const updateHitFx = (dt: number, selfX: number, selfH: number, selfY: number) => {
+    if (!hitFx) return;
+    // Over the shoulder works like first person here: the marker on the crosshair, the arcs turned with the view.
+    const fp = mouseLook();
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    const centre = { x: w / 2, y: h / 2 };
+    const me2 = fp ? centre : toScreen(selfX, selfH + 1, selfY) ?? centre;
+    hitFx.update(dt, settings, {
+      self: { x: state.players[me].x, y: state.players[me].y, sx: me2.x, sy: me2.y },
+      yaw: fp ? viewYaw : null,
+      // First person on the crosshair; from above on the body of the one you hit.
+      markAt: (t) => {
+        if (fp) return centre;
+        const r = rigs[t]?.root;
+        return r ? toScreen(r.position.x, r.position.y + 1.2, r.position.z) : null;
+      },
+    });
+  };
+
+  /**
+   * The lens in the air: it opens up with the speed of the fall (up to 6 degrees at terminal velocity) and kicks out a
+   * little more as the canopy bites, then settles to the normal lens under the canopy.
+   */
+  const airFov = (p: Player) => {
+    if (p.stage !== 'falling' || settings.reducedMotion) return 0;
+    const speed = Math.min(1, Math.max(0, p.vz) / DROP.freefallTerminal);
+    const open = p.canopy < DROP.stretch ? 0 : Math.min(1, (p.canopy - DROP.stretch) / (DROP.deployTime - DROP.stretch));
+    const bite = p.canopy < DROP.stretch ? 0 : Math.sin(Math.PI * Math.min(1, (p.canopy - DROP.stretch) / 0.9)) * 3;
+    return speed * 6 * (1 - open) + bite;
+  };
+
+  /** A vertical field of view (degrees) opened so the picture shows `widen` times as much at the same distance. */
+  const widenFov = (fov: number, widen: number) =>
+    widen === 1 ? fov : THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(fov) / 2) * widen));
+
   const renderFrame = (dt: number, alpha: number) => {
     resize();
+    airFrame++;
     const self = state.players[me];
+    const frozen = hitstop > 0;
+    hitstop = Math.max(0, hitstop - dt);
     scoped = !paused && scopeHeld(self);
     const droneX = state.drone.x0 + (state.drone.x1 - state.drone.x0) * state.drone.t;
     const droneY = state.drone.y0 + (state.drone.y1 - state.drone.y0) * state.drone.t;
@@ -1147,6 +2040,16 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     let selfX = self.x;
     let selfY = self.y;
     let selfH = 0;
+    // Who leaves a trail this frame: you, plus the three nearest bots that have smoke (low tier: only you).
+    const trails = new Set<number>();
+    if (looks[me].smoke !== 'off') trails.add(me);
+    if (tier !== 'low') {
+      state.players
+        .filter((o, i) => i !== me && looks[i].smoke !== 'off' && o.alive && o.stage === 'falling')
+        .sort((a, b) => Math.hypot(a.x - self.x, a.y - self.y) - Math.hypot(b.x - self.x, b.y - self.y))
+        .slice(0, MAX_JUMPERS - 1)
+        .forEach((o) => trails.add(o.id));
+    }
     state.players.forEach((p, i) => {
       const rig = rigs[i];
       const x = prev[i].x + (p.x - prev[i].x) * alpha;
@@ -1155,12 +2058,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const fallen = !p.alive && p.stage === 'ground' && deadAt[i] !== undefined;
       const visible = fallen || (p.alive && p.stage !== 'drone' && (i === me || p.stage === 'falling' || canSee(state, self, p)));
       rig.root.visible = visible && !(i === me && firstPerson());
-      const chuteOpen = p.stage === 'falling' && p.fall <= DROP.chute;
+      const chuteOpen = p.stage === 'falling' && p.canopy >= 0;
+      const hadChute = chutes[i].visible;
       chutes[i].visible = visible && chuteOpen;
+      // The canopy stops hanging over this fighter (landed, or knocked out in the air): it collapses where it was.
+      if (hadChute && !chutes[i].visible) releaseChute(i, p.stage === 'falling');
       // Free fall from the plane down to chute height, then drift slowly under the canopy.
       // Height interpolated between ticks like x and y, so the fall is smooth at any frame rate.
-      const fall = prev[i].fall + (p.fall - prev[i].fall) * alpha;
-      let h = p.stage === 'falling' ? fallHeight(Math.max(0, fall)) : 0;
+      // On the ground: the feet's height (a roof, a hop, a ladder), interpolated the same way.
+      let h = p.stage === 'falling' ? Math.max(0, prev[i].alt + (p.alt - prev[i].alt) * alpha) : (prev[i].z ?? 0) + ((p.z ?? 0) - (prev[i].z ?? 0)) * alpha;
       // Standing on a bridge or the pier lifts you onto its deck, smoothly at its ends.
       const onDeck = p.stage === 'ground' && MAP[Math.floor(y / TILE)]?.[Math.floor(x / TILE)] === 'd' ? DECK_Y : 0;
       deck[i] += (onDeck - deck[i]) * Math.min(1, dt * 14);
@@ -1179,6 +2085,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         }
       }
       rig.root.position.set(x, h, y);
+      // Hitstop: the one who was hit shudders while everything else holds still.
+      if (frozen && i === hitstopVictim && !settings.reducedMotion) rig.root.position.x += Math.sin(time * 120) * 0.07;
       if (i === me) {
         selfX = x;
         selfY = y;
@@ -1187,21 +2095,29 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // The body turns on a critically damped spring towards the sim heading: it starts and
       // settles smoothly instead of rotating at a constant rate and stopping dead.
       const yw = yaw[i];
-      if (p.stage === 'drone') {
+      if (frozen) {
+        // Hitstop: the body holds its turn too.
+      } else if (p.stage === 'drone') {
         yw.a = p.heading;
         yw.v = 0;
       } else {
         // A spring a little under critical damping: the body swings into a turn and settles with a
-        // touch of overshoot, like a person, not a turret.
-        const d = Math.atan2(Math.sin(p.heading - yw.a), Math.cos(p.heading - yw.a));
-        const w = 13;
+        // touch of overshoot, like a person, not a turret. In the air the body turns slower (it has the air to turn
+        // against), and under the canopy it faces the way the canopy flies unless it is shooting.
+        const ai = air[i];
+        const shootingAir = p.stage === 'falling' && lastShot[i] !== undefined && time - lastShot[i] < 1.5;
+        const want = p.stage === 'falling' && ai.motion && p.canopy >= 0.5 && !shootingAir ? ai.motion.yaw : p.heading;
+        const d = Math.atan2(Math.sin(want - yw.a), Math.cos(want - yw.a));
+        const w = p.stage === 'falling' ? (ai.motion ? 9 : 5) : 13;
         const zeta = 0.72;
         yw.v += (w * w * d - 2 * zeta * w * yw.v) * dt;
         yw.a += yw.v * dt;
       }
       const sinceShot = lastShot[i] === undefined ? 9 : time - lastShot[i];
       const sinceLand = landAt[i] === undefined ? 9 : time - landAt[i];
-      if (fallen) {
+      if (frozen) {
+        // Hitstop: every pose holds for a beat.
+      } else if (fallen) {
         poseDeath(rig, time - deadAt[i], i);
       } else if (p.stage === 'ground' && p.vault <= 0 && inWater(p.x, p.y)) {
         const before = Math.floor(rig.phase / Math.PI);
@@ -1217,21 +2133,48 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         }
       } else if (p.stage === 'ground') {
         poseTopDown(rig, {
-          dt, time, vx: p.vx, vy: p.vy, yaw: yw.a, yawRate: yw.v, onGround: true, dashing: p.dashTime > 0,
+          dt, time, vx: p.vx, vy: p.vy, yaw: yw.a, yawRate: yw.v, onGround: !p.jz, dashing: p.dashTime > 0,
           gun: p.weapon, sinceShot,
-          reload: p.reload > 0 ? 1 - p.reload / WEAPONS[p.weapon].reload : null,
+          reload: p.reload > 0 ? 1 - p.reload / reloadTime(p) : null,
           lean: p.lean,
           vault: p.vault > 0 ? 1 - p.vault / VAULT.time : null,
           // The landing roll, or a dodge roll (Shift).
           roll: p.rolling > 0 ? 1 - p.rolling / ROLL.time : sinceLand < ROLL_TIME ? sinceLand / ROLL_TIME : null,
         });
       } else if (chuteOpen) {
-        // Steering tilts you, in the body's own frame.
+        // The canopy flies on its own springs (heading, bank, pitch); the body hangs from it.
+        const ai = air[i];
+        ai.motion ??= newChuteMotion(yw.a);
+        if (!ai.pulled) {
+          ai.pulled = true;
+          sfx.chute(p.x - camX(), i === me ? 0 : Math.hypot(p.x - self.x, p.y - self.y, h - selfH));
+        }
+        const canopyT = p.canopy + alpha * DT;
+        const m = moveChute(ai.motion, dt, { vx: p.vx, vy: p.vy, canopy: canopyT, time, seed: i });
+        // Near the ground both toggles come down: the flare.
+        const flare = canopyT >= DROP.deployTime ? Math.min(1, Math.max(0, (DROP.flareAlt + 2 - h) / (DROP.flareAlt + 1))) : 0;
+        ai.brakeL = Math.min(1, m.brakeL + flare);
+        ai.brakeR = Math.min(1, m.brakeR + flare);
+        ai.turn = m.turn;
+        poseChute(rig, {
+          dt, time, seed: i, canopy: canopyT, brakeL: m.brakeL, brakeR: m.brakeR, turn: m.turn,
+          bank: ai.motion.bank, pitch: ai.motion.pitch, flare, dive: m.dive, reducedMotion: settings.reducedMotion, shooting: sinceShot < 1.5,
+        });
+      } else if (p.stage === 'falling') {
+        // Free fall: the stick in the body's own frame (track forward / back off, slide), the turn from the yaw spring.
+        const ai = air[i];
+        if (ai.jumpAt < 0) ai.jumpAt = time;
         const c = Math.cos(yw.a);
         const sn = Math.sin(yw.a);
-        poseChute(rig, { dt, time, seed: i, steerX: -p.vx * sn + p.vy * c, steerZ: p.vx * c + p.vy * sn, shooting: sinceShot < 1.5 });
-      } else if (p.stage === 'falling') {
-        poseFreefall(rig, { dt, time, seed: i });
+        const fs = DROP.freefallSpeed;
+        poseFreefall(rig, {
+          dt, time, seed: i,
+          track: Math.max(-1, Math.min(1, (p.vx * c + p.vy * sn) / fs)),
+          side: Math.max(-1, Math.min(1, (p.vx * sn - p.vy * c) / fs)),
+          turn: yw.v,
+          speed: Math.min(1, p.vz / DROP.freefallTerminal),
+          sinceJump: time - ai.jumpAt,
+        });
       } else {
         poseRig(rig, {
           dt, time, vx: 0, vy: 0, onGround: false, facing: 1, aim: 0, sideways: false, wall: 0, dashing: false, stunned: false,
@@ -1239,6 +2182,17 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         });
       }
       rig.root.rotation.y = Math.PI / 2 - yw.a;
+      // The flinch: a quick lean away from the shot, pivoting at the feet, and a small push back. Yaw first, then the
+      // tilt in world axes ('ZXY'), so it leans the same way whichever way the body faces.
+      const fl = flinch[i];
+      const fk = settings.reducedMotion || !p.alive ? 0 : flinchCurve(time - fl.at) * fl.k;
+      rig.root.rotation.order = 'ZXY';
+      rig.root.rotation.x = fk * 0.16 * fl.dy;
+      rig.root.rotation.z = -fk * 0.16 * fl.dx;
+      if (fk > 0) {
+        rig.root.position.x += fl.dx * 0.07 * fk;
+        rig.root.position.z += fl.dy * 0.07 * fk;
+      }
       rig.vest.visible = p.armor > 0;
 
       // Footsteps, at each footfall of the stride: yours and everyone near you, panned left or right.
@@ -1257,25 +2211,34 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       hitFlash[i] = Math.max(0, hitFlash[i] - dt);
       setFlash(rig, hitFlash[i] > 0);
       rig.root.updateMatrixWorld(true);
-      if (chutes[i].visible) {
-        // Rigidly attached to the top of the backpack: the rig hangs from the canopy, so the canopy
-        // takes the body's own position and tilt (its swing and its banking into turns), and the
-        // risers always leave from the shoulder straps, through the hands, to the lines. The
-        // canopy unfolds out of the pack over 0.7 s when it opens.
-        rig.body.localToWorld(harness.set(0, rig.shoulderL.y, HARNESS_BACK));
-        chutes[i].position.copy(harness);
-        rig.body.getWorldQuaternion(chutes[i].quaternion);
-        if (chuteAt[i] === undefined) chuteAt[i] = time;
-        const k = Math.min(1, (time - chuteAt[i]) / 0.7);
-        const open = 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2); // ease out with a little overshoot
-        (chutes[i].userData.deploy as THREE.Group).scale.setScalar(Math.max(0.08, open));
+      if (chutes[i].visible && air[i].motion) {
+        // On the harness at the top of the backpack, flying with the canopy's own orientation; the lines are restrung
+        // to the straps and hands every frame. Far canopies (others, beyond 55 m) reshape every third frame.
+        const ai = air[i];
+        const far = i !== me && Math.hypot(x - camera.position.x, h - camera.position.y, y - camera.position.z) > 55;
+        hangChute(chutes[i], rig, chuteQuaternion(ai.motion!, ai.q), { canopy: p.canopy + alpha * DT, time, seed: i, brakeL: ai.brakeL, brakeR: ai.brakeR }, !far || (airFrame + i) % 3 === 0);
+      }
+      if (p.stage !== 'falling') {
+        if (air[i].motion || air[i].jumpAt >= 0) leaveAir(rig);
+        air[i].motion = null;
+        air[i].jumpAt = -1;
+        air[i].pulled = false;
+      }
+
+      // Drop Smoke: from the feet, in free fall and under the canopy only; it stops the moment they touch down.
+      if (trails.has(i) && p.alive && p.stage === 'falling' && visible && !frozen) {
+        rig.root.updateMatrixWorld(true);
+        rig.shinL.localToWorld(smokeA.set(0, -rig.legLen / 2, 0));
+        rig.shinR.localToWorld(smokeB.set(0, -rig.legLen / 2, 0));
+        smokeFeet.addVectors(smokeA, smokeB).multiplyScalar(0.5);
+        dropSmoke.emit(i, smokeFeet, smokeColor(looks[i].smoke, looks[i].canopy, Number.parseInt(FIGHTERS[p.fighter].color.slice(1), 16), time), p.canopy < 0, dt, camera);
       }
 
       // Gun in hand.
       if (gunKinds[i] !== p.weapon) {
         if (guns[i]) scene.remove(guns[i]!);
-        guns[i] = p.weapon === 'fists' ? null : buildGun(GUN_MODEL[p.weapon]).root;
-        if (guns[i]) scene.add(guns[i]!);
+        guns[i] = p.weapon === 'fists' ? null : buildGun(GUN_MODEL[p.weapon], looks[i].finish).root;
+        if (guns[i]) scene.add(Object.assign(guns[i]!, { name: 'gun' }));
         gunKinds[i] = p.weapon;
       }
       const gun = guns[i];
@@ -1289,8 +2252,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
       // Health bar over the head, facing the camera.
       const bar = bars[i];
-      bar.g.visible = visible && p.alive && p.stage === 'ground' && !(i === me && firstPerson());
-      bar.g.position.set(x, 2.7, y);
+      // Others' bars fade out between 38 and 55 m from you (yours never does). They depth-test, so walls and roofs hide them.
+      const far = i === me ? 0 : THREE.MathUtils.smoothstep(Math.hypot(x - self.x, y - self.y), 38, 55);
+      bar.g.visible = visible && p.alive && p.stage === 'ground' && !(i === me && mouseLook()) && far < 1;
+      (bar.bg.material as THREE.MeshBasicMaterial).opacity = 1 - far;
+      (bar.fill.material as THREE.MeshBasicMaterial).opacity = 1 - far;
+      (bar.armor.material as THREE.MeshBasicMaterial).opacity = 1 - far;
+      // At eye level just under the 2.6 m ceiling, so a bar in the same room is not hidden by it; up on a roof, over the feet.
+      bar.g.position.set(x, (firstPerson() || shoulderView() ? 2.45 : 2.7) + (p.stage === 'ground' ? p.z : 0), y);
       bar.g.quaternion.copy(camera.quaternion);
       const k = Math.max(0.001, p.hp / p.maxHp);
       bar.fill.scale.x = k;
@@ -1300,46 +2269,49 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       bar.armor.position.x = -0.8 * (1 - a);
       bar.armor.visible = p.armor > 0;
     });
-    world.update(state, self.x, self.y, firstPerson());
+    // Over the shoulder the camera can be indoors with you: buildings are drawn as in first person (ceilings, no lifted roofs).
+    world.update(state, self.x, self.y, firstPerson() || shoulderView(), self.stage === 'ground' ? self.z : 0);
     updateThrowPreview(self, selfX, selfY);
     // By id: online the state object is replaced on every correction from the host.
     const tgt = aimMode === 'auto' && self.alive && self.stage !== 'drone' && aimTarget ? state.players[aimTarget.id] : null;
-    reticle.visible = !!tgt && tgt.alive && !firstPerson();
+    reticle.visible = !!tgt && tgt.alive && !mouseLook();
     if (tgt) {
       const ti = tgt.id;
-      reticle.position.set(prev[ti].x + (tgt.x - prev[ti].x) * alpha, 0.1, prev[ti].y + (tgt.y - prev[ti].y) * alpha);
+      reticle.position.set(prev[ti].x + (tgt.x - prev[ti].x) * alpha, 0.1 + feetOf(tgt), prev[ti].y + (tgt.y - prev[ti].y) * alpha);
       reticle.rotation.y = time * 1.5;
       reticle.scale.setScalar(1 + Math.sin(time * 8) * 0.05);
     }
-    setPeople(state.players.filter((q) => q.alive && q.stage === 'ground').map((q) => ({ x: q.x, y: q.y })));
+    // Grass and bushes part only round the people you can see (the nearest first): a bush moving round someone hidden in it
+    // would give them away.
+    setPeople(
+      state.players
+        .filter((q) => q.alive && q.stage === 'ground' && (q.id === me || canSee(state, self, q)))
+        .sort((a, b) => Math.hypot(a.x - self.x, a.y - self.y) - Math.hypot(b.x - self.x, b.y - self.y))
+        .map((q) => ({ x: q.x, y: q.y })),
+    );
 
-    // Loot.
-    const seen = new Set<number>();
+    // Loot: every item floats and turns; all items of a kind are drawn together (see lootDraw).
     for (const l of state.loot) {
-      seen.add(l.id);
-      let v = lootViews.get(l.id);
-      if (!v) {
-        v = lootModel(l.kind);
-        scene.add(v);
-        lootViews.set(l.id, v);
-      }
-      v.position.set(l.x, 0, l.y);
-      const item = v.getObjectByName('item')!;
-      item.position.y = 0.75 + Math.sin(time * 2.6 + l.id) * 0.1;
-      item.rotation.y = time * 0.9 + l.id;
-      const glow = v.getObjectByName('glow') as THREE.Mesh;
-      (glow.material as THREE.MeshBasicMaterial).opacity = 0.6 + Math.sin(time * 3 + l.id) * 0.2;
+      const look = lootLook(l);
+      const lz = l.z ?? 0;
+      // Indoors the beam stops under the ceiling, so it never pokes up through the roof.
+      const beamH = lz === 0 && buildingAt(l.x, l.y) >= 0 ? Math.min(look.beamH, 0.85) : look.beamH;
+      lootFxList.push({ x: l.x, y: l.y, z: lz, id: l.id, color: look.color, beam: look.beam, beamH, glowS: look.glowS });
+      // Off screen (last frame's view, with a margin): not drawn.
+      lootPos.set(l.x, 0.8 + lz, l.y);
+      if (lootFrustum.planes.some((pl) => pl.distanceToPoint(lootPos) < -3)) continue;
+      lootEuler.set(look.tilt.x, time * 0.9 + l.id, look.tilt.z, look.tilt.order);
+      lootM.compose(lootPos.set(l.x, lz + 0.75 + Math.sin(time * 2.6 + l.id) * 0.1, l.y), lootQ.setFromEuler(lootEuler), lootOne);
+      look.add(lootM);
     }
-    for (const [id, v] of lootViews) {
-      if (!seen.has(id)) {
-        scene.remove(v);
-        lootViews.delete(id);
-      }
-    }
+    lootDraw();
+    lootFx(lootFxList);
+    lootFxList.length = 0;
 
     // Projectiles.
     let t = 0;
     let lb = 0;
+    let cn = 0;
     let rk = 0;
     smokeClock += dt;
     const smokeTick = smokeClock > 0.035;
@@ -1368,6 +2340,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         if (!m) continue;
         m.visible = true;
         m.position.set(pr.x, pr.h ?? 1.3, pr.y);
+        const rl = m.userData.light as THREE.PointLight | undefined;
+        if (rl) {
+          rl.position.set(pr.x, pr.h ?? 1.3, pr.y);
+          rl.intensity = 3;
+        }
         m.lookAt(pr.x + pr.vx, (pr.h ?? 1.3) + (pr.vh ?? 0), pr.y + pr.vy);
         const f = m.userData.flame as THREE.Mesh;
         f.scale.set(1, 1, 0.8 + Math.random() * 0.5);
@@ -1375,6 +2352,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           tmpV.set(0, 0, -0.75).applyQuaternion(m.quaternion).add(m.position);
           vfx.burst(tmpV.x, tmpV.y, 2, 'dust', { z: tmpV.z, speed: 0.4, up: 0.6, gravity: -0.5, life: 0.9, size: 1.1 });
         }
+      } else if (pr.field) {
+        // The slow-field canister: the same arc as a bomb, tumbling, a thin blue trail behind it.
+        const m = canisters[cn++];
+        if (!m) continue;
+        m.visible = true;
+        const hgt = 1 + 4 * pr.t * (1 - pr.t) * 5;
+        m.position.set(pr.x, hgt, pr.y);
+        m.rotation.set(time * 9, Math.atan2(pr.tx - pr.sx, pr.ty - pr.sy), 0, 'YXZ');
+        if (smokeTick) vfx.burst(pr.x, hgt, 1, 'slow', { z: pr.y, speed: 0.3, up: 0.2, gravity: 0, life: 0.45, size: 0.8 });
       } else {
         const m = lobs[lb++];
         if (!m) continue;
@@ -1382,7 +2368,12 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         m.position.set(pr.x, 1 + 4 * pr.t * (1 - pr.t) * 5, pr.y);
       }
     }
-    for (; rk < rocketMeshes.length; rk++) rocketMeshes[rk].visible = false;
+    for (; cn < canisters.length; cn++) canisters[cn].visible = false;
+    for (; rk < rocketMeshes.length; rk++) {
+      rocketMeshes[rk].visible = false;
+      const rl = rocketMeshes[rk].userData.light as THREE.PointLight | undefined;
+      if (rl) rl.intensity = 0;
+    }
     for (; t < tracers.length; t++) tracers[t].visible = false;
     for (const c of contrails) {
       if (!c.visible) continue;
@@ -1404,9 +2395,25 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const f = state.fields[i];
       m.visible = !!f;
       if (f) {
-        m.position.set(f.x, 0.05, f.y);
+        m.position.set(f.x, 0.05 + (f.z ?? 0), f.y);
         m.scale.setScalar(f.r);
+        // In over the first 0.2 s, out over the last 0.6 s; the edge breathes.
+        const k = Math.min(1, (SUPERS.timebox.life - f.life) / 0.2, f.life / 0.6);
+        const u = m.userData as { floor: THREE.Mesh; dome: THREE.Mesh; edge: THREE.Mesh };
+        (u.floor.material as THREE.MeshBasicMaterial).opacity = 0.26 * k;
+        (u.dome.material as THREE.MeshBasicMaterial).opacity = 0.2 * k;
+        (u.edge.material as THREE.MeshBasicMaterial).opacity = (0.55 + Math.sin(time * 6) * 0.2) * k;
       }
+    });
+    // Slowed fighters (inside an enemy's field) wear the cold blue shell, with the odd fleck of frost.
+    slowShells.forEach((g, i) => {
+      const p = state.players[i];
+      const on = !!p && p.alive && p.stage === 'ground' && p.slowed > 0 && rigs[i].root.visible;
+      g.visible = on;
+      if (!on) return;
+      g.position.copy(rigs[i].root.position);
+      g.rotation.y = time * 1.5;
+      if (smokeTick && Math.random() < 0.3) vfx.burst(g.position.x, 0.4 + Math.random() * 1.4, 1, 'slow', { z: g.position.z, speed: 0.4, up: 0.3, gravity: 0.5, life: 0.5, size: 0.7 });
     });
 
     // The Deadline.
@@ -1419,10 +2426,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
 
     // Camera: chase the plane from behind, follow the fall from above, and on the ground sit
     // high and far so the fighters read small and you see what's coming.
-    const shake = trauma * trauma;
+    const shake = settings.reducedMotion ? 0 : trauma * trauma;
     const n = (f: number, ph: number) => Math.sin(time * f + ph) * 0.6 + Math.sin(time * f * 2.3 + ph) * 0.4;
     const kf = 1 - Math.exp(-3 * dt);
     let want: THREE.Vector3;
+    /** On the ground, how much wider than normal the lens opens on a narrow screen (1 on a wide one). */
+    let lensWiden = 1;
+    /** The ground camera profile for this screen (desktop, tablet or phone). */
+    const camProfile = cameraProfile(touch, canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight);
     let look: THREE.Vector3;
     if (self.stage === 'drone' && state.phase === 'drop') {
       // High above the plane, looking down over most of the map, so you can choose where to jump.
@@ -1435,33 +2446,83 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     } else if (self.stage === 'falling') {
       // Stay close above and behind the jumper the whole way down, so you see yourself from the
       // first frame, falling through the clouds, then the canopy opening below them.
-      const hh = selfH;
-      const chute = self.fall <= DROP.chute;
-      // Looking steeply down past the jumper: you see yourself in the middle and the ground below.
-      want = new THREE.Vector3(selfX, hh + (chute ? 17 : 12), selfY + (chute ? 13 : 7));
-      look = new THREE.Vector3(selfX, hh - (chute ? 1 : 4), selfY);
+      // The opening bites: the camera carries on down for a moment on a spring (you rise in the frame and settle),
+      // then the camera backs off and lowers behind the canopy. The spring is driven by the jumper's vertical
+      // acceleration only, so at a steady fall the camera sits exactly where it should.
+      const vzNow = self.vz;
+      const accel = dt > 0 ? (camVz - vzNow) / dt : 0; // upward acceleration of the jumper (m/s^2)
+      camVz = vzNow;
+      if (!settings.reducedMotion && fallTime > 0.1) {
+        const w = 4;
+        camDip.v += (-w * w * camDip.o - 2 * 0.65 * w * camDip.v - Math.max(-40, Math.min(40, accel))) * dt;
+        camDip.o = Math.max(-2.5, Math.min(2.5, camDip.o + camDip.v * dt));
+      } else camDip.o = camDip.v = 0;
+      const hh = selfH + camDip.o;
+      const chute = self.canopy >= DROP.stretch;
+      chuteCam += ((chute ? 1 : 0) - chuteCam) * (1 - Math.exp(-2.6 * dt));
+      // Under the canopy the camera backs off, lowers and looks at a point above the jumper, so the canopy sits in the
+      // picture and the jumper hangs clear of it (not hidden under the wing); a phone held upright backs off further.
+      // Eased, so the opening never jumps.
+      // High under the canopy it backs off a little further still, to look over the map for a spot and the others in
+      // the air; it closes back to the normal canopy framing by about 12 m up.
+      const high = 1 + 0.3 * Math.min(1, Math.max(0, (selfH - 12) / 24));
+      const back = (camera.aspect < 1.3 ? Math.min(1.5, 1.3 / camera.aspect) : 1) * (1 + (high - 1) * chuteCam);
+      const c = chuteCam;
+      // Free fall: looking steeply down past the jumper, the ground rushing up below.
+      const fb = 1 + (back - 1) * 0.6;
+      want = new THREE.Vector3(selfX, hh + 8.5 * fb + (14.5 * back - 8.5 * fb) * c, selfY + 5.5 * fb + (17.5 * back - 5.5 * fb) * c);
+      look = new THREE.Vector3(selfX, hh - 2 + 3.8 * c, selfY);
+      // The wind: a small, speed-scaled buffet in free fall (three unrelated rates, so it never reads as a loop).
+      if (!settings.reducedMotion) {
+        const buffet = Math.min(1, Math.max(0, self.vz) / DROP.freefallTerminal) * (1 - c) * 0.09;
+        want.x += n(11.3, 1.7) * buffet;
+        want.y += n(9.1, 0.4) * buffet * 0.6;
+        want.z += n(13.7, 2.9) * buffet;
+      }
       if (camNear < 1) {
         // Dev close-up: beside and a little below the jumper, looking up at body, risers and canopy.
         want = new THREE.Vector3(selfX + camOrbit.x, hh + camOrbit.y, selfY + camOrbit.z);
         look = new THREE.Vector3(selfX, hh + 2.2, selfY);
       }
     } else {
-      // Narrow screens (a phone held upright) pull the camera up so you still see around you.
-      const k = (camera.aspect < 1.3 ? Math.min(1.75, 1.3 / camera.aspect) : 1) * camZoom;
-      want = camNear < 1 ? new THREE.Vector3(selfX + 2, 3.2, selfY + 4) : new THREE.Vector3(selfX, 36 * k, selfY + 22 * k);
-      look = camNear < 1 ? new THREE.Vector3(selfX, 1.1, selfY) : new THREE.Vector3(selfX, 0, selfY + 1);
+      // Narrow screens (a phone held upright) see as far around you as a wide one by opening the lens wider, not by pulling
+      // the camera up: pulled up it sat above the cloud layer (DROP.cloudLow) and the screen was mostly cloud.
+      lensWiden = camera.aspect < 1.3 ? Math.min(1.75, 1.3 / camera.aspect) : 1;
+      // The ground camera profile: the desktop view is 1; a phone or tablet sits closer so the fighter is big enough to read.
+      const k = camZoom * camProfile.k;
+      // Look-ahead: 0.35 s of your velocity plus 2.5 m the way you face (3 m on touch), capped at 4 m (5 m on touch), so more
+      // of the screen shows where you are going and shooting. Off while standing still and aiming nowhere in particular.
+      const lx = self.vx * 0.35 + Math.cos(self.heading) * camProfile.face;
+      const ly = self.vy * 0.35 + Math.sin(self.heading) * camProfile.face;
+      const ll = Math.hypot(lx, ly);
+      const cap = ll > camProfile.cap ? camProfile.cap / ll : 1;
+      const still = Math.hypot(self.vx, self.vy) < 0.5 && !(mouseDown || held('fire'));
+      const ka = 1 - Math.exp(-2 * dt);
+      ahead.x += ((still ? 0 : lx * cap) - ahead.x) * ka;
+      ahead.y += ((still ? 0 : ly * cap) - ahead.y) * ka;
+      const ax0 = settings.reducedMotion ? 0 : ahead.x;
+      const ay0 = settings.reducedMotion ? 0 : ahead.y;
+      // Up on a roof the whole view rises with you (not with a hop), so you stay in the middle of the screen.
+      const lift = self.z >= 1.5 ? selfH : 0;
+      want = camNear < 1 ? new THREE.Vector3(selfX + 2, 3.2 + lift, selfY + 4) : new THREE.Vector3(selfX + ax0, 36 * k + lift, selfY + ay0 + 22 * k);
+      look = camNear < 1 ? new THREE.Vector3(selfX, 1.1 + lift, selfY) : new THREE.Vector3(selfX + ax0, lift, selfY + ay0 + 1);
       if (scoped && camNear >= 1) {
         // Through the scope from above: the view slides far out the way you aim and pulls up,
         // so you see (and auto-aim reaches) people well past the normal screen.
         const ax = Math.cos(self.heading) * 30;
         const ay = Math.sin(self.heading) * 30;
-        want.set(selfX + ax, 54 * k, selfY + ay + 33 * k);
+        want.set(selfX + ax, 54 * camZoom, selfY + ay + 33 * camZoom);
         look.set(selfX + ax, 0, selfY + ay + 1);
       }
     }
     // Falling: blend in from the plane view for a moment, then stay locked to the jumper (no lag,
     // no wobble). Ground: a soft follow.
     fallTime = self.stage === 'falling' ? fallTime + dt : 0;
+    if (self.stage !== 'falling') {
+      chuteCam = 0;
+      camDip.o = camDip.v = 0;
+      camVz = 0;
+    }
     const follow =
       self.stage === 'ground' ? 1 - Math.exp(-6 * dt) : self.stage === 'falling' ? (fallTime > 0.9 ? 1 : 1 - Math.exp(-6 * dt)) : kf;
     camPos.lerp(want, follow);
@@ -1469,14 +2530,44 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // Wider lens and see-through clouds while you pick your spot from the plane.
     const overview = self.stage === 'drone' && state.phase === 'drop';
     const fp = firstPerson();
-    const fov = fp ? THREE.MathUtils.damp(camera.fov, scoped ? 16 : 74, 18, dt) : THREE.MathUtils.damp(camera.fov, overview ? 52 : 42, 3, dt);
+    const sv = shoulderView();
+    // Into and out of the scope the lens eases over about 150 ms (95 % of the way at rate 20), both ways.
+    const fov = fp
+      ? THREE.MathUtils.damp(camera.fov, scoped ? SCOPE_FOV.first : settings.fov, 20, dt)
+      : sv
+        ? THREE.MathUtils.damp(camera.fov, scoped ? SCOPE_FOV.shoulder : Math.min(settings.fov, SHOULDER_FOV_MAX), 20, dt)
+        : THREE.MathUtils.damp(camera.fov, widenFov(overview ? 52 : 42 + airFov(self), lensWiden), 3, dt);
     // Far away above the map, a nearer near-plane wastes depth precision and the ground and the
     // roads fight (flicker); push it out while in the overview.
-    const near = overview ? 4 : camNear < 1 || fp ? 0.05 : 0.5;
-    if (Math.abs(fov - camera.fov) > 0.001 || camera.near !== near) {
+    const near = overview ? 4 : camNear < 1 || fp || sv ? 0.05 : 0.5;
+    // On a phone the fighter sits a little up and left of the middle, away from the buttons: the view is shifted by easing a
+    // projection offset (in the air and scoped it eases back to the middle).
+    const offOn = camProfile.kind !== 'desktop' && self.stage === 'ground' && !fp && !sv && !scoped;
+    viewOff.x = THREE.MathUtils.damp(viewOff.x, offOn ? 0.5 - camProfile.fx : 0, 6, dt);
+    viewOff.y = THREE.MathUtils.damp(viewOff.y, offOn ? 0.5 - camProfile.fy : 0, 6, dt);
+    const offChanged = Math.abs(viewOff.x - viewOff.sx) > 0.0005 || Math.abs(viewOff.y - viewOff.sy) > 0.0005;
+    if (Math.abs(fov - camera.fov) > 0.001 || camera.near !== near || offChanged) {
       camera.fov = fov;
       camera.near = near;
+      if (offChanged) {
+        viewOff.sx = viewOff.x;
+        viewOff.sy = viewOff.y;
+        if (Math.abs(viewOff.x) < 0.0005 && Math.abs(viewOff.y) < 0.0005) camera.clearViewOffset();
+        else camera.setViewOffset(1, 1, viewOff.x, viewOff.y, 1, 1);
+      }
       camera.updateProjectionMatrix();
+    }
+    if (fp || sv) {
+      const tan = (deg: number) => Math.tan((deg * Math.PI) / 360);
+      const base = fp ? settings.fov : Math.min(settings.fov, SHOULDER_FOV_MAX);
+      const tBase = tan(base);
+      const tScope = tan(fp ? SCOPE_FOV.first : SCOPE_FOV.shoulder);
+      zoomT = Math.max(0, Math.min(1, (tBase - tan(camera.fov)) / Math.max(0.001, tBase - tScope)));
+      // Turn by the lens's share of the screen, and a fifth slower again once fully zoomed (it is a rifle, not a mouse pointer).
+      lookScale = Math.max(0.08, Math.min(1, tan(camera.fov) / tBase)) * (1 - 0.2 * zoomT);
+    } else {
+      zoomT = 0;
+      lookScale = 1;
     }
     // Clouds: see-through from the plane, a thin mist while you fall through them (no white-out),
     // solid again once you're on the ground and they're only sky.
@@ -1499,23 +2590,51 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const sn = Math.sin(viewYaw);
       // Leaning (Q/E) puts your head out past the corner and tilts the world, like a real lean.
       const lean = self.lean * 0.72;
-      camera.position.set(selfX - sn * lean + n(23, 1) * 0.08 * shake, eyeY, selfY + c * lean + n(19, 4) * 0.08 * shake);
+      camera.position.set(selfX - sn * lean, eyeY, selfY + c * lean);
       if (air) {
         // Falling or under the canopy: your eyes are wherever your head is (lying flat in free
         // fall, hanging from the harness under the canopy), with the wind's flutter.
         rig.head.getWorldPosition(camera.position);
-        camera.position.y += 0.05 + (self.fall > DROP.chute ? Math.sin(time * 31) * 0.01 : 0);
+        camera.position.y += 0.05 + (self.canopy < 0 ? Math.sin(time * 31) * 0.01 : 0);
       }
       tmpV.set(camera.position.x + c * Math.cos(viewPitch), camera.position.y + Math.sin(viewPitch), camera.position.z + sn * Math.cos(viewPitch));
       camera.lookAt(tmpV);
       camera.rotateZ(-self.lean * 0.3);
+      {
+        // Who is under the crosshair (chest within 0.9 m of the view ray): rounds go to them, up or down.
+        const dx = c * Math.cos(viewPitch);
+        const dy = Math.sin(viewPitch);
+        const dz = sn * Math.cos(viewPitch);
+        let best = 60;
+        fpAim.on = false;
+        for (let i = 0; i < state.players.length; i++) {
+          const o = state.players[i];
+          if (i === me || !o.alive || o.stage === 'drone') continue;
+          const ox = o.x - camera.position.x;
+          const oy = chestHeight(o) - camera.position.y;
+          const oz = o.y - camera.position.z;
+          const along = ox * dx + oy * dy + oz * dz;
+          if (along <= 0.5 || along >= best) continue;
+          if (Math.hypot(ox - dx * along, oy - dy * along, oz - dz * along) < 0.9) {
+            best = along;
+            Object.assign(fpAim, { x: o.x, y: o.y, on: true });
+          }
+        }
+      }
+      // The shake in first person turns the view a little (about a degree at most) instead of
+      // moving your eyes: a jolt, not a slide. Only the view: where you aim does not move.
+      // Zoomed in, the same jolt would swing the picture many times as far across the screen: it is scaled down with the zoom.
+      const steady = 1 - 0.75 * zoomT;
+      camera.rotateY(n(13, 5) * 0.02 * shake * steady);
+      camera.rotateX(n(17, 2) * 0.015 * shake * steady);
+      camera.rotateZ(n(19, 4) * 0.012 * shake * steady);
       camPos.copy(camera.position);
       camLook.copy(tmpV);
       camFocus.set(selfX, 0, selfY);
       // The arms and gun: they sway with the stride, kick back by the gun's weight, dip to reload.
       if (vmGunKind !== self.weapon) {
         if (vmGun) viewmodel.remove(vmGun);
-        const built = self.weapon === 'fists' ? null : buildGun(GUN_MODEL[self.weapon]);
+        const built = self.weapon === 'fists' ? null : buildGun(GUN_MODEL[self.weapon], looks[me].finish);
         vmGun = built?.root ?? null;
         if (vmGun && built) {
           vmMuzzle.position.set(0, 0.03, built.length);
@@ -1530,12 +2649,93 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       }
       const since = lastShot[me] === undefined ? 9 : time - lastShot[me];
       const kick = Math.max(0, 1 - since / 0.14);
-      const reload = self.reload > 0 ? Math.sin((1 - self.reload / WEAPONS[self.weapon].reload) * Math.PI) : 0;
+      const reload = self.reload > 0 ? Math.sin((1 - self.reload / reloadTime(self)) * Math.PI) : 0;
       viewmodel.visible = !swim && !air && !scoped;
       swimArms.visible = swim && !air;
       if (swim) poseSwimArms(rig.phase, Math.min(1, speed / 1.6));
       viewmodel.position.set(Math.sin(rig.phase) * 0.012 * Math.min(1, speed / 5), bob * 0.5 - reload * 0.12, kick * 0.07);
       viewmodel.rotation.set(kick * 0.12 - reload * 0.5, 0, reload * 0.3);
+    } else if (shoulderView()) {
+      viewmodel.visible = false;
+      swimArms.visible = false;
+      // The pivot: just above your head, where the eyes of a third-person player would be.
+      const air = self.stage === 'falling';
+      const c = Math.cos(viewYaw);
+      const sn = Math.sin(viewYaw);
+      const cp = Math.cos(viewPitch);
+      const pivotY = selfH + (air ? 1.2 : 1.62);
+      // Right of the shoulder, so you see past yourself; scoped the arm comes in and the lens narrows (aim down sights).
+      // The side offset and the arm length ease to their scoped values (no pop when the right button goes down or up).
+      sideNow = air ? 0 : THREE.MathUtils.damp(sideNow, scoped ? 0.45 : 0.62, 20, dt);
+      const side = sideNow;
+      const px = selfX - sn * side;
+      const pz = selfY + c * side;
+      armWant = air ? 7 : THREE.MathUtils.damp(armWant, scoped ? 1.4 : 3.2, 20, dt);
+      const wantArm = armWant;
+      // Walls, ceilings and roofs: march out along the arm and stop short of the first solid (walls to their tops, the roof
+      // slab over a house from its ceiling to its roof surface, so indoors the camera stays under the ceiling and up on a
+      // roof it stays above the tiles).
+      const bx = -c * cp;
+      const bz = -sn * cp;
+      const by = -Math.sin(viewPitch);
+      let reach = wantArm;
+      if (!air) {
+        for (let d = 0.25; d <= wantArm; d += 0.25) {
+          const x = px + bx * d;
+          const z = pz + bz * d;
+          const y = pivotY + by * d;
+          const r = roofAt(x, z);
+          const underRoof = r >= 0 && selfH < 1.5 && buildingAt(x, z) === buildingAt(selfX, selfY);
+          if (solidAt(state, x, z, y) || solidAt(state, x, z, y + 0.12) || y < 0.25 || (r >= 0 && !underRoof && y < r + 0.25 && y > 2.2) || (underRoof && y > 2.33)) {
+            // A trunk is the only tree part the arm bumps into (leaves are not walls, and solidAt ignores crowns), and a trunk
+            // beside the landing spot must not drag the lens into the fighter's back: the arm stays at least 2.2 m (the camera
+            // may then sit inside the trunk, which draws nothing from the inside). Walls, roofs and the ground can still pull it in.
+            const trunk = tileAt(Math.floor(x / TILE), Math.floor(z / TILE)) === 't' && !(r >= 0) && y >= 0.25;
+            reach = Math.max(trunk ? Math.min(SHOULDER_ARM_MIN, wantArm) : 0.35, d - 0.3);
+            break;
+          }
+        }
+      }
+      // In at once, out gently (half-life ~0.2 s): a wall never sits between you and the camera, and it never pops.
+      armNow = reach < armNow ? reach : THREE.MathUtils.damp(armNow, reach, 3.5, dt);
+      camera.position.set(px + bx * armNow, pivotY + by * armNow, pz + bz * armNow);
+      // The view turns with the mouse unsmoothed (the crosshair is the aim); only the hit shake adds a small jolt.
+      tmpV.set(camera.position.x + c * cp, camera.position.y + Math.sin(viewPitch), camera.position.z + sn * cp);
+      camera.lookAt(tmpV);
+      if (shake > 0) camera.rotateZ(n(17, 2) * 0.02 * shake * (1 - 0.75 * zoomT));
+      // Too close (a tight corner): hide your own body rather than fill the screen with it.
+      rigs[me].root.visible = rigs[me].root.visible && armNow > 0.75;
+      camPos.copy(camera.position);
+      camLook.copy(tmpV);
+      camFocus.set(selfX, 0, selfY);
+      // Tree canopies: the dithered cut-out sits on the line from the camera to you (not on you), so leaves never come
+      // between you and the lens, under the canopy on the way down or walking through the woods.
+      updateNature(performance.now() / 1000, (camera.position.x + selfX) / 2, (camera.position.z + selfY) / 2, armNow / 2 + 3);
+      setFoliageFade(camera.position.x, camera.position.y, camera.position.z, selfX, selfH + 1.2, selfY);
+      // Where the crosshair lands: the first fighter near the ray, else the ground, else 60 m out. Shots go from you
+      // to that point, so what is under the crosshair is what you hit even though the camera is off to the side.
+      const dx = c * cp;
+      const dy = Math.sin(viewPitch);
+      const dz = sn * cp;
+      let hitT = dy < -0.01 ? Math.min(60, -camera.position.y / dy) : 60;
+      for (let i = 0; i < state.players.length; i++) {
+        const o = state.players[i];
+        if (i === me || !o.alive || o.stage === 'drone') continue;
+        const ox = o.x - camera.position.x;
+        const oy = chestHeight(o) - camera.position.y;
+        const oz = o.y - camera.position.z;
+        const along = ox * dx + oy * dy + oz * dz;
+        if (along <= armNow || along >= hitT) continue;
+        const off = Math.hypot(ox - dx * along, oy - dy * along, oz - dz * along);
+        if (off < 0.9) hitT = along;
+      }
+      crossAim.x = camera.position.x + dx * hitT;
+      crossAim.y = camera.position.z + dz * hitT;
+      // Never aim behind yourself (looking steeply down past your own feet).
+      if ((crossAim.x - self.x) * c + (crossAim.y - self.y) * sn < 1.5) {
+        crossAim.x = self.x + c * 30;
+        crossAim.y = self.y + sn * 30;
+      }
     } else {
       viewmodel.visible = false;
       swimArms.visible = false;
@@ -1543,28 +2743,60 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       camera.lookAt(camLook);
       camFocus.set(camLook.x, 0, camLook.z);
     }
+    // Tall landmarks (the HQ, cranes, water tower, mast, lookout) ghost when they stand between the camera and your chest.
+    props.fade(camera.position, tmpV.set(selfX, selfH + 1.2, selfY), dt, tier === 'low', self.stage !== 'drone');
     trauma = Math.max(0, trauma - dt * 1.5);
-    // Shadows: from the plane one fixed box over the whole map (a box that followed the camera made
-    // shadows pop in and out across the map: the flicker); on the ground a box around you that
-    // moves in steps of one shadow texel, so edges don't shimmer.
+    // Shadows: a box around the point the camera looks at (120 m across from the plane, 80 m on the ground, 48 m in first
+    // person) that moves in steps of one shadow texel, so edges don't shimmer. Trees outside it skip the shadow pass.
     // First person: a tighter box, so the shadows at your feet are crisp.
     const wide = overview;
-    const half = wide ? WORLD * 0.62 : fp ? 24 : 40;
+    const half = wide ? 60 : fp ? 24 : 40;
     if (half !== shadowHalf) {
       shadowHalf = half;
-      Object.assign(sun.shadow.camera, { left: -half, right: half, top: half, bottom: -half, far: wide ? 400 : 160 });
+      Object.assign(sun.shadow.camera, { left: -half, right: half, top: half, bottom: -half, far: 160 });
       sun.shadow.camera.updateProjectionMatrix();
     }
     const texel = (half * 2) / 2048;
-    const fxs = wide ? WORLD / 2 : Math.round(camFocus.x / texel) * texel;
-    const fzs = wide ? WORLD / 2 : Math.round(camFocus.z / texel) * texel;
-    sun.position.set(fxs - 20, wide ? 160 : 60, fzs + 14);
+    const fxs = Math.round(camFocus.x / texel) * texel;
+    const fzs = Math.round(camFocus.z / texel) * texel;
+    sun.position.set(fxs - 20, 60, fzs + 14);
     sun.target.position.set(fxs, 0, fzs);
 
-    vfx.update(dt);
+    vfx.update(frozen ? 0 : dt);
+    dropSmoke.update(frozen ? 0 : dt, camera);
     updateDamage(dt);
-    updateGroundChutes(dt);
+    updateHitFx(dt, selfX, selfH, selfY);
+    updateStreaks(dt, self, selfX, selfH, selfY);
+    // The wind while you are in the air: loud in free fall, a soft breeze under the canopy.
+    const fallSpeed = Math.min(1, Math.max(0, self.vz) / DROP.freefallTerminal);
+    sfx.wind(self.alive && self.stage === 'falling' && !paused ? (self.canopy < DROP.stretch ? 0.25 + 0.75 * fallSpeed : 0.22) : 0);
+    updateCollapsing(dt);
+    props.setPlaneView(overview);
+    world.setOverview(overview);
+    lootHidden = overview;
     props.update(time, dt);
+    // Trees, bushes, rocks and grass: only the chunks this camera sees, the far ones cheaper, shadows only near the box.
+    const spec = TIERS[tier];
+    // At eye level on the ground the low tier closes the fog in (eased, so landing or switching views never jumps).
+    const eye = (fp || sv) && self.stage === 'ground' && spec.eye ? spec.eye : null;
+    if (scene.fog instanceof THREE.Fog) {
+      scene.fog.near = THREE.MathUtils.damp(scene.fog.near, eye ? eye.fogNear : spec.fogNear, 2, dt);
+      scene.fog.far = THREE.MathUtils.damp(scene.fog.far, eye ? eye.fogFar : spec.fogFar, 2, dt);
+    }
+    world.cull(camera, {
+      shadow: shadowsOn() ? { x: fxs, z: fzs, half: half * 1.15 + 5 } : null,
+      // From above (the high camera) the view itself is small: grass is drawn wherever the frustum reaches. At eye level
+      // (first person, over the shoulder) and from the plane it thins out with distance, per tier.
+      reach: eye ? eye.reach : fp || sv || overview ? spec.reach : 4,
+      // Trees switch to fewer faces only where the switch can't be seen: everywhere from the plane, past the start of
+      // the fog at eye level and on the way down, never in the high view (its whole frustum is close).
+      lodNear: overview ? 0 : eye ? eye.lodNear : fp || sv || self.stage === 'falling' ? spec.lodNear : Infinity,
+      // Fog is by depth, not distance: a little past its end so nothing at the edge of the screen pops.
+      far: (scene.fog instanceof THREE.Fog ? scene.fog.far : spec.fogFar) * 1.3,
+      // Door halos, light cones and the warm fill in rooms: dropped on low (the lamps themselves stay lit).
+      glow: tier !== 'low',
+    });
+    lootFrustum.setFromProjectionMatrix(tmpM4.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
     renderer.render(scene, camera);
   };
 
@@ -1574,11 +2806,16 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** In words, what took a player out. */
   const causeName = (p: Player) => {
     const w = p.killedWith;
-    if (w === 'zone') return 'the Deadline';
+    if (w === 'zone') return COPY.zone.name;
     if (w === 'explosion') return 'an explosion';
     if (w === 'super' && p.killedBy !== null) return FIGHTERS[state.players[p.killedBy].fighter].superName;
     if (w === 'fists') return 'bare hands';
-    if (w && w in WEAPONS) return `a ${WEAPONS[w as WeaponKind].name.toLowerCase()}`;
+    if (w === 'rockets') return 'a rocket';
+    if (w && w in WEAPONS) {
+      // "an SMG", "a shotgun".
+      const n = WEAPONS[w as WeaponKind].name;
+      return n === n.toUpperCase() ? `an ${n}` : `a ${n.toLowerCase()}`;
+    }
     return 'something';
   };
   const emitHud = () => {
@@ -1588,31 +2825,58 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const zone =
       state.phase === 'drop'
         ? self.stage === 'drone'
-          ? { label: touch ? 'Tap JUMP to jump' : 'Jump with Space', seconds: Math.ceil((1 - state.drone.t) * DROP.flight), outside: false }
+          ? { label: touch ? 'Tap JUMP to jump' : `Jump with ${keyLabel(settings.keys.jump)}`, seconds: Math.ceil(Math.max(0, DROP.forceJump - state.drone.t) * DROP.flight), outside: false }
           : { label: 'Everyone is landing', seconds: 0, outside: false }
         : z.state === 'wait'
-          ? { label: 'Deadline moves in', seconds: Math.ceil(z.timer), outside }
+          ? { label: COPY.zone.waiting, seconds: Math.ceil(z.timer), outside }
           : z.state === 'shrink'
-            ? { label: 'Deadline closing', seconds: Math.ceil(z.timer), outside }
-            : { label: 'Final Deadline', seconds: 0, outside };
+            ? { label: COPY.zone.closing, seconds: Math.ceil(z.timer), outside }
+            : { label: COPY.zone.final, seconds: 0, outside };
     const k = self.stage === 'ground' ? lootUnder(state, self) : null;
+    // Walking into a named place on the ground shows its name once; nothing in the plane or the air, nothing once you are down.
+    const here = self.alive && self.stage === 'ground' ? placeAt(self.x, self.y)?.name ?? null : null;
+    if (here !== inPlace) {
+      inPlace = here;
+      if (here && !placesShown.has(here)) {
+        placesShown.add(here);
+        placeBanner = { id: placeId++, name: here, at: time };
+      }
+    }
+    const healNext = healChoice(self);
+    // Loot to take: a keycap over it in the world instead of a line of text.
+    showKeycap(self.alive && !self.using ? k : null);
+    const hintLive = lootHint !== null && time < lootHint.until && self.stage === 'ground';
     const prompt = !self.alive
       ? null
+      : self.stage === 'falling' && airHintAt >= 0 && time - airHintAt < 1.5
+        ? 'Land first, then shoot'
+      : hintLive && !k
+        ? firstPerson() ? 'Loot nearby' : `Loot nearby ${arrowTo(lootHint!.x - self.x, lootHint!.y - self.y)}`
+      : opts.firstRound && self.stage === 'ground' && self.shots === 0 && landAt[me] !== undefined && time - landAt[me] < 10 && !k
+        ? (touch ? 'Tap FIRE · shoot' : `${keyLabel(settings.keys.fire)} · shoot`)
       : self.stage === 'drone'
-        ? (touch ? 'Tap JUMP' : 'Space · jump')
+        ? (touch ? 'Tap JUMP' : `${keyLabel(settings.keys.jump)} · jump`)
+        : self.stage === 'falling' && self.canopy < 0 && DROP.height - self.alt >= DROP.minFreefallDrop
+          ? (touch ? 'Tap OPEN · open the parachute' : `${keyLabel(settings.keys.jump)} · open the parachute`)
+        : self.stage === 'falling' && self.canopy >= DROP.deployTime && self.alt > DROP.flareAlt + 4
+          ? (touch ? 'Hold DIVE · dive to go farther, faster' : `Hold ${keyLabel(settings.keys.roll)} · dive to go farther, faster`)
         : self.stage === 'ground' && inWater(self.x, self.y)
           ? 'Swimming · no shooting in the water'
-        : k
-          ? `${touch ? 'USE' : 'F'} · pick up ${LOOT_NAME[k.kind]}`
-          : self.charging
-            ? lastThrowAim ? 'Point where it lands · let go of F to throw' : 'Hold to throw farther · let go to throw'
+        : self.using
+          ? `${HEAL_NAME[self.using]}… · shoot or roll to stop`
+        : self.charging === 'super'
+          ? `Aim where it lands · let go of ${touch ? 'SUPER' : keyLabel(settings.keys.super)} to throw`
+        : self.charging
+            ? lastThrowAim ? `Point where it lands · let go of ${keyLabel(settings.keys.use)} to throw` : 'Hold to throw farther · let go to throw'
             : self.weapon === 'sniper' && self.mag + self.ammo > 0 && !scoped && !touch
               ? `${aimMode === 'mouse' || fpp ? 'Right click' : 'Z'} · scope`
           : self.weapon !== 'fists' && self.mag + self.ammo === 0
             ? 'Out of ammo · find an ammo box or another gun'
-            : self.item
-              ? self.item === 'bomb' ? `Hold ${touch ? 'USE' : 'F'} to throw the bomb` : `${touch ? 'USE' : 'F'} · use med kit`
-              : null;
+            : self.hp < self.maxHp * 0.6 && healNext && healNext !== 'coffee' && self.sinceCombat > 1.5
+              ? `${touch ? 'HEAL' : keyLabel(settings.keys.heal)} · use ${HEAL_NAME[healNext].toLowerCase()}`
+              : self.bombs > 0 && self.sinceCombat < 4 && !k
+                ? `Hold ${touch ? 'the pick-up button' : keyLabel(settings.keys.use)} to throw a bomb`
+                : null;
     opts.onHud({
       phase: state.phase,
       stage: self.stage,
@@ -1623,16 +2887,30 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       weapon: WEAPONS[self.weapon].name,
       mag: self.mag,
       ammo: self.ammo,
-      reloading: self.reload > 0 ? 1 - self.reload / WEAPONS[self.weapon].reload : null,
-      item: self.item,
+      reloading: self.reload > 0 ? 1 - self.reload / reloadTime(self) : null,
+      slots: slotsOf(self),
+      swapping: self.swapping,
+      vest: self.vest,
+      vestMax: VEST.points[self.vest] || ARMOR.points,
+      pack: self.pack,
+      bag: {
+        bandages: self.bandages, medkits: self.medkits, coffees: self.coffees, bombs: self.bombs,
+        cap: { bandage: carryCap(self, 'bandage'), medkit: carryCap(self, 'medkit'), coffee: carryCap(self, 'coffee'), bomb: carryCap(self, 'bomb') },
+      },
+      using: self.using ? { kind: self.using, name: HEAL_NAME[self.using], progress: 1 - self.useLeft / HEALS[self.using].time } : null,
+      buzz: self.buzz,
+      healNext: healNext ? HEAL_NAME[healNext] : null,
+      promptGrade: k && !self.using && self.alive ? lootGrade(k) : null,
       superCharge: self.superCharge,
       roll: 1 - self.rollCooldown / ROLL.cooldown,
       superName: FIGHTERS[self.fighter].superName,
       fighter: self.fighter,
       zone,
-      feed: feed.filter((f) => time - f.at < 6).map(({ id, text }) => ({ id, text })),
+      // The last five of the past 6 s: twenty fighters can drop several at once early on.
+      feed: feed.filter((f) => time - f.at < 6).slice(-5).map(({ id, text }) => ({ id, text })),
       prompt,
       dead: !self.alive,
+      facts: { ...facts },
       placement: self.placement,
       kills: self.kills,
       damage: Math.round(self.damage),
@@ -1646,7 +2924,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       won: state.winner === me,
       fps: Math.round(fps),
       zoneHits,
-      muted,
+      muted: muted || settings.muted,
       aimMode,
       paused,
       net: session.net,
@@ -1654,10 +2932,48 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       total: state.players.length,
       planeTime: state.tick * DT,
       firstPerson: firstPerson(),
+      shoulder: shoulderView(),
       scoped,
       sniper: self.weapon === 'sniper' && self.alive,
+      canReload: self.weapon !== 'fists' && self.reload <= 0 && self.mag < WEAPONS[self.weapon].mag && self.ammo > 0,
+      canUse: self.stage === 'ground' && (!!k || self.bombs > 0),
+      chute: self.canopy >= 0,
       mouseLocked: locked,
+      tier,
+      elim: elim && time - elim.at < 1.4 ? { id: elim.id, name: elim.name, left: elim.left } : null,
+      place: placeBanner && self.alive && time - placeBanner.at < 1.6 ? { id: placeBanner.id, name: placeBanner.name } : null,
     });
+  };
+
+  /** Slot 1 and slot 2 for the HUD, whichever is in your hands. */
+  const slotsOf = (p: Player): HudState['slots'] => {
+    const inHand = { name: p.weapon === 'fists' ? null : WEAPONS[p.weapon].name, kind: p.weapon === 'fists' ? null : p.weapon, rarity: p.rarity, mag: p.mag, ammo: p.ammo, active: true };
+    const h = p.holster;
+    const other = h && h.weapon !== 'fists' ? { name: WEAPONS[h.weapon].name, kind: h.weapon, rarity: h.rarity, mag: h.mag, ammo: h.ammo, active: false } : { name: null, kind: null, rarity: 0, mag: 0, ammo: 0, active: false };
+    return p.slot === 0 ? [inHand, other] : [other, inHand];
+  };
+  /** Draw at another quality tier: pixel ratio, shadows and view distance change at once (antialiasing on the next load). */
+  const setTier = (next: Tier) => {
+    const spec = TIERS[next];
+    const hadShadows = renderer.shadowMap.enabled;
+    tier = next;
+    renderer.setPixelRatio(pixelRatio());
+    renderer.shadowMap.enabled = shadowsOn();
+    sun.castShadow = shadowsOn();
+    if (sun.shadow.mapSize.x !== spec.shadowMap) {
+      sun.shadow.mapSize.set(spec.shadowMap, spec.shadowMap);
+      sun.shadow.map?.dispose();
+      sun.shadow.map = null as unknown as THREE.WebGLRenderTarget;
+    }
+    // (The fog follows the tier each frame: see the cull before rendering.)
+    // Turning shadows on or off changes the shaders: every material must recompile once.
+    if (hadShadows !== shadowsOn())
+      scene.traverse((o) => {
+        const m = (o as THREE.Mesh).material;
+        if (m) for (const mm of Array.isArray(m) ? m : [m]) mm.needsUpdate = true;
+      });
+    resize();
+    emitHud();
   };
 
   // ---------- loop
@@ -1667,23 +2983,68 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   let hudTimer = 0;
   let mmTimer = 0;
   const frame = (now: number) => {
+    const cpu0 = performance.now();
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     time += dt;
     if (dt > 0) fps += (1 / dt - fps) * 0.05;
+    // Auto quality: a frame rate that stays low during real play steps the tier down (never up, so the picture does not pump).
+    // On a touch screen the resolution gives way first (0.1 at a time, see ResolutionGuard); the tier (shadows off, shorter
+    // view) only steps down once the resolution is at its floor and the frame rate is still low.
+    if (opts.autoTier && !perfTier && !paused && state.phase !== 'drop' && tier !== 'low') {
+      if (touch && !resGuard.exhausted) {
+        if (resGuard.frame(dt) !== null) setTier(tier);
+      } else if (fpsGuard.frame(dt)) {
+        setTier(lowerTier(tier));
+        opts.onTier?.(tier);
+      }
+    }
+    if (holding) {
+      // Waiting behind the pre-match screen: draw the first frames (compiles shaders, uploads textures), report ready,
+      // then sleep until released.
+      if (heldFrames < 3) {
+        if (heldFrames === 0) {
+          const vis: [THREE.Object3D, boolean, boolean][] = [];
+          scene.traverse((o) => {
+            vis.push([o, o.visible, o.frustumCulled]);
+            o.visible = true;
+            o.frustumCulled = false;
+          });
+          renderer.render(scene, camera);
+          vis.forEach(([o, v, f]) => {
+            o.visible = v;
+            o.frustumCulled = f;
+          });
+        }
+        heldFrames++;
+        renderFrame(dt, 0);
+        if (heldFrames === 3) emitHud();
+      }
+      raf = requestAnimationFrame(frame);
+      return;
+    }
     // Paused (offline only): the world freezes, the camera and effects keep drawing.
     acc = paused && !session.online ? 0 : acc + dt;
     while (acc >= DT) {
-      state.players.forEach((p, i) => Object.assign(prev[i], { x: p.x, y: p.y, fall: p.fall }));
+      state.players.forEach((p, i) => Object.assign(prev[i], { x: p.x, y: p.y, alt: p.alt, z: p.z }));
       const events = session.tick(state.players[me].alive ? readInput() : NO_INPUT);
       // A guest's state is replaced by the host's on every correction: always read it back.
       state = session.state;
       events.forEach(handle);
+      // The height the canopy opened at (a daily goal asks for it below 60 m).
+      const mine = state.players[me];
+      if (facts.openedAlt === null && mine.stage === 'falling' && mine.canopy >= 0) facts.openedAlt = Math.round(mine.alt);
+      // One hit-confirm tick per tick, the strongest; a kill has its own sound instead.
+      if (pendingTick && !killedThisTick) sfx.hitTick(pendingTick);
+      pendingTick = null;
+      killedThisTick = false;
       acc -= DT;
     }
     renderFrame(dt, acc / DT);
     hudTimer -= dt;
-    if (hudTimer <= 0) {
+    // An elimination shows on the HUD at once, not at the next 10 Hz update.
+    if (hudTimer <= 0 || hudNow) {
+      hudNow = false;
       hudTimer = 0.1;
       emitHud();
     }
@@ -1692,10 +3053,60 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       mmTimer = 0.1;
       drawMinimap();
     }
+    perf.frame(dt, performance.now() - cpu0);
     raf = requestAnimationFrame(frame);
   };
   raf = requestAnimationFrame(frame);
-  if (process.env.NODE_ENV !== 'production') (window as unknown as { __lcs?: unknown }).__lcs = { state: () => state, buildings: BUILDINGS, map: MAP, animals: props.animals, preview: () => ({ ring: landRing.visible, x: landRing.position.x, y: landRing.position.y, z: landRing.position.z, s: landRing.scale.x, parent: !!landRing.parent, op: (landRing.material as THREE.MeshBasicMaterial).opacity, dots: arcDots.filter((d) => d.visible).length, aim: lastThrowAim }) };
+  if (process.env.NODE_ENV !== 'production') (window as unknown as { __lcs?: unknown }).__lcs = { fighter: () => {
+    // Dev only: the fighter's box on screen (projected corners of its rig, CSS px) and the shoulder arm, for the camera checks.
+    const box = new THREE.Box3().setFromObject(rigs[me].root);
+    const pts = [0, 1].flatMap((i) => [0, 1].flatMap((j) => [0, 1].map((l) => new THREE.Vector3(i ? box.max.x : box.min.x, j ? box.max.y : box.min.y, l ? box.max.z : box.min.z).project(camera))));
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    const xs = pts.map((v) => ((v.x + 1) / 2) * w), ys = pts.map((v) => ((1 - v.y) / 2) * h);
+    return { w, h, x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys), height: Math.max(...ys) - Math.min(...ys), arm: armNow, shoulder: shoulderView(), cam: camera.position.toArray() };
+  }, state: () => state, buildings: BUILDINGS, map: MAP, animals: props.animals, preview: () => ({ ring: landRing.visible, x: landRing.position.x, y: landRing.position.y, z: landRing.position.z, s: landRing.scale.x, parent: !!landRing.parent, op: (landRing.material as THREE.MeshBasicMaterial).opacity, dots: arcDots.filter((d) => d.visible).length, aim: lastThrowAim }) };
+
+  // Measuring (?perf only, any build): draw calls and triangles of the last frame, the world's build time, a synchronous
+  // render benchmark, and a way to put the player at a fixed spot with the sim frozen, so before/after shots match.
+  if (perfRequested()) {
+    (window as unknown as { __lcsPerf?: unknown }).__lcsPerf = {
+      buildMs,
+      tall: props.tallState,
+      scene,
+      camera,
+      tier: () => tier,
+      /** The live tier table (to try other view distances while measuring). */
+      tiers: TIERS,
+      setTier: (t: Tier) => setTier(t),
+      stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles }),
+      state: () => state,
+      pause: (on: boolean) => {
+        paused = on;
+      },
+      place: (x: number, y: number, yaw: number, pitch = -0.04) => {
+        const p = state.players[me];
+        Object.assign(p, { x, y, vx: 0, vy: 0, heading: yaw });
+        Object.assign(prev[me], { x, y });
+        viewYaw = yaw;
+        viewPitch = pitch;
+        viewInit = true;
+      },
+      /** Puts the plane at a fixed point of a fixed route (with the sim paused, for the same view from the plane). */
+      drone: (d: { x0: number; y0: number; x1: number; y1: number; t: number }) => Object.assign(state.drone, d),
+      /** Renders the current view n times, waiting for the GPU each time: ms per frame, shadows included. */
+      bench: (n = 30) => {
+        const gl = renderer.getContext();
+        const px = new Uint8Array(4);
+        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        const t0 = performance.now();
+        for (let i = 0; i < n; i++) {
+          renderer.render(scene, camera);
+          gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        }
+        return (performance.now() - t0) / n;
+      },
+    };
+  }
 
   return {
     touch,
@@ -1712,6 +3123,12 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         touchLatched.add(b);
       } else touchHeld.delete(b);
     },
+    /** Release (or hold) a match built behind the pre-match screen. */
+    setHeld: (on: boolean) => {
+      holding = on;
+      sfx.setMuted('held', on);
+      last = performance.now();
+    },
     setPaused: (on: boolean) => {
       paused = on;
       keys.clear();
@@ -1721,6 +3138,29 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       mouseDown = false;
       emitHud();
     },
+    setTier,
+    /** New settings, applied at once: keys, mouse, camera, picture, sound. */
+    applySettings: (next: Settings) => {
+      const prev = settings;
+      settings = next;
+      bound = keyMap(next.keys);
+      const wantFpp = !touch && (fppParam || next.camera === 'first');
+      const wantShoulder = !touch && !wantFpp && (tpsParam || next.camera === 'shoulder');
+      if (wantFpp !== fpp || wantShoulder !== shoulder) {
+        fpp = wantFpp;
+        shoulder = wantShoulder;
+        viewInit = false;
+        if (!fpp && !shoulder && document.pointerLockElement === canvas) document.exitPointerLock();
+      }
+      sfx.setVolume('master', next.master);
+      sfx.setVolume('guns', next.guns);
+      sfx.setVolume('steps', next.steps);
+      sfx.setMuted('player', next.muted);
+      if (prev.resolution !== next.resolution || prev.shadows !== next.shadows) setTier(tier);
+      emitHud();
+    },
+    /** Silence everything for a reason ('ad' while a video ad plays, 'portal' for the portal's mute button). */
+    setMuted: (reason: string, on: boolean) => sfx.setMuted(reason, on),
     volumes: () => sfx.volumes,
     setVolume: (kind: VolumeKind, value: number) => sfx.setVolume(kind, value),
     setAimMode: (m: AimMode) => {
@@ -1729,6 +3169,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     },
     dispose: () => {
       cancelAnimationFrame(raf);
+      dropSmoke.dispose();
+      hitFx?.dispose();
       document.removeEventListener('pointerlockchange', onLockChange);
       document.removeEventListener('mousemove', onLook);
       canvas.removeEventListener('click', onLockClick);
@@ -1736,19 +3178,26 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       canvas.removeEventListener('mousemove', onMouseMove);
       canvas.removeEventListener('mousedown', onMouseDown);
       canvas.removeEventListener('contextmenu', onContext);
+      canvas.removeEventListener('wheel', onWheel);
       window.removeEventListener('mouseup', onMouseUp);
       window.removeEventListener('keydown', onDown);
       window.removeEventListener('keyup', onUp);
       window.removeEventListener('blur', onBlur);
+      // Every drawable, not only meshes: the renderer hangs a dispose listener on each geometry, material and texture it
+      // drew, and one left undisposed (the chute lines' shared module-level material) kept the whole old renderer, its
+      // canvas and the old match's DOM alive after Play again.
       scene.traverse((o) => {
-        if (o instanceof THREE.Mesh) {
-          o.geometry.dispose();
-          const m = o.material as THREE.Material & { map?: THREE.Texture | null };
-          m.map?.dispose();
+        const d = o as THREE.Object3D & { geometry?: THREE.BufferGeometry; material?: THREE.Material | THREE.Material[] };
+        d.geometry?.dispose();
+        for (const m of d.material ? (Array.isArray(d.material) ? d.material : [d.material]) : []) {
+          for (const v of Object.values(m)) if (v instanceof THREE.Texture) v.dispose();
           m.dispose();
         }
       });
+      sfx.dispose();
       renderer.dispose();
+      renderer.forceContextLoss();
+      perf.dispose();
     },
   };
 };

@@ -5,7 +5,7 @@ Goal: after reading this you can find any rule in the code, change a number safe
 
 Everything here was read from the source at commit `efd3251`; `file:line` points at the lines as of that commit. For the game design (what the game is meant to be) read `docs/DESIGN.md`; this guide describes what the code does today. Where the two differ, see "Known gaps" at the end.
 
-Status: a single-player prototype, you against 9 bots, in the browser. There is no networking code.
+Status (as of `efd3251`): a single-player prototype in the browser with no networking code. Today a round has 20 players: you against 19 bots offline (`PLAYERS` in `constants.ts`).
 
 ---
 
@@ -40,7 +40,7 @@ src/
     play/page.tsx         renders <Lobby/>
   components/             React UI around the canvas
     Lobby.tsx             fighter pick, Play button, remembers the pick
-    Match.tsx             owns the canvas, the HUD, the Esc Esc menu
+    Match.tsx             owns the canvas, the HUD, the Esc / P menu
     AimChoice.tsx         auto-aim / mouse-aim switch
   game/
     sim/                  THE RULES. Pure TypeScript: no DOM, no three.js
@@ -62,7 +62,7 @@ src/
 public/assets/            Kenney CC0 models, recorded gunshots (see ASSETS.md)
 ```
 
-The one rule that shapes everything: **`src/game/sim` knows nothing about the screen.** `step()` takes a state and the ten players' inputs and changes the state. Rendering reads the state; it never writes rules back. Why a web developer should care:
+The one rule that shapes everything: **`src/game/sim` knows nothing about the screen.** `step()` takes a state and the twenty players' inputs and changes the state. Rendering reads the state; it never writes rules back. Why a web developer should care:
 
 - It is like a reducer: `state = step(state, inputs)`, but it mutates in place for speed.
 - It runs headless, so the tests play whole rounds in about a second.
@@ -168,15 +168,17 @@ Games usually do not "check, then refuse the move". They move first, then push t
 
 Stats are in `WEAPONS` (`constants.ts:414`): damage, bullets per shot, spread, speed, range, fire interval, `ammo` found in the gun, `mag` and `reload` seconds.
 
-| Weapon | Damage x bullets | Mag / spare when found | Reload (s) | Range (m) |
+| Weapon | Damage x bullets | Mag / spare when found | Reload (s) | Between shots (s) |
 |---|---|---|---|---|
-| Fists | 110 | infinite | none | 1.6 |
-| Pistol | 140 | 12 / 36 total | 1.1 | 13 |
-| SMG | 75 | 30 / 90 total | 1.7 | 12 |
-| Shotgun | 70 x 7 | 6 / 18 total | 2.2 | 7 |
-| Rifle | 120 | 25 / 75 total | 1.9 | 20 |
-| Sniper | 700 | 5 / 10 total | 2.6 | 34 |
-| Rockets | 900, radius 3 m | 1 / 4 total | 2.4 | 16 (lobbed) |
+| Fists | 15 | infinite | none | 0.467 (reach 1.6 m) |
+| Pistol | 34 | 12 / 36 total | 1.1 | 0.367 |
+| SMG | 22 | 30 / 90 total | 1.7 | 0.100 |
+| Shotgun | 13 x 8 | 6 / 18 total | 2.2 | 0.800 |
+| Rifle | 28 | 25 / 75 total | 1.9 | 0.167 |
+| Sniper | 80 | 5 / 10 total | 2.6 | 1.500 |
+| Rockets | 125, blast radius 3 m | 1 / 4 total | 2.4 | 1.200 |
+
+Falloff, spread, the roles each gun is tuned for and time-to-kill tables are in `docs/BALANCE.md`; `balance.test.ts` holds the roles.
 
 ("Total" is `ammo`, magazine plus spare; the gun starts with a full magazine and the rest as spare.)
 
@@ -188,7 +190,7 @@ Stats are in `WEAPONS` (`constants.ts:414`): damage, bullets per shot, spread, s
 - **Rockets and bombs** are lobbed: a `lob` projectile flies a fixed 0.35 s plus distance/22 along an arc to the aim point, then `explode` damages everyone in radius with linear falloff (`1 - 0.7 * d/radius`), halved for the thrower, and damages crates and racks.
 - **Armor** absorbs 60 % of each hit (`ARMOR.absorb`) until its 500 points are gone; the Deadline ignores armor.
 - **Regeneration**: 25 hp/s starting 6 s after the last combat.
-- **Supers**: charge grows with damage dealt (`damage / superCost`); Q fires it when full. Hotfix dashes (takes no damage from other players while dashing), Legacy places a wall, Standup a slow field, Intern a knock-back blast.
+- **Supers**: charge grows with damage dealt (`damage / superCost`); Q fires it when full. Hotfix dashes (takes no damage from other players while dashing), Legacy places a wall, Standup throws a slow-field canister (hold G to aim: a light blue arc and landing rings show where; let go to throw, up to 15 m; it bursts for up to 32 damage within 3 m, never the thrower, and leaves a 4 m field that slows enemies to 45 % for 4 s; bots throw it at once at a target 2.5 to 13 m away), Intern a knock-back blast.
 
 ### 4.7 The drop
 
@@ -196,30 +198,47 @@ You spawn on a cargo drone that crosses the map on a random line (`createGame`, 
 
 ### 4.8 The Deadline (zone) (`step.ts:395-435`)
 
-`ZONE_PHASES` has 5 phases of wait, shrink, target radius and damage per second: for example phase 1 waits 42 s, shrinks over 32 s to radius 60, then deals 12 hp/s outside. The first circle has radius `WORLD * 0.72` (about 92 m, bigger than the map). Each next circle's centre is chosen at random inside the current one (`pickNextCircle`, within 60 % of the spare room) using `nextRandom`, so it is deterministic. Waits plus shrinks total 224 s after everyone has landed. Outside the circle you take `dps * DT` per tick through `hurt(..., ignoreArmor)`.
+`ZONE_PHASES` has 6 phases of wait, shrink, target radius and damage per second: phase 1 waits 60 s, shrinks over 40 s to radius 80, then deals 3 hp/s outside; the last ends at radius 0 with 35 hp/s. The first circle has radius `WORLD * 0.72` (about 127 m, bigger than the map). Each next circle's centre is chosen at random inside the current one (`pickNextCircle`, within 60 % of the spare room) using `nextRandom`, so it is deterministic. Waits plus shrinks total 365 s after everyone has landed at most. `ZONE_RULES` can cut waits short, inside `updateZone` so online stays in sync: from phase 2, 35 s with no player damaging another (`zone.calm`, reset in `hurt`) drops the current wait to 10 s, and with 3 or fewer alive every wait is halved (`zone.halved`). Outside the circle you take `dps * DT` per tick through `hurt`. sim.test.ts checks the edge speed (at most half the slowest run speed, and swim speed after the first circle), the rotation room (the next circle never more than a third of the time away, even with both cuts) and the damage ramp. Bot pacing by phase (`STAGE_AGGRO`, `STAGE_CHASE`, `STAGE_BACK`, `HUNT_ALIVE` in bot-params.ts) changes how often bots start fights, never their aim.
 
 ### 4.9 Visibility
 
 `canSee(state, viewer, target)` (`step.ts:231`): a target standing in a bush or crops is invisible unless the viewer is within `PLANT_REVEAL` (2.4 m) or the target fired in the last second (`revealed`). Auto-aim and bots both use it, so hiding works against them too. `lineOfSight` samples the segment every 0.5 m with `solidAt`.
 
-### 4.10 The bots (`bot.ts`)
+### 4.10 The bots (`bot.ts`, `bot-params.ts`)
 
-Each bot is a closure `state -> Input` that re-thinks every 8 ticks (7.5 times a second) and repeats its plan in between; one-shot buttons (super, use) are only pressed on a thinking tick.
+Each bot is a closure `state -> Input` with its own seeded PRNG. It thinks every 8 ticks (7.5 times a second) and repeats
+its plan in between; one-shot buttons are pressed on a thinking tick only. Aiming and firing run every tick.
 
-| Priority | Behaviour |
-|---|---|
-| Drone | jump at a personal moment (`jumpAt`) |
-| Falling | glide gently toward the point (48 m, 48 m), a little left of the map centre |
-| Zone | if outside the target circle's 85 % and the Deadline is shrinking or under 12 s away, run to the next circle's centre |
-| Target seen (within 22 m, line of sight) | keep the range the gun likes (`PREFERRED`: pistol 9 m, shotgun 3.5 m, sniper 18 m, ...) while strafing; fire inside 95 % of range; super under 9 m; throw a bomb under 11 m |
-| Otherwise | walk to the nearest useful loot within 30 m, else toward the next circle |
-| Hurt, calm | use a med kit under 55 % hp |
+- **Seeing.** Every "can this bot see or shoot that player?" question goes through `botCanSee(state, viewer, target)`
+  (bushes via `canSee`, then a clear 3D line, `botSight`, from the viewer's eyes, which move when it leans, to the
+  target's chest, through walls, roofs and floors). A bot notices someone only after looking for `spotTime` seconds
+  (quick up close, slow far out; sooner when the other one moves or fires; later at the edge of its view, indoors
+  (`lightAt`, 0.6 under a roof until the lighting work supplies a real level) or in a bush). Half-noticed movement makes
+  it turn its head. Within 6 m, or when just shot, it notices in any direction; never through walls.
+- **Hearing.** Gunfire within 45 m gives a guess of where it came from (`guessFromSound`: bearing off by up to about
+  20 degrees, distance by up to 30 %), never the shooter's position.
+- **Reacting and aiming.** The first shot at someone new waits a `reactionDelay` drawn per target round the personality's
+  reaction time (slower against a person, `VS_HUMAN`). Aim error settles over time on target and grows while the bot moves,
+  while it is hit and near the end of its gun's range (`aimError`, `AIM_PENALTY`). Fire comes in bursts, semi-automatics
+  included.
+- **Ways of playing** (`BotMode`): explore (`roam`, `loot`), attack (`engage`: strafing in its own style, now and then
+  planting its feet), defend (`cover`: behind a wall, rock or tree trunk found by `fightCover`, ducking out to a
+  `peekFrom` spot and leaning out to shoot, then back; it moves to another angle after a few looks), under pressure
+  (`pressure`: hit by someone it cannot see, it gets behind something or zigzags off the line), and heal (`retreat` breaks
+  off, then `heal` out of sight with the items it carries at their own use times). Being hit never leaves it standing
+  still. Badly hurt, it does not start fights (`LOW_HP`), and it fights again once healed to its own level.
+- **Personalities.** Rusher, camper, looter, tactical, each with per-bot jitter: reaction, aim, field of view,
+  aggression, confidence, eyes, slip chance, strafe width and rhythm, dodge-roll chance. Now and then a bot slips once in a
+  fight: a late reaction, staying in the open, a reload mid-fight, a long loose burst, or tunnel vision.
+- **Pacing** stays with `stagePace` (by Deadline phase, the crowd and the last few alive) and the after-landing grace.
 
-Aim has a per-bot random error (0.6 to 1.4 m) so they can be beaten. There is no path-finding: when a bot barely moved over a think interval and its goal is more than 1.5 m away, it walks 25 to 55 ticks in a direction 90 degrees (plus a little) off its goal (`detour`).
+There is no path-finding: when a bot that was trying to walk barely moved over a think interval, it walks 25 to 55 ticks
+in a direction 90 degrees (plus a little) off its goal (`detour`). There is no crouch in the game, so bots peek by
+stepping out and leaning.
 
 ### 4.11 Tests (`sim.test.ts`)
 
-17 tests, run in Node with no browser: map shape, windows and fences vs bullets, trunk and rock shapes, furniture reachability, doors opening on open ground, edge of the world, the drop, loot swap, armor, magazines and ammo boxes, sliding, vaulting, the Deadline and a full round of 10 bots ending in one winner. The sim has no tests for rendering, input, audio or React.
+17 tests, run in Node with no browser: map shape, windows and fences vs bullets, trunk and rock shapes, furniture reachability, doors opening on open ground, edge of the world, the drop, loot swap, armor, magazines and ammo boxes, sliding, vaulting, the Deadline and a full round of 20 bots ending in one winner. The sim has no tests for rendering, input, audio or React.
 
 ---
 
@@ -286,7 +305,7 @@ Created with `createSfx()` and driven by events; the sim does not know about it.
 | Footsteps ("Footsteps") | 0.8 | multiplier inside `footstep` |
 | `sfx` / `ui` / `amb` buses | 1.0 / 0.7 / 0.5 | fixed |
 
-- **Volume sliders**: `Match.tsx` shows three sliders in the Esc Esc menu; `setVolume` applies at once and saves `{master, guns, steps}` as JSON in `localStorage` under `lcs:volume` (reads and writes are in try/catch). M mutes (key `merge-conflict:muted`).
+- **Volume sliders**: `Match.tsx` shows three sliders in the Esc / P menu; `setVolume` applies at once and saves `{master, guns, steps}` as JSON in `localStorage` under `lcs:volume` (reads and writes are in try/catch). M mutes (key `merge-conflict:muted`).
 - **Gunshots** are recordings (`public/assets/sounds/*.m4a`, fetched and decoded when the context starts), played on the `guns` bus at `GUN_LEVEL` 0.4 scaled by distance. Until the files decode, the code falls back to a synthesised crack, body and thump. Footsteps, hits, explosions, vaults and UI sounds are always synthesised from oscillators and filtered noise. A budget of 5 gunshot voices stops rapid fire from clipping.
 - **Surfaces**: footsteps differ for grass (soft brush), dirt, hard floor and asphalt (click and heel), wood (a hollow thud) and plants (rustle).
 
@@ -297,10 +316,10 @@ Created with `createSfx()` and driven by events; the sim does not know about it.
 | Component | Job |
 |---|---|
 | `Lobby` | Pick a fighter (saved to `localStorage` key `lcs:fighter`) and start a match. Remounting `Match` with a new `key` is how "play again" works. |
-| `Match` | Creates the canvas and the minimap canvas, calls `startMatch` in an effect, shows the HUD from `HudState`, the Esc Esc menu (aim choice, sound sliders, resume, exit) and the end screen with placement. Disposes the game on unmount. |
+| `Match` | Creates the canvas and the minimap canvas, calls `startMatch` in an effect, shows the HUD from `HudState`, the Esc / P menu (aim choice, sound sliders, resume, exit) and the end screen with placement. Disposes the game on unmount. |
 | `AimChoice` | Auto-aim or mouse aim; stored in `lcs:aim` and also toggled by T. |
 
-React only draws the HUD. It reads the 10 Hz `HudState` snapshot and calls a few methods returned by `startMatch` (`setPaused`, `setVolume`, `setAimMode`, `dispose`); it does not touch the simulation. Esc pressed twice within 450 ms opens the menu and pauses (this is offline, so pausing is fair).
+React only draws the HUD. It reads the 10 Hz `HudState` snapshot and calls a few methods returned by `startMatch` (`setPaused`, `setVolume`, `setAimMode`, `dispose`); it does not touch the simulation. Esc or P opens the menu and pauses in one press (with the mouse captured, the browser's release of it counts as the Esc: see `game/pauseKeys.ts`) (this is offline, so pausing is fair).
 
 ---
 
@@ -324,10 +343,53 @@ Changing anything under `sim/` changes the rules for everyone; run `npm run test
 
 ## 9. Known gaps (read from the code, not guessed)
 
-- **`docs/DESIGN.md` is out of date against the code.** It describes a 64 x 64 m "campus" with racks and water coolers; the code builds a 128 x 128 m countryside (64 x 64 tiles of 2 m) with houses, farms, a forest and a quarry. It also lists no rifle, sniper, rockets or magazines. `README.md` says the game is offline against 9 bots, which matches the code. Not changed here.
+- **`docs/DESIGN.md` is out of date against the code.** It describes a 64 x 64 m "campus" with racks and water coolers; the code builds a 128 x 128 m countryside (64 x 64 tiles of 2 m) with houses, farms, a forest and a quarry. It also lists no rifle, sniper, rockets or magazines. `README.md` says the game is offline against 19 bots, which matches the code. Not changed here.
 - **The `sfx.ts` header comment is stale**: it says "no audio files", but gunshots are recorded samples (section 6, `ASSETS.md`).
 - **No networking**: no server, no room code, no prediction. The sim is built to allow it.
 - **Tests** cover only `sim`. Rendering, input, audio and the React shell have none.
 - **No path-finding** for bots (detours only).
 - **`window.__lcs` and `?cam=near`** exist only in development builds.
 - **Not run for this guide**: a production build (`npm run build`) and an in-browser play-through.
+
+## 10. Portal build (CrazyGames)
+
+`npm run build:portal` writes one static folder, `dist/portal/`, ready to zip and upload; `npm run dev:portal` serves it
+with hot reload on port 3203, and `npm run phone:portal` builds it and serves the build on port 3204 to the local network
+(open the "Network" URL it prints on a phone on the same Wi-Fi).
+
+- **Entry** (`portal/index.html`, `portal/main.tsx`, `vite.portal.config.ts`): the CrazyGames SDK v3 script, self-hosted OFL
+  fonts, favicons and manifest from `portal/static/`, the game's models and sounds copied into `assets/`, every path relative
+  (`base: './'`, `__LCS_ASSET_BASE__`). No lobby server, no Next.js, no outbound link.
+- **What players see**: `PortalGame` = the main menu (`MainMenu`) over the live battleground, then solo rounds against nine
+  bots (`Match`). Online play, the support card and every studio link exist only on the site.
+- **Neutral copy**: `src/game/copy/studio.ts` (the developer jokes) is swapped for `neutral.ts` at build time by an alias.
+  The game keeps its name; fighters, bots, the zone ("the Storm"), the result and intro lines change.
+- **Platform adapter** (`src/platform/`): `detectPlatform` picks the CrazyGames adapter when the SDK inits, else a no-op web
+  adapter. `usePlatformRound` reports loading stop (menu shown), gameplay start/stop (a round on screen, not paused, not
+  on the report) and follows the portal's mute button.
+- **Ads**: no midgame video ads. They used to play as the player left the round report and broke the tempo between
+  rounds (on localhost the SDK shows its "Midgame ad would appear here" demo for them), so the report now goes straight
+  on. The only ad is one banner under the main menu (`MenuBanner`, SDK `banner.requestResponsiveBanner`): requested
+  once the menu is on screen (boot screen gone, no side panel open), cleared when the menu goes (Play), so never in a
+  round. The slot is 320x50 (320x250 on windows at least 880 px tall, where the SDK may pick 300x250), sits below the
+  menu buttons (on phones at the bottom of the stack, above the version line) and is not rendered at all on windows under
+  560 px tall (phones held sideways). No SDK, or any refusal (no fill, `bannerCooldown` within 30 s, `maxRefreshReached`,
+  `bannersDisabled`, `notVisible`, `noAvailableSizes`): the slot collapses, never an empty box. The site build (Next.js)
+  never loads the SDK script and always uses the web adapter (`banners: false`, no break of any kind), so the site shows
+  no ads and no placeholder. `rewardedBreak` stays in the adapter for a reward the player chooses (unused in this game).
+- **Performance tiers** (`src/game/render/quality.ts`): auto by device (phones, tablets and 4 GB Chromebooks get low),
+  a frame-rate guard steps down once if it stays under 40 fps; Settings > Graphics overrides it, plus shadows, resolution
+  scale and an FPS counter. The menu backdrop is cheaper on low and holds still with reduced motion.
+- **Settings** (`src/game/settings.ts`, `SettingsPanel`): key rebinding (conflicts swap, Esc/Tab/arrows reserved),
+  sensitivity, invert Y, touch size/opacity/left-handed, third/first person and FOV, graphics, audio, accessibility
+  (reduced motion, colour-blind colours, larger HUD). Saved as JSON through the platform storage, applied live; the pause
+  menu opens the same panel.
+- **Checks**: `scripts/portal-report.mjs` runs after every build and fails it on too many files, absolute paths, any URL but
+  the SDK, the lobby server in the bundle, or a studio joke in the shipped text, and prints the size.
+- **Captures** (`scripts/portal-*.mjs`, need playwright-core in a scratch folder): covers into `docs/portal/covers`
+  (1920x1080, 800x1200, 800x800, three variants), screens into `docs/portal/screens`, load times (`portal-serve.mjs` +
+  `portal-load.mjs`). On localhost the SDK fills the menu banner with its demo placeholder.
+
+Measured 2026-11-20 (`portal-load.mjs`, build served with gzip under a sub-path, cache off, three runs): fast 4G (9 Mbps,
+85 ms) menu usable in 0.9 s and the first frame of a round 1.4 s after Play; slow 4G (1.6 Mbps, 150 ms, 4x CPU, Pixel 7)
+2.6 s and 2.7 s. Build: 69 files, about 2.4 MB on disk, 1.6 MB over the wire, code 322 KB gzip.
