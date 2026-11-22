@@ -42,6 +42,7 @@ import type { Rig } from './characters';
 import type { GunKind } from './guns';
 import type { Look } from '../cosmetics';
 import type { Tier } from './quality';
+import { SNIPER_KICK, sniperBolt, sniperKick } from './sniperKick';
 import type { NetStatus, Session } from '../net/session';
 import type { FighterId, GameEvent, GameState, HealKind, Input, Loot, LootKind, Player, WeaponKind } from '../sim/types';
 
@@ -1314,6 +1315,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const feed: { id: number; text: string; at: number }[] = [];
   let feedId = 0;
   let trauma = 0;
+  /** When your last sniper round left the barrel (render clock): drives the camera kick. */
+  let sniperShotAt = -9;
   /**
    * Hitstop, render only: for this long (real seconds) poses and particles hold still, the person
    * hit shudders. The sim, your input and the camera never stop.
@@ -1361,6 +1364,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
             vmMuzzle.getWorldPosition(muzzleAt);
             vfx.burst(muzzleAt.x, muzzleAt.y, 4, 'spark', { z: muzzleAt.z, speed: 1.2, up: 0.2, gravity: 0, life: 0.05, size: 0.5 });
           } else vfx.burst(mx, 1.15, 5, 'spark', { z: my, speed: 3, up: 0.5, gravity: 0, life: 0.07, size: 1.6 });
+          if (e.weapon === 'sniper') {
+            // A rifle this long breathes fire and a smoke puff that drifts up and away from the muzzle.
+            const own = e.owner === me && firstPerson() && vmGun;
+            const fx = own ? muzzleAt.x : mx;
+            const fy = own ? muzzleAt.y : 1.15;
+            const fz = own ? muzzleAt.z : my;
+            vfx.burst(fx, fy, 8, 'hot', { z: fz, speed: 4.5, up: 0.5, gravity: 0, life: 0.1, size: own ? 0.9 : 2.4, dirX: Math.cos(e.angle) * 0.6 });
+            vfx.burst(fx, fy + 0.05, 7, 'dust', { z: fz, speed: 1.5, up: 0.9, gravity: -1.6, life: 0.75, size: own ? 1 : 2.6 });
+          }
           vfx.burst(e.x - Math.sin(e.angle) * 0.4, 1.1, 1, 'ko', { z: e.y + Math.cos(e.angle) * 0.4, speed: 2.5, up: 3, gravity: 18, life: 0.6, size: 0.45 });
         }
         if (d < 60) {
@@ -1369,7 +1381,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           else if (e.weapon === 'rockets') sfx.shot('launcher', e.x - camX());
           else sfx.gunshot(SOUND[e.weapon], e.x - camX(), d);
         }
-        if (e.owner === me && (e.weapon === 'shotgun' || e.weapon === 'sniper')) trauma = Math.min(1, trauma + 0.2);
+        if (e.owner === me && e.weapon === 'shotgun') trauma = Math.min(1, trauma + 0.2);
+        if (e.owner === me && e.weapon === 'sniper') {
+          trauma = Math.min(1, trauma + 0.45);
+          sniperShotAt = time;
+        }
         if (e.weapon === 'sniper') contrail(e.x, e.y, e.angle, chestHeight(state.players[e.owner]) + 0.05, e.len);
         break;
       }
@@ -2134,7 +2150,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       } else if (p.stage === 'ground') {
         poseTopDown(rig, {
           dt, time, vx: p.vx, vy: p.vy, yaw: yw.a, yawRate: yw.v, onGround: !p.jz, dashing: p.dashTime > 0,
-          gun: p.weapon, sinceShot,
+          gun: p.weapon, sinceShot, reducedMotion: settings.reducedMotion,
           reload: p.reload > 0 ? 1 - p.reload / reloadTime(p) : null,
           lean: p.lean,
           vault: p.vault > 0 ? 1 - p.vault / VAULT.time : null,
@@ -2428,6 +2444,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // high and far so the fighters read small and you see what's coming.
     const shake = settings.reducedMotion ? 0 : trauma * trauma;
     const n = (f: number, ph: number) => Math.sin(time * f + ph) * 0.6 + Math.sin(time * f * 2.3 + ph) * 0.4;
+    // Your sniper shot: the view kicks up and comes back (a quarter size with reduced motion, and without the jitter).
+    const snipeKick = sniperKick(time - sniperShotAt, SNIPER_KICK.camRecover) * (settings.reducedMotion ? SNIPER_KICK.reducedScale : 1);
+    const snipePitch = SNIPER_KICK.camPitch + (SNIPER_KICK.camPitchScoped - SNIPER_KICK.camPitch) * zoomT;
     const kf = 1 - Math.exp(-3 * dt);
     let want: THREE.Vector3;
     /** On the ground, how much wider than normal the lens opens on a narrow screen (1 on a wide one). */
@@ -2628,6 +2647,13 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       camera.rotateY(n(13, 5) * 0.02 * shake * steady);
       camera.rotateX(n(17, 2) * 0.015 * shake * steady);
       camera.rotateZ(n(19, 4) * 0.012 * shake * steady);
+      if (snipeKick > 0) {
+        camera.rotateX(snipeKick * snipePitch);
+        if (!settings.reducedMotion) {
+          camera.rotateY(n(29, 3) * SNIPER_KICK.camShake * snipeKick * steady);
+          camera.rotateX(n(31, 1) * SNIPER_KICK.camShake * 0.7 * snipeKick * steady);
+        }
+      }
       camPos.copy(camera.position);
       camLook.copy(tmpV);
       camFocus.set(selfX, 0, selfY);
@@ -2648,13 +2674,16 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         vmGunKind = self.weapon;
       }
       const since = lastShot[me] === undefined ? 9 : time - lastShot[me];
-      const kick = Math.max(0, 1 - since / 0.14);
+      const kick = Math.max(0, 1 - since / 0.14) + (self.weapon === 'sniper' ? sniperKick(since) * (settings.reducedMotion ? SNIPER_KICK.reducedScale : 1) * 2 : 0);
       const reload = self.reload > 0 ? Math.sin((1 - self.reload / reloadTime(self)) * Math.PI) : 0;
       viewmodel.visible = !swim && !air && !scoped;
       swimArms.visible = swim && !air;
       if (swim) poseSwimArms(rig.phase, Math.min(1, speed / 1.6));
       viewmodel.position.set(Math.sin(rig.phase) * 0.012 * Math.min(1, speed / 5), bob * 0.5 - reload * 0.12, kick * 0.07);
-      viewmodel.rotation.set(kick * 0.12 - reload * 0.5, 0, reload * 0.3);
+      const bolt = self.weapon === 'sniper' ? sniperBolt(since) * (settings.reducedMotion ? SNIPER_KICK.reducedScale : 1) : 0;
+      viewmodel.position.y -= bolt * SNIPER_KICK.boltDrop;
+      viewmodel.position.z += bolt * SNIPER_KICK.boltPull;
+      viewmodel.rotation.set(kick * 0.12 - reload * 0.5 + bolt * SNIPER_KICK.boltPitch, 0, reload * 0.3 + bolt * SNIPER_KICK.boltRoll);
     } else if (shoulderView()) {
       viewmodel.visible = false;
       swimArms.visible = false;
@@ -2703,6 +2732,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       tmpV.set(camera.position.x + c * cp, camera.position.y + Math.sin(viewPitch), camera.position.z + sn * cp);
       camera.lookAt(tmpV);
       if (shake > 0) camera.rotateZ(n(17, 2) * 0.02 * shake * (1 - 0.75 * zoomT));
+      if (snipeKick > 0) {
+        // Up by a few degrees and a little jitter; the aim (viewPitch, the crosshair ray) is untouched, so it settles back onto it.
+        camera.rotateX(snipeKick * snipePitch);
+        if (!settings.reducedMotion) {
+          camera.rotateY(n(29, 3) * SNIPER_KICK.camShake * snipeKick * (1 - 0.75 * zoomT));
+          camera.rotateX(n(31, 1) * SNIPER_KICK.camShake * 0.7 * snipeKick * (1 - 0.75 * zoomT));
+        }
+      }
       // Too close (a tight corner): hide your own body rather than fill the screen with it.
       rigs[me].root.visible = rigs[me].root.visible && armNow > 0.75;
       camPos.copy(camera.position);

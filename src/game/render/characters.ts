@@ -9,6 +9,7 @@ import { GLOW_MATERIAL, GOLD_MATERIAL, outfitParts } from '../cosmetics';
 
 import type { OutfitParts, PartColor } from '../cosmetics';
 import type { FighterId as CharacterId, WeaponKind } from '../sim/types';
+import { SNIPER_KICK, sniperBolt, sniperKick } from './sniperKick';
 
 /**
  * Low-poly fighters built from primitives. Each one has a different silhouette:
@@ -639,6 +640,8 @@ export interface TopDownPose {
   sinceShot: number;
   /** What's in the hands: decides the grip and where each hand goes. */
   gun: WeaponKind;
+  /** Reduced motion: the sniper kick is a quarter size. */
+  reducedMotion?: boolean;
   /** 0..1 through a reload, or null. */
   reload: number | null;
   /** -1 (left) .. 1 (right). */
@@ -793,13 +796,18 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   const r = p.reload;
   const reloadTilt = r === null ? 0 : Math.sin(Math.min(1, r * 1.3) * Math.PI) * 0.55;
   rig.weapon.visible = p.gun !== 'fists' && p.vault === null;
-  rig.weapon.position.set(h.x + sway * 0.4, rig.chestY + h.y + step - reloadTilt * 0.12, -Math.max(0, kick) * 0.12);
+  // The sniper's own kick (every fighter's model, bots too): the rifle pitches up hard and is driven back, then settles.
+  const snipeScale = p.reducedMotion ? SNIPER_KICK.reducedScale : 1;
+  const snipe = p.gun === 'sniper' ? sniperKick(sinceShot) * snipeScale : 0;
+  // ...then the bolt: the rifle rolls over, dips and is pulled back to re-chamber, and comes back ready.
+  const bolt = p.gun === 'sniper' ? sniperBolt(sinceShot) * snipeScale : 0;
+  rig.weapon.position.set(h.x + sway * 0.4, rig.chestY + h.y + step - reloadTilt * 0.12 - bolt * SNIPER_KICK.boltDrop, -Math.max(0, kick) * 0.12 - snipe * SNIPER_KICK.weaponPush - bolt * SNIPER_KICK.boltPull);
   // Running without firing for a moment: the gun drops to low ready, muzzle down; it comes up
   // the moment you shoot.
   const lowReady = running && sinceShot > 0.8 && p.gun !== 'pistol' ? 0.35 * amp : 0;
-  rig.weapon.rotation.x = damp(rig.weapon.rotation.x, -kick * 0.35 + sway * 0.4 + reloadTilt * 0.5 + lowReady, 30 - lowReady * 40, dt);
+  rig.weapon.rotation.x = damp(rig.weapon.rotation.x, -kick * 0.35 - snipe * SNIPER_KICK.weaponPitch + sway * 0.4 + bolt * SNIPER_KICK.boltPitch + reloadTilt * 0.5 + lowReady, snipe > 0 ? 90 : 30 - lowReady * 40, dt);
   rig.weapon.rotation.y = damp(rig.weapon.rotation.y, sway * 0.6, 10, dt);
-  rig.weapon.rotation.z = damp(rig.weapon.rotation.z, reloadTilt * 0.6 + p.lean * 0.2, 12, dt);
+  rig.weapon.rotation.z = damp(rig.weapon.rotation.z, reloadTilt * 0.6 + p.lean * 0.2 + bolt * SNIPER_KICK.boltRoll, bolt > 0 ? 40 : 12, dt);
   rig.hand.position.set(0, 0, h.grip);
 
   if (p.vault !== null) {
