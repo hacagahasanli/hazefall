@@ -185,8 +185,28 @@ export const natureUniforms = {
   uTime: { value: 0 },
   uFocus: { value: new THREE.Vector3() },
   uFade: { value: 0 },
+  /** Shoulder-camera foliage fade: camera position, chest position, 1 when active (see `setFoliageFade`). */
+  uLens: { value: new THREE.Vector3() },
+  uChest: { value: new THREE.Vector3() },
+  uLensOn: { value: 0 },
   /** The view's reach scale (per quality tier): grass and tall grass shrink away at `reach x uReach` metres. */
   uReach: { value: 1 },
+};
+
+/** Crown fade rule (C4): leaves within 3 m of the lens, or within 1 m of the lens-to-chest segment, thin to 25 %. */
+export const FOLIAGE_FADE = { nearM: 3, nearSoftM: 0.6, segM: 1, segSoftM: 0.6, minAlpha: 0.25, minY: 0.0 } as const;
+/** CPU mirror of the shader's crown fade (the shader also skips brown trunk faces: vColor.g < vColor.r): opacity (0.25..1) of a leaf at `p` for lens `cam` and `chest`. */
+export const foliageAlpha = (p: [number, number, number], cam: [number, number, number], chest: [number, number, number]) => {
+  const F = FOLIAGE_FADE;
+  if (p[1] <= F.minY) return 1;
+  const ab = [chest[0] - cam[0], chest[1] - cam[1], chest[2] - cam[2]];
+  const ap = [p[0] - cam[0], p[1] - cam[1], p[2] - cam[2]];
+  const len2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2];
+  const t = len2 > 1e-6 ? Math.min(1, Math.max(0, (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / len2)) : 0;
+  const ds = Math.hypot(ap[0] - ab[0] * t, ap[1] - ab[1] * t, ap[2] - ab[2] * t);
+  const dc = Math.hypot(ap[0], ap[1], ap[2]);
+  const k = Math.max(1 - sstep(F.nearM, F.nearM + F.nearSoftM, dc), 1 - sstep(F.segM, F.segM + F.segSoftM, ds));
+  return 1 + (F.minAlpha - 1) * k;
 };
 
 /** How far (m, at reach scale 1) the lawn's tufts and the tall grass are drawn. */
@@ -197,7 +217,7 @@ export const TALL_GRASS_REACH = 150;
  * Adds wind sway (bigger the higher above `pivot` a vertex is) and, for canopies, a dithered
  * cut-out within `uFade` metres of the player above 2.2 m, so you can always see your fighter.
  */
-const windy = (m: THREE.MeshStandardMaterial, amount: number, pivot: number, cutout: boolean, bend = 0, reach = 0) => {
+const windy = (m: THREE.MeshStandardMaterial, amount: number, pivot: number, cutout: boolean, bend = 0, reach = 0, lensFade = cutout) => {
   // Blades (reach > 0: the grasses) are single triangles drawn from both sides, lit from above on either side.
   const blades = reach > 0;
   if (blades) m.side = THREE.DoubleSide;
@@ -242,24 +262,34 @@ const windy = (m: THREE.MeshStandardMaterial, amount: number, pivot: number, cut
         #endif
         vWorld = (modelMatrix * wp).xyz;`,
       );
+    const F = FOLIAGE_FADE;
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform vec3 uFocus;\nuniform float uFade;\nvarying vec3 vWorld;')
+      .replace('#include <common>', '#include <common>\nuniform vec3 uFocus;\nuniform float uFade;\nuniform vec3 uLens;\nuniform vec3 uChest;\nuniform float uLensOn;\nvarying vec3 vWorld;')
       .replace(
         '#include <clipping_planes_fragment>',
-        cutout
-          ? `#include <clipping_planes_fragment>
-          if (uFade > 0.0 && vWorld.y > 2.2) {
+        `#include <clipping_planes_fragment>
+${cutout ? `          if (uFade > 0.0 && vWorld.y > 2.2) {
             float d = distance(vWorld.xz, uFocus.xz) / uFade;
             if (d < 1.0) {
               vec2 q = mod(floor(gl_FragCoord.xy), 4.0);
               float bayer = mod(q.x * 2.0 + q.y * 3.0 + q.x * q.y, 4.0) / 4.0 + 0.1;
               if (bayer > d * d * 1.2) discard;
             }
-          }`
-          : '#include <clipping_planes_fragment>',
+          }` : ''}
+${lensFade ? `          if (uLensOn > 0.5 && vWorld.y > ${F.minY.toFixed(1)} && vColor.g >= vColor.r) {
+            // Camera-to-chest rule, leaf faces only (mirrors foliageAlpha in nature.ts): thin to minAlpha with a screen-space alpha hash.
+            vec3 ab = uChest - uLens;
+            vec3 ap = vWorld - uLens;
+            float tt = clamp(dot(ap, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
+            float fk = max(1.0 - smoothstep(${F.nearM.toFixed(1)}, ${(F.nearM + F.nearSoftM).toFixed(1)}, length(ap)),
+                           1.0 - smoothstep(${F.segM.toFixed(1)}, ${(F.segM + F.segSoftM).toFixed(1)}, length(ap - ab * tt)));
+            float fa = mix(1.0, ${F.minAlpha.toFixed(2)}, fk);
+            float hash = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+            if (hash > fa) discard;
+          }` : ''}`
       );
   };
-  m.customProgramCacheKey = () => `windy-${amount}-${pivot}-${cutout}-${reach}`;
+  m.customProgramCacheKey = () => `windy-${amount}-${pivot}-${cutout}-${reach}-${lensFade}`;
   return m;
 };
 
@@ -501,7 +531,7 @@ export const buildBushes = (spots: Placement[]) => {
   const seeds = [5, 19, 31];
   const lists = seeds.map(() => [] as THREE.Matrix4[]);
   for (const p of spots) lists[Math.floor(p.seed * seeds.length)].push(placeMatrix(p.x, p.y, 1.05 + p.seed * 0.3, p.seed * 50));
-  const m = windy(new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 }), 0.03, 0.2, false, 0.35);
+  const m = windy(new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 }), 0.03, 0.2, false, 0.35, 0, true);
   return natureSet(seeds.map((sd, i) => chunkedInstances(bushGeo(sd), m, lists[i].map((mm) => item(mm)), { height: 2.5, radius: 2, farGeo: bushGeo(sd, true) })));
 };
 
@@ -648,4 +678,15 @@ export const updateNature = (time: number, focusX: number, focusY: number, fade:
   natureUniforms.uTime.value = time;
   natureUniforms.uFocus.value.set(focusX, 0, focusY);
   natureUniforms.uFade.value = fade;
+  natureUniforms.uLensOn.value = 0; // off until the shoulder camera calls setFoliageFade later in the frame
+};
+
+/**
+ * Shoulder camera only: crowns near the lens or crossing the lens-to-chest segment fade to 25 %. Uniforms are shared by
+ * all merged tree chunks, so this costs no draw calls. Call it after `updateNature` each frame (updateNature clears it).
+ */
+export const setFoliageFade = (camX: number, camY: number, camZ: number, chestX: number, chestY: number, chestZ: number) => {
+  natureUniforms.uLens.value.set(camX, camY, camZ);
+  natureUniforms.uChest.value.set(chestX, chestY, chestZ);
+  natureUniforms.uLensOn.value = 1;
 };
