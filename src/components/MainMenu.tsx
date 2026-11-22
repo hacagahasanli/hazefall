@@ -493,6 +493,11 @@ export const MainMenu = ({
             <p>Fonts: Bungee and Chakra Petch (SIL Open Font License).</p>
             <p>Built with three.js and React.</p>
           </div>
+          <div className="flex flex-col gap-1.5 text-sm text-cream/75">
+            <span className="text-sm font-semibold text-cream/55">Privacy and terms</span>
+            <p>The game saves only your settings and progress, through the site you play on. It asks for no personal data, has no account of its own and shares nothing with third parties.</p>
+            <p>By playing you agree to the Terms of Use and Privacy Policy of the site you play on, and to the Nalbaki Games Privacy Policy.</p>
+          </div>
           <span className="text-xs text-cream/45">Version {GAME_VERSION}</span>
         </SidePanel>
       )}
