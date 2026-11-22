@@ -219,14 +219,21 @@ export const FighterGrid = ({ fighter, portraits, onPick, shortGrid = false }: {
 );
 
 /** Drop, loot, survive. */
-export const HowTo = () => (
+/** What the three cards say on a phone (the game's own copy names keys). */
+const HOW_TO_TOUCH: [string, string][] = [
+  ['Drop', 'Tap JUMP over the place you want to land, free-fall, then tap FIRE to open the parachute and steer with the stick.'],
+  ['Loot', 'Walk over loot. The arrow button picks up what you stand on, SWAP changes gun and HEAL uses what you carry.'],
+  ['Survive', 'Stay inside the safe zone. The left thumb moves, FIRE aims by itself at whoever you can see, ROLL gets you out of trouble and SUPER fires when its ring is full.'],
+];
+
+export const HowTo = ({ touch = false }: { touch?: boolean }) => (
   <section className="grid gap-3 sm:grid-cols-3">
-    {COPY.howTo.map(([title, text], i) => (
-      <div key={title} className="panel-cut flex gap-4 bg-ink/70 p-4 backdrop-blur">
+    {(touch ? HOW_TO_TOUCH : COPY.howTo).map(([title, text], i) => (
+      <div key={title} className="panel-cut flex gap-4 bg-ink/70 p-4 backdrop-blur [@media(max-height:500px)]:gap-3 [@media(max-height:500px)]:p-3">
         <span className="font-display text-2xl text-gold/80">0{i + 1}</span>
         <div className="flex flex-col gap-1">
           <span className="font-display text-base">{title}</span>
-          <span className="text-sm text-cream/70">{text}</span>
+          <span className="text-sm text-cream/70 [@media(max-height:500px)]:text-xs">{text}</span>
         </div>
       </div>
     ))}

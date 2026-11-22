@@ -49,7 +49,7 @@ const Stick = ({ onMove, right = false, opacity = 1 }: { onMove: (x: number, y: 
   const [knob, setKnob] = useState({ x: 0, y: 0 });
   const pointer = useRef<number | null>(null);
   const baseRef = useRef({ x: 0, y: 0 });
-  const R = 58;
+  const R = 54;
 
   const release = () => {
     pointer.current = null;
@@ -60,7 +60,7 @@ const Stick = ({ onMove, right = false, opacity = 1 }: { onMove: (x: number, y: 
 
   return (
     <div
-      className={`absolute bottom-0 top-24 w-1/2 touch-none ${right ? 'right-0' : 'left-0'}`}
+      className={`absolute bottom-0 top-[calc(90px*var(--ui,1))] w-1/2 touch-none ${right ? 'right-0' : 'left-0'}`}
       style={{ opacity }}
       onPointerDown={(e) => {
         goFullscreen();
@@ -97,7 +97,7 @@ const Stick = ({ onMove, right = false, opacity = 1 }: { onMove: (x: number, y: 
       onPointerCancel={(e) => e.pointerId === pointer.current && release()}
     >
       {base ? (
-        <div className="pointer-events-none absolute" style={{ left: base.x - R, top: base.y - R }}>
+        <div className="pointer-events-none absolute" style={{ left: base.x - R, top: base.y - R, zoom: 'var(--ui, 1)' } as React.CSSProperties}>
           <div
             className="rounded-full border-2 border-cream/25 bg-ink-deep/35"
             style={{ width: R * 2, height: R * 2 }}
@@ -109,7 +109,7 @@ const Stick = ({ onMove, right = false, opacity = 1 }: { onMove: (x: number, y: 
         </div>
       ) : (
         <div
-          className="pointer-events-none absolute bottom-8 flex h-28 w-28 items-center justify-center rounded-full border-2 border-dashed border-cream/25 text-[10px] font-semibold uppercase tracking-widest text-cream/50"
+          className="pointer-events-none absolute bottom-6 flex h-[calc(96px*var(--ui,1))] w-[calc(96px*var(--ui,1))] items-center justify-center rounded-full border-2 border-dashed border-cream/25 text-[10px] font-semibold uppercase tracking-widest text-cream/50"
           style={right ? { right: 'calc(20px + env(safe-area-inset-right))' } : { left: 'calc(20px + env(safe-area-inset-left))' }}
         >
           move
@@ -254,56 +254,34 @@ export const TouchControls = ({
     style={{ WebkitTouchCallout: 'none' } as React.CSSProperties}
   >
     <Stick onMove={onMove} right={leftHanded} opacity={opacity} />
+    {/*
+      The button cluster, drawn for an 844 x 390 phone at scale 1 and scaled by the phone UI scale (--ui) and the player's
+      size setting, from the bottom corner. Every button is given by its centre (from the corner) and its size: FIRE under
+      the thumb, the others on two arcs round it, nothing above 236 px (the minimap ends at 132 px from the top).
+    */}
     <div
-      className="absolute bottom-0 h-[300px] w-[260px]"
+      className="absolute bottom-0 h-[236px] w-[282px]"
       style={{
         ...(leftHanded ? { left: 'env(safe-area-inset-left)' } : { right: 'env(safe-area-inset-right)' }),
         opacity,
-        transform: `scale(${size})`,
+        transform: `scale(calc(${size} * var(--ui, 1)))`,
         transformOrigin: leftHanded ? 'bottom left' : 'bottom right',
       }}
     >
-      <Pad
-        b="fire"
-        label={onPlane ? 'Jump' : 'Fire'}
-        press={press}
-        size={108}
-        accent
-        style={{ right: 16, bottom: 18 }}
-      />
+      <Pad b="fire" label={onPlane ? 'Jump' : 'Fire'} press={press} size={92} accent style={at(66, 66, 92, leftHanded)} />
       {!onPlane && (
         <>
-          <Pad
-            b="roll"
-            label={inAir ? 'Dive' : 'Roll'}
-            press={press}
-            ready={rollReady}
-            style={{ right: 136, bottom: 14 }}
-          />
+          <Pad b="roll" label={inAir ? 'Dive' : 'Roll'} press={press} size={52} ready={rollReady} style={at(158, 50, 52, leftHanded)} />
+          <Pad b="jump" label="Jump" press={press} size={52} style={at(142, 116, 52, leftHanded)} />
+          <Pad b="reload" label="Reload" press={press} size={48} style={at(94, 152, 48, leftHanded)} />
           {/* Pick up (and hold to throw a bomb): a small icon button. */}
-          <Pad b="use" label="Pick up" icon={PICKUP_ICON} press={press} size={56} style={{ right: 42, bottom: 140 }} />
-          {sniper && <Pad b="scope" label="Scope" press={press} size={64} accent style={{ right: 30, bottom: 218 }} />}
-          <Pad
-            b="reload"
-            label="Reload"
-            press={press}
-            size={58}
-            style={{ right: 124, bottom: 102 }}
-          />
-          <Pad
-            b="super"
-            label="Super"
-            press={press}
-            size={62}
-            ready={superReady}
-            accent={superReady >= 1}
-            style={{ right: 118, bottom: 176 }}
-          />
-          {canSwap && <Pad b="swap" label={swapLabel ? `Swap to ${swapLabel}` : 'Swap guns'} icon={SWAP_ICON} press={press} size={46} style={{ right: 208, bottom: 36 }} />}
-          {heal && <Pad b="heal" label="Heal" sub={heal} press={press} size={54} accent style={{ right: 196, bottom: 220 }} />}
-          <Pad b="jump" label="Jump" press={press} size={50} style={{ right: 140, bottom: 246 }} />
-          <Pad b="leanL" label="◀ Q" press={press} size={46} style={{ right: 200, bottom: 160 }} />
-          <Pad b="leanR" label="E ▶" press={press} size={46} style={{ right: 200, bottom: 104 }} />
+          <Pad b="use" label="Pick up" icon={PICKUP_ICON} press={press} size={46} style={at(30, 150, 46, leftHanded)} />
+          {sniper && <Pad b="scope" label="Scope" press={press} size={56} accent style={at(36, 214, 56, leftHanded)} />}
+          <Pad b="super" label="Super" press={press} size={58} ready={superReady} accent={superReady >= 1} style={at(212, 104, 58, leftHanded)} />
+          {canSwap && <Pad b="swap" label={swapLabel ? `Swap to ${swapLabel}` : 'Swap guns'} icon={SWAP_ICON} press={press} size={42} style={at(222, 40, 42, leftHanded)} />}
+          {heal && <Pad b="heal" label="Heal" sub={heal} press={press} size={50} accent style={at(188, 170, 50, leftHanded)} />}
+          <Pad b="leanL" label="◀ Q" press={press} size={38} style={at(258, 196, 38, leftHanded)} />
+          <Pad b="leanR" label="E ▶" press={press} size={38} style={at(258, 150, 38, leftHanded)} />
         </>
       )}
     </div>
@@ -313,17 +291,25 @@ export const TouchControls = ({
         type="button"
         aria-label="Pause"
         onClick={onPause}
-        className="absolute flex h-11 w-11 items-center justify-center rounded-full border-2 border-cream/30 bg-ink-deep/60 text-cream"
+        className="absolute flex items-center justify-center rounded-full border-2 border-cream/30 bg-ink-deep/60 text-cream"
         style={{
-          right: 'calc(min(120px, 28vh, 30vw) + 26px + env(safe-area-inset-right))',
-          top: 10,
+          width: 'calc(40px * var(--ui, 1))',
+          height: 'calc(40px * var(--ui, 1))',
+          right: 'calc(124px * var(--ui, 1) + 16px + env(safe-area-inset-right))',
+          top: 8,
         }}
       >
         <span className="flex gap-1">
-          <span className="h-4 w-1.5 rounded-sm bg-cream" />
-          <span className="h-4 w-1.5 rounded-sm bg-cream" />
+          <span className="h-3.5 w-1.5 rounded-sm bg-cream" />
+          <span className="h-3.5 w-1.5 rounded-sm bg-cream" />
         </span>
       </button>
     )}
   </div>
 );
+
+/** A button's place in the cluster from its centre (distance from the corner) and size; mirrored when left-handed. */
+const at = (cx: number, cy: number, size: number, left: boolean): React.CSSProperties => ({
+  [left ? 'left' : 'right']: cx - size / 2,
+  bottom: cy - size / 2,
+});

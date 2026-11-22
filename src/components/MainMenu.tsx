@@ -339,7 +339,7 @@ export const MainMenu = ({
 
       <div
         key={entered ? 'in' : 'boot'}
-        className={`relative flex h-full w-full flex-col justify-between gap-4 px-6 py-6 sm:w-[min(440px,38vw)] sm:min-w-[340px] sm:px-10 sm:py-9 max-sm:justify-end [@media(max-height:640px)]:sm:py-4 [@media(max-height:500px)]:sm:gap-2 ${panel ? 'invisible' : ''}`}
+        className={`relative flex h-full w-full flex-col justify-between gap-4 px-6 py-6 sm:w-[min(440px,38vw)] sm:min-w-[340px] sm:px-10 sm:py-9 max-sm:justify-end [@media(max-height:640px)]:sm:py-4 [@media(max-height:500px)]:sm:gap-2 [@media(max-height:360px)]:sm:py-2 [@media(max-height:360px)]:sm:gap-1 ${panel ? 'invisible' : ''}`}
         aria-hidden={!!panel}
         style={{ paddingLeft: 'max(1.5rem, env(safe-area-inset-left))', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
       >
@@ -413,7 +413,7 @@ export const MainMenu = ({
           <MenuBanner platform={platform} active={entered && !panel} />
         </div>
 
-        <footer className="flex items-center justify-between gap-3 text-xs text-cream/50 max-sm:mt-2 [@media(max-height:500px)]:leading-none">
+        <footer className="flex items-center justify-between gap-3 text-xs text-cream/50 max-sm:mt-2 [@media(max-height:500px)]:leading-none [@media(max-height:340px)]:hidden">
           <span>{credit}</span>
           <span>
             v{GAME_VERSION}
@@ -453,8 +453,8 @@ export const MainMenu = ({
       )}
       {panel === 'how' && (
         <SidePanel title="How to play" onClose={() => setPanel(null)}>
-          <HowTo />
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
+          <HowTo touch={touch} />
+          {!touch && <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
             {(
               [
                 ['up', 'Move'],
@@ -476,8 +476,8 @@ export const MainMenu = ({
                 </kbd>
               </div>
             ))}
-          </div>
-          <p className="text-sm text-cream/60">On a phone: the left thumb moves (the stick appears where you touch), FIRE aims by itself at whoever you can see, and the small arrow button above it picks up what you stand on (a key shows over it).</p>
+          </div>}
+          {!touch && <p className="text-sm text-cream/60">On a phone: the left thumb moves (the stick appears where you touch), FIRE aims by itself at whoever you can see, and the small arrow button above it picks up what you stand on (a key shows over it).</p>}
         </SidePanel>
       )}
       {panel === 'credits' && (

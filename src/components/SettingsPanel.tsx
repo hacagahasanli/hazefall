@@ -214,8 +214,8 @@ export const SettingsPanel = ({
         className="flex h-full w-full max-w-[640px] flex-col border-r border-cream/10 bg-[linear-gradient(100deg,#0a0d18_0%,#121a22_100%)] shadow-[20px_0_60px_rgba(0,0,0,0.5)] [animation:slideIn_0.25s_ease-out]"
         style={{ paddingLeft: 'env(safe-area-inset-left)' }}
       >
-        <header className="flex items-end justify-between gap-4 px-5 pb-3 pt-5 sm:px-7">
-          <h2 className="font-display text-3xl italic text-green sm:text-4xl">Settings</h2>
+        <header className="flex items-end justify-between gap-4 px-5 pb-3 pt-5 sm:px-7 [@media(max-height:500px)]:pb-0 [@media(max-height:500px)]:pt-2">
+          <h2 className="font-display text-3xl italic text-green sm:text-4xl [@media(max-height:500px)]:text-xl">Settings</h2>
         </header>
         <div
           role="tablist"
@@ -241,7 +241,7 @@ export const SettingsPanel = ({
                 uiTick();
                 setTab(t);
               }}
-              className={`relative shrink-0 px-3 py-2.5 text-xs font-bold uppercase tracking-widest focus-visible:outline-2 focus-visible:outline-green ${tab === t ? 'text-green' : 'text-cream/55 hover:text-cream'}`}
+              className={`relative shrink-0 px-3 py-2.5 [@media(max-height:500px)]:py-1.5 text-xs font-bold uppercase tracking-widest focus-visible:outline-2 focus-visible:outline-green ${tab === t ? 'text-green' : 'text-cream/55 hover:text-cream'}`}
             >
               {label}
               {tab === t && <span className="absolute inset-x-2 bottom-0 h-0.5 bg-green" />}
@@ -249,7 +249,7 @@ export const SettingsPanel = ({
           ))}
         </div>
 
-        <div role="tabpanel" aria-labelledby={`tab-${tab}`} className="flex flex-1 flex-col gap-6 overflow-y-auto px-5 py-5 sm:px-7">
+        <div role="tabpanel" aria-labelledby={`tab-${tab}`} className="flex flex-1 flex-col gap-6 overflow-y-auto px-5 py-5 sm:px-7 [@media(max-height:500px)]:gap-3 [@media(max-height:500px)]:py-2">
           {tab === 'controls' && (
             <>
               {aim && !touch && (
@@ -360,7 +360,7 @@ export const SettingsPanel = ({
           )}
         </div>
 
-        <footer className="flex items-center justify-between gap-3 border-t border-cream/10 px-5 py-4 sm:px-7" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
+        <footer className="flex items-center justify-between gap-3 border-t border-cream/10 px-5 py-4 sm:px-7 [@media(max-height:500px)]:py-1.5" style={{ paddingBottom: 'max(0.4rem, env(safe-area-inset-bottom))' }}>
           <button
             type="button"
             onClick={() => {
@@ -377,7 +377,7 @@ export const SettingsPanel = ({
               uiTick(true);
               onClose();
             }}
-            className="panel-cut bg-green px-8 py-2.5 font-display text-base uppercase text-ink-deep hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream"
+            className="panel-cut bg-green px-8 py-2.5 [@media(max-height:500px)]:py-1.5 font-display text-base uppercase text-ink-deep hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream"
           >
             Back
           </button>

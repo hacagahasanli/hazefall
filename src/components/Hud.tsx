@@ -227,10 +227,10 @@ export const Vitals = ({
   if (hud.buzz > 0) items.push(<Count key="buzz" color="#ffd23f" icon={<Icon size={13} color="#ffd23f">{ITEM_ICONS.coffee}</Icon>} n={`${Math.ceil(hud.buzz)}s`} />);
   return (
     <div className="flex items-end gap-2.5">
-      <div className={`flex flex-col gap-1 ${rings ? "w-52 sm:w-60" : "w-48"}`}>
+      <div className={`flex flex-col gap-1 ${rings ? "w-52 sm:w-60" : "w-48 [@media(max-height:400px)]:w-40"}`}>
         {items.length > 0 && <div className="flex flex-wrap items-center gap-1">{items}</div>}
         <div className="flex items-end gap-2">
-          <span className="w-9 text-right font-display text-2xl leading-[0.85] tabular-nums drop-shadow-[0_2px_0_rgba(10,13,24,0.8)]" style={{ color: low ? hpColor : '#e6ebf5' }}>
+          <span className="w-11 text-right font-display text-2xl leading-[0.85] tabular-nums drop-shadow-[0_2px_0_rgba(10,13,24,0.8)]" style={{ color: low ? hpColor : '#e6ebf5' }}>
             {Math.ceil(hud.hp)}
           </span>
           <div className="flex flex-1 flex-col gap-[3px]">

@@ -22,6 +22,7 @@ import { useSettings } from '~/components/useSettings';
 import { lockReleaseOpensMenu, pauseKeyAction } from '~/game/pauseKeys';
 import { createWebPlatform } from '~/platform/web';
 import { TouchControls, useTouch } from '~/components/TouchControls';
+import { useRotateBlock } from '~/lib/orientation';
 import { ShockRing, Streaks } from '~/components/Transitions';
 import { uiImpact, uiTick, uiWhoosh } from '~/components/uiSound';
 import { capLabel, Counters, Vitals, Weapons } from '~/components/Hud';
@@ -623,7 +624,7 @@ export const Match = ({
   settingsRef.current = settings;
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** Larger HUD text (accessibility): the HUD blocks are zoomed as a whole, so nothing reflows. */
-  const hudZoom = settings.largeHud ? 1.25 : 1;
+  const hudZoom = `calc(${settings.largeHud ? 1.25 : 1} * var(--ui, 1))`;
 
   const [game, setGame] = useState<ReturnType<typeof startMatch> | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -638,6 +639,11 @@ export const Match = ({
   const [hud, setHud] = useState<HudState | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const touch = useTouch();
+  // Held upright, a touch screen shows the rotate card (portal/index.html); the round waits in the pause menu behind it.
+  const rotateBlocked = useRotateBlock();
+  useEffect(() => {
+    if (rotateBlocked && !online && !heldRef.current) setMenuOpen(true);
+  }, [rotateBlocked, online]);
   const inPlane = hud?.stage === 'drone';
   useLayoutEffect(() => {
     // On a phone the big drop map starts 8 px under the health bar (it used to run underneath it).
@@ -653,7 +659,7 @@ export const Match = ({
   }, [touch, inPlane, hudZoom, hud != null]);
   useLayoutEffect(() => {
     const el = mapBoxRef.current;
-    setPillTop(touch && inPlane && el && mapTop !== null && window.innerWidth < 640 ? Math.round(el.getBoundingClientRect().bottom + 8) : null);
+    setPillTop(touch && inPlane && el && mapTop !== null && window.innerWidth < 480 ? Math.round(el.getBoundingClientRect().bottom + 8) : null);
   }, [touch, inPlane, mapTop]);
 
   // Building the map takes a moment and blocks the page: let the loading screen paint first
@@ -837,7 +843,8 @@ export const Match = ({
       {/* On phones it sits top right, out of the thumbs' way. */}
       <div
         ref={mapBoxRef}
-        className={`panel-cut absolute bg-ink-deep/80 p-1.5 ${touch ? `right-2 ${mapTop === null ? 'top-2' : ''}` : 'bottom-3 right-3'}`}
+        data-hud="minimap"
+        className={`panel-cut absolute bg-ink-deep/80 ${touch ? 'p-1' : 'p-1.5'} ${touch ? `right-2 ${mapTop === null ? 'top-2' : ''}` : 'bottom-3 right-3'}`}
         style={touch ? { marginRight: 'env(safe-area-inset-right)', ...(mapTop !== null ? { top: mapTop } : {}) } : undefined}
       >
         {/* Big while you're on the plane choosing where to jump. */}
@@ -848,10 +855,10 @@ export const Match = ({
           className={
             hud?.stage === 'drone'
               ? touch
-                ? 'block h-[min(340px,62vh,62vw)] w-[min(340px,62vh,62vw)]'
+                ? 'block h-[min(300px,58vh,58vw)] w-[min(300px,58vh,58vw)]'
                 : 'block h-[340px] w-[340px]'
               : touch
-                ? 'block h-[min(120px,28vh,30vw)] w-[min(120px,28vh,30vw)]'
+                ? 'block h-[calc(112px*var(--ui,1))] w-[calc(112px*var(--ui,1))]'
                 : 'block h-48 w-48'
           }
         />
@@ -861,6 +868,7 @@ export const Match = ({
         <>
           {/* You: health, shield, what you carry and the ability rings, bottom left (top left on a phone, out of the thumbs' way). */}
           <div
+            data-hud="vitals"
             className={`pointer-events-none absolute flex flex-col gap-1.5 ${touch ? 'left-3 top-2' : 'bottom-4 left-4'}`}
             style={{ ...(touch ? { marginLeft: 'env(safe-area-inset-left)' } : {}), zoom: hudZoom }}
           >
@@ -903,7 +911,7 @@ export const Match = ({
                 <div className="font-mono text-xs tracking-[0.3em] text-green/90 [animation:fadeIn_0.4s_ease-out]">{COPY.intro.above}</div>
               )}
               <div
-                className={`font-display text-4xl leading-none text-gold drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)] sm:text-7xl ${settings.reducedMotion ? '' : 'lcs-glitch-in'}`}
+                className={`font-display text-4xl leading-none text-gold drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)] sm:text-7xl [@media(max-height:520px)]:sm:text-4xl ${settings.reducedMotion ? '' : 'lcs-glitch-in'}`}
                 style={settings.reducedMotion ? undefined : { animationDelay: '0.35s' }}
               >
                 {COPY.intro.title(hud.total)[0]}
@@ -919,10 +927,19 @@ export const Match = ({
           {/* Deadline and players left */}
           <div
             className={`pointer-events-none absolute inset-x-0 flex justify-center ${touch ? `${pillTop === null ? 'top-[124px]' : ''} sm:top-3` : 'top-3'}`}
-            style={pillTop !== null ? { top: pillTop } : undefined}
+            style={{
+              ...(pillTop !== null ? { top: pillTop } : {}),
+              // On a touch screen the pill sits between the health block (left) and the minimap (right), never over either.
+              ...(touch
+                ? {
+                    paddingLeft: `calc((${hudZoom} * 208px) + env(safe-area-inset-left))`,
+                    paddingRight: `calc(${hud.stage === 'drone' ? 'min(300px, 58vh, 58vw) + 24px' : '(112px * var(--ui, 1)) + 24px'} + env(safe-area-inset-right))`,
+                  }
+                : {}),
+            }}
           >
-            <div className="panel-cut flex items-center gap-3 bg-ink-deep/85 px-3 py-1 sm:gap-4 sm:px-4 sm:py-1.5" style={{ zoom: hudZoom }}>
-              {touch && (
+            <div data-hud="pill" className="panel-cut flex items-center gap-3 whitespace-nowrap bg-ink-deep/85 px-3 py-1 sm:gap-4 sm:px-4 sm:py-1.5" style={{ zoom: hudZoom }}>
+              {touch && hud.stage !== 'drone' && (
                 <>
                   <Counters alive={hud.alive} kills={hud.kills} pulse={!settings.reducedMotion} />
                   <span className="h-4 w-px bg-cream/20" />
@@ -1067,7 +1084,7 @@ export const Match = ({
 
           {/* Kill feed */}
           <div
-            className={`pointer-events-none absolute flex flex-col items-end gap-1 text-xs ${touch ? 'right-2 top-[176px] sm:top-[min(140px,32vh,33vw)]' : 'right-4 top-[52px]'}`}
+            className={`pointer-events-none absolute flex flex-col items-end gap-1 text-xs ${touch ? 'right-2 top-[176px] sm:top-[calc(124px*var(--ui,1)+14px)]' : 'right-4 top-[52px]'}`}
           >
             {hud.feed.map((k) => (
               <span key={k.id} className="rounded bg-ink-deep/80 px-2 py-0.5 text-cream/80">
