@@ -20,6 +20,7 @@ import { resolveTier } from '~/game/render/quality';
 import { keyLabel } from '~/game/settings';
 import { FIGHTERS, PLAYERS } from '~/game/sim/constants';
 import { previewed, StyleRow } from '~/components/StyleRow';
+import { xpToNext } from '~/game/progress';
 import { loadCount, onLoadCount } from '~/lib/loading';
 
 import type { StylePreview } from '~/components/StyleRow';
@@ -34,6 +35,22 @@ const IDS = Object.keys(FIGHTERS) as FighterId[];
 /** The launch: camera move, 3-2-1 and the fade all live in this window. */
 const LAUNCH = 3.2;
 const FADE = 0.45;
+
+/** The career level in the lobby's plate style: "Level 7", the XP into the next level and a thin gold bar. */
+const LevelPlate = ({ career }: { career: Career }) => {
+  const need = xpToNext(career.level);
+  return (
+    <div className="panel-cut flex w-40 flex-col gap-1 bg-ink-deep/70 px-3 py-2 backdrop-blur" aria-label={`Level ${career.level}, ${career.xp} of ${need} XP`}>
+      <span className="flex items-baseline justify-between gap-2 text-sm font-semibold text-cream">
+        <span>Level {career.level}</span>
+        <span className="text-xs font-normal tabular-nums text-cream/65">{career.xp}/{need} XP</span>
+      </span>
+      <div className="h-1.5 overflow-hidden bg-cream/10">
+        <div className="h-full bg-gold" style={{ width: `${Math.min(100, Math.round((career.xp / need) * 100))}%` }} />
+      </div>
+    </div>
+  );
+};
 
 export const PreMatch = ({
   platform,
@@ -256,16 +273,19 @@ export const PreMatch = ({
         className={`fixed inset-x-0 top-0 flex items-start justify-between gap-4 px-5 pt-4 transition-opacity duration-500 sm:px-8 sm:pt-6 ${launching ? 'opacity-0' : 'opacity-100'}`}
         style={{ paddingLeft: 'max(1.25rem, env(safe-area-inset-left))', paddingRight: 'max(1.25rem, env(safe-area-inset-right))' }}
       >
-        <button
-          type="button"
-          onClick={() => {
-            uiTick(true);
-            onBack();
-          }}
-          className="panel-cut bg-ink-deep/70 px-4 py-2 text-sm font-semibold text-cream/80 backdrop-blur hover:text-cream focus-visible:outline-2 focus-visible:outline-green"
-        >
-          ← Menu{!touch && <span className="ml-2 text-cream/45">Esc</span>}
-        </button>
+        <div className="flex flex-col items-start gap-2 [@media(max-height:500px)]:flex-row [@media(max-height:500px)]:items-center">
+          <button
+            type="button"
+            onClick={() => {
+              uiTick(true);
+              onBack();
+            }}
+            className="panel-cut bg-ink-deep/70 px-4 py-2 text-sm font-semibold text-cream/80 backdrop-blur hover:text-cream focus-visible:outline-2 focus-visible:outline-green"
+          >
+            ← Menu{!touch && <span className="ml-2 text-cream/45">Esc</span>}
+          </button>
+          {career && <LevelPlate career={career} />}
+        </div>
         <div className="flex flex-col items-end gap-0.5 text-right" aria-live="polite">
           <span className="text-sm font-semibold text-cream/70">{status}</span>
           <span className="font-display text-2xl leading-none tabular-nums text-gold drop-shadow-[0_2px_12px_rgba(0,0,0,0.7)] sm:text-3xl">

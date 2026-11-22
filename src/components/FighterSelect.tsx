@@ -5,11 +5,12 @@
  * the four to choose from, and the three how-to cards. Portraits are rendered from the game's own models after the page
  * has painted (`usePortraits`).
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { COPY } from '~/game/copy/studio';
 import { FIGHTERS } from '~/game/sim/constants';
 
+import type { Look } from '~/game/cosmetics';
 import type { FighterId } from '~/game/sim/types';
 
 export const FIGHTER_IDS: FighterId[] = ['hotfix', 'legacy', 'standup', 'intern'];
@@ -40,16 +41,22 @@ const Bar = ({ label, value, text, color }: { label: string; value: number; text
 
 type Portraits = Record<FighterId, string> | null;
 
-/** The fighters' portraits, rendered once after the page has painted (null until then, or while `skip`). */
-export const usePortraits = (skip = false): Portraits => {
+/**
+ * The fighters' portraits, rendered after the page has painted (null until then, or while `skip`). With a `look` they wear it,
+ * and are drawn again when it changes (the Fighter screen's Style tray).
+ */
+export const usePortraits = (skip = false, look?: Look): Portraits => {
   const [portraits, setPortraits] = useState<Portraits>(null);
+  const lookKey = look ? JSON.stringify(look.outfit) + look.finish : '';
+  const lookRef = useRef(look);
+  lookRef.current = look;
   useEffect(() => {
-    if (skip || portraits) return;
+    if (skip || (portraits && !lookKey)) return;
     let cancelled = false;
     const raf = requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         void import('~/game/render/showcase').then(({ renderPortraits }) => {
-          if (!cancelled) setPortraits(renderPortraits());
+          if (!cancelled) setPortraits(renderPortraits(lookRef.current));
         });
       }),
     );
@@ -57,7 +64,8 @@ export const usePortraits = (skip = false): Portraits => {
       cancelled = true;
       cancelAnimationFrame(raf);
     };
-  }, [skip, portraits]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skip, lookKey, !portraits]);
   return portraits;
 };
 

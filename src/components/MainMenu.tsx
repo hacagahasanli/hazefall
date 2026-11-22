@@ -13,6 +13,7 @@ import { MenuBanner } from '~/components/MenuBanner';
 import { SettingsPanel } from '~/components/SettingsPanel';
 import { setUiSound, uiTick } from '~/components/uiSound';
 import { Chip } from '~/components/Chip';
+import { previewed, StyleRow } from '~/components/StyleRow';
 import { nextReward } from '~/game/cosmetics';
 import { dailyFor, goalDef, hoursToReset, liveStreak, streakLine, xpToNext } from '~/game/progress';
 import { deviceFacts } from '~/game/render/deviceFacts';
@@ -25,7 +26,9 @@ import { GAME_TITLE, ONLINE_PLAY } from '~/lib/studio';
 import { showsOnlineRow } from '~/platform/menu';
 import { loadDone, track } from '~/lib/telemetry';
 
+import type { StylePreview } from '~/components/StyleRow';
 import type { Career } from '~/game/career';
+import type { Look } from '~/game/cosmetics';
 import type { AimMode } from '~/game/render/game';
 import type { Settings } from '~/game/settings';
 import type { FighterId } from '~/game/sim/types';
@@ -71,10 +74,10 @@ const Backdrop = ({ settings, platform, onLive }: { settings: Settings; platform
 };
 
 /** A side panel for Fighter, How to play and Credits (Settings has its own). */
-const SidePanel = ({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) => {
+const SidePanel = ({ title, onClose, children, escHeld }: { title: string; onClose: () => void; children: ReactNode; /** True while something inside (the Style tray) takes Esc first. */ escHeld?: { current: boolean } }) => {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== 'Escape') return;
+      if (e.code !== 'Escape' || escHeld?.current) return;
       e.stopImmediatePropagation();
       onClose();
     };
@@ -181,6 +184,8 @@ export const MainMenu = ({
   support: Support,
   onlineInterest: OnlineInterest,
   career,
+  onLook,
+  onSeen,
 }: {
   platform: Platform;
   settings: Settings;
@@ -196,13 +201,25 @@ export const MainMenu = ({
   support?: ComponentType<{ variant?: 'pill' | 'card' | 'menu' }>;
   /** What the game remembers (portal build): the level bar under the logo and today's goals under the menu. */
   career?: Career;
+  /** A look was picked in the Fighter screen's Style tray, and a category was opened (portal build). */
+  onLook?: (look: Look) => void;
+  onSeen?: (ids: string[]) => void;
   /** Our own site's "Online is coming" button under the menu while online play is closed (portals pass nothing). */
   onlineInterest?: ComponentType;
 }) => {
   const [panel, setPanel] = useState<Panel>(null);
   const [focus, setFocus] = useState(0);
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
-  const portraits = usePortraits(panel !== 'fighter');
+  const [preview, setPreview] = useState<StylePreview>(null);
+  const trayOpen = useRef(false);
+  const shownLook = career ? previewed(career.look, fighter, preview) : undefined;
+  const portraits = usePortraits(panel !== 'fighter', shownLook);
+  // Leaving the Fighter screen drops a tray left open and any locked preview.
+  useEffect(() => {
+    if (panel === 'fighter') return;
+    trayOpen.current = false;
+    setPreview(null);
+  }, [panel]);
   const f = FIGHTERS[fighter];
 
   // The menu is the first thing a player can use: loading is over.
@@ -384,8 +401,21 @@ export const MainMenu = ({
         <SettingsPanel settings={settings} onChange={onSettings} onClose={() => setPanel(null)} touch={touch} aim={{ value: aim, onChange: onAim }} portalMuted={platform.muted()} />
       )}
       {panel === 'fighter' && (
-        <SidePanel title="Fighter" onClose={() => setPanel(null)}>
+        <SidePanel title="Fighter" onClose={() => setPanel(null)} escHeld={trayOpen}>
           <FighterCard fighter={fighter} portraits={portraits} />
+          {career && onLook && (
+            <StyleRow
+              career={career}
+              fighter={fighter}
+              disabled={false}
+              onLook={onLook}
+              onSeen={(ids) => onSeen?.(ids)}
+              onPreview={setPreview}
+              onOpen={(o) => {
+                trayOpen.current = o;
+              }}
+            />
+          )}
           <FighterGrid fighter={fighter} portraits={portraits} onPick={(id) => (uiTick(), onFighter(id))} />
         </SidePanel>
       )}

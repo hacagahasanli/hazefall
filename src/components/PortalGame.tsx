@@ -183,6 +183,8 @@ export const PortalGame = ({
       support={support}
       onlineInterest={onlineInterest}
       career={career}
+      onLook={pickLook}
+      onSeen={markSeen}
     />
     </>
   );

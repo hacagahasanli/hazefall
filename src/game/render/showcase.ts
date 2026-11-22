@@ -10,6 +10,7 @@ import { buildPlane } from './plane';
 import { buildProps } from './props';
 import { buildWorld } from './world';
 
+import type { Look } from '../cosmetics';
 import type { Tier } from './quality';
 import type { FighterId } from '../sim/types';
 
@@ -156,7 +157,7 @@ export const startShowcase = (canvas: HTMLCanvasElement, onReady: () => void, op
  * Portraits of the four fighters for the menu cards: each one standing ready with a rifle,
  * rendered once offscreen to an image.
  */
-export const renderPortraits = (): Record<FighterId, string> => {
+export const renderPortraits = (look?: Look): Record<FighterId, string> => {
   const W = 360;
   const H = 440;
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
@@ -176,7 +177,7 @@ export const renderPortraits = (): Record<FighterId, string> => {
     const rim = new THREE.DirectionalLight(new THREE.Color(FIGHTERS[id].color), 2.2);
     rim.position.set(-3, 2, -2);
     scene.add(key, rim);
-    const rig = buildRig(id);
+    const rig = buildRig(id, look?.outfit[id]);
     scene.add(rig.root);
     rig.vest.visible = true;
     // Let the pose settle (it eases into place).
@@ -188,7 +189,7 @@ export const renderPortraits = (): Record<FighterId, string> => {
     }
     rig.root.rotation.y = 0.35;
     rig.root.updateMatrixWorld(true);
-    const gun = buildGun('rifle').root;
+    const gun = buildGun('rifle', look?.finish).root;
     rig.hand.getWorldPosition(gun.position);
     rig.hand.getWorldQuaternion(gun.quaternion);
     scene.add(gun);
