@@ -109,7 +109,7 @@ const Placement = ({ place, total, won, fx }: { place: number; total: number; wo
         />
         <span
           key={landed ? 'landed' : 'counting'}
-          className={`relative flex items-start font-display text-[7rem] sm:text-[10rem] [@media(max-height:520px)]:text-[5rem] ${landed ? '' : 'opacity-70'}`}
+          className={`relative flex items-start font-display text-[7rem] sm:text-[10rem] [@media(min-height:521px)_and_(max-height:640px)]:sm:text-[6.5rem] [@media(max-height:520px)]:text-[5rem] ${landed ? '' : 'opacity-70'}`}
           style={{
             color,
             textShadow: '0 0.045em 0 #0a0d18, 0 0.09em 0 rgba(10,13,24,0.55), 0 0.2em 0.5em rgba(0,0,0,0.45)',
@@ -393,10 +393,10 @@ const XpPanel = ({ summary, fx, fighter }: { summary: RoundSummary; fx: boolean;
   const shown = ordered.slice(0, 2);
   const next = !leveled ? nextReward(after.level) : null;
   return (
-    <div className="flex max-w-sm flex-col gap-1 pl-2" aria-label="Experience earned">
-      <ul className="flex flex-col gap-0.5 text-sm">
+    <div className="flex max-w-sm flex-col gap-1 pl-2 [@media(max-height:640px)_and_(min-width:640px)]:max-w-none" aria-label="Experience earned">
+      <ul className="flex flex-col gap-0.5 text-sm [@media(max-height:640px)_and_(min-width:720px)]:grid [@media(max-height:640px)_and_(min-width:720px)]:grid-cols-2 [@media(max-height:640px)_and_(min-width:720px)]:gap-x-6 [@media(max-height:640px)_and_(min-width:640px)]:text-xs">
         {lines.map((l, i) => (
-          <li key={l.label} className={`flex items-baseline justify-between gap-6 ${l.goal ? 'font-semibold text-gold' : 'text-cream/75'}`} style={at(i)}>
+          <li key={l.label} className={`flex items-baseline justify-between gap-6 [@media(max-height:640px)_and_(min-width:640px)]:gap-3 ${l.goal ? 'font-semibold text-gold' : 'text-cream/75'}`} style={at(i)}>
             <span>{l.label}</span>
             <span className="font-display tabular-nums">+{l.xp}</span>
           </li>
@@ -480,20 +480,20 @@ const Result = ({
       )}
       {/* A win: a warm gold light from above. */}
       {hud.won && <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-2/3 bg-[radial-gradient(ellipse_at_50%_0%,rgba(255,210,63,0.22),transparent_70%)]" />}
-      <div className="relative m-auto flex w-full max-w-3xl flex-col gap-7 [@media(max-height:520px)]:gap-3">
-        <div className="flex flex-wrap items-end gap-x-10 gap-y-4 [@media(max-height:520px)]:gap-y-2">
+      <div className="relative m-auto flex w-full max-w-3xl flex-col gap-7 [@media(max-height:520px)]:gap-3 [@media(max-height:640px)_and_(min-width:640px)]:grid [@media(max-height:640px)_and_(min-width:640px)]:max-w-5xl [@media(max-height:640px)_and_(min-width:640px)]:grid-cols-2 [@media(max-height:640px)_and_(min-width:640px)]:content-center [@media(max-height:640px)_and_(min-width:640px)]:gap-x-8 [@media(max-height:640px)_and_(min-width:640px)]:gap-y-3">
+        <div className="flex flex-wrap items-end gap-x-10 gap-y-4 [@media(max-height:520px)]:gap-y-2 [@media(max-height:640px)_and_(min-width:640px)]:col-start-1">
           <div className="flex flex-col items-start">
             {hud.won && (
               <Trophy
-                className="mb-1 ml-2 h-16 w-16 drop-shadow-[0_0_24px_rgba(255,210,63,0.6)] sm:h-20 sm:w-20 [@media(max-height:520px)]:h-10 [@media(max-height:520px)]:w-10"
+                className="mb-1 ml-2 h-16 w-16 drop-shadow-[0_0_24px_rgba(255,210,63,0.6)] sm:h-20 sm:w-20 [@media(min-height:521px)_and_(max-height:640px)]:sm:h-10 [@media(min-height:521px)_and_(max-height:640px)]:sm:w-10 [@media(max-height:520px)]:h-8 [@media(max-height:520px)]:w-8"
                 style={fx ? { animation: 'lcsLand 0.5s cubic-bezier(0.2,0.8,0.2,1) 0.55s both' } : undefined}
               />
             )}
             <Placement place={place} total={hud.total} won={hud.won} fx={fx} />
           </div>
-          <div className="flex max-w-sm flex-col gap-2 pb-4 [@media(max-height:520px)]:pb-1">
+          <div className="flex max-w-sm flex-col gap-2 pb-4 [@media(max-height:520px)]:pb-1 [@media(max-height:640px)_and_(min-width:640px)]:max-w-none">
             <h2
-              className={`font-display text-3xl leading-none sm:text-[2.6rem] [@media(max-height:520px)]:text-2xl ${fx ? 'lcs-glitch-in' : ''}`}
+              className={`font-display text-3xl leading-none sm:text-[2.6rem] [@media(min-height:521px)_and_(max-height:640px)]:sm:text-3xl [@media(max-height:520px)]:text-2xl ${fx ? 'lcs-glitch-in' : ''}`}
               style={{ color: hud.won ? '#ffd23f' : '#e6ebf5', ...(fx ? { animationDelay: '0.45s' } : {}) }}
             >
               {hud.won ? COPY.result.won : COPY.result.lost}
@@ -516,35 +516,37 @@ const Result = ({
           </div>
         </div>
 
-        <div className="flex flex-col gap-2">
-          <div className="grid grid-cols-[auto_auto_auto] items-end justify-between justify-items-start gap-x-4 gap-y-2 pl-2 sm:grid-cols-3 sm:justify-normal sm:gap-x-10">
+        <div className="flex flex-col gap-2 [@media(max-height:640px)_and_(min-width:640px)]:contents">
+          <div className="grid grid-cols-[auto_auto_auto] items-end justify-between justify-items-start gap-x-4 gap-y-2 pl-2 sm:grid-cols-3 sm:justify-normal sm:gap-x-10 [@media(max-height:640px)_and_(min-width:640px)]:col-start-1 [@media(max-height:640px)_and_(min-width:640px)]:gap-x-6">
             {stats.map((st, i) => (
               <StatSticker key={st.key} stat={st} index={i} fx={fx} />
             ))}
           </div>
-          {report?.summary && <XpPanel summary={report.summary} fx={fx} fighter={fighter} />}
-          {report?.line && <p className="animate-[riseIn_0.5s_ease-out_0.7s_both] pl-2 text-lg font-semibold text-gold">{report.line}</p>}
-          {report?.nudge && <p className="animate-[riseIn_0.5s_ease-out_0.72s_both] pl-2 text-sm text-cream/75">{report.nudge}</p>}
-          <p className="animate-[riseIn_0.5s_ease-out_0.75s_both] text-sm text-cream/55">
-            Accuracy <b className="font-semibold text-cream/85">{hud.accuracy}%</b>
-            <span className="mx-2 text-cream/25">·</span>
-            <b className="font-semibold text-cream/85">{hud.distance} m</b> on foot
-          </p>
+          <div className="flex flex-col gap-2 [@media(max-height:640px)_and_(min-width:640px)]:col-start-2 [@media(max-height:640px)_and_(min-width:640px)]:row-span-4 [@media(max-height:640px)_and_(min-width:640px)]:row-start-1 [@media(max-height:640px)_and_(min-width:640px)]:self-center">
+            {report?.summary && <XpPanel summary={report.summary} fx={fx} fighter={fighter} />}
+            {report?.line && <p className="animate-[riseIn_0.5s_ease-out_0.7s_both] pl-2 text-lg font-semibold text-gold">{report.line}</p>}
+            {report?.nudge && <p className="animate-[riseIn_0.5s_ease-out_0.72s_both] pl-2 text-sm text-cream/75">{report.nudge}</p>}
+            <p className="animate-[riseIn_0.5s_ease-out_0.75s_both] text-sm text-cream/55">
+              Accuracy <b className="font-semibold text-cream/85">{hud.accuracy}%</b>
+              <span className="mx-2 text-cream/25">·</span>
+              <b className="font-semibold text-cream/85">{hud.distance} m</b> on foot
+            </p>
+          </div>
         </div>
 
         {hostWaits && (
-          <p className="text-sm text-cream/70">
+          <p className="text-sm text-cream/70 [@media(max-height:640px)_and_(min-width:640px)]:col-start-1">
             You are the host: the round runs on your device, so it goes on for the others until
             there is a winner. {hud.alive} still standing.
           </p>
         )}
-        <div className="flex flex-wrap gap-3 [animation:riseIn_0.4s_ease-out_0.8s_both]">
+        <div className="flex flex-wrap gap-3 [animation:riseIn_0.4s_ease-out_0.8s_both] max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:-mx-6 max-sm:bg-ink-deep/95 max-sm:px-6 max-sm:py-3 [@media(max-height:640px)_and_(min-width:640px)]:col-start-1 [@media(max-height:500px)_and_(min-width:640px)]:flex-nowrap [@media(max-height:500px)_and_(min-width:640px)]:gap-2">
           <button
             type="button"
             autoFocus
             disabled={hostWaits}
             onClick={onPlayAgain}
-            className="panel-cut bg-gold px-10 py-3.5 font-display text-xl text-ink-deep shadow-[0_6px_0_#b8901c] transition hover:brightness-110 active:translate-y-[3px] active:shadow-[0_3px_0_#b8901c] disabled:opacity-40 [@media(max-height:520px)]:py-2.5"
+            className="panel-cut bg-gold px-10 [@media(max-height:500px)_and_(min-width:640px)]:px-4 py-3.5 whitespace-nowrap font-display text-xl [@media(max-height:500px)_and_(min-width:640px)]:text-lg text-ink-deep shadow-[0_6px_0_#b8901c] transition hover:brightness-110 active:translate-y-[3px] active:shadow-[0_3px_0_#b8901c] disabled:opacity-40 [@media(max-height:520px)]:py-2.5"
           >
             {online ? 'Back to the room' : 'Play again'}
           </button>
@@ -552,14 +554,14 @@ const Result = ({
             <button
               type="button"
               onClick={onExit}
-              className="panel-cut bg-cream/10 px-8 py-3.5 font-display text-lg text-cream/90 transition hover:bg-cream/20 disabled:opacity-40 [@media(max-height:520px)]:py-2.5"
+              className="panel-cut bg-cream/10 px-8 [@media(max-height:500px)_and_(min-width:640px)]:px-3 py-3.5 whitespace-nowrap font-display text-lg [@media(max-height:500px)_and_(min-width:640px)]:text-base text-cream/90 transition hover:bg-cream/20 disabled:opacity-40 [@media(max-height:520px)]:py-2.5"
             >
               {exitLabel}
             </button>
           )}
         </div>
         {Support && (
-          <div className="[animation:riseIn_0.45s_ease-out_1s_both]">
+          <div className="[animation:riseIn_0.45s_ease-out_1s_both] [@media(max-height:640px)_and_(min-width:640px)]:col-start-1">
             <Support variant="card" />
           </div>
         )}
@@ -996,7 +998,7 @@ export const Match = ({
           {/* You went down: who took you out and with what, before the round report comes up. */}
           {hud.dead && !hud.won && !showResult && (
             <div
-              className="pointer-events-none absolute inset-0 z-[5] flex items-start justify-center bg-[radial-gradient(ellipse_at_center,rgba(10,13,24,0.15)_30%,rgba(10,13,24,0.7))] px-4 pt-[11vh] animate-[fadeIn_0.3s_ease-out]"
+              className="pointer-events-none absolute inset-0 z-[5] flex items-start justify-center bg-[radial-gradient(ellipse_at_center,rgba(10,13,24,0.15)_30%,rgba(10,13,24,0.7))] px-4 pt-[11vh] [@media(max-height:500px)]:pt-[16vh] animate-[fadeIn_0.3s_ease-out]"
               role="status"
               aria-live="assertive"
             >
@@ -1008,7 +1010,7 @@ export const Match = ({
               )}
               <div className="relative flex flex-col items-center gap-2 text-center animate-[riseIn_0.35s_ease-out_both]" style={{ zoom: hudZoom }}>
                 <div
-                  className={`font-display text-4xl leading-none drop-shadow-[0_4px_18px_rgba(0,0,0,0.8)] sm:text-6xl ${settings.reducedMotion ? '' : 'lcs-glitch-in'}`}
+                  className={`font-display text-4xl leading-none drop-shadow-[0_4px_18px_rgba(0,0,0,0.8)] sm:text-6xl [@media(max-height:500px)]:sm:text-4xl ${settings.reducedMotion ? '' : 'lcs-glitch-in'}`}
                   style={{ color: killColor }}
                 >
                   {COPY.result.lost}

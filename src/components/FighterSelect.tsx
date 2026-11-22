@@ -73,28 +73,28 @@ export const usePortraits = (skip = false, look?: Look): Portraits => {
 export const FighterCard = ({ fighter, portraits }: { fighter: FighterId; portraits: Portraits }) => {
   const f = FIGHTERS[fighter];
   return (
-      <div className="panel-cut relative flex min-h-[300px] overflow-hidden border border-cream/10 bg-ink/70 backdrop-blur sm:min-h-[380px] [@media(max-height:500px)]:min-h-[250px]">
+      <div className="panel-cut relative flex shrink-0 min-h-[300px] overflow-hidden border border-cream/10 bg-ink/70 backdrop-blur sm:min-h-[380px] [@media(max-height:640px)]:sm:min-h-0">
         <div
           className="absolute inset-0 opacity-50 transition-[background] duration-700"
           style={{
             background: `radial-gradient(circle at 70% 65%, ${f.color}, transparent 60%)`,
           }}
         />
-        <div className="relative z-10 flex flex-1 flex-col justify-between gap-4 p-5 sm:p-6">
+        <div className="relative z-10 flex flex-1 flex-col justify-between gap-4 p-5 sm:p-6 [@media(max-height:640px)]:sm:gap-2 [@media(max-height:640px)]:sm:p-4 [@media(max-height:420px)]:sm:gap-1! [@media(max-height:420px)]:sm:p-2.5!">
           <div className="flex flex-col gap-2">
             <span className="text-sm font-semibold text-cream/60">
               You drop as
             </span>
             <h1
               key={fighter}
-              className="font-display text-4xl leading-none [animation:riseIn_0.35s_ease-out] sm:text-6xl [@media(max-height:500px)]:text-4xl"
+              className="font-display text-4xl leading-none [animation:riseIn_0.35s_ease-out] sm:text-6xl [@media(max-height:500px)]:text-3xl"
               style={{ color: f.color }}
             >
               {f.name.toUpperCase()}
             </h1>
             <span className="text-sm text-cream/70">{f.role}</span>
           </div>
-          <div className="flex max-w-[11rem] flex-col gap-3 sm:max-w-[15rem]">
+          <div className="flex max-w-[11rem] flex-col gap-3 sm:max-w-[15rem] [@media(max-height:500px)]:max-w-[22rem] [@media(max-height:500px)]:flex-row [@media(max-height:500px)]:gap-3 [@media(max-height:500px)]:[&>*]:flex-1">
             <Bar label="Health" value={1} text={`${f.hp}`} color="#3ddc84" />
             <Bar
               label="Speed"
@@ -109,7 +109,7 @@ export const FighterCard = ({ fighter, portraits }: { fighter: FighterId; portra
               color="#ffd23f"
             />
           </div>
-          <div className="panel-cut max-w-xs bg-ink-deep/70 p-3 text-sm">
+          <div className="panel-cut max-w-xs bg-ink-deep/70 p-3 text-sm [@media(max-height:500px)]:p-2 [@media(max-height:500px)]:text-xs">
             <span className="font-bold text-gold">G · {f.superName}</span>
             <span className="text-cream/80">: {f.superText}</span>
           </div>
@@ -121,7 +121,7 @@ export const FighterCard = ({ fighter, portraits }: { fighter: FighterId; portra
             key={fighter}
             src={portraits[fighter]}
             alt={`${f.name}, ${f.role}`}
-            className="pointer-events-none absolute -right-8 bottom-0 z-0 h-[62%] w-auto sm:h-[92%] [@media(max-height:500px)]:h-[72%] [@media(max-height:500px)]:-right-14 object-contain drop-shadow-[0_12px_28px_rgba(0,0,0,0.7)] [animation:riseIn_0.4s_ease-out] sm:right-2"
+            className="pointer-events-none absolute -right-8 bottom-0 z-0 h-[62%] w-auto sm:h-[92%] [@media(max-height:500px)]:h-[72%] [@media(max-height:500px)]:-right-2 object-contain drop-shadow-[0_12px_28px_rgba(0,0,0,0.7)] [animation:riseIn_0.4s_ease-out] sm:right-2"
           />
         )}
       </div>

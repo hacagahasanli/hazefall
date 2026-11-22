@@ -296,13 +296,13 @@ export const PreMatch = ({
 
       {/* Left (bottom on phones): who you are. */}
       <section
-        className={`fixed bottom-0 left-0 flex max-w-[min(560px,58vw)] flex-col gap-3 px-5 pb-6 transition-all duration-500 sm:px-8 sm:pb-9 max-sm:max-w-none max-sm:right-0 ${launching ? 'translate-y-6 opacity-0' : 'opacity-100'}`}
+        className={`fixed bottom-0 left-0 flex max-w-[min(560px,58vw)] flex-col gap-3 px-5 pb-6 transition-all duration-500 sm:px-8 sm:pb-9 max-sm:max-w-none max-sm:right-0 [@media(max-height:640px)]:sm:gap-2 [@media(max-height:640px)]:sm:pb-5 [@media(max-height:500px)]:gap-1.5 [@media(max-height:500px)]:pb-3 [@media(max-height:500px)]:sm:pb-3 ${launching ? 'translate-y-6 opacity-0' : 'opacity-100'}`}
         style={{ paddingLeft: 'max(1.25rem, env(safe-area-inset-left))', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
       >
         <span className="text-sm font-semibold text-cream/70">You drop as</span>
         <h1
           key={fighter}
-          className="font-display text-5xl leading-[0.9] drop-shadow-[0_4px_20px_rgba(0,0,0,0.7)] [animation:riseIn_0.35s_ease-out] sm:text-7xl [@media(max-height:500px)]:text-4xl"
+          className="font-display text-5xl leading-[0.9] drop-shadow-[0_4px_20px_rgba(0,0,0,0.7)] [animation:riseIn_0.35s_ease-out] sm:text-7xl [@media(max-height:500px)]:text-4xl [@media(max-height:420px)]:text-3xl"
           style={{ color: f.color }}
         >
           {f.name.toUpperCase()}
@@ -323,7 +323,7 @@ export const PreMatch = ({
                 aria-label={c.name}
                 onClick={() => pick(id)}
                 disabled={readied && !on}
-                className={`panel-cut relative h-20 w-16 overflow-hidden border-2 bg-ink/80 transition sm:h-24 sm:w-20 [@media(max-height:500px)]:h-16 [@media(max-height:500px)]:w-14 ${on ? '-translate-y-1' : readied ? 'opacity-25' : 'opacity-75 hover:opacity-100'}`}
+                className={`panel-cut relative h-20 w-16 overflow-hidden border-2 bg-ink/80 transition sm:h-24 sm:w-20 [@media(max-height:500px)]:h-16 [@media(max-height:500px)]:w-14 [@media(max-height:420px)]:h-12 [@media(max-height:420px)]:w-11 ${on ? '-translate-y-1' : readied ? 'opacity-25' : 'opacity-75 hover:opacity-100'}`}
                 style={{ borderColor: on ? c.color : 'rgba(230,235,245,0.12)' }}
               >
                 <span className="absolute inset-0 opacity-40" style={{ background: `radial-gradient(circle at 50% 80%, ${c.color}, transparent 70%)` }} />
@@ -353,7 +353,7 @@ export const PreMatch = ({
           type="button"
           onClick={ready}
           disabled={readied || !live}
-          className={`panel-cut relative mt-2 w-fit px-8 py-3 font-display text-xl uppercase transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream sm:text-2xl ${readied ? 'bg-cream/15 text-cream/70' : 'bg-green text-ink-deep hover:brightness-110'} ${!readied && live && !settings.reducedMotion ? '[animation:readyPulse_1.6s_ease-in-out_infinite]' : ''}`}
+          className={`panel-cut relative mt-2 w-fit px-8 py-3 font-display text-xl uppercase transition [@media(max-height:500px)]:mt-0 [@media(max-height:500px)]:py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream sm:text-2xl ${readied ? 'bg-cream/15 text-cream/70' : 'bg-green text-ink-deep hover:brightness-110'} ${!readied && live && !settings.reducedMotion ? '[animation:readyPulse_1.6s_ease-in-out_infinite]' : ''}`}
         >
           {readied ? <span className={fx ? 'lcs-glitch-in inline-block' : ''}>Ready ✓</span> : 'Ready'}
           {!touch && !readied && settings.showKeyHints && <span className="ml-3 text-sm opacity-70">Space</span>}
@@ -363,7 +363,7 @@ export const PreMatch = ({
 
       {/* Right: the lobby filling (hidden on short phones, where the clock already says it). */}
       <aside
-        className={`fixed right-0 top-1/2 flex w-[min(340px,34vw)] -translate-y-1/2 flex-col gap-2 pr-5 transition-all duration-500 sm:pr-8 max-sm:hidden [@media(max-height:500px)]:hidden ${launching ? 'translate-x-8 opacity-0' : 'opacity-100'}`}
+        className={`fixed right-0 top-1/2 flex w-[min(340px,34vw)] -translate-y-1/2 flex-col gap-2 pr-5 transition-all duration-500 sm:pr-8 [@media(min-height:501px)_and_(max-height:640px)]:top-[5.5rem] [@media(min-height:501px)_and_(max-height:640px)]:translate-y-0 [@media(min-height:501px)_and_(max-height:640px)]:gap-1 max-sm:hidden [@media(max-height:500px)]:hidden ${launching ? 'translate-x-8 opacity-0' : 'opacity-100'}`}
         style={{ paddingRight: 'max(1.25rem, env(safe-area-inset-right))' }}
         aria-label="Players in this match"
       >
@@ -374,8 +374,8 @@ export const PreMatch = ({
         <div className="h-1 overflow-hidden bg-cream/10">
           <div className="h-full bg-gold transition-[width] duration-300" style={{ width: `${((joined + 1) / PLAYERS) * 100}%` }} />
         </div>
-        <ol className="grid grid-cols-2 gap-1">
-          <li className="panel-cut col-span-2 flex items-center gap-2 bg-ink/80 px-3 py-1.5 text-sm">
+        <ol className="grid grid-cols-2 gap-1 [@media(max-height:640px)]:gap-0.5">
+          <li className="panel-cut col-span-2 flex items-center gap-2 bg-ink/80 px-3 py-1.5 text-sm [@media(max-height:640px)]:py-1">
             <span className="h-2 w-2 rounded-full" style={{ background: f.color }} />
             <b className="flex-1">You</b>
             <span className={`text-xs ${readied ? 'text-green' : 'text-cream/50'}`}>{readied ? 'ready' : f.name}</span>
@@ -383,7 +383,7 @@ export const PreMatch = ({
           {names.map((n, i) => (
             <li
               key={n}
-              className={`panel-cut flex min-w-0 items-center gap-2 bg-ink/60 px-2.5 py-1 text-xs transition-all duration-300 ${i < joined ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0'}`}
+              className={`panel-cut flex min-w-0 items-center gap-2 bg-ink/60 px-2.5 py-1 text-xs transition-all duration-300 [@media(max-height:640px)]:py-0.5 ${i < joined ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0'}`}
             >
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green/70" />
               <span className="min-w-0 flex-1 truncate text-cream/85">{n}</span>
@@ -395,10 +395,10 @@ export const PreMatch = ({
       {/* After Ready: the match-starting strip, bottom centre. */}
       {readied && !launching && (
         <div
-          className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] flex justify-center px-4 max-sm:bottom-auto max-sm:top-20"
+          className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] flex justify-center px-4 max-sm:bottom-auto max-sm:top-28 [@media(max-height:640px)_and_(min-width:640px)]:justify-end [@media(max-height:640px)_and_(min-width:640px)]:px-6 [@media(max-height:500px)_and_(min-width:640px)]:bottom-3"
           aria-live="polite"
         >
-          <div className="panel-cut flex w-[min(420px,92vw)] flex-col gap-2 bg-ink-deep/85 px-5 py-3 backdrop-blur [animation:riseIn_0.35s_ease-out]">
+          <div className="panel-cut flex w-[min(420px,92vw)] flex-col gap-2 bg-ink-deep/85 px-5 py-3 backdrop-blur [animation:riseIn_0.35s_ease-out] [@media(max-height:640px)_and_(min-width:640px)]:w-[min(300px,44vw)] [@media(max-height:640px)_and_(min-width:640px)]:gap-1.5 [@media(max-height:640px)_and_(min-width:640px)]:py-2">
             <div className="flex items-baseline justify-between gap-4">
               <span className="font-display text-base uppercase tracking-wide text-cream">{joining ? 'Joining match' : 'Match starting'}</span>
               <span className="font-display text-3xl leading-none tabular-nums text-gold">

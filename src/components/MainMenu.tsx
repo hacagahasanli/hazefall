@@ -92,9 +92,9 @@ const SidePanel = ({ title, onClose, children, escHeld }: { title: string; onClo
         className="flex h-full w-full max-w-[880px] flex-col border-r border-cream/10 bg-[linear-gradient(100deg,#0a0d18_0%,#121a22_100%)] shadow-[20px_0_60px_rgba(0,0,0,0.5)] [animation:slideIn_0.25s_ease-out]"
         style={{ paddingLeft: 'env(safe-area-inset-left)' }}
       >
-        <h2 className="px-5 pb-3 pt-5 font-display text-3xl italic text-green sm:px-7 sm:text-4xl">{title}</h2>
-        <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 pb-5 sm:px-7">{children}</div>
-        <footer className="flex justify-end border-t border-cream/10 px-5 py-4 sm:px-7" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
+        <h2 className="px-5 pb-3 pt-5 font-display text-3xl italic text-green sm:px-7 sm:text-4xl [@media(max-height:500px)]:pb-1 [@media(max-height:500px)]:pt-3 [@media(max-height:500px)]:text-2xl [@media(max-height:420px)]:pt-2 [@media(max-height:420px)]:text-xl">{title}</h2>
+        <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 pb-5 sm:px-7 [@media(max-height:500px)]:gap-3 [@media(max-height:500px)]:pb-3">{children}</div>
+        <footer className="flex justify-end border-t border-cream/10 px-5 py-4 sm:px-7 [@media(max-height:500px)]:py-2 [@media(max-height:420px)]:py-1.5" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
           <button
             type="button"
             autoFocus
@@ -102,7 +102,7 @@ const SidePanel = ({ title, onClose, children, escHeld }: { title: string; onClo
               uiTick(true);
               onClose();
             }}
-            className="panel-cut bg-green px-8 py-2.5 font-display text-base uppercase text-ink-deep hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream"
+            className="panel-cut bg-green px-8 py-2.5 font-display text-base uppercase text-ink-deep hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream [@media(max-height:420px)]:py-1.5"
           >
             Back
           </button>
@@ -141,7 +141,7 @@ const TodayCard = ({ career }: { career: Career }) => {
   const done = daily.done.length;
   const streak = liveStreak(career, now);
   return (
-    <section aria-label="Today" className="panel-cut flex flex-col gap-1.5 bg-ink-deep/70 px-4 py-3 backdrop-blur [animation:slideIn_0.45s_ease-out_0.3s_both] [@media(max-height:500px)]:hidden">
+    <section aria-label="Today" className="panel-cut flex flex-col gap-1.5 bg-ink-deep/70 px-4 py-3 backdrop-blur [animation:slideIn_0.45s_ease-out_0.3s_both] [@media(max-height:640px)]:sm:gap-1 [@media(max-height:640px)]:sm:py-2 [@media(max-height:500px)]:hidden">
       <div className="flex items-baseline justify-between gap-4">
         <h2 className="font-display text-lg leading-none text-cream">Today</h2>
         <span className="font-display text-lg leading-none tabular-nums text-gold">{done}/{daily.goals.length}</span>
@@ -314,11 +314,11 @@ export const MainMenu = ({
 
       <div
         key={entered ? 'in' : 'boot'}
-        className={`relative flex h-full w-full flex-col justify-between gap-4 px-6 py-6 sm:w-[min(440px,38vw)] sm:min-w-[340px] sm:px-10 sm:py-9 max-sm:justify-end ${panel ? 'invisible' : ''}`}
+        className={`relative flex h-full w-full flex-col justify-between gap-4 px-6 py-6 sm:w-[min(440px,38vw)] sm:min-w-[340px] sm:px-10 sm:py-9 max-sm:justify-end [@media(max-height:640px)]:sm:py-4 [@media(max-height:500px)]:sm:gap-2 ${panel ? 'invisible' : ''}`}
         aria-hidden={!!panel}
         style={{ paddingLeft: 'max(1.5rem, env(safe-area-inset-left))', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
       >
-        <div className="flex flex-col gap-1 [animation:slideIn_0.5s_ease-out] max-sm:mb-auto max-sm:mt-2 [@media(max-height:500px)]:gap-0">
+        <div className="flex flex-col gap-1 [animation:slideIn_0.5s_ease-out] max-sm:mb-auto max-sm:mt-2 [@media(max-height:500px)]:gap-0 [@media(max-width:639px)_and_(max-height:760px)]:mt-0">
           <h1 className="m-0">
             {/* The wordmark (brand/last-commit-standing/logo.svg): a fixed-ratio image, so a plain <img> is right. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -327,14 +327,14 @@ export const MainMenu = ({
               alt={GAME_TITLE}
               width={1130}
               height={306}
-              className={`h-auto w-full max-w-[400px] drop-shadow-[0_6px_28px_rgba(0,0,0,0.65)] [@media(max-height:500px)]:max-w-[260px] ${settings.reducedMotion ? '' : 'lcs-glitch-in'}`}
+              className={`h-auto w-full max-w-[400px] drop-shadow-[0_6px_28px_rgba(0,0,0,0.65)] [@media(max-height:640px)]:sm:max-w-[240px] [@media(max-height:500px)]:max-w-[200px] ${settings.reducedMotion ? '' : 'lcs-glitch-in'}`}
             />
           </h1>
           {career && <LevelBar career={career} />}
         </div>
 
-        <div className="flex flex-col gap-4 max-sm:gap-3">
-          <nav aria-label="Main menu" className="flex flex-col gap-1.5 max-sm:gap-2 [@media(max-height:500px)]:gap-0.5">
+        <div className="flex flex-col gap-4 max-sm:gap-3 [@media(max-height:640px)]:sm:gap-2">
+          <nav aria-label="Main menu" className="flex flex-col gap-1.5 max-sm:gap-2 [@media(max-height:500px)]:gap-0.5 [@media(max-width:639px)_and_(max-height:760px)]:gap-1.5">
             {items.map((it, i) => (
               <button
                 key={it.id}
@@ -358,12 +358,12 @@ export const MainMenu = ({
                 }}
                 onFocus={() => setFocus(i)}
                 style={{ animationDelay: `${0.08 + i * 0.05}s` }}
-                className={`group relative flex items-baseline gap-3 overflow-hidden text-left outline-none disabled:cursor-not-allowed [animation:slideIn_0.45s_ease-out_both] focus-visible:ring-1 focus-visible:ring-green/35 max-sm:panel-cut max-sm:bg-ink/80 max-sm:px-4 max-sm:py-3 max-sm:backdrop-blur ${it.primary ? 'py-1 sm:py-2' : 'py-1'}`}
+                className={`group relative flex items-baseline gap-3 overflow-hidden text-left outline-none disabled:cursor-not-allowed [animation:slideIn_0.45s_ease-out_both] focus-visible:ring-1 focus-visible:ring-green/35 max-sm:panel-cut max-sm:bg-ink/80 max-sm:px-4 max-sm:py-3 max-sm:backdrop-blur [@media(max-width:639px)_and_(max-height:760px)]:max-sm:py-2 ${it.primary ? 'py-1 sm:py-2 [@media(max-height:640px)]:sm:py-0.5' : 'py-1 [@media(max-height:640px)]:sm:py-0.5'}`}
               >
                 {/* The accent bar slides in from the left on hover and focus. */}
                 <span className={`absolute left-0 top-1/2 h-[70%] w-1.5 -translate-y-1/2 -skew-x-12 bg-green transition-all duration-200 ${focus === i ? 'translate-x-0 opacity-100' : '-translate-x-3 opacity-0'}`} />
                 <span
-                  className={`font-display uppercase italic leading-none transition-all duration-200 ${it.soon ? 'text-cream/35' : focus === i ? 'translate-x-5 text-green' : 'text-cream/85'} ${it.primary ? 'text-5xl sm:text-6xl [@media(max-height:500px)]:text-4xl' : 'text-2xl sm:text-3xl [@media(max-height:500px)]:text-xl'}`}
+                  className={`font-display uppercase italic leading-none transition-all duration-200 ${it.soon ? 'text-cream/35' : focus === i ? 'translate-x-5 text-green' : 'text-cream/85'} ${it.primary ? 'text-5xl sm:text-6xl [@media(max-height:640px)]:sm:text-5xl [@media(max-height:500px)]:text-4xl' : 'text-2xl sm:text-3xl [@media(max-height:640px)]:sm:text-2xl [@media(max-height:500px)]:text-xl'}`}
                 >
                   {it.label}
                 </span>
@@ -388,7 +388,7 @@ export const MainMenu = ({
           <MenuBanner platform={platform} active={entered && !panel} />
         </div>
 
-        <footer className="flex items-center justify-between gap-3 text-xs text-cream/50 max-sm:mt-2">
+        <footer className="flex items-center justify-between gap-3 text-xs text-cream/50 max-sm:mt-2 [@media(max-height:500px)]:leading-none">
           <span>{credit}</span>
           <span>
             v{GAME_VERSION}
