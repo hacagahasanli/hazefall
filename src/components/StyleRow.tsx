@@ -75,8 +75,14 @@ export const StyleRow = ({
       e.preventDefault();
       close(true);
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    // In the capture phase, and stopped there, so the lobby's own Esc (back to the menu) never also sees this key.
+    const onCapture = (e: KeyboardEvent) => {
+      if (e.code !== 'Escape') return;
+      e.stopPropagation();
+      onKey(e);
+    };
+    window.addEventListener('keydown', onCapture, true);
+    return () => window.removeEventListener('keydown', onCapture, true);
   });
   useEffect(() => {
     if (disabled && open) close();

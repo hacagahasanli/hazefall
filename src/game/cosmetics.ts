@@ -125,7 +125,12 @@ export const outfitById = (key: string): Outfit => OUTFITS.find((o) => o.key ===
 export const outfitParts = (key: string, fighter: FighterId): OutfitParts => ({ ...STANDARD[fighter], ...outfitById(key).parts[fighter] });
 
 /** The two shared special materials. */
-export const GOLD_MATERIAL = { color: 0xffc23d, metalness: 0.85, roughness: 0.28, emissive: 0x2a1a00 };
+/**
+ * The spec asks for metalness 0.85-0.9 on gold and Synthwave, but the game has no environment map, so a high metalness renders
+ * brown and grey (seen on the contact sheet). Metal is capped here so gold reads as gold; colours and roughness stay as specified.
+ */
+const METAL_CAP = 0.5;
+export const GOLD_MATERIAL = { color: 0xffc23d, metalness: METAL_CAP, roughness: 0.28, emissive: 0x2a1a00 };
 export const GLOW_MATERIAL = { color: 0x39ff88, emissive: 0x39ff88, emissiveIntensity: 0.6 };
 
 const hexOf = (c: PartColor): number => (c === 'gold' ? GOLD_MATERIAL.color : c === 'glow' ? GLOW_MATERIAL.color : c);
@@ -172,8 +177,8 @@ export const FINISHES: Finish[] = [
     ...same(TRIM, { color: 0xf4f2ea }),
   }),
   finish('gold', 'Gold Build', { level: 10 }, {
-    steel: { color: 0xffc23d, metalness: 0.9, roughness: 0.22, emissive: 0x2a1a00 },
-    dark: { color: 0xd9961a, metalness: 0.85, roughness: 0.3 },
+    steel: { color: 0xffc23d, metalness: METAL_CAP, roughness: 0.22, emissive: 0x2a1a00 },
+    dark: { color: 0xd9961a, metalness: METAL_CAP, roughness: 0.3 },
     polymer: { color: 0x1c2024, roughness: 0.6 },
     ...same(WOOD, { color: 0x1c2024 }),
     ...same(TRIM, { color: 0xfff0b0, metalness: 0.6 }),
@@ -188,7 +193,7 @@ export const FINISHES: Finish[] = [
     glass: { color: 0x39ff88, emissive: 0x1f6b45 },
   }),
   finish('synthwave', 'Synthwave', { level: 18 }, {
-    steel: { color: 0xd6dcff, metalness: 0.85, roughness: 0.25 },
+    steel: { color: 0xd6dcff, metalness: METAL_CAP, roughness: 0.25 },
     dark: { color: 0x2a1f4d },
     polymer: { color: 0x6b3fd1 },
     ...same(WOOD, { color: 0xff5fa2 }),
@@ -341,7 +346,10 @@ export const finishChip = (key: string): string => {
   const trim = css(f.mats.brass?.color ?? f.mats.red?.color ?? 0xb08d3c);
   const line = `linear-gradient(0deg, transparent calc(50% - 1px), ${trim} calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px))`;
   if (key === 'gold') return `${line}, linear-gradient(90deg, #ffe08a, #ffc23d 50%, #d9961a)`;
-  const sheen = key === 'arctic' || key === 'synthwave' ? `linear-gradient(90deg, ${css(steel)}, ${css((steel & 0xfefefe) >> 1)}) 0 0 / 50% 100% no-repeat, ${css(polymer)}` : `${css(steel)} 0 0 / 50% 100% no-repeat, ${css(polymer)}`;
+  // A sheen on Arctic and Synthwave steel (light to dark), flat blocks of colour otherwise.
+  const darker = (steel & 0xfefefe) >> 1;
+  const left = key === 'arctic' || key === 'synthwave' ? `linear-gradient(90deg, ${css(steel)}, ${css(darker)})` : `linear-gradient(90deg, ${css(steel)}, ${css(steel)})`;
+  const sheen = `${left} 0 0 / 50% 100% no-repeat, linear-gradient(90deg, ${css(polymer)}, ${css(polymer)})`;
   return `${line}, ${sheen}`;
 };
 

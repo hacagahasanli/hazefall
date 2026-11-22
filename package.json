@@ -15,7 +15,8 @@
     "phone:portal": "npm run build:portal && vite preview --config vite.portal.config.ts --host",
     "dev:web": "vite --config vite.web.config.ts",
     "build:web": "vite build --config vite.web.config.ts && node scripts/web-report.mjs",
-    "preview:web": "vite preview --config vite.web.config.ts"
+    "preview:web": "vite preview --config vite.web.config.ts",
+    "looks:sheet": "vite --config scripts/looks-sheet/vite.config.ts"
   },
   "dependencies": {
     "@colyseus/core": "^0.18.28",

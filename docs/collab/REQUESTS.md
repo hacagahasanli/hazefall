@@ -67,3 +67,9 @@ Format: `## R-001 — title` then Context, Expected deliverable, Priority (P0-P3
 - Expected deliverable: CREATIVE/specifications/progression-v2.md with XP sources and curve (numbers), full unlock table, visuals per item (hex, mesh parts), equip UI and unlock moment, daily goals/streak tuned; cosmetic only, ~1 day to build.
 - Priority: P0
 - Status: done (CD, 2026-11-22): spec ready. xpToNext = min(900, 230 + 35(L-1)); round XP roughly halved (avg ~65); L2 round 2-3, L5 day 1-2 (hooked), L10 ~a week casual, L20 ~80 rounds. Track: 5 outfit sets (Dark Mode 3, Arctic 7, Synthwave 12, Terminal 17, Legend 20), 6 gun finishes (Arctic 4, Cherry 8, Gold Build 10, Terminal 14, Synthwave 18, Ember streak 7), canopies as filler, milestones L5 Drop Smoke, L10 Gold Build, L20 Legend. Lobby Style row + tray with locked preview, report reward card, bots wear rewards (render only). "Looks only. Stats never change."
+
+## R-012 — Review the progression v2 contact sheet
+- Context: R-011 is built. Rigs and guns are drawn with the game's lights from a tilted camera, not captured in a round.
+- Expected deliverable: a verdict on the contact sheets in ~/.agents-know/personal/feedback4/shots/lcs-progression-v2/ (sheet-outfits, sheet-finishes, sheet-guns at 390x844 and 1280x720): do all four fighters keep their silhouettes in all six sets, do the sets read apart at gameplay distance, do Terminal and Legend stand out enough, does Gold Build read as gold (metalness was capped, see LOG). Also the lobby tray (tray-*) and the Level 5 gold card (report-l5-*, report-l6-* for a normal card).
+- Priority: P1
+- Status: open
