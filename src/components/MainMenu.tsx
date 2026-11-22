@@ -6,7 +6,7 @@
  * SETTINGS, HOW TO PLAY, CREDITS. ↑/↓ (or W/S) move, Enter picks, Esc closes a panel; hover and focus slide in an accent
  * bar with a soft tick. On phones the menu is a stack of thumb-sized buttons at the bottom over the scene.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { FighterCard, FighterGrid, HowTo, usePortraits } from '~/components/FighterSelect';
 import { MenuBanner } from '~/components/MenuBanner';
@@ -84,6 +84,21 @@ const SidePanel = ({ title, onClose, children, escHeld }: { title: string; onClo
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [onClose]);
+  const scroller = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState(false);
+  const measure = useCallback(() => {
+    const el = scroller.current;
+    if (el) setMore(el.scrollHeight - el.scrollTop - el.clientHeight > 4);
+  }, []);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    for (const c of Array.from(el.children)) ro.observe(c);
+    return () => ro.disconnect();
+  }, [measure]);
   return (
     <div className="fixed inset-0 z-40 flex bg-ink-deep/40" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div
@@ -93,7 +108,13 @@ const SidePanel = ({ title, onClose, children, escHeld }: { title: string; onClo
         style={{ paddingLeft: 'env(safe-area-inset-left)' }}
       >
         <h2 className="px-5 pb-3 pt-5 font-display text-3xl italic text-green sm:px-7 sm:text-4xl [@media(max-height:500px)]:pb-1 [@media(max-height:500px)]:pt-3 [@media(max-height:500px)]:text-2xl [@media(max-height:420px)]:pt-2 [@media(max-height:420px)]:text-xl">{title}</h2>
-        <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 pb-5 sm:px-7 [@media(max-height:500px)]:gap-3 [@media(max-height:500px)]:pb-3">{children}</div>
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <div ref={scroller} onScroll={measure} className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 pb-5 sm:px-7 [@media(max-height:500px)]:gap-3 [@media(max-height:500px)]:pb-3">
+            {children}
+          </div>
+          {/* A fade at the bottom while more is below, so a cut-off panel reads as scrollable. */}
+          <div aria-hidden className={`pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-[#111820] to-transparent transition-opacity duration-150 ${more ? 'opacity-100' : 'opacity-0'}`} />
+        </div>
         <footer className="flex justify-end border-t border-cream/10 px-5 py-4 sm:px-7 [@media(max-height:500px)]:py-2 [@media(max-height:420px)]:py-1.5" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
           <button
             type="button"
@@ -402,7 +423,10 @@ export const MainMenu = ({
       )}
       {panel === 'fighter' && (
         <SidePanel title="Fighter" onClose={() => setPanel(null)} escHeld={trayOpen}>
-          <FighterCard fighter={fighter} portraits={portraits} />
+          {/* On a short, wide window the hero and the Style chips sit left and the four fighters right, so all of it shows without scrolling. */}
+          <div className="flex flex-col gap-5 [@media(max-height:500px)]:gap-3 [@media(max-height:600px)]:sm:grid [@media(max-height:600px)]:sm:grid-cols-2 [@media(max-height:600px)]:sm:items-start [@media(max-height:600px)]:sm:gap-x-5">
+          <div className="flex flex-col gap-5 [@media(max-height:500px)]:gap-3 [@media(max-height:600px)]:sm:gap-3">
+          <FighterCard fighter={fighter} portraits={portraits} tight />
           {career && onLook && (
             <StyleRow
               career={career}
@@ -416,7 +440,11 @@ export const MainMenu = ({
               }}
             />
           )}
-          <FighterGrid fighter={fighter} portraits={portraits} onPick={(id) => (uiTick(), onFighter(id))} />
+          </div>
+          <div className="flex flex-col gap-3">
+            <FighterGrid fighter={fighter} portraits={portraits} onPick={(id) => (uiTick(), onFighter(id))} shortGrid />
+          </div>
+          </div>
         </SidePanel>
       )}
       {panel === 'how' && (

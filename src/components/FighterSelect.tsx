@@ -70,7 +70,8 @@ export const usePortraits = (skip = false, look?: Look): Portraits => {
 };
 
 /** The fighter you drop as, big. */
-export const FighterCard = ({ fighter, portraits }: { fighter: FighterId; portraits: Portraits }) => {
+/** `tight`: on a short, wide window the Fighter screen trims the hero's spacing (the lobby keeps the roomy one). */
+export const FighterCard = ({ fighter, portraits, tight = false }: { fighter: FighterId; portraits: Portraits; tight?: boolean }) => {
   const f = FIGHTERS[fighter];
   return (
       <div className="panel-cut relative flex shrink-0 min-h-[300px] overflow-hidden border border-cream/10 bg-ink/70 backdrop-blur sm:min-h-[380px] [@media(max-height:640px)]:sm:min-h-0">
@@ -80,21 +81,21 @@ export const FighterCard = ({ fighter, portraits }: { fighter: FighterId; portra
             background: `radial-gradient(circle at 70% 65%, ${f.color}, transparent 60%)`,
           }}
         />
-        <div className="relative z-10 flex flex-1 flex-col justify-between gap-4 p-5 sm:p-6 [@media(max-height:640px)]:sm:gap-2 [@media(max-height:640px)]:sm:p-4 [@media(max-height:420px)]:sm:gap-1! [@media(max-height:420px)]:sm:p-2.5!">
-          <div className="flex flex-col gap-2">
-            <span className="text-sm font-semibold text-cream/60">
+        <div className={`relative z-10 flex flex-1 flex-col justify-between gap-4 p-5 sm:p-6 [@media(max-height:640px)]:sm:gap-2 [@media(max-height:640px)]:sm:p-4 ${tight ? '[@media(max-height:600px)]:sm:gap-1.5 [@media(max-height:600px)]:sm:p-3' : ''} [@media(max-height:420px)]:sm:gap-1! [@media(max-height:420px)]:sm:p-2.5!`}>
+          <div className="flex flex-col gap-2 [@media(max-height:600px)]:sm:gap-1">
+            <span className={`text-sm font-semibold text-cream/60 ${tight ? '[@media(max-height:420px)]:sm:hidden' : ''}`}>
               You drop as
             </span>
             <h1
               key={fighter}
-              className="font-display text-4xl leading-none [animation:riseIn_0.35s_ease-out] sm:text-6xl [@media(max-height:500px)]:text-3xl"
+              className={`font-display text-4xl leading-none [animation:riseIn_0.35s_ease-out] sm:text-6xl ${tight ? '[@media(max-height:600px)]:sm:text-4xl' : ''} [@media(max-height:500px)]:text-3xl`}
               style={{ color: f.color }}
             >
               {f.name.toUpperCase()}
             </h1>
             <span className="text-sm text-cream/70">{f.role}</span>
           </div>
-          <div className="flex max-w-[11rem] flex-col gap-3 sm:max-w-[15rem] [@media(max-height:500px)]:max-w-[22rem] [@media(max-height:500px)]:flex-row [@media(max-height:500px)]:gap-3 [@media(max-height:500px)]:[&>*]:flex-1">
+          <div className={`flex max-w-[11rem] flex-col gap-3 ${tight ? '[@media(max-height:600px)]:sm:gap-1.5' : ''} sm:max-w-[15rem] [@media(max-height:500px)]:max-w-[22rem] ${tight ? '[@media(max-height:420px)]:sm:max-w-[26rem]' : ''} [@media(max-height:500px)]:flex-row [@media(max-height:500px)]:gap-3 [@media(max-height:500px)]:[&>*]:flex-1`}>
             <Bar label="Health" value={1} text={`${f.hp}`} color="#3ddc84" />
             <Bar
               label="Speed"
@@ -109,7 +110,7 @@ export const FighterCard = ({ fighter, portraits }: { fighter: FighterId; portra
               color="#ffd23f"
             />
           </div>
-          <div className="panel-cut max-w-xs bg-ink-deep/70 p-3 text-sm [@media(max-height:500px)]:p-2 [@media(max-height:500px)]:text-xs">
+          <div className={`panel-cut max-w-xs bg-ink-deep/70 p-3 text-sm ${tight ? '[@media(max-height:600px)]:sm:p-2 [@media(max-height:600px)]:sm:text-xs' : ''} [@media(max-height:500px)]:p-2 [@media(max-height:500px)]:text-xs`}>
             <span className="font-bold text-gold">G · {f.superName}</span>
             <span className="text-cream/80">: {f.superText}</span>
           </div>
@@ -129,7 +130,8 @@ export const FighterCard = ({ fighter, portraits }: { fighter: FighterId; portra
 };
 
 /** Pick one of the four. */
-export const FighterGrid = ({ fighter, portraits, onPick }: { fighter: FighterId; portraits: Portraits; onPick: (id: FighterId) => void }) => (
+/** `shortGrid`: on a short, wide window the four sit two by two (the Fighter screen puts them beside the hero). */
+export const FighterGrid = ({ fighter, portraits, onPick, shortGrid = false }: { fighter: FighterId; portraits: Portraits; onPick: (id: FighterId) => void; shortGrid?: boolean }) => (
   <>
     <div className="flex items-end justify-between">
       <h2 className="font-display text-xl [@media(max-height:500px)]:text-base">
@@ -140,7 +142,7 @@ export const FighterGrid = ({ fighter, portraits, onPick }: { fighter: FighterId
       </span>
     </div>
     <div
-      className="grid grid-cols-2 gap-3 sm:grid-cols-4"
+      className={`grid grid-cols-2 gap-3 sm:grid-cols-4 ${shortGrid ? '[@media(max-height:600px)]:sm:grid-cols-2' : ''}`}
       role="radiogroup"
       aria-label="Fighter"
     >
@@ -154,7 +156,7 @@ export const FighterGrid = ({ fighter, portraits, onPick }: { fighter: FighterId
             role="radio"
             aria-checked={on}
             onClick={() => onPick(id)}
-            className={`panel-cut group relative flex h-36 flex-col justify-end overflow-hidden border-2 bg-ink/80 p-2.5 text-left transition sm:h-44 [@media(max-height:500px)]:h-28 ${on ? 'border-gold' : 'border-cream/10 hover:border-cream/30'}`}
+            className={`panel-cut group relative flex h-36 flex-col justify-end overflow-hidden border-2 bg-ink/80 p-2.5 text-left transition sm:h-44 ${shortGrid ? '[@media(max-height:600px)_and_(min-height:501px)]:sm:h-32 [@media(max-height:500px)]:sm:h-24' : ''} [@media(max-height:500px)]:h-28 ${on ? 'border-gold' : 'border-cream/10 hover:border-cream/30'}`}
           >
             <div
               className={`absolute inset-0 transition ${on ? 'opacity-60' : 'opacity-25 group-hover:opacity-40'}`}
