@@ -22,13 +22,23 @@ export const SNIPER_KICK = {
   boltDrop: 0.04,
   boltPull: 0.07,
   /** Rifle pitch at the peak, radians (the other guns kick about 0.1 to 0.2). */
-  weaponPitch: 0.62,
+  weaponPitch: 0.95,
   /** How far the rifle is driven back at the peak, metres. */
-  weaponPush: 0.26,
+  weaponPush: 0.2,
+  /** The rifle also rises at the peak (metres), so the muzzle climbs clear above the shoulder line seen from behind. */
+  weaponRise: 0.12,
+  /** The whole upper body recoils at the peak: lean back (radians), pushed back (metres), the head nods back (radians). */
+  bodyLean: 0.2,
+  bodyBack: 0.09,
+  headNod: 0.3,
   /** Over-the-shoulder camera pitch at the peak, radians (about 3.4 degrees). */
-  camPitch: 0.06,
+  camPitch: 0.12,
   /** The same through the scope (the lens is 30 degrees there, so the same angle would be a huge jump). */
-  camPitchScoped: 0.034,
+  camPitchScoped: 0.05,
+  /** Shoulder view at the peak: the camera is pulled back along its arm (metres) and the lens opens (degrees), both over the same curve. */
+  camDolly: 0.4,
+  camDollyScoped: 0.1,
+  fovPunch: 4,
   /** Camera jitter at the peak, radians, scaled by the curve (the trauma shake on top of it). */
   camShake: 0.01,
   /** Reduced motion keeps a quarter of the kick and no shake. */

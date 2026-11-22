@@ -79,4 +79,16 @@ describe('sniperKick', () => {
     expect(sniperBolt(2)).toBe(0);
     expect(sniperBolt(Number.NaN)).toBe(0);
   });
+
+  it('reads from behind (camera pitch, lens punch, dolly, body recoil are big enough) without a nauseating size', () => {
+    expect(SNIPER_KICK.camPitch).toBeGreaterThanOrEqual(0.1);
+    expect(SNIPER_KICK.camPitch).toBeLessThanOrEqual(0.14);
+    expect(SNIPER_KICK.fovPunch).toBeGreaterThanOrEqual(3);
+    expect(SNIPER_KICK.fovPunch).toBeLessThanOrEqual(5);
+    expect(SNIPER_KICK.camDolly).toBeLessThanOrEqual(0.5);
+    expect(SNIPER_KICK.camDollyScoped).toBeLessThan(SNIPER_KICK.camDolly);
+    expect(SNIPER_KICK.bodyLean).toBeGreaterThanOrEqual(0.15);
+    expect(SNIPER_KICK.weaponRise).toBeGreaterThan(0.08);
+    expect(SNIPER_KICK.camPitchScoped).toBeLessThan(SNIPER_KICK.camPitch);
+  });
 });

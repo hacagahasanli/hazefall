@@ -1317,6 +1317,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   let trauma = 0;
   /** When your last sniper round left the barrel (render clock): drives the camera kick. */
   let sniperShotAt = -9;
+  /** The lens opening of the sniper kick applied to the camera's fov this frame (degrees), so it can be taken off before easing. */
+  let fovPunchNow = 0;
   /**
    * Hitstop, render only: for this long (real seconds) poses and particles hold still, the person
    * hit shudders. The sim, your input and the camera never stop.
@@ -1367,11 +1369,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           if (e.weapon === 'sniper') {
             // A rifle this long breathes fire and a smoke puff that drifts up and away from the muzzle.
             const own = e.owner === me && firstPerson() && vmGun;
-            const fx = own ? muzzleAt.x : mx;
-            const fy = own ? muzzleAt.y : 1.15;
-            const fz = own ? muzzleAt.z : my;
-            vfx.burst(fx, fy, 8, 'hot', { z: fz, speed: 4.5, up: 0.5, gravity: 0, life: 0.1, size: own ? 0.9 : 2.4, dirX: Math.cos(e.angle) * 0.6 });
-            vfx.burst(fx, fy + 0.05, 7, 'dust', { z: fz, speed: 1.5, up: 0.9, gravity: -1.6, life: 0.75, size: own ? 1 : 2.6 });
+            // From behind, the rifle's muzzle is 1.5 m out and has just kicked up: the flash sits there and is big.
+            const fx = own ? muzzleAt.x : e.x + Math.cos(e.angle) * 1.5;
+            const fy = own ? muzzleAt.y : 1.4;
+            const fz = own ? muzzleAt.z : e.y + Math.sin(e.angle) * 1.5;
+            // Looking through your own scope the flash is a small spark far out front: the full one would fill the lens.
+            const lens = e.owner === me && shoulderView() && zoomT > 0.5;
+            vfx.burst(lens ? e.x + Math.cos(e.angle) * 3 : fx, fy, lens ? 4 : 14, 'hot', { z: lens ? e.y + Math.sin(e.angle) * 3 : fz, speed: 5.5, up: 0.6, gravity: 0, life: 0.12, size: own ? 1.2 : lens ? 0.9 : 4.4, dirX: Math.cos(e.angle) * 0.6 });
+            if (!lens) vfx.burst(fx, fy, 6, 'spark', { z: fz, speed: 4, up: 0.8, gravity: 0, life: 0.09, size: own ? 0.8 : 2.6, dirX: Math.cos(e.angle) * 0.5 });
+            if (!lens) vfx.burst(fx, fy + 0.05, 7, 'dust', { z: fz, speed: 1.5, up: 0.9, gravity: -1.6, life: 0.75, size: own ? 1 : 3.2 });
           }
           vfx.burst(e.x - Math.sin(e.angle) * 0.4, 1.1, 1, 'ko', { z: e.y + Math.cos(e.angle) * 0.4, speed: 2.5, up: 3, gravity: 18, life: 0.6, size: 0.45 });
         }
@@ -2551,11 +2557,16 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const fp = firstPerson();
     const sv = shoulderView();
     // Into and out of the scope the lens eases over about 150 ms (95 % of the way at rate 20), both ways.
-    const fov = fp
+    // Your sniper shot opens the lens a few degrees for a moment (shoulder view): undo last frame's punch, ease the base, add this frame's.
+    camera.fov -= fovPunchNow;
+    const fovBase = fp
       ? THREE.MathUtils.damp(camera.fov, scoped ? SCOPE_FOV.first : settings.fov, 20, dt)
       : sv
         ? THREE.MathUtils.damp(camera.fov, scoped ? SCOPE_FOV.shoulder : Math.min(settings.fov, SHOULDER_FOV_MAX), 20, dt)
         : THREE.MathUtils.damp(camera.fov, widenFov(overview ? 52 : 42 + airFov(self), lensWiden), 3, dt);
+    const fovPunchWas = fovPunchNow;
+    fovPunchNow = sv && !scoped ? SNIPER_KICK.fovPunch * snipeKick : 0;
+    const fov = fovBase + fovPunchNow;
     // Far away above the map, a nearer near-plane wastes depth precision and the ground and the
     // roads fight (flicker); push it out while in the overview.
     const near = overview ? 4 : camNear < 1 || fp || sv ? 0.05 : 0.5;
@@ -2565,7 +2576,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     viewOff.x = THREE.MathUtils.damp(viewOff.x, offOn ? 0.5 - camProfile.fx : 0, 6, dt);
     viewOff.y = THREE.MathUtils.damp(viewOff.y, offOn ? 0.5 - camProfile.fy : 0, 6, dt);
     const offChanged = Math.abs(viewOff.x - viewOff.sx) > 0.0005 || Math.abs(viewOff.y - viewOff.sy) > 0.0005;
-    if (Math.abs(fov - camera.fov) > 0.001 || camera.near !== near || offChanged) {
+    if (Math.abs(fov - camera.fov) > 0.001 || fovPunchWas !== fovPunchNow || camera.near !== near || offChanged) {
       camera.fov = fov;
       camera.near = near;
       if (offChanged) {
@@ -2727,7 +2738,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       }
       // In at once, out gently (half-life ~0.2 s): a wall never sits between you and the camera, and it never pops.
       armNow = reach < armNow ? reach : THREE.MathUtils.damp(armNow, reach, 3.5, dt);
-      camera.position.set(px + bx * armNow, pivotY + by * armNow, pz + bz * armNow);
+      const armOut = armNow + snipeKick * (SNIPER_KICK.camDolly + (SNIPER_KICK.camDollyScoped - SNIPER_KICK.camDolly) * zoomT);
+      camera.position.set(px + bx * armOut, pivotY + by * armOut, pz + bz * armOut);
       // The view turns with the mouse unsmoothed (the crosshair is the aim); only the hit shake adds a small jolt.
       tmpV.set(camera.position.x + c * cp, camera.position.y + Math.sin(viewPitch), camera.position.z + sn * cp);
       camera.lookAt(tmpV);
@@ -2741,7 +2753,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         }
       }
       // Too close (a tight corner): hide your own body rather than fill the screen with it.
-      rigs[me].root.visible = rigs[me].root.visible && armNow > 0.75;
+      rigs[me].root.visible = rigs[me].root.visible && armNow > 0.75 && !(scoped && zoomT > 0.6);
       camPos.copy(camera.position);
       camLook.copy(tmpV);
       camFocus.set(selfX, 0, selfY);

@@ -693,7 +693,9 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   if (stepping) rig.phase += dt * 9; // a quick shuffle while turning on the spot
   // The head turns a little ahead of the body into a turn.
   rig.head.rotation.y = damp(rig.head.rotation.y, Math.max(-0.45, Math.min(0.45, -p.yawRate * 0.08)), 10, dt);
-  rig.head.rotation.x = damp(rig.head.rotation.x, 0, 10, dt);
+  // The sniper's shot nods the head back with the recoil.
+  const nod = p.gun === 'sniper' ? sniperKick(p.sinceShot) * (p.reducedMotion ? SNIPER_KICK.reducedScale : 1) : 0;
+  rig.head.rotation.x = damp(rig.head.rotation.x, -nod * SNIPER_KICK.headNod, nod > 0 ? 60 : 10, dt);
 
   const rel = Math.atan2(p.vy, p.vx) - rig.hipYaw;
   const fwd = speed > 0.05 ? Math.cos(rel) : 0;
@@ -770,7 +772,8 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   // A kick that snaps back and settles with a small overshoot.
   const kick = (1 - kickT) * Math.cos(kickT * Math.PI * 1.5) * KICK[p.gun];
   // Running leans the body into it like a soldier on the move; firing straightens it a little.
-  let leanX = p.dashing ? 0.45 : 0.26 * fwd * amp + 0.05 - kick * 0.07;
+  const bodyKick = p.gun === 'sniper' ? sniperKick(sinceShot) * (p.reducedMotion ? SNIPER_KICK.reducedScale : 1) : 0;
+  let leanX = (p.dashing ? 0.45 : 0.26 * fwd * amp + 0.05 - kick * 0.07) - bodyKick * SNIPER_KICK.bodyLean;
   // The model faces +z, so its own right is -x: a lean to the right (E) moves the body to -x and
   // tips the top that way (positive z rotation).
   let bank = Math.max(-0.18, Math.min(0.18, -p.yawRate * 0.035)) + 0.08 * side * amp + p.lean * 0.38;
@@ -779,13 +782,13 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
     leanX = 0.35 * Math.sin(p.vault * Math.PI);
     bank = -0.55 * Math.sin(p.vault * Math.PI);
   }
-  rig.body.rotation.x = damp(rig.body.rotation.x, leanX, 14, dt);
+  rig.body.rotation.x = damp(rig.body.rotation.x, leanX, bodyKick > 0 ? 80 : 14, dt);
   rig.body.rotation.z = damp(rig.body.rotation.z, bank, 10, dt);
   const breathe = running ? 0 : Math.sin(p.time * 2.1) * 0.012;
   rig.body.position.set(
     damp(rig.body.position.x, -p.lean * 0.22, 10, dt),
     (running ? bob * 0.06 * amp : breathe) - legDrop,
-    -kick * 0.05,
+    -kick * 0.05 - bodyKick * SNIPER_KICK.bodyBack,
   );
 
   // ---- the gun: at the chest, stock at the right shoulder; bobs with the steps, kicks by its
@@ -801,7 +804,7 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   const snipe = p.gun === 'sniper' ? sniperKick(sinceShot) * snipeScale : 0;
   // ...then the bolt: the rifle rolls over, dips and is pulled back to re-chamber, and comes back ready.
   const bolt = p.gun === 'sniper' ? sniperBolt(sinceShot) * snipeScale : 0;
-  rig.weapon.position.set(h.x + sway * 0.4, rig.chestY + h.y + step - reloadTilt * 0.12 - bolt * SNIPER_KICK.boltDrop, -Math.max(0, kick) * 0.12 - snipe * SNIPER_KICK.weaponPush - bolt * SNIPER_KICK.boltPull);
+  rig.weapon.position.set(h.x + sway * 0.4, rig.chestY + h.y + step - reloadTilt * 0.12 - bolt * SNIPER_KICK.boltDrop + snipe * SNIPER_KICK.weaponRise, -Math.max(0, kick) * 0.12 - snipe * SNIPER_KICK.weaponPush - bolt * SNIPER_KICK.boltPull);
   // Running without firing for a moment: the gun drops to low ready, muzzle down; it comes up
   // the moment you shoot.
   const lowReady = running && sinceShot > 0.8 && p.gun !== 'pistol' ? 0.35 * amp : 0;
