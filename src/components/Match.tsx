@@ -1144,6 +1144,7 @@ export const Match = ({
               canSwap={hud.slots.every((sl) => sl.name !== null)}
               swapLabel={hud.slots.find((sl) => !sl.active)?.name ?? null}
               heal={hud.healNext}
+              crouched={hud.crouched}
             />
           )}
 

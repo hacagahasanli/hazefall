@@ -120,6 +120,8 @@ export interface HudState {
   planeTime: number;
   /** Looking through the sniper's scope. */
   scoped: boolean;
+  /** Crouched (the touch CROUCH toggle shows lit). */
+  crouched: boolean;
   /** Holding a sniper (the touch SCOPE button shows). */
   sniper: boolean;
   /** Touch buttons that only show when they can do something: the magazine is not full and there are rounds to put in it,
@@ -141,7 +143,7 @@ export interface HudState {
 }
 
 export type AimMode = 'auto' | 'mouse';
-export type TouchButton = 'fire' | 'jump' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR' | 'scope' | 'swap' | 'heal' | 'crouch' | 'look';
+export type TouchButton = 'fire' | 'fire2' | 'jump' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR' | 'scope' | 'swap' | 'heal' | 'crouch' | 'look';
 
 export interface MatchOptions {
   fighter: FighterId;
@@ -1266,7 +1268,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       }
       const input: Input = {
         mx, my,
-        ...shootJump({ ground: p.stage === 'ground', key: held('fire'), mouse: mouseDown, touchFire: btn('fire'), jumpKey: jumpKey() }),
+        ...shootJump({ ground: p.stage === 'ground', key: held('fire'), mouse: mouseDown, touchFire: btn('fire') || btn('fire2'), jumpKey: jumpKey() }),
         super: held('super') || btn('super'),
         use: held('use') || btn('use'),
         lean: (held('leanR') || btn('leanR') ? 1 : 0) - (held('leanL') || btn('leanL') ? 1 : 0),
@@ -1305,7 +1307,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // emulated mouse press never shoots (FIRE does).
     const input = {
       mx, my,
-      ...shootJump({ ground: p.stage === 'ground', key: held('fire'), mouse: mouseDown && !touch, touchFire: btn('fire'), jumpKey: jumpKey() }),
+      ...shootJump({ ground: p.stage === 'ground', key: held('fire'), mouse: mouseDown && !touch, touchFire: btn('fire') || btn('fire2'), jumpKey: jumpKey() }),
       // Battle-royale keys: Q / E lean, G crouches, F picks up or uses, B is the super.
       super: held('super') || btn('super'),
       use: held('use') || btn('use'),
@@ -3094,6 +3096,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       firstPerson: firstPerson(),
       shoulder: shoulderView(),
       scoped,
+      crouched: crouchOn,
       sniper: self.weapon === 'sniper' && self.alive,
       canReload: self.weapon !== 'fists' && self.reload <= 0 && self.mag < WEAPONS[self.weapon].mag && self.ammo > 0,
       canUse: self.stage === 'ground' && (!!k || self.bombs > 0),

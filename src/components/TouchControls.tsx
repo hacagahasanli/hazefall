@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { PICKUP_ICON, RELOAD_ICON, SWAP_ICON } from '~/game/render/icons';
 import { isTouchUi, subscribe } from '~/lib/device';
-import { clusterZone as layoutZone, isPhoneLandscape, layoutPads, padSize, phoneScale, TOUCH_FLOOR, visiblePads } from '~/lib/phoneUi';
+import { clusterZone as layoutZone, isPhoneLandscape, layoutPads, padSize, phoneScale, deviceGrow, sidePads, TOUCH_FLOOR, visiblePads } from '~/lib/phoneUi';
 import type { PadId } from '~/lib/phoneUi';
 
 import type { TouchButton } from '~/game/render/game';
@@ -155,6 +155,7 @@ const Pad = ({
   sub,
   icon,
   right,
+  fromTop = false,
 }: {
   b: TouchButton;
   label: string;
@@ -169,6 +170,8 @@ const Pad = ({
   accent?: boolean;
   /** Mirrored: the cluster is on the left (left-handed). */
   right: boolean;
+  /** The box's y is from the top of the screen instead of the bottom (the upper side buttons). */
+  fromTop?: boolean;
 }) => {
   const [down, setDown] = useState(false);
   const isDown = useRef(false);
@@ -203,7 +206,7 @@ const Pad = ({
         height: size,
         fontSize: size > 90 ? 18 : size > 60 ? 12 : 10,
         [right ? 'left' : 'right']: box.x - size / 2,
-        bottom: box.y - size / 2,
+        [fromTop ? 'top' : 'bottom']: box.y - size / 2,
       }}
       onPointerDown={(e) => {
         goFullscreen();
@@ -275,6 +278,7 @@ export const TouchControls = ({
   size = 1,
   opacity = 0.9,
   leftHanded = false,
+  crouched = false,
 }: {
   press: Press;
   onMove: (x: number, y: number) => void;
@@ -301,17 +305,21 @@ export const TouchControls = ({
   size?: number;
   opacity?: number;
   leftHanded?: boolean;
+  /** Crouched now: the CROUCH toggle shows lit. */
+  crouched?: boolean;
 }) => {
   const { w, h, ui } = useScreen();
   const stage = onPlane ? 'plane' : inAir ? (chute ? 'canopy' : 'fall') : 'ground';
   const ids = visiblePads({ stage, canReload, canHeal: !!heal, canUse, canSwap, sniper });
-  const boxes = layoutPads(ids, ui, size, w, h);
+  // A tablet's arc grows with its screen (up to 1.25x), like the upper buttons: same layout, a size that fits the hand.
+  const boxes = layoutPads(ids, ui * deviceGrow(ui, w, h), size, w, h);
   // On the plane and in free fall the big JUMP / OPEN sits low, as the old one did, clear of the big drop map above it.
   const lowFire = boxes.fire && stage !== 'ground' && stage !== 'canopy' ? { ...boxes.fire, y: Math.min(boxes.fire.y, boxes.fire.size / 2 + 8) } : null;
   if (lowFire) boxes.fire = lowFire;
   const show = (id: PadId) => boxes[id];
   const box = (id: PadId) => boxes[id]!;
   const zone = layoutZone(ui, w, h);
+  const side = sidePads(ui, size, w, h, sniper, stage);
   return (
     <div className="absolute inset-0 z-[5] select-none" style={{ WebkitTouchCallout: 'none' } as React.CSSProperties}>
       <Stick onMove={onMove} right={leftHanded} opacity={opacity} />
@@ -343,7 +351,15 @@ export const TouchControls = ({
           {show('swap') && (
             <Pad b="swap" label={swapLabel ? `Swap to ${swapLabel}` : 'Swap guns'} icon={SWAP_ICON} press={press} box={box('swap')} right={leftHanded} />
           )}
-          {show('scope') && <Pad b="scope" label="Scope" press={press} box={box('scope')} right={leftHanded} accent />}
+          {show('crouch') && <Pad b="crouch" label={crouched ? 'Stand' : 'Crouch'} press={press} box={box('crouch')} right={leftHanded} accent={crouched} />}
+        </span>
+      </div>
+      {/* Upper side buttons: a second FIRE high on the stick's side, SCOPE high on the buttons' side (mirrored left-handed). */}
+      {/* Inside the safe area, so a notch never covers them. */}
+      <div className="pointer-events-none absolute bottom-0 top-0" style={{ left: 'env(safe-area-inset-left)', right: 'env(safe-area-inset-right)', opacity }}>
+        <span className="pointer-events-auto contents">
+          {side.fire && <Pad b="fire2" label="Fire" press={press} box={side.fire} right={!leftHanded} fromTop accent />}
+          {side.scope && <Pad b="scope" label="Scope" press={press} box={side.scope} right={leftHanded} fromTop accent />}
         </span>
       </div>
       {/* Pause: just under the minimap (hidden on the plane, where the big map takes the corner). */}

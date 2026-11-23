@@ -13,6 +13,7 @@ import {
   PAD_GAP,
   padSize,
   phoneScale,
+  sidePads,
   TOUCH_FLOOR,
   visiblePads,
 } from './phoneUi';
@@ -56,14 +57,13 @@ describe('touch button size rule', () => {
 
 describe('which touch buttons show', () => {
   it('shows four in a typical ground moment', () => {
-    expect(visiblePads(ground)).toEqual(['fire', 'roll', 'jump', 'super']);
+    expect(visiblePads(ground)).toEqual(['fire', 'roll', 'jump', 'super', 'crouch']);
   });
-  it('adds RELOAD, HEAL, USE, SWAP and SCOPE only when they can do something', () => {
+  it('adds RELOAD, HEAL, USE and SWAP only when they can do something; CROUCH always on the ground', () => {
     expect(visiblePads({ ...ground, canReload: true })).toContain('reload');
     expect(visiblePads({ ...ground, canHeal: true })).toContain('heal');
     expect(visiblePads({ ...ground, canUse: true })).toContain('use');
     expect(visiblePads({ ...ground, canSwap: true })).toContain('swap');
-    expect(visiblePads({ ...ground, sniper: true })).toContain('scope');
     expect(visiblePads({ ...ground, canReload: true, canHeal: true, canUse: true, canSwap: true, sniper: true })).toHaveLength(9);
   });
   it('has no lean buttons', () => {
@@ -111,6 +111,31 @@ describe('touch cluster layout', () => {
       });
     }
   }
+  it('puts a second FIRE high on the left and SCOPE high on the right, clear of each other and of the arc, on every device', () => {
+    for (const [w, h] of [...sizes, [1180, 820], [1366, 1024], [1024, 768]] as [number, number][]) {
+      for (const setting of [0.7, 1, 1.3]) {
+        const ui = isPhoneLandscape(true, w, h) ? phoneScale(w, h) : 1;
+        const side = sidePads(ui, setting, w, h, true, 'ground');
+        const f = side.fire!;
+        const sc = side.scope!;
+        expect(f.size).toBeGreaterThanOrEqual(60);
+        expect(sc.size).toBeGreaterThanOrEqual(TOUCH_FLOOR);
+        // On screen, in the upper part.
+        expect(f.y - f.size / 2).toBeGreaterThan(70 * ui);
+        expect(f.y + f.size / 2).toBeLessThan(h * 0.8);
+        expect(sc.y - sc.size / 2).toBeGreaterThanOrEqual(0);
+        // SCOPE sits above the arc: its bottom (from the bottom) clears every arc button's top on that side.
+        const boxes = layoutPads(visiblePads({ ...ground, canReload: true, canHeal: true, canUse: true, canSwap: true, sniper: true }), ui, setting, w, h);
+        for (const b of Object.values(boxes)) {
+          const scBottomFromBottom = h - (sc.y + sc.size / 2);
+          const overlapX = Math.abs(b!.x - sc.x) < (b!.size + sc.size) / 2;
+          if (overlapX) expect(scBottomFromBottom, `${w}x${h}`).toBeGreaterThanOrEqual(b!.y + b!.size / 2 + PAD_GAP - 0.5);
+        }
+      }
+    }
+    expect(sidePads(1, 1, 844, 390, true, 'canopy')).toEqual({ fire: null, scope: null });
+    expect(sidePads(1, 1, 844, 390, false, 'ground').scope).toBeNull();
+  });
   it('keeps the zone to 46 % of the width and 64 % of the height', () => {
     const z = clusterZone(1, 568, 320);
     expect(z.w).toBeLessThanOrEqual(568 * 0.46);

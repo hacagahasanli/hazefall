@@ -27,7 +27,7 @@ export const phoneScale = (w: number, h: number): number => {
  * Touch buttons (spec 4.2): sizes, which buttons show, and where they sit. Pure, so it is tested; TouchControls draws it.
  * ------------------------------------------------------------------------------------------------------------------ */
 
-export type PadId = 'fire' | 'roll' | 'jump' | 'super' | 'reload' | 'heal' | 'use' | 'swap' | 'scope';
+export type PadId = 'fire' | 'roll' | 'jump' | 'super' | 'reload' | 'heal' | 'use' | 'swap' | 'crouch';
 
 /** No touch button is smaller than this (CSS px); FIRE and OPEN, under the thumb, never under FIRE_FLOOR. */
 export const TOUCH_FLOOR = 44;
@@ -47,8 +47,8 @@ export const PAD_SPEC: Record<PadId, { x: number; y: number; size: number }> = {
   heal: { x: 236, y: 198, size: 54 },
   use: { x: 320, y: 60, size: 56 },
   swap: { x: 322, y: 142, size: 50 },
-  // The sniper's scope: the drag-to-scope on FIRE is not built yet, so it stays a button, on the free spot in the arc.
-  scope: { x: 160, y: 214, size: 56 },
+  // Crouch (a toggle) on the free spot high in the arc; the sniper's SCOPE moved to the upper right (sidePads).
+  crouch: { x: 160, y: 214, size: 54 },
 };
 
 /** rendered = max(floor, base * ui * size): the player's size setting can no longer push a button under the floor. */
@@ -82,8 +82,35 @@ export const visiblePads = (c: PadContext): PadId[] => {
   if (c.canHeal) out.push('heal');
   if (c.canUse) out.push('use');
   if (c.canSwap) out.push('swap');
-  if (c.sniper) out.push('scope');
+  out.push('crouch');
   return out;
+};
+
+/**
+ * The two buttons outside the thumb arc, the way battle-royale players know them: a second FIRE high on the stick's side
+ * (left), so you can move and shoot with the left thumb while the right one aims and dodges, and SCOPE high on the right,
+ * left of the pause button under the minimap. Both only on the ground (SCOPE only with a sniper). Boxes are given by their
+ * centre from the TOP corner on their side (x from that side's edge, y from the top) and their diameter, in CSS px.
+ *
+ * Sizes follow the device: phones scale with `ui` (never under the floors), tablets (ui 1 on a tall screen) grow up to
+ * 1.25x with the screen's short side, so a thumb finds them without looking on a 13" tablet too.
+ */
+export const SIDE_SPEC = { fire: { size: 78, floor: 60 }, scope: { size: 62, floor: TOUCH_FLOOR } };
+export const deviceGrow = (ui: number, w: number, h: number) => (ui >= 1 ? Math.max(1, Math.min(1.25, Math.min(w, h) / 600)) : 1);
+export const sidePads = (ui: number, size: number, w: number, h: number, sniper: boolean, stage: PadContext['stage']) => {
+  if (stage !== 'ground') return { fire: null, scope: null };
+  const k = deviceGrow(ui, w, h);
+  const fire = Math.max(SIDE_SPEC.fire.floor, SIDE_SPEC.fire.size * ui * size * k);
+  const scope = Math.max(SIDE_SPEC.scope.floor, SIDE_SPEC.scope.size * ui * size * k);
+  // Left FIRE: below the health block (about 70 px at ui 1), at about 40 % of the height, never under the move hint.
+  const fireY = Math.min(Math.max(70 * ui + fire / 2 + 12, h * 0.4), h * 0.62);
+  // SCOPE: in the top right, just left of the minimap (112 px of map in 4 px of padding, 8 px in from the edge), level with
+  // its middle: clear of the thumb arc below it and of the counters' pill in the middle of the top edge.
+  const map = 112 * ui + 8;
+  return {
+    fire: { x: 18 + fire / 2, y: fireY, size: fire },
+    scope: sniper ? { x: 8 + map + 12 + scope / 2, y: Math.max(scope / 2 + 8, 8 + map / 2), size: scope } : null,
+  };
 };
 
 export interface PadBox {
