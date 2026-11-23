@@ -8,7 +8,7 @@ import { actionFor, DEFAULT_SETTINGS, keyLabel, keyMap } from '../settings';
 
 import type { VolumeKind } from '../sfx';
 import type { Action, Settings } from '../settings';
-import { ARMOR, CROUCH, HEALS, LEAN, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITEMS, MAP, PLACE_TIER, placeAt, PLAYERS, PROPS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
+import { ARMOR, CROUCH, HEALS, LEAN, THROW, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITEMS, MAP, PLACE_TIER, placeAt, PLAYERS, PROPS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
 import { canSee, carryCap, chestHeight, feetOf, healChoice, inPlant, inWater, lineOfSight, lootUnder, reloadTime, solidAt, superThrowTarget, throwDistance } from '../sim/step';
 import { buildingAt, CLIMB, roofAt } from '../sim/roofs';
 import { createOfflineSession } from '../net/session';
@@ -421,6 +421,31 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** Each fighter's gun length (m) and where its muzzle was last drawn (world), with the time it was: flashes and lines start there. */
   const gunLens: number[] = state.players.map(() => 0);
   const muzzles = state.players.map(() => ({ p: new THREE.Vector3(), at: -9 }));
+  /** What a hand holds instead of the gun: a bomb, a bandage roll, a med kit, a coffee cup (built when first needed). */
+  const handItems: (Record<'bomb' | 'bandage' | 'medkit' | 'coffee', THREE.Object3D> | null)[] = state.players.map(() => null);
+  const thrownAt: number[] = state.players.map(() => -9);
+  const handItemsOf = (i: number) => {
+    if (handItems[i]) return handItems[i]!;
+    const bomb = buildGun('bomb').root;
+    bomb.scale.setScalar(1.15);
+    const bandage = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.09, 10).rotateZ(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.9 }));
+    const medkit = new THREE.Group();
+    medkit.add(new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.17, 0.08), new THREE.MeshStandardMaterial({ color: 0xd8dcd8, roughness: 0.7 })));
+    const cross = new THREE.MeshStandardMaterial({ color: 0xd8342c, roughness: 0.7 });
+    const c1 = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.035, 0.085), cross);
+    const c2 = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.11, 0.085), cross);
+    medkit.add(c1, c2);
+    const coffee = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.038, 0.12, 10), new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.8 }));
+    const set = { bomb, bandage, medkit, coffee };
+    Object.values(set).forEach((o) => {
+      o.visible = false;
+      o.traverse((m) => (m.castShadow = true));
+      scene.add(o);
+    });
+    handItems[i] = set;
+    return set;
+  };
+  const handEnd = new THREE.Vector3();
   /**
    * Health bars. Yours is drawn over everything; everyone else's is hidden by whatever hides them (walls, roofs, a
    * canopy), so a bar never gives away someone you could not see, and it fades out with distance.
@@ -808,6 +833,51 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     return g;
   });
 
+  /** A lobbed bomb's height along its flight (t 0..1) over `d` metres: a longer throw goes higher. */
+  const lobHeight = (t: number, d: number) => 1 + 4 * t * (1 - t) * (2.5 + d * 0.16);
+  /**
+   * A bomb in hand: the arc it will fly, as one red line from the hand that fades out before it comes down (it says
+   * roughly where, not exactly: no ring on the ground). One ribbon of 40 segments facing the camera, rebuilt each frame.
+   */
+  const ARC_N = 40;
+  const arcGeo = new THREE.BufferGeometry();
+  arcGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((ARC_N + 1) * 2 * 3), 3));
+  arcGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array((ARC_N + 1) * 2 * 4), 4));
+  arcGeo.setIndex(Array.from({ length: ARC_N }, (_, k) => [k * 2, k * 2 + 1, k * 2 + 2, k * 2 + 1, k * 2 + 3, k * 2 + 2]).flat());
+  const bombArc = new THREE.Mesh(arcGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, depthTest: false, side: THREE.DoubleSide }));
+  bombArc.frustumCulled = false;
+  bombArc.renderOrder = 10;
+  bombArc.visible = false;
+  scene.add(bombArc);
+  const arcP = new THREE.Vector3();
+  const arcQ = new THREE.Vector3();
+  const arcT = new THREE.Vector3();
+  const arcS = new THREE.Vector3();
+  const arcV = new THREE.Vector3();
+  const ARC_RED = new THREE.Color(0xff3a26);
+  const drawBombArc = (x0: number, h0: number, y0: number, tx: number, ty: number) => {
+    const pos = arcGeo.getAttribute('position') as THREE.BufferAttribute;
+    const col = arcGeo.getAttribute('color') as THREE.BufferAttribute;
+    const d = Math.hypot(tx - x0, ty - y0);
+    const at = (t: number, out: THREE.Vector3) => out.set(x0 + (tx - x0) * t, h0 + (lobHeight(t, d) - 1) + (1 - h0) * t, y0 + (ty - y0) * t);
+    for (let k = 0; k <= ARC_N; k++) {
+      const t = k / ARC_N;
+      at(t, arcP);
+      at(Math.min(1, t + 0.01), arcQ);
+      arcT.subVectors(arcQ, arcP).normalize();
+      arcV.subVectors(camera.position, arcP).normalize();
+      arcS.crossVectors(arcT, arcV).normalize().multiplyScalar(0.045 + 0.02 * Math.min(1, d / 30));
+      pos.setXYZ(k * 2, arcP.x + arcS.x, arcP.y + arcS.y, arcP.z + arcS.z);
+      pos.setXYZ(k * 2 + 1, arcP.x - arcS.x, arcP.y - arcS.y, arcP.z - arcS.z);
+      // In from the hand, bright through the top, gone over the last third: not a pin on the map.
+      const a = Math.min(1, t / 0.06) * (1 - THREE.MathUtils.smoothstep(t, 0.62, 0.96)) * 0.85;
+      col.setXYZW(k * 2, ARC_RED.r, ARC_RED.g, ARC_RED.b, a);
+      col.setXYZW(k * 2 + 1, ARC_RED.r, ARC_RED.g, ARC_RED.b, a);
+    }
+    pos.needsUpdate = true;
+    col.needsUpdate = true;
+  };
+
   // ---------- throw preview: while you hold a rocket or a bomb, a dotted arc and a red landing
   // circle the size of the blast show where it will come down
   const arcDots = Array.from({ length: 22 }, () => {
@@ -842,13 +912,22 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const updateThrowPreview = (self: Player, x: number, y: number) => {
     // Only a bomb and the slow-field canister get the landing circle: rockets fly straight where you aim, like a gun.
     const ground = self.alive && self.stage === 'ground';
-    const bomb = ground && self.charging === 'bomb';
+    const bomb = ground && (self.charging === 'bomb' || self.item === 'bomb');
     const slow = ground && self.charging === 'super';
-    const on = bomb || slow;
-    landRing.visible = landDisc.visible = on;
+    // The bomb has its own line (drawBombArc); the dotted arc and the ring stay for the slow-field canister.
+    landRing.visible = landDisc.visible = slow;
     fieldEdge.visible = slow;
-    arcDots.forEach((d) => (d.visible = on));
-    if (!on) return;
+    arcDots.forEach((d) => (d.visible = slow));
+    bombArc.visible = bomb;
+    if (bomb) {
+      const range = ITEMS.bomb.range;
+      const toCursor = lastThrowAim ? Math.hypot(lastThrowAim.x - self.x, lastThrowAim.y - self.y) : 0;
+      const d = lastThrowAim ? Math.min(range, Math.max(THROW.min, toCursor)) : throwDistance(self.charging === 'bomb' ? self.charge : 0, range);
+      const a = lastThrowAim && toCursor > 0.3 ? Math.atan2(lastThrowAim.y - self.y, lastThrowAim.x - self.x) : self.heading;
+      drawBombArc(x, (self.z ?? 0) + 1.6, y, x + Math.cos(a) * d, y + Math.sin(a) * d);
+      return;
+    }
+    if (!slow) return;
     tint(bomb);
     let tx: number;
     let ty: number;
@@ -917,7 +996,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     if (e.button === 2) rightDown = false;
   };
   const onContext = (e: Event) => e.preventDefault();
-  /** Crouched (G toggles it; a jump or a roll stands you up). */
+  /** Crouched (C toggles it; a jump or a roll stands you up). */
   let crouchOn = false;
   /** The mouse wheel swaps guns: one press per notch (a trackpad's flood of small deltas counts once per 250 ms). */
   let wheelSwap = false;
@@ -1040,7 +1119,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     locked = document.pointerLockElement === canvas;
   };
   /**
-   * Looking around (hold C): the mouse turns your head and the camera, not your aim. The gun stays on the point it was on,
+   * Looking around (hold Left Alt): the mouse turns your head and the camera, not your aim. The gun stays on the point it was on,
    * and on letting go the view swings back to it. `freeYaw` / `freePitch` are the head's turn away from the aim.
    */
   let freeYaw = 0;
@@ -1282,7 +1361,17 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         aimX: shoulder ? crossAim.x : fpAim.on ? fpAim.x : p.x + c * 30,
         aimY: shoulder ? crossAim.y : fpAim.on ? fpAim.y : p.y + sn * 30,
       };
-      lastThrowAim = null;
+      // A bomb in hand goes where the crosshair meets the ground (look up to throw farther, up to its range).
+      const bombAim = p.item === 'bomb';
+      if (bombAim) {
+        const ahead = Math.max(THROW.min, Math.min(ITEMS.bomb.range, Math.hypot(crossAim.x - p.x, crossAim.y - p.y)));
+        const lookUp = Math.max(0, viewPitch + 0.12) / 0.6;
+        const far = Math.min(ITEMS.bomb.range, ahead + lookUp * ITEMS.bomb.range);
+        input.aimX = p.x + c * far;
+        input.aimY = p.y + sn * far;
+        input.throwAt = true;
+      }
+      lastThrowAim = bombAim ? { x: input.aimX, y: input.aimY } : null;
       lastAim.x = input.aimX;
       lastAim.y = input.aimY;
       touchLatched.clear();
@@ -1308,7 +1397,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const input = {
       mx, my,
       ...shootJump({ ground: p.stage === 'ground', key: held('fire'), mouse: mouseDown && !touch, touchFire: btn('fire') || btn('fire2'), jumpKey: jumpKey() }),
-      // Battle-royale keys: Q / E lean, G crouches, F picks up or uses, B is the super.
+      // Battle-royale keys: Q / E lean, C crouches, F picks up or uses, G is the super.
       super: held('super') || btn('super'),
       use: held('use') || btn('use'),
       lean: clamp((held('leanR') || btn('leanR') ? 1 : 0) - (held('leanL') || btn('leanL') ? 1 : 0)),
@@ -1334,10 +1423,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const cycle = held('swap') || btn('swap') || wheelSwap;
     wheelSwap = false;
     return {
-      slot: held('slot1') ? 1 : held('slot2') ? 2 : 0,
+      slot: held('slot1') ? 1 : held('slot2') ? 2 : held('slot3') ? 3 : held('slot4') ? 4 : 0,
       cycle,
-      heal: held('heal') || btn('heal'),
-      coffee: held('coffee'),
+      // Keys take heals and bombs into the hand (3 / 4) and shoot uses them; the touch HEAL button still heals at once.
+      heal: btn('heal'),
     };
   };
   /** The crouch toggle as this tick's input: a jump or a roll stands you up, and so does being off your feet or in water. */
@@ -1538,6 +1627,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           sfx.pickup();
           if (e.kind === 'rifle') facts.pickedRifle = true;
         }
+        break;
+      case 'throw':
+        thrownAt[e.player] = time;
+        if (Math.hypot(state.players[e.player].x - state.players[me].x, state.players[e.player].y - state.players[me].y) < 30) sfx.dash(state.players[e.player].x - camX());
         break;
       case 'swap':
         if (e.player === me) sfx.reload();
@@ -2222,6 +2315,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           land: settings.reducedMotion ? fd.k * landCurve(time - fd.at) * 0.5 : fd.k * landCurve(time - fd.at),
           climb: p.climb > 0 ? 1 - p.climb / CLIMB.time : null,
           aimPitch,
+          item: p.item ?? null,
+          using: p.using,
+          useT: p.using ? 1 - p.useLeft / HEALS[p.using].time : 0,
+          windUp: p.charging === 'bomb' ? Math.min(1, p.charge / THROW.full) : 0,
+          sinceThrow: time - thrownAt[i],
           dt, time, vx: p.vx, vy: p.vy, yaw: yw.a, yawRate: yw.v, onGround: !p.jz, dashing: p.dashTime > 0,
           gun: p.weapon, sinceShot, reducedMotion: settings.reducedMotion,
           reload: p.reload > 0 ? 1 - p.reload / reloadTime(p) : null,
@@ -2343,7 +2441,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         rig.hand.getWorldQuaternion(tmpQ);
         gun.position.copy(tmpV);
         gun.quaternion.copy(tmpQ);
-        gun.visible = !(i === me && firstPerson()) && visible && p.alive && (p.stage === 'ground' ? p.vault <= 0 && p.climb <= 0 && sinceLand >= ROLL_TIME : chuteOpen && sinceShot < 1.5);
+        const handBusy = p.stage === 'ground' && (!!p.item || !!p.using || time - thrownAt[i] < 0.45);
+        gun.visible = !handBusy && !(i === me && firstPerson()) && visible && p.alive && (p.stage === 'ground' ? p.vault <= 0 && p.climb <= 0 && sinceLand >= ROLL_TIME : chuteOpen && sinceShot < 1.5);
         if (gun.visible) {
           gun.updateMatrixWorld(true);
           muzzles[i].p.set(0, 0.03, gunLens[i]);
@@ -2352,6 +2451,21 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         }
       }
 
+      // A bomb or a heal in the right hand (the arm on -x): at the end of its forearm.
+      {
+        const showItem = visible && p.alive && p.stage === 'ground' && !(i === me && firstPerson());
+        const want = !showItem ? null : p.using ? p.using : p.item === 'bomb' && time - thrownAt[i] >= 0.12 ? 'bomb' : null;
+        if (want || handItems[i]) {
+          const set = handItemsOf(i);
+          for (const [k, o] of Object.entries(set)) o.visible = k === want;
+          if (want) {
+            const o = set[want as keyof typeof set];
+            rig.foreL.localToWorld(handEnd.set(0, -rig.armLen / 2 - 0.05, 0));
+            o.position.copy(handEnd);
+            rig.foreL.getWorldQuaternion(o.quaternion);
+          }
+        }
+      }
       // Health bar over the head, facing the camera.
       const bar = bars[i];
       // Others' bars fade out between 38 and 55 m from you (yours never does). They depth-test, so walls and roofs hide them.
@@ -2466,7 +2580,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         const m = canisters[cn++];
         if (!m) continue;
         m.visible = true;
-        const hgt = 1 + 4 * pr.t * (1 - pr.t) * 5;
+        const hgt = lobHeight(pr.t, Math.hypot(pr.tx - pr.sx, pr.ty - pr.sy));
         m.position.set(pr.x, hgt, pr.y);
         m.rotation.set(time * 9, Math.atan2(pr.tx - pr.sx, pr.ty - pr.sy), 0, 'YXZ');
         if (smokeTick) vfx.burst(pr.x, hgt, 1, 'slow', { z: pr.y, speed: 0.3, up: 0.2, gravity: 0, life: 0.45, size: 0.8 });
@@ -2474,7 +2588,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         const m = lobs[lb++];
         if (!m) continue;
         m.visible = true;
-        m.position.set(pr.x, 1 + 4 * pr.t * (1 - pr.t) * 5, pr.y);
+        m.position.set(pr.x, lobHeight(pr.t, Math.hypot(pr.tx - pr.sx, pr.ty - pr.sy)), pr.y);
       }
     }
     for (; cn < canisters.length; cn++) canisters[cn].visible = false;
@@ -2713,7 +2827,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const c = Math.cos(viewYaw);
       const sn = Math.sin(viewYaw);
       // Leaning (Q/E) puts your head out past the corner and tilts the world, like a real lean.
-      const lean = self.lean * 0.72;
+      const lean = self.lean * LEAN.offset * 0.9;
       camera.position.set(selfX - sn * lean, eyeY, selfY + c * lean);
       // Holding C turns the head: the view goes with it, the aim does not.
       const fpFree = Math.abs(freeYaw) + Math.abs(freePitch) > 0.02;
@@ -2786,7 +2900,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const since = lastShot[me] === undefined ? 9 : time - lastShot[me];
       const kick = Math.max(0, 1 - since / 0.14) + (self.weapon === 'sniper' ? sniperKick(since) * (settings.reducedMotion ? SNIPER_KICK.reducedScale : 1) * 2 : 0);
       const reload = self.reload > 0 ? Math.sin((1 - self.reload / reloadTime(self)) * Math.PI) : 0;
-      viewmodel.visible = !swim && !air && !scoped;
+      viewmodel.visible = !swim && !air && !scoped && !self.item && !self.using;
       swimArms.visible = swim && !air;
       if (swim) poseSwimArms(rig.phase, Math.min(1, speed / 1.6));
       viewmodel.position.set(Math.sin(rig.phase) * 0.012 * Math.min(1, speed / 5), bob * 0.5 - reload * 0.12, kick * 0.07);
@@ -3035,7 +3149,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           : self.weapon !== 'fists' && self.mag + self.ammo === 0
             ? 'Out of ammo · find an ammo box or another gun'
             : self.hp < self.maxHp * 0.6 && healNext && healNext !== 'coffee' && self.sinceCombat > 1.5
-              ? `${touch ? 'HEAL' : keyLabel(settings.keys.heal)} · use ${HEAL_NAME[healNext].toLowerCase()}`
+              ? `${touch ? 'HEAL' : `${keyLabel(settings.keys.slot3)} then ${keyLabel(settings.keys.fire)}`} · use ${HEAL_NAME[healNext].toLowerCase()}`
               : self.bombs > 0 && self.sinceCombat < 4 && !k
                 ? `Hold ${touch ? 'the pick-up button' : keyLabel(settings.keys.use)} to throw a bomb`
                 : null;
@@ -3145,6 +3259,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   let acc = 0;
   let hudTimer = 0;
   let mmTimer = 0;
+  /** Held behind the lobby: the shaders' background compile, before the first frames are drawn. */
+  let warm: 'idle' | 'compiling' | 'done' = 'idle';
+  const warmList: THREE.Object3D[] = [];
+  const warmVis: [THREE.Object3D, boolean, boolean][] = [];
   const frame = (now: number) => {
     const cpu0 = performance.now();
     const dt = Math.min(0.1, (now - last) / 1000);
@@ -3165,19 +3283,52 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     if (holding) {
       // Waiting behind the pre-match screen: draw the first frames (compiles shaders, uploads textures), report ready,
       // then sleep until released.
-      if (heldFrames < 3) {
-        if (heldFrames === 0) {
-          const vis: [THREE.Object3D, boolean, boolean][] = [];
-          scene.traverse((o) => {
-            vis.push([o, o.visible, o.frustumCulled]);
+      if (warm === 'compiling') {
+        // The shaders compile a few at a time: each frame draws only a small batch of meshes (one per distinct material),
+        // which compiles their programs and waits for them, about 15 ms of work, so the lobby's countdown never freezes.
+        // (Compiling them all and drawing once queued every program on the GPU at once and froze both screens.)
+        const t0 = performance.now();
+        let n = 0;
+        while (warmList.length && (n === 0 || performance.now() - t0 < 8) && n < 3) {
+          const batch = warmList.splice(Math.max(0, warmList.length - 2), 2);
+          for (const [o] of warmVis) o.visible = !(o as THREE.Mesh).isMesh && !(o as THREE.Points).isPoints && !(o as THREE.Line).isLine;
+          for (const o of batch) {
             o.visible = true;
             o.frustumCulled = false;
-          });
+          }
           renderer.render(scene, camera);
-          vis.forEach(([o, v, f]) => {
+          for (const o of batch) o.visible = false;
+          n++;
+        }
+        if (!warmList.length) {
+          warmVis.forEach(([o, v, f]) => {
             o.visible = v;
             o.frustumCulled = f;
           });
+          warmVis.length = 0;
+          warm = 'done';
+        }
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+      if (heldFrames < 3) {
+        if (heldFrames === 0 && warm === 'idle') {
+          // One mesh per distinct material and kind of mesh (plain, instanced, skinned): what decides a shader program.
+          const seen = new Set<string>();
+          scene.traverse((o) => {
+            const m = o as THREE.Mesh;
+            if (!m.isMesh && !(o as THREE.Points).isPoints && !(o as THREE.Line).isLine) return;
+            const mats = Array.isArray(m.material) ? m.material : [m.material];
+            const kind = (m as THREE.InstancedMesh).isInstancedMesh ? 'i' : (m as THREE.SkinnedMesh).isSkinnedMesh ? 's' : 'm';
+            const key = mats.map((x) => x?.uuid).join(',') + kind + (m.geometry?.attributes?.color ? 'c' : '') + (m.geometry?.morphAttributes && Object.keys(m.geometry.morphAttributes).length ? 'm' : '');
+            if (seen.has(key)) return;
+            seen.add(key);
+            warmList.push(o);
+          });
+          scene.traverse((o) => warmVis.push([o, o.visible, o.frustumCulled]));
+          warm = 'compiling';
+          raf = requestAnimationFrame(frame);
+          return;
         }
         heldFrames++;
         renderFrame(dt, 0);

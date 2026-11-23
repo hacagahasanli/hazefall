@@ -1174,7 +1174,8 @@ export const VAULT = { after: 0.15, time: 0.55, reach: 3.2 };
 /** Armor is a second health bar of up to 100 (Vest III) that takes hits first (the Deadline ignores it). */
 export const ARMOR = { points: 100, absorb: 1 };
 export const ITEMS = {
-  bomb: { damage: 80, radius: 2.6, range: 30 },
+  // Thrown far, as in a battle royale (45 m at a full wind-up or at the aim point): an arc you lob over a wall or a roof.
+  bomb: { damage: 80, radius: 2.6, range: 45 },
 };
 /**
  * Everyone jumps with a pistol, one magazine in it and two more spare: nobody lands empty-handed. Nobody can fire in the
@@ -1192,7 +1193,7 @@ export const PLANT_REVEAL = 2.4;
 export const AUTO_AIM_RANGE = 28;
 export const REGEN = { after: 6, perSecond: 2.5 };
 /** Leaning out round a corner (Q / E): how far the shoulder and the muzzle move out, and the speed while leaning. */
-export const LEAN = { offset: 0.7, speed: 0.6, rate: 6 };
+export const LEAN = { offset: 1.1, speed: 0.6, rate: 6 };
 /**
  * Crouching (G, a toggle): lower and steadier. `drop` m off the chest (where rounds leave and are aimed), `bodyDrop` m off the
  * top of the body for rounds, `speed` of the walking speed, `rate` how fast you go down and up (1/s), `spread` of the gun's

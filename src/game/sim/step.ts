@@ -568,6 +568,7 @@ export const newPlayer = (id: number, name: string, fighter: FighterId, bot: boo
   pushing: 0,
   lean: 0,
   crouch: 0,
+  item: null,
   rolling: 0,
   rollDir: 0,
   rollCooldown: 0,
@@ -1404,6 +1405,8 @@ const finishHeal = (state: GameState, p: Player) => {
   else if (kind === 'medkit') p.hp = Math.min(p.maxHp, p.hp + HEALS.medkit.heal);
   else p.buzz = HEALS.coffee.buzz;
   state.events.push({ type: 'heal', player: p.id, kind, done: true });
+  // Done: the gun comes back up.
+  p.item = null;
 };
 
 // ---------- per tick
@@ -1481,9 +1484,33 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     p.heading += Math.max(-maxTurn, Math.min(maxTurn, d));
   }
 
-  // Two gun slots: 1 / 2 draw one, X (or the wheel, or SWAP) the other one.
+  // Two gun slots: 1 / 2 draw one, X (or the wheel, or SWAP) the other one. 3 takes the heals in hand, 4 a bomb: then
+  // shoot uses them (no extra key); 1, 2, X or the wheel put them away. Swimming, both hands swim.
   const slotPress = input.slot && input.slot !== (p.prev.slot ?? 0) ? input.slot - 1 : -1;
-  if ((input.cycle && !p.prev.cycle) || (slotPress >= 0 && slotPress !== p.slot)) swapGuns(state, p);
+  const cyclePress = !!input.cycle && !p.prev.cycle;
+  if (swimming && p.item) p.item = null;
+  if (slotPress === 2 || slotPress === 3) {
+    const want = slotPress === 2 ? 'heal' : 'bomb';
+    const has = want === 'heal' ? healChoice(p) !== null : p.bombs > 0;
+    if (has && !swimming && p.item !== want) {
+      p.item = want;
+      p.charging = null;
+      p.charge = 0;
+      p.reload = 0;
+      if (p.using && want !== 'heal') p.using = null;
+      state.events.push({ type: 'swap', player: p.id, weapon: p.weapon });
+    }
+  } else if (p.item && (cyclePress || slotPress >= 0)) {
+    // Back to the gun (the other one if that slot was asked for).
+    p.item = null;
+    p.charging = null;
+    p.charge = 0;
+    p.swapping = SWAP_TIME * 0.5;
+    if (slotPress >= 0 && slotPress !== p.slot) swapGuns(state, p);
+    else state.events.push({ type: 'swap', player: p.id, weapon: p.weapon });
+  } else if (cyclePress || (slotPress >= 0 && slotPress !== p.slot)) swapGuns(state, p);
+  if (p.item === 'bomb' && p.bombs <= 0 && p.charging !== 'bomb') p.item = null;
+  if (p.item === 'heal' && !p.using && healChoice(p) === null) p.item = null;
 
   // Heals: a moment of standing nearly still with something in your hands that is not a gun.
   if (swimming && p.using) p.using = null;
@@ -1613,6 +1640,31 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     // Both hands are swimming: no shooting, no throwing.
     p.charging = null;
     p.charge = 0;
+  } else if (p.item === 'heal') {
+    // Heals in hand: shoot starts the one that fits now (a med kit when badly hurt, else a bandage, else coffee).
+    if (input.fire && !p.prev.fire && !p.using) {
+      const kind = healChoice(p);
+      if (kind) startHeal(state, p, kind);
+    }
+  } else if (p.item === 'bomb') {
+    // A bomb in hand: hold shoot to wind up (farther), let go to throw; with the mouse it goes to the aim point.
+    if (input.fire && p.bombs > 0) {
+      p.charging = 'bomb';
+      p.charge += DT;
+    } else if (p.charging === 'bomb') {
+      const toAim = Math.hypot(input.aimX - p.x, input.aimY - p.y);
+      const d = input.throwAt ? Math.min(ITEMS.bomb.range, Math.max(THROW.min, toAim)) : throwDistance(p.charge, ITEMS.bomb.range);
+      const a = input.throwAt && toAim > 0.3 ? Math.atan2(input.aimY - p.y, input.aimX - p.x) : p.heading;
+      lob(state, p, p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, ITEMS.bomb.range, ITEMS.bomb.damage, ITEMS.bomb.radius);
+      state.events.push({ type: 'throw', player: p.id });
+      p.revealed = 1;
+      p.bombs -= 1;
+      p.charge = 0;
+      p.charging = null;
+      // Thrown: the gun comes back up.
+      p.item = null;
+      p.swapping = SWAP_TIME * 0.5;
+    }
   } else if (input.fire && p.using) {
     // Pulling the trigger puts the heal away (a fresh press, so holding fire through a heal you started does not).
     if (!p.prev.fire) p.using = null;
@@ -1644,7 +1696,7 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     }
   }
   if (auto) takeLoot(state, p, auto);
-  else if (!p.bot && !swimming && p.bombs > 0 && !k && !p.using && (input.use || p.charging === 'bomb')) {
+  else if (!p.bot && !swimming && p.bombs > 0 && !k && !p.using && p.item !== 'bomb' && (input.use || p.charging === 'bomb')) {
     // A bomb: hold F to throw it farther, let go to throw.
     if (input.use) {
       p.charging = 'bomb';

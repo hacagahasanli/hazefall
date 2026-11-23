@@ -141,6 +141,11 @@ export const PreMatch = ({
     if (shownLook.current) staging.current?.setLook(shownLook.current);
   }, [lookKey, live]);
 
+  // The match's ground texture paints in small slices while you pick (it would otherwise freeze the screen after Ready).
+  useEffect(() => {
+    void import('~/game/render/nature').then((m) => m.warmTerrain());
+  }, []);
+
   useEffect(() => {
     hum.current = startHum();
     return () => hum.current?.stop();
@@ -151,10 +156,14 @@ export const PreMatch = ({
   useEffect(() => {
     if (!live) return;
     let raf = 0;
-    const start = performance.now();
+    // The clock moves with the frames drawn, at most 1/20 s per frame: when the match being built underneath holds the
+    // screen for a moment, the countdown waits with it instead of jumping from 10 to 8.
+    let prev = performance.now();
+    let s = 0;
     let lastWhole = 99;
     const tick = (now: number) => {
-      const s = (now - start) / 1000;
+      s += Math.min(0.05, Math.max(0, (now - prev) / 1000));
+      prev = now;
       setT(s);
       // Not loaded yet as the launch nears: the strip waits ("Joining") rather than cutting to a loading screen.
       if (!loadedRef.current && end.current - s < LAUNCH + 0.6) end.current = s + LAUNCH + 0.6;

@@ -19,8 +19,8 @@ export const ROOF_LAYER = 1.5;
 export const FEET = { gravity: 18, jump: 5, landDrop: 1 };
 /** The body for bullets: from the feet to the top of the head. */
 export const BODY = { top: 1.9 };
-/** Climbing a ladder: seconds from the ground to the roof, and how long you push into it first. */
-export const CLIMB = { time: 0.9, after: 0.15 };
+/** Climbing a ladder: seconds from the ground to the roof (1.25: three hand-over-hand pulls a person can follow), and how long you push into it first. */
+export const CLIMB = { time: 1.25, after: 0.15 };
 /** How far the roof hangs out past the walls (drawn only: you stand on the footprint). */
 const OVERHANG = 0.4;
 

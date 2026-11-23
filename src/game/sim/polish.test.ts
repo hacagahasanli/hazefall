@@ -102,7 +102,7 @@ describe('rounds and low cover', () => {
 });
 
 describe('crouching', () => {
-  it('G crouches you: slower, lower, and a hop or a roll stands you up', () => {
+  it('crouching (C):  slower, lower, and a hop or a roll stands you up', () => {
     const s = arena();
     const me = s.players[0];
     Object.assign(me, { x: 40, y: 12 });
@@ -181,5 +181,54 @@ describe('big props are as big as they look', () => {
     const c = { x: (hq.x0 + hq.w / 2) * TILE, y: (hq.y0 + hq.h / 2) * TILE };
     for (const h of [1.1, 5, 12]) expect(solidAt(s, c.x, c.y, h)).toBe(true);
     expect(solidAt(s, c.x, c.y, HQ.top + 1)).toBe(false);
+  });
+});
+
+describe('heals and bombs in hand (3 / 4, no extra key)', () => {
+  it('3 takes the heals in hand; shoot uses one with its own time, then the gun comes back', () => {
+    const s = arena();
+    const me = s.players[0];
+    Object.assign(me, { x: 40, y: 12, hp: 50, bandages: 2, medkits: 0 });
+    hold(s, { slot: 3 }, 2);
+    expect(me.item).toBe('heal');
+    hold(s, { fire: true }, 1);
+    expect(me.using).toBe('bandage');
+    hold(s, {}, 60 * 2);
+    expect(me.using).toBeNull();
+    expect(me.hp).toBeGreaterThan(50);
+    expect(me.item).toBeNull();
+    expect(me.bandages).toBe(1);
+  });
+
+  it('4 takes a bomb; hold shoot to wind up, let go to throw it far (up to 45 m), no shot fired', () => {
+    const s = arena();
+    const me = s.players[0];
+    Object.assign(me, { x: 40, y: 12, bombs: 2, heading: 0 });
+    hold(s, { slot: 4 }, 2);
+    expect(me.item).toBe('bomb');
+    const shots = me.shots;
+    hold(s, { fire: true }, 90);
+    expect(me.charging).toBe('bomb');
+    hold(s, {}, 1);
+    const lobbed = s.projectiles.find((p) => p.kind === 'lob' && p.owner === 0)!;
+    expect(lobbed).toBeTruthy();
+    expect(Math.hypot(lobbed.tx - lobbed.sx, lobbed.ty - lobbed.sy)).toBeGreaterThan(40);
+    expect(me.bombs).toBe(1);
+    expect(me.shots).toBe(shots);
+    expect(me.item).toBeNull();
+  });
+
+  it('1 or 2 puts the item away, and nothing goes in hand without it', () => {
+    const s = arena();
+    const me = s.players[0];
+    Object.assign(me, { x: 40, y: 12, bombs: 0, bandages: 0, medkits: 0, coffees: 0 });
+    hold(s, { slot: 4 }, 2);
+    expect(me.item).toBeNull();
+    me.bombs = 1;
+    hold(s, {}, 1);
+    hold(s, { slot: 4 }, 2);
+    expect(me.item).toBe('bomb');
+    hold(s, { slot: 1 }, 2);
+    expect(me.item).toBeNull();
   });
 });

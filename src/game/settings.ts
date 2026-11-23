@@ -3,13 +3,12 @@
  * saved as JSON (through the platform's storage: localStorage on the web, the portal's data module on CrazyGames) and
  * applied live. Pure (no DOM): loading, clamping, rebinding and the key-to-action lookup are tested without a browser.
  */
-import { COPY } from './copy/studio';
 
 import type { QualitySetting } from './render/quality';
 
 export type Action =
   | 'up' | 'down' | 'left' | 'right' | 'fire' | 'jump' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR' | 'scope' | 'crouch' | 'look'
-  | 'slot1' | 'slot2' | 'swap' | 'heal' | 'coffee' | 'aim' | 'mute' | 'pause';
+  | 'slot1' | 'slot2' | 'slot3' | 'slot4' | 'swap' | 'aim' | 'mute' | 'pause';
 
 /** In the order the Controls tab lists them, with the words it shows. */
 export const ACTIONS: [Action, string][] = [
@@ -31,8 +30,8 @@ export const ACTIONS: [Action, string][] = [
   ['slot1', 'Gun slot 1'],
   ['slot2', 'Gun slot 2'],
   ['swap', 'Swap guns'],
-  ['heal', 'Heal'],
-  ['coffee', COPY.items.coffee],
+  ['slot3', 'Heals in hand (shoot to use)'],
+  ['slot4', 'Bomb in hand (hold shoot, let go to throw)'],
   ['aim', 'Switch aim mode'],
   ['mute', 'Mute'],
   ['pause', 'Pause'],
@@ -46,26 +45,26 @@ export const DEFAULT_KEYS: Record<Action, string> = {
   fire: 'KeyJ',
   jump: 'Space',
   use: 'KeyF',
-  super: 'KeyB',
+  super: 'KeyG',
   roll: 'ShiftLeft',
   reload: 'KeyR',
   leanL: 'KeyQ',
   leanR: 'KeyE',
-  crouch: 'KeyG',
-  look: 'KeyC',
+  crouch: 'KeyC',
+  look: 'AltLeft',
   scope: 'KeyZ',
   slot1: 'Digit1',
   slot2: 'Digit2',
   swap: 'KeyX',
-  heal: 'KeyH',
-  coffee: 'KeyV',
+  slot3: 'Digit3',
+  slot4: 'Digit4',
   aim: 'KeyT',
   mute: 'KeyM',
   pause: 'KeyP',
 };
 
 /** Free keys handed to a newly added action when an old save already uses its default. */
-const SPARE_KEYS = ['Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'KeyN', 'KeyJ', 'KeyK', 'KeyL', 'KeyU', 'KeyI', 'KeyO', 'KeyY'];
+const SPARE_KEYS = ['Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'KeyN', 'KeyJ', 'KeyK', 'KeyL', 'KeyU', 'KeyI', 'KeyO', 'KeyY'];
 
 /** Always on, whatever the bindings: arrows move, the right Shift rolls too, Esc belongs to menus and the browser. */
 export const FIXED_KEYS: Partial<Record<Action, string[]>> = {
@@ -140,7 +139,7 @@ export const DEFAULT_SETTINGS: Settings = {
   colorBlind: false,
   largeHud: false,
   showKeyHints: true,
-  keysVersion: 3,
+  keysVersion: 4,
 };
 
 export const SETTINGS_KEY = 'lcs:settings';
@@ -160,13 +159,18 @@ export const normalize = (raw: unknown): Settings => {
     const taken = new Set(Object.entries(rk).filter(([a]) => a !== 'fire' && a !== 'jump').map(([, k]) => k));
     rk = { ...rk, fire: !taken.has('KeyJ') ? 'KeyJ' : typeof rk.jump === 'string' && rk.jump !== 'Space' ? rk.jump : 'KeyJ', jump: 'Space' };
   }
-  // Layout 3: G crouches and C looks around (held); the super moves from G to B and heal from C to H. A save that still has
-  // the old defaults there moves once; a key the player chose themselves stays theirs.
-  if (typeof r.keysVersion !== 'number' || r.keysVersion < 3) {
+  // Layout 4: C crouches, holding Left Alt looks around, G stays the super and heal moves from C to H. (Layout 3, out for a
+  // few hours, had crouch on G, look on C and the super on B.) A save that still has an old default there moves once; a key
+  // the player chose themselves stays theirs.
+  if (typeof r.keysVersion !== 'number' || r.keysVersion < 4) {
     rk = { ...rk };
     // Left unbound here, they take their new defaults below (or a spare key if the save already uses those).
-    if (rk.super === 'KeyG') delete rk.super;
     if (rk.heal === 'KeyC') delete rk.heal;
+    if (r.keysVersion === 3) {
+      if (rk.crouch === 'KeyG') delete rk.crouch;
+      if (rk.look === 'KeyC') delete rk.look;
+      if (rk.super === 'KeyB') delete rk.super;
+    }
   }
   const used = new Set<string>();
   const saved = (a: Action) => {

@@ -247,12 +247,12 @@ const SPECS: Record<CharacterId, Spec> = {
       const pom = mesh(ico(0.07, 0), c('pom'));
       pom.position.y = spec.headR * 1.15;
       head.add(pom);
-      // The backpack, bigger than it should be.
-      const pack = mesh(box(0.62, 0.74, 0.4), c('bag'));
-      pack.position.set(0, spec.torsoH * 0.5, -spec.torsoD / 2 - 0.2);
+      // The backpack: a school bag, a size that sits on the back (it used to stand wider and taller than the body).
+      const pack = mesh(box(0.44, 0.5, 0.25), c('bag'));
+      pack.position.set(0, spec.torsoH * 0.55, -spec.torsoD / 2 - 0.125);
       torso.add(pack);
-      const flap = mesh(box(0.5, 0.26, 0.06), c('bagTrim'));
-      flap.position.set(0, spec.torsoH * 0.36, -spec.torsoD / 2 - 0.42);
+      const flap = mesh(box(0.36, 0.18, 0.05), c('bagTrim'));
+      flap.position.set(0, spec.torsoH * 0.42, -spec.torsoD / 2 - 0.27);
       torso.add(flap);
       for (const sx of [-1, 1]) {
         const strap = mesh(box(0.06, spec.torsoH * 0.95, 0.04), c('bagTrim'), false);
@@ -665,6 +665,13 @@ export interface TopDownPose {
   climb?: number | null;
   /** The aim's elevation (radians, + up): the gun points at a target above or below you. */
   aimPitch?: number;
+  /** In hand instead of the gun: a bomb, or a heal being used (which, and 0..1 through it). */
+  item?: 'bomb' | 'heal' | null;
+  using?: 'bandage' | 'medkit' | 'coffee' | null;
+  useT?: number;
+  /** Winding up a bomb, 0..1; seconds since one left the hand (the throw's swing). */
+  windUp?: number;
+  sinceThrow?: number;
 }
 
 /** How hard each gun kicks: the shotgun and the sniper rock the whole body. */
@@ -739,9 +746,12 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   // ---- up a ladder: face the wall, hand over hand on the rungs, knees stepping up opposite; over the eave like a vault.
   if (climbing && p.climb! < 0.75) {
     const up = p.climb! / 0.75;
-    const cyc = up * 5; // five pulls from the ground to the eave
-    const lead = (cyc % 1);
-    const reachL = Math.sin(Math.PI * (Math.floor(cyc) % 2 === 0 ? lead : 1 - lead));
+    // Three hand-over-hand pulls from the ground to the eave (~0.3 s each): one hand reaches up while the other pulls down,
+    // eased at both ends so each grip reads.
+    const cyc = up * 3;
+    const ease = (x: number) => 0.5 - 0.5 * Math.cos(Math.PI * x);
+    const lead = ease(cyc % 1);
+    const reachL = Math.floor(cyc) % 2 === 0 ? lead : 1 - lead;
     const reachR = 1 - reachL;
     rig.body.rotation.set(damp(rig.body.rotation.x, 0.08, 14, dt), 0, damp(rig.body.rotation.z, (reachL - reachR) * 0.06, 10, dt));
     rig.body.position.set(0, 0, 0.05);
@@ -753,10 +763,10 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
     reach(rig.armL, rig.foreL, rig.shoulderL, tmpGrip, rig.armLen, -1, POLE_L);
     reach(rig.armR, rig.foreR, rig.shoulderR, tmpSupport, rig.armLen, 1, POLE_R);
     // Feet on the rungs: the knee opposite the high hand comes up.
-    rig.legL.rotation.set(damp(rig.legL.rotation.x, -0.25 - reachL * 0.95, 22, dt), 0, 0);
-    rig.legR.rotation.set(damp(rig.legR.rotation.x, -0.25 - reachR * 0.95, 22, dt), 0, 0);
-    rig.shinL.rotation.x = damp(rig.shinL.rotation.x, 0.4 + reachL * 1.25, 22, dt);
-    rig.shinR.rotation.x = damp(rig.shinR.rotation.x, 0.4 + reachR * 1.25, 22, dt);
+    rig.legL.rotation.set(damp(rig.legL.rotation.x, -0.25 - reachL * 0.95, 12, dt), 0, 0);
+    rig.legR.rotation.set(damp(rig.legR.rotation.x, -0.25 - reachR * 0.95, 12, dt), 0, 0);
+    rig.shinL.rotation.x = damp(rig.shinL.rotation.x, 0.4 + reachL * 1.25, 12, dt);
+    rig.shinR.rotation.x = damp(rig.shinR.rotation.x, 0.4 + reachR * 1.25, 12, dt);
     rig.head.rotation.x = damp(rig.head.rotation.x, -0.35, 8, dt);
     return;
   }
@@ -854,7 +864,7 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
     crouch * 0.3 + land * 0.32 + weight * Math.max(-0.16, Math.min(0.2, accF * 0.012)) + (airborne ? Math.max(-0.08, Math.min(0.12, -(p.airV ?? 0) * 0.025)) : 0);
   // The model faces +z, so its own right is -x: a lean to the right (E) moves the body to -x and
   // tips the top that way (positive z rotation).
-  let bank = Math.max(-0.18, Math.min(0.18, -p.yawRate * 0.035)) + 0.08 * side * amp + p.lean * 0.38 + weight * Math.max(-0.12, Math.min(0.12, accS * 0.01));
+  let bank = Math.max(-0.18, Math.min(0.18, -p.yawRate * 0.035)) + 0.08 * side * amp + p.lean * 0.55 + weight * Math.max(-0.12, Math.min(0.12, accS * 0.01));
   if (vaultK !== null) {
     // Swing over sideways with the weight on the planted hand.
     leanX = 0.35 * Math.sin(vaultK * Math.PI);
@@ -864,7 +874,7 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   rig.body.rotation.z = damp(rig.body.rotation.z, bank, 10, dt);
   const breathe = running ? 0 : Math.sin(p.time * 2.1) * 0.012;
   rig.body.position.set(
-    damp(rig.body.position.x, -p.lean * 0.22, 10, dt),
+    damp(rig.body.position.x, -p.lean * 0.38, 10, dt),
     (running ? bob * 0.06 * amp : breathe) - legDrop,
     -kick * 0.05 - bodyKick * SNIPER_KICK.bodyBack,
   );
@@ -893,7 +903,7 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   rig.weapon.rotation.y = damp(rig.weapon.rotation.y, sway * 0.6, 10, dt);
   // Leaning, the body tips over but the rifle is held nearly level against it (only a little cant), so the sights stay
   // on the line the round will fly.
-  rig.weapon.rotation.z = damp(rig.weapon.rotation.z, reloadTilt * 0.6 - p.lean * 0.26 + bolt * SNIPER_KICK.boltRoll, bolt > 0 ? 40 : 12, dt);
+  rig.weapon.rotation.z = damp(rig.weapon.rotation.z, reloadTilt * 0.6 - p.lean * 0.4 + bolt * SNIPER_KICK.boltRoll, bolt > 0 ? 40 : 12, dt);
   rig.hand.position.set(0, 0, h.grip);
 
   if (vaultK !== null) {
@@ -910,6 +920,53 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
       rig.armL.quaternion.setFromEuler(tmpE.set(-0.6, 0, 0.5));
       rig.armR.quaternion.setFromEuler(tmpE.set(-0.6, 0, -0.5));
     }
+    return;
+  }
+
+  // ---- something in hand that is not the gun (the gun is put away): a bomb held, wound up and thrown, or a heal used.
+  const throwing = (p.sinceThrow ?? 9) < 0.45;
+  if (p.item === 'bomb' || throwing || p.using) {
+    rig.weapon.visible = false;
+    const cy = rig.chestY;
+    const sx = rig.shoulderL.x;
+    if (p.item === 'bomb' || throwing) {
+      const w = p.windUp ?? 0;
+      if (throwing) {
+        // The throw: the arm comes over the top from behind the head and follows through forward and down.
+        const k = Math.min(1, (p.sinceThrow ?? 9) / 0.45);
+        const arc = Math.min(1, k / 0.35);
+        const z = -0.25 + 0.85 * arc;
+        const y = cy + 0.55 - 0.35 * Math.max(0, (k - 0.35) / 0.65) - 0.05 * arc;
+        tmpGrip.set(sx * 0.7, y, z);
+        tmpSupport.set(-sx * 0.6, cy + 0.05, 0.25 - 0.2 * arc);
+        rig.body.rotation.y = damp(rig.body.rotation.y, 0.35 - 0.6 * arc, 30, dt);
+      } else {
+        // Held at the chest, then drawn back past the ear as it winds up; the other hand points the way.
+        tmpGrip.set(sx * (0.55 + 0.35 * w), cy + 0.12 + 0.4 * w, 0.28 - 0.55 * w);
+        tmpSupport.set(-sx * 0.35, cy + 0.1 + 0.2 * w, 0.32 + 0.15 * w);
+        rig.body.rotation.y = damp(rig.body.rotation.y, 0.35 * w, 12, dt);
+      }
+    } else {
+      // Heals: a bandage is wound round the other forearm, a med kit held in both hands and worked at, coffee drunk.
+      const t = p.useT ?? 0;
+      const ph = t * Math.PI * 2 * (p.using === 'bandage' ? 3 : 2);
+      if (p.using === 'coffee') {
+        const sip = Math.min(1, t / 0.25);
+        tmpGrip.set(sx * 0.25, cy + 0.12 + 0.3 * sip, 0.2 + 0.05 * (1 - sip));
+        tmpSupport.set(-sx * 0.5, cy - 0.2, 0.15);
+        rig.head.rotation.x = damp(rig.head.rotation.x, -0.25 * sip, 10, dt);
+      } else if (p.using === 'bandage') {
+        tmpSupport.set(-sx * 0.15, cy - 0.02, 0.3);
+        tmpGrip.set(-sx * 0.15 + Math.cos(ph) * 0.09, cy - 0.02 + Math.sin(ph) * 0.09, 0.3 + Math.sin(ph) * 0.04);
+        rig.head.rotation.x = damp(rig.head.rotation.x, 0.35, 8, dt);
+      } else {
+        tmpGrip.set(sx * 0.2, cy - 0.08 + Math.sin(ph) * 0.03, 0.34);
+        tmpSupport.set(-sx * 0.2, cy - 0.08 - Math.sin(ph) * 0.03, 0.34);
+        rig.head.rotation.x = damp(rig.head.rotation.x, 0.4, 8, dt);
+      }
+    }
+    reach(rig.armL, rig.foreL, rig.shoulderL, tmpGrip, rig.armLen, -1);
+    reach(rig.armR, rig.foreR, rig.shoulderR, tmpSupport, rig.armLen, 1);
     return;
   }
 

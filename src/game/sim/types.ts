@@ -39,7 +39,7 @@ export interface Input {
   scope?: boolean;
   /** Mouse aim: the aim point is where to throw (a bomb lands under the cursor). */
   throwAt?: boolean;
-  /** Draw the gun in slot 1 or 2 (0 = no change). */
+  /** Draw the gun in slot 1 or 2, or take the heals (3) or a bomb (4) in hand (0 = no change). */
   slot?: number;
   /** Switch to the other gun (X, the mouse wheel, the touch SWAP button). */
   cycle?: boolean;
@@ -125,6 +125,8 @@ export interface Player {
   lean: number;
   /** Crouching: 0 (standing) .. 1 (down), eased towards the input. */
   crouch: number;
+  /** In hand instead of the gun (3 / 4): the heals (shoot uses one) or a bomb (hold shoot, let go to throw). */
+  item: 'heal' | 'bomb' | null;
   /** Dodge roll: seconds left, its direction, and the recharge. */
   rolling: number;
   rollDir: number;
@@ -261,6 +263,8 @@ export type GameEvent =
   | { type: 'pickup'; player: number; kind: LootKind }
   /** Drew the other gun. */
   | { type: 'swap'; player: number; weapon: WeaponKind }
+  /** A bomb thrown from the hand (the throw's swing). */
+  | { type: 'throw'; player: number }
   /** Started (`done` false) or finished (true) using a heal. */
   | { type: 'heal'; player: number; kind: HealKind; done: boolean }
   /** Once a second while someone stands outside the Deadline: what it took that second. */

@@ -83,8 +83,39 @@ const sampleGrid = (g: Float32Array, x: number, y: number) => {
 const sstep = (a: number, b: number, v: number) => smooth(Math.max(0, Math.min(1, (v - a) / (b - a))));
 const mix = (a: number[], b: number[], k: number) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
 
+/**
+ * The ground texture is the same every match (the map is fixed), and painting its 1056 x 1056 px costs a few hundred ms of
+ * main thread: it is painted once per visit, in small slices while the lobby is up (`warmTerrain`), and every match after
+ * that reuses the canvas. A match that needs it before the slices are done paints the rest at once.
+ */
+let painter: ReturnType<typeof makeTerrainPainter> | null = null;
+const terrainPainter = () => (painter ??= makeTerrainPainter());
+
+/** Paint the ground a few rows at a time in idle moments (call while the lobby is up). Safe to call more than once. */
+export const warmTerrain = () => {
+  if (typeof window === 'undefined') return;
+  const p = terrainPainter();
+  const slice = () => {
+    if (p.done()) return;
+    const t0 = performance.now();
+    while (!p.done() && performance.now() - t0 < 6) p.step(8);
+    setTimeout(slice, 16);
+  };
+  setTimeout(slice, 0);
+};
+
 /** The ground texture: 4.4 px per metre (roads and paths are geometry), meadow greens with dry patches, soft dirt, mud. */
 export const paintTerrain = () => {
+  const p = terrainPainter();
+  p.step(Infinity);
+  p.g.putImageData(p.img, 0, 0);
+  const tex = new THREE.CanvasTexture(p.c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return tex;
+};
+
+const makeTerrainPainter = () => {
   const px = 4.4; // 1056 px across, as before (6 px a metre over the old 176 m)
   const n = WORLD * px;
   const c = document.createElement('canvas');
@@ -119,7 +150,8 @@ export const paintTerrain = () => {
     for (let y = b.y0 - 2; y < b.y0 + b.h + 2; y++) for (let x = b.x0 - 2; x < b.x0 + b.w + 2; x++) if (x >= 0 && y >= 0 && x < SIZE && y < SIZE) near[y * SIZE + x].push(i);
   });
   const kerbOf = BUILDINGS.map((b) => builtUp.some(([x0, y0, x1, y1]) => b.x0 >= x0 && b.x0 <= x1 && b.y0 >= y0 && b.y0 <= y1));
-  for (let py = 0; py < n; py++) {
+  let row = 0;
+  const paintRow = (py: number) => {
     const wy = py / px;
     const ty = wy / TILE;
     for (let pxx = 0; pxx < n; pxx++) {
@@ -191,13 +223,18 @@ export const paintTerrain = () => {
       img.data[o + 2] = col[2];
       img.data[o + 3] = 255;
     }
-  }
-  g.putImageData(img, 0, 0);
-
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
-  return tex;
+  };
+  return {
+    c,
+    g,
+    img,
+    done: () => row >= n,
+    /** Paint up to `rows` more rows. */
+    step: (rows: number) => {
+      const end = Math.min(n, row + rows);
+      for (; row < end; row++) paintRow(row);
+    },
+  };
 };
 
 // ---------------------------------------------------------------------------

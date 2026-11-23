@@ -468,7 +468,8 @@ export const MainMenu = ({
                 ['leanR', 'Lean right'],
                 ['crouch', 'Crouch'],
                 ['look', 'Look around (hold)'],
-                ['heal', 'Heal'],
+                ['slot3', 'Heals in hand'],
+                ['slot4', 'Bomb in hand'],
                 ['pause', 'Pause'],
               ] as const
             ).map(([a, label]) => (

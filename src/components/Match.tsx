@@ -1188,8 +1188,8 @@ export const Match = ({
                 <Key k={keyLabel(settings.keys.swap)} /> / wheel · guns
               </span>
               <span className="flex items-center gap-1">
-                <Key k={keyLabel(settings.keys.heal)} /> heal
-                <Key k={keyLabel(settings.keys.coffee)} /> {COPY.items.coffee.toLowerCase()}
+                <Key k={keyLabel(settings.keys.slot3)} /> heals
+                <Key k={keyLabel(settings.keys.slot4)} /> bomb
               </span>
               <span className="flex items-center gap-1">
                 <Key k={keyLabel(settings.keys.roll)} /> roll

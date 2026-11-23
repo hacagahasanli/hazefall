@@ -9,7 +9,7 @@ const mem = () => {
 
 /** The layout before layout 3: the super on G, heal on C, no crouch or look keys. */
 const V2: Record<string, string> = Object.fromEntries(
-  Object.entries({ ...DEFAULT_KEYS, super: 'KeyG', heal: 'KeyC' }).filter(([a]) => a !== 'crouch' && a !== 'look'),
+  Object.entries({ ...DEFAULT_KEYS, super: 'KeyG', heal: 'KeyC', coffee: 'KeyV' }).filter(([a]) => !['crouch', 'look', 'slot3', 'slot4'].includes(a)),
 );
 
 describe('settings store', () => {
@@ -70,7 +70,7 @@ describe('settings store', () => {
     expect(keys.slot2).toBe('Digit2');
     expect(keys.swap).toBe('KeyX');
     expect(keys.slot1).not.toBe('Digit1');
-    expect(keys.heal).not.toBe('KeyC');
+    expect(keys.slot3).toBe('Digit3');
     expect(new Set(Object.values(keys)).size).toBe(ACTIONS.length);
   });
 
@@ -90,20 +90,21 @@ describe('settings store', () => {
     expect(normalize({ keys: { ...V2, fire: 'KeyK', jump: 'KeyB' } }).keys).toMatchObject({ fire: 'KeyK', jump: 'KeyB' });
   });
 
-  it('moves a layout-2 save once to layout 3: G crouches, C looks around, the super goes to B and heal to H', () => {
+  it('moves an older save once to layout 4: C crouches, Left Alt looks around, the super stays on G, 3 / 4 hold heals and a bomb', () => {
     const keys = normalize({ keys: V2, keysVersion: 2 }).keys;
-    expect(keys).toMatchObject({ crouch: 'KeyG', look: 'KeyC', super: 'KeyB', heal: 'KeyH' });
+    expect(keys).toMatchObject({ crouch: 'KeyC', look: 'AltLeft', super: 'KeyG', slot3: 'Digit3', slot4: 'Digit4' });
+    // The short-lived layout 3 (crouch G, look C, super B) moves too.
+    const v3 = normalize({ keys: { ...V2, heal: 'KeyH', crouch: 'KeyG', look: 'KeyC', super: 'KeyB' }, keysVersion: 3 }).keys;
+    expect(v3).toMatchObject({ crouch: 'KeyC', look: 'AltLeft', super: 'KeyG', slot3: 'Digit3', slot4: 'Digit4' });
+    expect(new Set(Object.values(v3)).size).toBe(ACTIONS.length);
     expect(new Set(Object.values(keys)).size).toBe(ACTIONS.length);
-    // A super the player had put on G themselves... is still moved (G is the crouch now), but a heal on V stays.
-    const own = normalize({ keys: { ...V2, heal: 'KeyY', coffee: 'KeyV' }, keysVersion: 2 }).keys;
-    expect(own.heal).toBe('KeyY');
-    // B already used by the save: the super gets a spare key, nothing is lost.
-    const bTaken = normalize({ keys: { ...V2, jump: 'KeyB', fire: 'KeyJ' }, keysVersion: 2 }).keys;
-    expect(bTaken.jump).toBe('KeyB');
-    expect(bTaken.super).not.toBe('KeyB');
-    expect(new Set(Object.values(bTaken)).size).toBe(ACTIONS.length);
-    // Layout 3 saves keep whatever they chose.
-    expect(normalize({ keys: { ...DEFAULT_KEYS, crouch: 'KeyN', super: 'KeyG' }, keysVersion: 3 }).keys).toMatchObject({ crouch: 'KeyN', super: 'KeyG' });
+    // 3 already used by the save: the heals slot gets a spare key, nothing is lost.
+    const taken = normalize({ keys: { ...V2, reload: 'Digit3', fire: 'KeyJ' }, keysVersion: 2 }).keys;
+    expect(taken.reload).toBe('Digit3');
+    expect(taken.slot3).not.toBe('Digit3');
+    expect(new Set(Object.values(taken)).size).toBe(ACTIONS.length);
+    // Layout 4 saves keep whatever they chose.
+    expect(normalize({ keys: { ...DEFAULT_KEYS, crouch: 'KeyN', super: 'KeyB' }, keysVersion: 4 }).keys).toMatchObject({ crouch: 'KeyN', super: 'KeyB' });
   });
 
   it('never throws when storage does', () => {

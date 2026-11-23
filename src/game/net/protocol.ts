@@ -22,8 +22,11 @@ const HEAL = 1 << 14;
 const COFFEE = 1 << 15;
 /** Crouched (a held state, like leaning). */
 const CROUCH = 1 << 16;
+/** Heals (3) or a bomb (4) into the hand. */
+const SLOT3 = 1 << 17;
+const SLOT4 = 1 << 18;
 /** Presses that must survive when inputs are folded together (everything but leaning and the held aim keys). */
-export const PRESS_BITS = 0b111111 | SLOT1 | SLOT2 | CYCLE | HEAL | COFFEE;
+export const PRESS_BITS = 0b111111 | SLOT1 | SLOT2 | SLOT3 | SLOT4 | CYCLE | HEAL | COFFEE;
 
 /** One tick of input: [clientTick, buttons, mx * 100, my * 100, aimX, aimY, pitch * 100]. */
 export type WireInput = [number, number, number, number, number, number, number];
@@ -43,6 +46,8 @@ export const encodeInput = (tick: number, i: Input): WireInput => {
   if (i.throwAt) bits |= THROW_AT;
   if (i.slot === 1) bits |= SLOT1;
   if (i.slot === 2) bits |= SLOT2;
+  if (i.slot === 3) bits |= SLOT3;
+  if (i.slot === 4) bits |= SLOT4;
   if (i.cycle) bits |= CYCLE;
   if (i.heal) bits |= HEAL;
   if (i.coffee) bits |= COFFEE;
@@ -59,7 +64,7 @@ export const decodeInput = (w: WireInput): Input => {
   s.snap = (w[1] & SNAP) !== 0;
   s.scope = (w[1] & SCOPE) !== 0;
   s.throwAt = (w[1] & THROW_AT) !== 0;
-  s.slot = w[1] & SLOT1 ? 1 : w[1] & SLOT2 ? 2 : 0;
+  s.slot = w[1] & SLOT1 ? 1 : w[1] & SLOT2 ? 2 : w[1] & SLOT3 ? 3 : w[1] & SLOT4 ? 4 : 0;
   s.cycle = (w[1] & CYCLE) !== 0;
   s.heal = (w[1] & HEAL) !== 0;
   s.coffee = (w[1] & COFFEE) !== 0;
