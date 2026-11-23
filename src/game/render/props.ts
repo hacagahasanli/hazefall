@@ -497,6 +497,8 @@ const FADE_PAD = 1;
 export const tallLandmarks = () => {
   const geos: THREE.BufferGeometry[] = [];
   const boxes: THREE.Box3[] = [];
+  /** Each part's real top (m), before the fade pad. */
+  const tops: number[] = [];
   const level = new Float32Array(TALL_MAX).fill(1);
   const clear = new Float32Array(TALL_MAX).fill(99);
   const uniforms = { uFade: { value: level }, uDither: { value: 0 } };
@@ -549,6 +551,7 @@ export const tallLandmarks = () => {
       g.translate(x, 0, z);
       g.computeBoundingBox();
       boxes.push(g.boundingBox!.clone().expandByScalar(FADE_PAD));
+      tops.push(g.boundingBox!.max.y);
       g.setAttribute('aPart', new THREE.BufferAttribute(new Float32Array(g.getAttribute('position').count).fill(geos.length), 1));
       geos.push(g);
     },
@@ -565,7 +568,9 @@ export const tallLandmarks = () => {
       uniforms.uDither.value = dither ? 1 : 0;
       let ghosted = false;
       for (let i = 0; i < boxes.length; i++) {
-        if (on && hits(cam.x, cam.y, cam.z, target.x, target.y, target.z, boxes[i])) clear[i] = 0;
+        // Standing on top of it (the HQ roof) it is the floor under you, not something hiding you.
+        const onTop = target.y - 1.2 > tops[i] - 0.7;
+        if (on && !onTop && hits(cam.x, cam.y, cam.z, target.x, target.y, target.z, boxes[i])) clear[i] = 0;
         else clear[i] += dt;
         if (!on) level[i] = 1;
         else if (clear[i] < FADE_HOLD) level[i] = Math.max(FADE_MIN, level[i] - ((1 - FADE_MIN) / FADE_IN) * dt);

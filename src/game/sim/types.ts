@@ -47,6 +47,8 @@ export interface Input {
   heal?: boolean;
   /** Drink a coffee. */
   coffee?: boolean;
+  /** Crouched (G toggles it on the client; the sim gets the state). */
+  crouch?: boolean;
   /** Aim point on the map. */
   aimX: number;
   aimY: number;
@@ -121,6 +123,8 @@ export interface Player {
   pushing: number;
   /** Leaning: -1 (left) .. 1 (right), eased towards the input. */
   lean: number;
+  /** Crouching: 0 (standing) .. 1 (down), eased towards the input. */
+  crouch: number;
   /** Dodge roll: seconds left, its direction, and the recharge. */
   rolling: number;
   rollDir: number;

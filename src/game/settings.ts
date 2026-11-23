@@ -8,7 +8,7 @@ import { COPY } from './copy/studio';
 import type { QualitySetting } from './render/quality';
 
 export type Action =
-  | 'up' | 'down' | 'left' | 'right' | 'fire' | 'jump' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR' | 'scope'
+  | 'up' | 'down' | 'left' | 'right' | 'fire' | 'jump' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR' | 'scope' | 'crouch' | 'look'
   | 'slot1' | 'slot2' | 'swap' | 'heal' | 'coffee' | 'aim' | 'mute' | 'pause';
 
 /** In the order the Controls tab lists them, with the words it shows. */
@@ -25,6 +25,8 @@ export const ACTIONS: [Action, string][] = [
   ['reload', 'Reload'],
   ['leanL', 'Lean left'],
   ['leanR', 'Lean right'],
+  ['crouch', 'Crouch'],
+  ['look', 'Look around (hold)'],
   ['scope', 'Scope'],
   ['slot1', 'Gun slot 1'],
   ['slot2', 'Gun slot 2'],
@@ -44,16 +46,18 @@ export const DEFAULT_KEYS: Record<Action, string> = {
   fire: 'KeyJ',
   jump: 'Space',
   use: 'KeyF',
-  super: 'KeyG',
+  super: 'KeyB',
   roll: 'ShiftLeft',
   reload: 'KeyR',
   leanL: 'KeyQ',
   leanR: 'KeyE',
+  crouch: 'KeyG',
+  look: 'KeyC',
   scope: 'KeyZ',
   slot1: 'Digit1',
   slot2: 'Digit2',
   swap: 'KeyX',
-  heal: 'KeyC',
+  heal: 'KeyH',
   coffee: 'KeyV',
   aim: 'KeyT',
   mute: 'KeyM',
@@ -61,7 +65,7 @@ export const DEFAULT_KEYS: Record<Action, string> = {
 };
 
 /** Free keys handed to a newly added action when an old save already uses its default. */
-const SPARE_KEYS = ['Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'KeyB', 'KeyN', 'KeyH', 'KeyJ', 'KeyK', 'KeyL', 'KeyU', 'KeyI', 'KeyO', 'KeyY'];
+const SPARE_KEYS = ['Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'KeyN', 'KeyJ', 'KeyK', 'KeyL', 'KeyU', 'KeyI', 'KeyO', 'KeyY'];
 
 /** Always on, whatever the bindings: arrows move, the right Shift rolls too, Esc belongs to menus and the browser. */
 export const FIXED_KEYS: Partial<Record<Action, string[]>> = {
@@ -136,7 +140,7 @@ export const DEFAULT_SETTINGS: Settings = {
   colorBlind: false,
   largeHud: false,
   showKeyHints: true,
-  keysVersion: 2,
+  keysVersion: 3,
 };
 
 export const SETTINGS_KEY = 'lcs:settings';
@@ -155,6 +159,14 @@ export const normalize = (raw: unknown): Settings => {
   if (r.keysVersion !== DEFAULT_SETTINGS.keysVersion && rk.fire === 'Space') {
     const taken = new Set(Object.entries(rk).filter(([a]) => a !== 'fire' && a !== 'jump').map(([, k]) => k));
     rk = { ...rk, fire: !taken.has('KeyJ') ? 'KeyJ' : typeof rk.jump === 'string' && rk.jump !== 'Space' ? rk.jump : 'KeyJ', jump: 'Space' };
+  }
+  // Layout 3: G crouches and C looks around (held); the super moves from G to B and heal from C to H. A save that still has
+  // the old defaults there moves once; a key the player chose themselves stays theirs.
+  if (typeof r.keysVersion !== 'number' || r.keysVersion < 3) {
+    rk = { ...rk };
+    // Left unbound here, they take their new defaults below (or a spare key if the save already uses those).
+    if (rk.super === 'KeyG') delete rk.super;
+    if (rk.heal === 'KeyC') delete rk.heal;
   }
   const used = new Set<string>();
   const saved = (a: Action) => {

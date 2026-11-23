@@ -4,13 +4,13 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 import { assetUrl } from '../../lib/assets';
 import { trackLoad } from '../../lib/loading';
-import { BUILDINGS, fenceVertical, MAP, SIZE, TILE, tileHash, treeSpot, WORLD } from '../sim/constants';
+import { BUILDINGS, CRATE_TOP, fenceVertical, MAP, SIZE, TILE, tileHash, treeSpot, WORLD } from '../sim/constants';
 import { EAVE, ridgeHeight, roofRise, ROOF_LAYER } from '../sim/roofs';
 
 import { buildFurniture, buildRugs } from './furniture';
 import { cloneMaterial, collectParts, mergeParts, mergeRigid, mergeStatic } from './merge';
 import { buildRoads } from './roads';
-import { buildBushes, buildGrass, buildRocks, buildTallGrass, buildTrees, natureUniforms, outerForest, paintTerrain, updateNature } from './nature';
+import { buildBushes, buildGrass, buildMeadow, buildRocks, buildTallGrass, buildTrees, natureUniforms, outerForest, paintTerrain, updateNature } from './nature';
 
 import { chunkedInstances } from './chunks';
 
@@ -28,12 +28,52 @@ const loader = new GLTFLoader();
 // Counted for the loading screens (lib/loading): real files, real progress.
 const load = (name: string) => trackLoad(loader.loadAsync(assetUrl(`models/${name}.glb`))).then((g) => g.scene);
 
-const TINTS = [0xffffff, 0xffc9b0, 0xc8dcff, 0xfff0b8, 0xe0ffd0, 0xffd6e8, 0xd8d0ff];
-/** Siding colours for the houses in first person, and their roofs. */
-const FACADES = [0xd9c8a8, 0xb9c8d6, 0xe4d7c1, 0xc9a98a, 0xa9b996, 0xd8b8a4, 0xc4c0b6];
 /** With the metal gone the pack's pale colours read washed out next to the old look; this brings them back to it. */
 const HOUSE_DIFFUSE = 0.6;
-const ROOFS = [0x7a3a2e, 0x4a5560, 0x5a6b45, 0x6b4a32, 0x3f4650];
+
+/**
+ * Colours by place (battleground-atmosphere.md item 5), so Old Town reads apart from the Truck Stop at street level the way
+ * the landmarks do from the sky: walls, trim, roofs and the tint of the house model seen from above, one set per kind of
+ * place, picked per house by hash within it.
+ */
+interface Palette { walls: number[]; trim: number; roofs: number[]; tints: number[]; chimneys: boolean; ac: boolean }
+const PALETTES: Record<string, Palette> = {
+  town: { walls: [0xd9c8a8, 0xc9a98a, 0xb87a5e, 0xe4d7c1, 0xa9b996], trim: 0xf1ead8, roofs: [0x7a3a2e, 0x6b4a32, 0x4a5560], tints: [0xffe2cc, 0xfff0d8, 0xffd6c0, 0xf0e8ff], chimneys: true, ac: false },
+  farm: { walls: [0xe8e0cc, 0xd8c49a], trim: 0x5b4636, roofs: [0x5a6b45, 0x6b4a32], tints: [0xfff6e0, 0xf0ffe0], chimneys: true, ac: false },
+  cabin: { walls: [0x8a6440, 0x6f5136, 0xa07c56], trim: 0xe4d7c1, roofs: [0x3f5a3a, 0x3f4650], tints: [0xe0d0b8, 0xd8e8d0], chimneys: true, ac: false },
+  truck: { walls: [0xd8b8a4, 0xb9c8d6, 0xe8dcb0, 0xc8d8c0], trim: 0xf4f1ea, roofs: [0x4a5560], tints: [0xffd6e8, 0xc8dcff, 0xfff0b8, 0xd8ffe0], chimneys: false, ac: true },
+  campus: { walls: [0xc4c0b6, 0xdedbd2], trim: 0x3f4650, roofs: [0x4a5560], tints: [0xc8dcff, 0xffffff], chimneys: false, ac: true },
+  works: { walls: [0x8f969c, 0x9c7f66, 0xb0aca2], trim: 0x3f4650, roofs: [0x3f4650, 0x5c6066], tints: [0xd0d4d8, 0xc8c0b8], chimneys: false, ac: false },
+};
+const PLACE_KIND: [string, number, number, number, number][] = [
+  ['works', 4, 4, 27, 25], ['cabin', 30, 4, 79, 28], ['cabin', 88, 4, 117, 31], ['farm', 34, 32, 51, 45], ['farm', 72, 34, 89, 47],
+  ['cabin', 4, 40, 31, 91], ['town', 44, 42, 79, 79], ['works', 76, 48, 89, 57], ['works', 89, 36, 113, 83], ['farm', 33, 74, 50, 87],
+  ['campus', 10, 90, 41, 115], ['truck', 52, 90, 79, 105], ['works', 80, 93, 117, 117],
+];
+const DOOR_COLORS = [0x3f5a3a, 0x4a6a8a, 0x7a3a2e, 0x2b2d30, 0x5b4636, 0x2f4a5a];
+const houseHash = (bi: number, k: number) => {
+  const v = Math.sin(bi * 91.7 + k * 47.3) * 43758.5453;
+  return v - Math.floor(v);
+};
+/** The look of building `bi`: its place's palette and the colours this house took from it. */
+export const houseLook = (bi: number) => {
+  const b = BUILDINGS[bi];
+  const cx = b.x0 + b.w / 2;
+  const cy = b.y0 + b.h / 2;
+  const kind = PLACE_KIND.find(([, x0, y0, x1, y1]) => cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1)?.[0] ?? 'farm';
+  const pal = PALETTES[kind];
+  const pick = (list: number[], k: number) => list[Math.floor(houseHash(bi, k) * list.length) % list.length];
+  return {
+    kind,
+    wall: b.barn ? 0x9b3b30 : kind === 'truck' ? pal.walls[bi % pal.walls.length] : pick(pal.walls, 1),
+    trim: b.barn ? 0xe4d7c1 : pal.trim,
+    roof: b.barn ? 0x5b2a24 : pick(pal.roofs, 2),
+    tint: pick(pal.tints, 3),
+    door: pick(DOOR_COLORS, 4),
+    chimney: !b.barn && pal.chimneys && houseHash(bi, 21) < 0.5,
+    ac: pal.ac,
+  };
+};
 
 /**
  * A gabled roof over a building's footprint (x0, z0, w, d in metres): the ridge along the long
@@ -76,7 +116,8 @@ const buildRoof = (x0: number, z0: number, w: number, d: number, barn: boolean, 
     ),
   );
   slopes.computeVertexNormals();
-  const roof = new THREE.Mesh(paint(slopes, barn ? 0x5b2a24 : ROOFS[i % ROOFS.length]), roofMats.roof);
+  const look = houseLook(i);
+  const roof = new THREE.Mesh(paint(slopes, look.roof), roofMats.roof);
   roof.castShadow = true;
   roof.receiveShadow = true;
   // The gables: triangles closing the ends between the wall tops and the ridge.
@@ -86,8 +127,32 @@ const buildRoof = (x0: number, z0: number, w: number, d: number, barn: boolean, 
     new THREE.Float32BufferAttribute([...pos(o, o, H), ...pos(o, S - o, H), ...pos(o, S / 2, H + rise - 0.1), ...pos(L - o, o, H), ...pos(L - o, S / 2, H + rise - 0.1), ...pos(L - o, S - o, H)], 3),
   );
   gables.computeVertexNormals();
-  const gable = new THREE.Mesh(paint(gables, barn ? 0x9b3b30 : FACADES[i % FACADES.length]), roofMats.gable);
+  const gable = new THREE.Mesh(paint(gables, look.wall), roofMats.gable);
   gable.castShadow = true;
+  // Roof details (merged with the roofs): a ridge cap, a chimney on half the homes, an AC box on flat roofs in town.
+  const bits: THREE.BufferGeometry[] = [];
+  const darker = new THREE.Color(look.roof).multiplyScalar(0.7).getHex();
+  const at = (u: number, v: number, y: number, sx: number, sy: number, sz: number, hex: number) => {
+    const p = pos(u, v, y);
+    bits.push(paint(new THREE.BoxGeometry(alongX ? sx : sz, sy, alongX ? sz : sx).translate(p[0], p[1], p[2]), hex));
+  };
+  if (rise > 0.3) {
+    at(L / 2, S / 2, H + rise + 0.03, L - 0.2, 0.12, 0.3, darker);
+    if (look.chimney) {
+      const v = S * 0.3;
+      const ySlope = H + rise * (v / (S / 2));
+      const brick = look.kind === 'cabin' ? look.wall : 0x8a6a5a;
+      at(L * 0.3, v, (ySlope + H + rise + 0.5) / 2 - 0.2, 0.6, H + rise + 0.5 - ySlope + 0.4, 0.6, brick);
+      at(L * 0.3, v, H + rise + 0.54, 0.7, 0.08, 0.7, 0x3a3430);
+    }
+  } else if (look.ac) {
+    at(L * 0.35, S * 0.4, H + rise + 0.3, 1.2, 0.6, 0.9, 0x9aa3a8);
+  }
+  if (bits.length) {
+    const m = new THREE.Mesh(mergeGeometries(bits.map((b) => b.toNonIndexed()))!, roofMats.roof);
+    m.castShadow = true;
+    g.add(m);
+  }
   // Unlit: facing down, a lit ceiling would take the hemisphere light's grass-green ground colour.
   const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(Math.PI / 2), roofMats.ceiling);
   ceiling.position.set(x0 + w / 2, H - 0.02, z0 + d / 2);
@@ -387,8 +452,6 @@ const lampMats = {
   tapeA: new THREE.MeshStandardMaterial({ color: 0xd4a21f, roughness: 0.9 }),
   tapeB: new THREE.MeshStandardMaterial({ color: 0x2a2a2c, roughness: 0.9 }),
   ceilingLamp: new THREE.MeshStandardMaterial({ color: 0xfff0d0, emissive: 0xffc878, emissiveIntensity: 1.8, roughness: 1 }),
-  sandbag: new THREE.MeshStandardMaterial({ color: 0x8c7b58, roughness: 1, flatShading: true }),
-  sandbagDark: new THREE.MeshStandardMaterial({ color: 0x74664a, roughness: 1, flatShading: true }),
 };
 const LAMP_GLOW = 0x8a5a26;
 const ROOM_GLOW = 0x4a2e12;
@@ -417,8 +480,9 @@ export const buildWorld = (scene: THREE.Scene): World => {
     buildRocks(tilesOf('k').map(spot)),
     buildGrass(),
     buildTallGrass(),
+    buildMeadow(),
   ];
-  ['trees', 'bushes', 'rocks', 'grass', 'tall grass'].forEach((name, i) => (nature[i].group.name = name));
+  ['trees', 'bushes', 'rocks', 'grass', 'tall grass', 'meadow'].forEach((name, i) => (nature[i].group.name = name));
   nature.forEach((n) => scene.add(n.group));
   scene.add(mergeStatic(buildRoads()));
 
@@ -547,18 +611,22 @@ export const buildWorld = (scene: THREE.Scene): World => {
   scene.add(roomGlow);
   glows.push(roomGlow);
 
-  // ---------- the battle zone: scorch marks on the ground by some houses, and a low pile of sandbags in some of their
+  // ---------- earlier rounds and a hurried leaving: scorch marks on the ground by some houses, and yard things in some of their
   // corners. Picked per building from a fixed hash, so every match looks the same; flat or tucked into a corner, so none
   // of it reads as cover you could use (they are not in the simulation).
   const scorchMat = new THREE.MeshBasicMaterial({ map: poolTex, color: 0x1c1610, transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
   const open = (tx: number, ty: number) => 'gpd'.includes(MAP[ty]?.[tx] ?? '#');
   const wear = new THREE.Group();
+  // One material per colour (the yard things merge per material: a handful of draw calls for the whole map).
+  // One vertex-coloured material for all of them: they merge into a single batch per chunk.
+  const yardAll = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true });
+  const yardGeo = (g: THREE.BufferGeometry, hex: number) => paint(g.toNonIndexed(), hex);
   BUILDINGS.forEach((b, bi) => {
     const x0 = b.x0 * TILE;
     const z0 = b.y0 * TILE;
     const x1 = (b.x0 + b.w) * TILE;
     const z1 = (b.y0 + b.h) * TILE;
-    if (hash(bi, 3, 11) < 0.6) {
+    if (hash(bi, 3, 11) < 0.35) {
       // Along one wall, outside, a few metres from a corner.
       const side = Math.floor(hash(bi, 5, 12) * 4);
       const t = 0.2 + hash(bi, 7, 13) * 0.6;
@@ -572,8 +640,8 @@ export const buildWorld = (scene: THREE.Scene): World => {
         wear.add(s);
       }
     }
-    if (hash(bi, 4, 16) < 0.4) {
-      // Sandbags hugging a corner, outside, where nobody walks.
+    if (hash(bi, 4, 16) < 0.6) {
+      // Yard things hugging a corner, outside, where nobody walks.
       const corner = Math.floor(hash(bi, 6, 17) * 4);
       const cx = corner & 1 ? x1 : x0;
       const cz = corner & 2 ? z1 : z0;
@@ -582,18 +650,32 @@ export const buildWorld = (scene: THREE.Scene): World => {
       if (open(Math.floor((cx + ox * 0.6) / TILE), Math.floor((cz + oz * 0.6) / TILE))) {
         const pile = new THREE.Group();
         pile.position.set(cx + ox * 0.45, 0, cz + oz * 0.45);
-        const bag = (x: number, y: number, z: number, ry: number, k: number) => {
-          const m = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.24, 0.38), k % 3 ? lampMats.sandbag : lampMats.sandbagDark);
+        // A home left in a hurry, not a fort (battleground-atmosphere.md item 8): a woodpile, a water butt or two bins,
+        // all low and against the wall.
+        const kind = hash(bi, 8, 19);
+        const box = (w: number, h: number, d: number, x: number, y: number, z: number, hex: number, ry = 0) => {
+          const m = new THREE.Mesh(yardGeo(new THREE.BoxGeometry(w, h, d), hex), yardAll);
           m.position.set(x, y, z);
-          m.rotation.y = ry + (hash(bi, k, 18) - 0.5) * 0.25;
+          m.rotation.y = ry;
           m.castShadow = m.receiveShadow = true;
           pile.add(m);
         };
-        // Along the wall of the corner on each side, a second row on top.
-        bag(-ox * 0.1, 0.12, -oz * 0.05 - oz * 0.0, 0, 0);
-        bag(-ox * 0.85, 0.12, 0, 0, 1);
-        bag(0, 0.12, -oz * 0.8, Math.PI / 2, 2);
-        bag(-ox * 0.45, 0.36, 0, 0, 3);
+        const drum = (r: number, h: number, x: number, z: number, hex: number, lid: number) => {
+          const m = new THREE.Mesh(yardGeo(new THREE.CylinderGeometry(r, r * 0.92, h, 8), hex), yardAll);
+          m.position.set(x, h / 2, z);
+          m.castShadow = m.receiveShadow = true;
+          const top = new THREE.Mesh(yardGeo(new THREE.CylinderGeometry(r * 1.04, r * 1.04, 0.05, 8), lid), yardAll);
+          top.position.set(x, h + 0.02, z);
+          pile.add(m, top);
+        };
+        if (kind < 0.45) {
+          // Logs in three rows along the wall, cut ends pale.
+          for (let row = 0; row < 3; row++) for (let k = 0; k < 6 - row; k++) box(0.6, 0.17, 0.17, -ox * (0.1 + k * 0.19 + row * 0.09), 0.09 + row * 0.17, -oz * 0.02, k % 2 ? 0x7a5a3a : 0x8a6a48, Math.PI / 2);
+        } else if (kind < 0.75) drum(0.3, 0.9, -ox * 0.2, -oz * 0.2, 0x3f5a3a, 0x2f4a2e);
+        else {
+          drum(0.25, 0.9, -ox * 0.15, -oz * 0.2, 0x4a5a4a, 0x3a4a3a);
+          drum(0.25, 0.9, -ox * 0.7, -oz * 0.2, 0x4a5a4a, 0x3a4a3a);
+        }
         wear.add(pile);
       }
     }
@@ -636,6 +718,62 @@ export const buildWorld = (scene: THREE.Scene): World => {
     return g;
   });
 
+  /**
+   * The facade kit at eye level (battleground-atmosphere.md item 4): a dark wear band at the foot of every outside wall, an
+   * eave board under the roof, corner posts, window frames (lintel, jambs, a mullion) and a sill ledge, in the place's
+   * trim colour. One instanced box mesh for the whole map; it shows with the real walls (shoulder view and first person).
+   */
+  const facadeKit = () => {
+    const parts: { m: THREE.Matrix4; c: THREE.Color }[] = [];
+    const q = new THREE.Quaternion();
+    const v = new THREE.Vector3();
+    const sc = new THREE.Vector3();
+    const piece = (x: number, y: number, z: number, along: number, high: number, proud: number, alongX: boolean, hex: number | THREE.Color) => {
+      sc.set(alongX ? along : proud, high, alongX ? proud : along);
+      parts.push({ m: new THREE.Matrix4().compose(v.set(x, y, z), q, sc), c: hex instanceof THREE.Color ? hex : new THREE.Color(hex) });
+    };
+    BUILDINGS.forEach((b, bi) => {
+      const look = houseLook(bi);
+      const band = new THREE.Color(look.wall).multiplyScalar(0.62).lerp(new THREE.Color(0x5a4a38), 0.3);
+      const inB = (x: number, y: number) => x >= b.x0 && y >= b.y0 && x < b.x0 + b.w && y < b.y0 + b.h;
+      for (let ty = b.y0; ty < b.y0 + b.h; ty++) {
+        for (let tx = b.x0; tx < b.x0 + b.w; tx++) {
+          const t = MAP[ty][tx];
+          if (t !== '#' && t !== 'w') continue;
+          for (const [nx, ny] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            if (inB(tx + nx, ty + ny)) continue;
+            const alongX = ny !== 0; // the face runs along x when its normal is along y
+            const face = (proud: number) => [tx * TILE + TILE / 2 + nx * (TILE / 2 + proud / 2), ty * TILE + TILE / 2 + ny * (TILE / 2 + proud / 2)];
+            let [fx, fz] = face(0.06);
+            piece(fx, 0.225, fz, TILE, 0.45, 0.06, alongX, band);
+            [fx, fz] = face(0.08);
+            piece(fx, 2.49, fz, TILE, 0.22, 0.08, alongX, look.trim);
+            if (t === 'w') {
+              piece(fx, 2.42, fz, 1.9, 0.12, 0.08, alongX, look.trim);
+              const ax = alongX ? 1 : 0;
+              const az = alongX ? 0 : 1;
+              for (const o of [-0.9, 0.9]) piece(fx + ax * o, 1.65, fz + az * o, 0.12, 1.5, 0.08, alongX, look.trim);
+              [fx, fz] = face(0.04);
+              piece(fx, 1.65, fz, 0.06, 1.5, 0.04, alongX, look.trim);
+              [fx, fz] = face(0.22);
+              piece(fx, 0.92, fz, TILE, 0.08, 0.22, alongX, new THREE.Color(look.trim).multiplyScalar(0.85));
+            }
+          }
+        }
+      }
+      for (const [cx, cz] of [[b.x0, b.y0], [b.x0 + b.w, b.y0], [b.x0, b.y0 + b.h], [b.x0 + b.w, b.y0 + b.h]]) piece(cx * TILE, 1.3, cz * TILE, 0.16, 2.6, 0.16, true, look.trim);
+    });
+    const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }), parts.length);
+    parts.forEach((p, i) => {
+      mesh.setMatrixAt(i, p.m);
+      mesh.setColorAt(i, p.c);
+    });
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+    mesh.name = 'facade kit';
+    return mesh;
+  };
+
   // In first person (and over the shoulder) every house shows its real walls at once, in its own colour: one instanced
   // wall, sill and glass mesh for the whole map (the per-building ones above stay for the view from above, where only
   // the house you're in opens up).
@@ -644,7 +782,7 @@ export const buildWorld = (scene: THREE.Scene): World => {
     const walls: { m: THREE.Matrix4; c: THREE.Color }[] = [];
     const windows: THREE.Matrix4[] = [];
     BUILDINGS.forEach((b, bi) => {
-      const c = new THREE.Color(b.barn ? 0x9b3b30 : FACADES[bi % FACADES.length]);
+      const c = new THREE.Color(houseLook(bi).wall);
       for (let ty = b.y0; ty < b.y0 + b.h; ty++) {
         for (let tx = b.x0; tx < b.x0 + b.w; tx++) {
           const t = MAP[ty][tx];
@@ -670,6 +808,7 @@ export const buildWorld = (scene: THREE.Scene): World => {
     });
     sill.count = glass.count = windows.length;
     g.add(sill, glass);
+    g.add(facadeKit());
     g.visible = false;
     scene.add(g);
     return g;
@@ -775,7 +914,7 @@ export const buildWorld = (scene: THREE.Scene): World => {
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.translate(-root.position.x, -root.position.y, -root.position.z);
     geo.computeVertexNormals();
-    paint(geo, b.barn ? 0x9b3b30 : FACADES[bi % FACADES.length]);
+    paint(geo, houseLook(bi).wall);
     const mat = cloneMaterial(jambBase);
     mat.transparent = true;
     const jambs = new THREE.Mesh(geo, mat);
@@ -815,7 +954,7 @@ export const buildWorld = (scene: THREE.Scene): World => {
         o.material = (o.material as THREE.Material).clone();
         // A tint per house so the rooftops don't all read the same from above.
         const m = o.material as THREE.MeshStandardMaterial;
-        if (m.color) m.color.multiply(new THREE.Color(TINTS[i % TINTS.length]));
+        if (m.color) m.color.multiply(new THREE.Color(houseLook(i).tint));
         // The pack's materials are fully metallic and the scene has no environment map: a metal with nothing to reflect is
         // black wherever the sun's highlight does not reach (every slope and wall facing away from it).
         m.metalness = 0;
@@ -845,7 +984,8 @@ export const buildWorld = (scene: THREE.Scene): World => {
   // ---------- everything loaded from the packs
   const crates = tilesOf('r');
   let crateMeshes: THREE.InstancedMesh[] = [];
-  const crateMatrices = crates.map((t) => place(t.x, t.y, 4.2, hash(t.tx, t.ty) * Math.PI));
+  // 1.3 m tall (CRATE_TOP: rounds stop on it up to there, so it must look that tall), 1.05 x 2.1 m on the ground.
+  const crateMatrices = crates.map((t) => place(t.x, t.y, 4.2, hash(t.tx, t.ty) * Math.PI).multiply(new THREE.Matrix4().makeScale(1, CRATE_TOP / (0.25 * 4.2), 1)));
   const crateAlive = crates.map(() => true);
 
   void (async () => {

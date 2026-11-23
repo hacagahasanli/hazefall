@@ -262,7 +262,7 @@ export const Home = () => {
           {[
             ['01', 'Drop', 'The plane crosses the map. Jump when you like, free-fall through the clouds, steer your parachute down. You land with a pistol and two spare magazines. Shooting starts once you are on the ground.'],
             ['02', 'Loot', 'Guns, armor, ammo, med kits and bombs lie in the houses, barns and the yards. Walk over them or press F. Every gun sounds and kicks like itself.'],
-            ['03', 'Survive', 'The Deadline closes in phase by phase and hurts more each time. Hide in tall grass, lean round corners with Q and E, vault fences. Be the last one.'],
+            ['03', 'Survive', 'The Deadline closes in phase by phase and hurts more each time. Hide in tall grass, lean round corners with Q and E, crouch behind rocks with G, vault fences. Be the last one.'],
           ].map(([n, title, text]) => (
             <div key={n} className="panel-cut flex gap-4 bg-ink/80 p-4 backdrop-blur">
               <span className="font-display text-3xl text-gold/80">{n}</span>

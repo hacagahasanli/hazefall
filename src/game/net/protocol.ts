@@ -20,6 +20,8 @@ const SLOT2 = 1 << 12;
 const CYCLE = 1 << 13;
 const HEAL = 1 << 14;
 const COFFEE = 1 << 15;
+/** Crouched (a held state, like leaning). */
+const CROUCH = 1 << 16;
 /** Presses that must survive when inputs are folded together (everything but leaning and the held aim keys). */
 export const PRESS_BITS = 0b111111 | SLOT1 | SLOT2 | CYCLE | HEAL | COFFEE;
 
@@ -44,6 +46,7 @@ export const encodeInput = (tick: number, i: Input): WireInput => {
   if (i.cycle) bits |= CYCLE;
   if (i.heal) bits |= HEAL;
   if (i.coffee) bits |= COFFEE;
+  if (i.crouch) bits |= CROUCH;
   return [tick, bits, Math.round(i.mx * 100), Math.round(i.my * 100), r2(i.aimX), r2(i.aimY), Math.round((i.pitch ?? 0) * 100)];
 };
 
@@ -60,6 +63,7 @@ export const decodeInput = (w: WireInput): Input => {
   s.cycle = (w[1] & CYCLE) !== 0;
   s.heal = (w[1] & HEAL) !== 0;
   s.coffee = (w[1] & COFFEE) !== 0;
+  s.crouch = (w[1] & CROUCH) !== 0;
   s.pitch = (w[6] ?? 0) / 100;
   return s;
 };
@@ -184,7 +188,7 @@ const reviver = (_k: string, v: unknown) =>
  * ride along in an object at the end, so nothing is lost if the two lists drift apart.
  */
 const PLAYER_KEYS = Object.keys(newPlayer(0, '', 'hotfix', false, 0, 0)).filter((k) => k !== 'prev');
-const INPUT_KEYS = [...Object.keys(NO_INPUT), 'snap', 'pitch', 'scope', 'throwAt', 'slot', 'cycle', 'heal', 'coffee'];
+const INPUT_KEYS = [...Object.keys(NO_INPUT), 'snap', 'pitch', 'scope', 'throwAt', 'slot', 'cycle', 'heal', 'coffee', 'crouch'];
 
 /** Loot the same way: the list is sent whenever it changes and once a second, and twenty fighters need ~150 pieces. */
 const LOOT_KEYS = ['id', 'kind', 'x', 'y', 'ammo', 'tier', 'active'];

@@ -1167,6 +1167,12 @@ export const Match = ({
                 <Key k={keyLabel(settings.keys.leanR)} /> lean
               </span>
               <span className="flex items-center gap-1">
+                <Key k={keyLabel(settings.keys.crouch)} /> crouch
+              </span>
+              <span className="flex items-center gap-1">
+                <Key k={keyLabel(settings.keys.look)} /> hold · look around
+              </span>
+              <span className="flex items-center gap-1">
                 <Key k={keyLabel(settings.keys.super)} /> super
               </span>
               <span className="flex items-center gap-1">

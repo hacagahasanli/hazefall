@@ -101,7 +101,7 @@ export const paintTerrain = () => {
   const meadow = weightGrid((t) => t === 'h');
   const floor = weightGrid((t, tx, ty) => '.lwr#u'.includes(t) && insideBuilding(tx, ty));
   const GRASS_A = [62, 112, 42];
-  const GRASS_B = [98, 146, 58];
+  const GRASS_B = [104, 138, 64];
   const DRY = [146, 150, 74];
   const DIRT = [132, 102, 68];
   const DIRT_DARK = [104, 80, 54];
@@ -109,6 +109,16 @@ export const paintTerrain = () => {
   const SOIL = [96, 72, 46];
   const GRAVEL = [128, 124, 116];
   const WOOD = [170, 128, 86];
+  // Round every house (battleground-atmosphere.md item 3): a 2.2 m ring of trodden ground, or in the built-up places (the
+  // Campus, the Truck Stop, the Container Yard) a hard-edged 1.2 m concrete sidewalk. Per tile, the houses near it.
+  const WORN = mix(DIRT, GRAVEL, 0.4);
+  const KERB = [150, 146, 138];
+  const builtUp = [[52, 90, 79, 105], [10, 90, 41, 115], [89, 36, 113, 83]];
+  const near: number[][] = Array.from({ length: SIZE * SIZE }, () => []);
+  BUILDINGS.forEach((b, i) => {
+    for (let y = b.y0 - 2; y < b.y0 + b.h + 2; y++) for (let x = b.x0 - 2; x < b.x0 + b.w + 2; x++) if (x >= 0 && y >= 0 && x < SIZE && y < SIZE) near[y * SIZE + x].push(i);
+  });
+  const kerbOf = BUILDINGS.map((b) => builtUp.some(([x0, y0, x1, y1]) => b.x0 >= x0 && b.x0 <= x1 && b.y0 >= y0 && b.y0 <= y1));
   for (let py = 0; py < n; py++) {
     const wy = py / px;
     const ty = wy / TILE;
@@ -119,7 +129,7 @@ export const paintTerrain = () => {
       const big = fbm(wx * 0.045, wy * 0.045, 4);
       const fine = noise2(wx * 1.7, wy * 1.7);
       let col = mix(GRASS_A, GRASS_B, sstep(0.3, 0.75, big));
-      col = mix(col, DRY, sstep(0.62, 0.85, fbm(wx * 0.08 + 40, wy * 0.08 + 13, 3)) * 0.55);
+      col = mix(col, DRY, sstep(0.62, 0.85, fbm(wx * 0.08 + 40, wy * 0.08 + 13, 3)) * 0.7);
       const grain = (fine - 0.5) * 18;
       col = [col[0] + grain, col[1] + grain, col[2] + grain * 0.6];
 
@@ -150,9 +160,25 @@ export const paintTerrain = () => {
           if (ring && !roadGap) col = [col[0] * 0.8, col[1] * 0.8, col[2] * 0.8];
         }
       }
-      // Floors inside buildings: hard-edged planks.
       const ftx = Math.floor(tx);
       const fty = Math.floor(ty);
+      {
+        const list = near[Math.max(0, Math.min(SIZE - 1, fty)) * SIZE + Math.max(0, Math.min(SIZE - 1, ftx))];
+        let worn = 0;
+        let kerb = 0;
+        for (const bi of list) {
+          const b = BUILDINGS[bi];
+          const dx = Math.max(b.x0 * TILE - wx, 0, wx - (b.x0 + b.w) * TILE);
+          const dy = Math.max(b.y0 * TILE - wy, 0, wy - (b.y0 + b.h) * TILE);
+          const d = Math.hypot(dx, dy);
+          if (d <= 0) continue;
+          if (kerbOf[bi]) kerb = Math.max(kerb, d < 1.2 ? 1 : 0);
+          else worn = Math.max(worn, 0.75 * (1 - sstep(0.6, 2.2, d + e * 2.2)));
+        }
+        if (kerb > 0 && wRoad < 0.5) col = [KERB[0] + grain * 0.4, KERB[1] + grain * 0.4, KERB[2] + grain * 0.4];
+        else if (worn > 0) col = mix(col, [WORN[0] + grain * 0.6, WORN[1] + grain * 0.6, WORN[2] + grain * 0.4], worn);
+      }
+      // Floors inside buildings: hard-edged planks.
       if (floor[fty * SIZE + ftx] > 0) {
         const plank = Math.floor(wy * 3.3);
         const shade = (tileHash(plank, Math.floor((wx + plank * 0.7) / 2.4), 5) - 0.5) * 22;
@@ -608,15 +634,16 @@ export const buildGrass = () => {
       const t = MAP[ty][tx];
       if (t !== 'g' && t !== 't' && t !== 'b') continue;
       if (routeDistance(tx * TILE + 1, ty * TILE + 1) < -0.4) continue;
-      // Denser in the lush patches, sparse in the dry ones.
+      // Denser in the lush patches, sparse in the dry ones; fuller and taller at a meadow's edge (2 tiles round tall grass).
       const lush = fbm(tx * 0.09, ty * 0.09, 3);
-      const count = Math.round(5 + lush * 9);
+      const edge = meadowEdge(tx, ty);
+      const count = Math.round((5 + lush * 9) * (edge ? 1.5 : 1));
       for (let i = 0; i < count; i++) {
         const x = tx * TILE + r() * TILE;
         const y = ty * TILE + r() * TILE;
         if (routeDistance(x, y) < 0.1) continue; // keep the roads and paths clear
         const s = 0.8 + r() * 0.7;
-        mats.push(placeMatrix(x, y, s, r() * Math.PI * 2, s * (0.8 + lush * 0.6)));
+        mats.push(placeMatrix(x, y, s, r() * Math.PI * 2, s * (0.8 + lush * 0.6) * (edge ? 1.3 : 1)));
         colors.push(new THREE.Color().setHSL(0.24 + r() * 0.05, 0.4, 0.75 + r() * 0.35));
       }
     }
@@ -626,28 +653,121 @@ export const buildGrass = () => {
 };
 
 /**
- * Tall grass on the 'h' meadows: dense tufts 1.1-1.6 m high in straw and green, swaying more
- * than the lawn and parting round anyone walking through (it hides you like a bush).
+ * Tall grass on the 'h' patches (battleground-atmosphere.md item 1): waist to chest high (blades 0.55-1.35 m), 16 tufts a
+ * tile in the heart of a patch and 10 lower ones on its rim, so a patch rises from its edge instead of standing up as a
+ * wall. It hides a crouched fighter (step.ts plantHides); standing in it you show from the chest up.
  */
 export const buildTallGrass = () => {
   const mats: THREE.Matrix4[] = [];
   const colors: THREE.Color[] = [];
   const r = rng(4096);
+  const isH = (x: number, y: number) => MAP[y]?.[x] === 'h';
   for (let ty = 0; ty < SIZE; ty++) {
     for (let tx = 0; tx < SIZE; tx++) {
-      if (MAP[ty][tx] !== 'h') continue;
-      for (let i = 0; i < 22; i++) {
+      if (!isH(tx, ty)) continue;
+      const rim = !(isH(tx + 1, ty) && isH(tx - 1, ty) && isH(tx, ty + 1) && isH(tx, ty - 1));
+      for (let i = 0, n = rim ? 10 : 16; i < n; i++) {
         const x = tx * TILE + r() * TILE;
         const y = ty * TILE + r() * TILE;
-        const s = 1.4 + r() * 0.8;
-        mats.push(placeMatrix(x, y, s, r() * Math.PI * 2, 3.2 + r() * 1.4));
-        const straw = r() < 0.4;
-        colors.push(new THREE.Color().setHSL(straw ? 0.12 + r() * 0.03 : 0.2 + r() * 0.05, straw ? 0.55 : 0.45, 0.85 + r() * 0.3));
+        const s = 1.1 + r() * 0.5;
+        mats.push(placeMatrix(x, y, s, r() * Math.PI * 2, (1.9 + r() * 0.45) * (rim ? 0.75 : 1)));
+        const k = r();
+        // 30 % straw, 10 % pale seed heads, the rest green.
+        colors.push(k < 0.3 ? new THREE.Color().setHSL(0.12 + r() * 0.03, 0.55, 0.85 + r() * 0.3) : k < 0.4 ? new THREE.Color().setHSL(0.13, 0.35, 1.0 + r() * 0.1) : new THREE.Color().setHSL(0.2 + r() * 0.05, 0.45, 0.85 + r() * 0.3));
       }
     }
   }
   const m = windy(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }), 0.12, 0, false, 1.1, TALL_GRASS_REACH);
   return natureSet([chunkedInstances(tuftGeo(), m, mats.map((mm, i) => item(mm, colors[i])), { height: 2, radius: 1, reach: TALL_GRASS_REACH, colors: true })]);
+};
+
+/** Is grass tile (tx, ty) within 2 tiles of a tall-grass patch (the meadow's edge)? */
+const meadowEdge = (() => {
+  let grid: Uint8Array | null = null;
+  return (tx: number, ty: number) => {
+    if (!grid) {
+      grid = new Uint8Array(SIZE * SIZE);
+      for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
+        if (MAP[y][x] !== 'h') continue;
+        for (let j = -2; j <= 2; j++) for (let i = -2; i <= 2; i++) if (x + i >= 0 && y + j >= 0 && x + i < SIZE && y + j < SIZE) grid[(y + j) * SIZE + x + i] = 1;
+      }
+    }
+    return grid[ty * SIZE + tx] === 1 && MAP[ty][tx] === 'g';
+  };
+})();
+
+/** One clump of thin stems or leaves, triangles from a seed: `stems` blades `h0..h1` high, `w` wide, coloured base to tip. */
+const clumpGeo = (seed: number, stems: number, h0: number, h1: number, w: number, base: number, tip: number, heads?: number[]) => {
+  const r = rng(seed);
+  const pos: number[] = [];
+  const col: number[] = [];
+  const cb = new THREE.Color(base);
+  const ct = new THREE.Color(tip);
+  for (let i = 0; i < stems; i++) {
+    const h = h0 + r() * (h1 - h0);
+    const a = r() * Math.PI;
+    const ox = (r() - 0.5) * 0.22;
+    const oz = (r() - 0.5) * 0.22;
+    const lean = (r() - 0.5) * 0.12;
+    const dx = Math.cos(a) * w;
+    const dz = Math.sin(a) * w;
+    const tx = ox + Math.cos(a + 1.3) * lean;
+    const tz = oz + Math.sin(a + 1.3) * lean;
+    pos.push(ox - dx, 0, oz - dz, ox + dx, 0, oz + dz, tx, h, tz);
+    col.push(cb.r, cb.g, cb.b, cb.r, cb.g, cb.b, ct.r, ct.g, ct.b);
+    if (heads) {
+      // A flat diamond flower head on the stem, its colour from the list.
+      const c = new THREE.Color(heads[Math.floor(r() * heads.length)]);
+      const s = 0.045;
+      pos.push(tx - s, h, tz, tx, h, tz - s, tx + s, h, tz, tx - s, h, tz, tx + s, h, tz, tx, h, tz + s);
+      for (let k = 0; k < 6; k++) col.push(c.r, c.g, c.b);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(new Array(pos.length).fill(0).map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
+  return g;
+};
+
+/**
+ * Meadow edges and drifts (battleground-atmosphere.md item 2): two wildflower clumps (warm: cream, butter, coral; cool:
+ * cream, lilac, cornflower) whose colour comes in drifts, and a small leafy plant, round every tall-grass patch and in a
+ * few drifts across the open fields. Three draw calls, culled like the lawn.
+ */
+export const buildMeadow = () => {
+  const warm = clumpGeo(311, 5, 0.22, 0.42, 0.018, 0x4f7a35, 0x6f9a45, [0xf4efe0, 0xf4efe0, 0xf2d46b, 0xf2d46b, 0xe07a5f]);
+  const cool = clumpGeo(733, 5, 0.22, 0.42, 0.018, 0x4f7a35, 0x6f9a45, [0xf4efe0, 0xf4efe0, 0xb9a3d9, 0xb9a3d9, 0x8fa8d9]);
+  const leaf = clumpGeo(97, 5, 0.16, 0.3, 0.07, 0x3f6b35, 0x5a8a40);
+  const lists: THREE.Matrix4[][] = [[], [], []];
+  const tints: THREE.Color[][] = [[], [], []];
+  const r = rng(5151);
+  const towns = [[44, 42, 79, 79], [52, 90, 79, 105], [10, 90, 41, 115], [89, 36, 113, 83]];
+  for (let ty = 2; ty < SIZE - 2; ty++) {
+    for (let tx = 2; tx < SIZE - 2; tx++) {
+      if (MAP[ty][tx] !== 'g') continue;
+      if (routeDistance(tx * TILE + 1, ty * TILE + 1) < 0.6) continue;
+      const edge = meadowEdge(tx, ty);
+      const inTown = towns.some(([x0, y0, x1, y1]) => tx >= x0 && tx <= x1 && ty >= y0 && ty <= y1);
+      const drift = !inTown && fbm(tx * 0.15 + 7, ty * 0.15, 2) > 0.64;
+      const flowers = edge ? 5 : drift ? 4 : 0;
+      const leaves = edge ? 3 : !inTown && tileHash(tx, ty, 41) < 0.08 ? 1 : 0;
+      const kind = fbm(tx * 0.12, ty * 0.12, 2) > 0.5 ? 0 : 1;
+      const put = (k: number) => {
+        const x = tx * TILE + r() * TILE;
+        const y = ty * TILE + r() * TILE;
+        if (routeDistance(x, y) < 0.3) return;
+        const s = 0.85 + r() * 0.35;
+        lists[k].push(placeMatrix(x, y, s, r() * Math.PI * 2));
+        const l = 0.88 + r() * 0.22;
+        tints[k].push(new THREE.Color(l, l, l));
+      };
+      for (let i = 0; i < flowers; i++) put(kind);
+      for (let i = 0; i < leaves; i++) put(2);
+    }
+  }
+  const m = windy(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, side: THREE.DoubleSide }), 0.2, 0, false, 0.6, GRASS_REACH);
+  return natureSet([warm, cool, leaf].map((g, k) => chunkedInstances(g, m, lists[k].map((mm, i) => item(mm, tints[k][i])), { height: 0.5, radius: 0.4, reach: GRASS_REACH, castShadow: false, colors: true })));
 };
 
 /** A forest beyond the edge of the map, so the world doesn't end in a flat green plane. */

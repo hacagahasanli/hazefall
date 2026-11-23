@@ -50,6 +50,8 @@ export interface Rig {
   chuteSwing: { vx: number; vz: number };
   /** In the air, where the body pivots: 0 at the hips (free fall) .. 1 at the harness (hanging from the canopy). */
   airPivot: number;
+  /** Last frame's velocity and the smoothed acceleration (m/s^2, map axes): the body leans into a start, a stop and a cut. */
+  motion: { vx: number; vy: number; ax: number; ay: number };
 }
 
 interface Spec {
@@ -472,7 +474,7 @@ export const buildRig = (id: CharacterId, outfit = 'standard'): Rig => {
   return {
     root, body, armL, armR, foreL: left.fore, foreR: right.fore, armLen: s.armLen,
     shinL: ll.shin, shinR: lr.shin, legLen: s.legLen,
-    head, vest, hipYaw: 0, hipInit: false, chuteSwing: { vx: 0, vz: 0 }, airPivot: 0,
+    head, vest, hipYaw: 0, hipInit: false, chuteSwing: { vx: 0, vz: 0 }, airPivot: 0, motion: { vx: 0, vy: 0, ax: 0, ay: 0 },
     shoulderL: armL.position.clone(), shoulderR: armR.position.clone(),
     legL, legR, weapon, hand, chestY, phase: 0, turn: 0,
   };
@@ -600,6 +602,9 @@ const vB = new THREE.Vector3();
 const vC = new THREE.Vector3();
 const vD = new THREE.Vector3();
 const qA = new THREE.Quaternion();
+/** Elbows out and down, behind the hands: on a ladder. */
+const POLE_L = new THREE.Vector3(-0.6, -0.4, -0.6);
+const POLE_R = new THREE.Vector3(0.6, -0.4, -0.6);
 
 /**
  * Point an upper arm and forearm so the hand lands on `target` (both in body space). Elbows
@@ -650,6 +655,16 @@ export interface TopDownPose {
   vault: number | null;
   /** 0..1 through the landing roll, or null. */
   roll: number | null;
+  /** 0 (standing) .. 1 (crouched). */
+  crouch?: number;
+  /** Off your feet (a hop, a step off a roof): the vertical speed, + up (m/s). */
+  airV?: number;
+  /** 0..1: how hard you just landed, already shaped over time (the knees take it, then you stand). */
+  land?: number;
+  /** 0..1 up a ladder (the last quarter is over the eave), or null. */
+  climb?: number | null;
+  /** The aim's elevation (radians, + up): the gun points at a target above or below you. */
+  aimPitch?: number;
 }
 
 /** How hard each gun kicks: the shotgun and the sniper rock the whole body. */
@@ -700,9 +715,52 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   const rel = Math.atan2(p.vy, p.vx) - rig.hipYaw;
   const fwd = speed > 0.05 ? Math.cos(rel) : 0;
   const side = speed > 0.05 ? Math.sin(rel) : 0;
-  const running = p.onGround && speed > 0.3 && p.vault === null && p.roll === null;
-  rig.phase += dt * (running ? 3.2 + speed * 1.2 : 0) * (fwd < -0.35 ? -1 : 1);
-  const swing = running ? Math.sin(rig.phase) * amp : 0;
+  const crouch = p.crouch ?? 0;
+  const climbing = p.climb !== undefined && p.climb !== null;
+  const airborne = !p.onGround && p.vault === null && p.roll === null && !climbing;
+  const running = p.onGround && speed > 0.3 && p.vault === null && p.roll === null && !climbing;
+  // Crouched: shorter, quicker-looking steps (the stride is cut, the cadence kept).
+  rig.phase += dt * (running ? 3.2 + speed * 1.2 * (1 + crouch * 0.6) : 0) * (fwd < -0.35 ? -1 : 1);
+  const swing = running ? Math.sin(rig.phase) * amp * (1 - crouch * 0.45) : 0;
+  // The body's weight: the smoothed acceleration in the body's own frame (forward, to the side). Starting off you lean
+  // in, stopping you rock back, cutting sideways you bank into the cut.
+  const mo = rig.motion;
+  if (dt > 0) {
+    const k = 1 - Math.exp(-10 * dt);
+    mo.ax += (Math.max(-60, Math.min(60, (p.vx - mo.vx) / dt)) - mo.ax) * k;
+    mo.ay += (Math.max(-60, Math.min(60, (p.vy - mo.vy) / dt)) - mo.ay) * k;
+  }
+  mo.vx = p.vx;
+  mo.vy = p.vy;
+  const accF = mo.ax * Math.cos(rig.hipYaw) + mo.ay * Math.sin(rig.hipYaw);
+  const accS = -mo.ax * Math.sin(rig.hipYaw) + mo.ay * Math.cos(rig.hipYaw);
+  const land = p.land ?? 0;
+
+  // ---- up a ladder: face the wall, hand over hand on the rungs, knees stepping up opposite; over the eave like a vault.
+  if (climbing && p.climb! < 0.75) {
+    const up = p.climb! / 0.75;
+    const cyc = up * 5; // five pulls from the ground to the eave
+    const lead = (cyc % 1);
+    const reachL = Math.sin(Math.PI * (Math.floor(cyc) % 2 === 0 ? lead : 1 - lead));
+    const reachR = 1 - reachL;
+    rig.body.rotation.set(damp(rig.body.rotation.x, 0.08, 14, dt), 0, damp(rig.body.rotation.z, (reachL - reachR) * 0.06, 10, dt));
+    rig.body.position.set(0, 0, 0.05);
+    rig.weapon.visible = false;
+    // Hands on the rungs in front: one high, reaching, the other lower, pulling.
+    const sy = rig.shoulderL.y;
+    tmpGrip.set(-0.2, sy + 0.12 + reachR * 0.42, 0.34);
+    tmpSupport.set(0.2, sy + 0.12 + reachL * 0.42, 0.34);
+    reach(rig.armL, rig.foreL, rig.shoulderL, tmpGrip, rig.armLen, -1, POLE_L);
+    reach(rig.armR, rig.foreR, rig.shoulderR, tmpSupport, rig.armLen, 1, POLE_R);
+    // Feet on the rungs: the knee opposite the high hand comes up.
+    rig.legL.rotation.set(damp(rig.legL.rotation.x, -0.25 - reachL * 0.95, 22, dt), 0, 0);
+    rig.legR.rotation.set(damp(rig.legR.rotation.x, -0.25 - reachR * 0.95, 22, dt), 0, 0);
+    rig.shinL.rotation.x = damp(rig.shinL.rotation.x, 0.4 + reachL * 1.25, 22, dt);
+    rig.shinR.rotation.x = damp(rig.shinR.rotation.x, 0.4 + reachR * 1.25, 22, dt);
+    rig.head.rotation.x = damp(rig.head.rotation.x, -0.35, 8, dt);
+    return;
+  }
+  const vaultK = climbing ? (p.climb! - 0.75) / 0.25 : p.vault;
   const bob = running ? Math.abs(Math.sin(rig.phase)) : 0;
 
   // ---- the landing roll: curl up and turn over around the hips, then stand.
@@ -731,28 +789,43 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   const along = Math.max(Math.abs(fwd), 0.25);
   let kneeL: number;
   let kneeR: number;
-  if (p.vault !== null) {
-    const tuck = Math.sin(Math.min(1, p.vault / 0.8) * Math.PI);
+  if (vaultK !== null) {
+    const tuck = Math.sin(Math.min(1, vaultK / 0.8) * Math.PI);
     rig.legL.rotation.x = damp(rig.legL.rotation.x, -1.3 * tuck, 25, dt);
     rig.legR.rotation.x = damp(rig.legR.rotation.x, -0.9 * tuck, 25, dt);
     rig.legL.rotation.z = damp(rig.legL.rotation.z, 0.5 * tuck, 25, dt);
     rig.legR.rotation.z = damp(rig.legR.rotation.z, 0.5 * tuck, 25, dt);
     kneeL = 1.9 * tuck;
     kneeR = 1.6 * tuck;
+  } else if (airborne) {
+    // Off your feet: going up the knees tuck (one leads), coming down both legs reach for the ground.
+    const v = p.airV ?? 0;
+    const rise = Math.max(0, Math.min(1, v / 4));
+    const fall = Math.max(0, Math.min(1, -v / 5));
+    rig.legL.rotation.x = damp(rig.legL.rotation.x, -0.85 * rise - 0.4 * fall - 0.15, 14, dt);
+    rig.legR.rotation.x = damp(rig.legR.rotation.x, -0.3 * rise - 0.25 * fall - 0.1, 14, dt);
+    rig.legL.rotation.z = damp(rig.legL.rotation.z, -0.06 - 0.08 * fall, 14, dt);
+    rig.legR.rotation.z = damp(rig.legR.rotation.z, 0.06 + 0.08 * fall, 14, dt);
+    kneeL = 0.35 + 1.15 * rise + 0.35 * fall;
+    kneeR = 0.3 + 0.55 * rise + 0.25 * fall;
   } else {
     // A real run cycle: the leg swinging through bends hard at the knee and lifts the foot; the
     // standing leg stays nearly straight. Standing still: a ready stance, knees a little bent.
+    // Crouched, the hips sink (thighs forward, knees bent hard, one foot a little ahead); a hard landing bends both
+    // knees for a moment on top of whatever stance you're in.
     const c = running ? Math.cos(rig.phase) : 0;
     const ready = 0.22;
-    rig.legL.rotation.x = damp(rig.legL.rotation.x, -swing * 1.0 * along - ready * 0.6, 16, dt);
-    rig.legR.rotation.x = damp(rig.legR.rotation.x, swing * 1.0 * along - ready * 0.6, 16, dt);
-    rig.legL.rotation.z = damp(rig.legL.rotation.z, -swing * 0.45 * side - 0.04, 16, dt);
-    rig.legR.rotation.z = damp(rig.legR.rotation.z, swing * 0.45 * side + 0.04, 16, dt);
-    kneeL = ready + (running ? Math.max(0, c) * 1.5 * amp + 0.15 * amp : 0);
-    kneeR = ready + (running ? Math.max(0, -c) * 1.5 * amp + 0.15 * amp : 0);
+    const sit = crouch * 1.05 + land * 0.75;
+    const bend = crouch * 1.85 + land * 1.35;
+    rig.legL.rotation.x = damp(rig.legL.rotation.x, -swing * 1.0 * along - ready * 0.6 - sit - crouch * 0.12, 16, dt);
+    rig.legR.rotation.x = damp(rig.legR.rotation.x, swing * 1.0 * along - ready * 0.6 - sit + crouch * 0.18, land > 0.05 ? 40 : 16, dt);
+    rig.legL.rotation.z = damp(rig.legL.rotation.z, -swing * 0.45 * side - 0.04 - crouch * 0.08, 16, dt);
+    rig.legR.rotation.z = damp(rig.legR.rotation.z, swing * 0.45 * side + 0.04 + crouch * 0.08, 16, dt);
+    kneeL = ready + bend + (running ? Math.max(0, c) * 1.5 * amp * (1 - crouch * 0.5) + 0.15 * amp : 0);
+    kneeR = ready + bend - crouch * 0.25 + (running ? Math.max(0, -c) * 1.5 * amp * (1 - crouch * 0.5) + 0.15 * amp : 0);
   }
-  rig.shinL.rotation.x = damp(rig.shinL.rotation.x, kneeL, 18, dt);
-  rig.shinR.rotation.x = damp(rig.shinR.rotation.x, kneeR, 18, dt);
+  rig.shinL.rotation.x = damp(rig.shinL.rotation.x, kneeL, land > 0.05 ? 40 : 18, dt);
+  rig.shinR.rotation.x = damp(rig.shinR.rotation.x, kneeR, land > 0.05 ? 40 : 18, dt);
   // Legs face the hips (local yaw is the opposite sign of map yaw). A small step on the spot lifts
   // the feet while turning.
   rig.legL.rotation.y = -twist;
@@ -764,7 +837,8 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   }
   // Keep the lower foot on the ground: the body drops as far as the bent legs shorten it.
   const reachOf = (thigh: number, knee: number) => (Math.cos(thigh) + Math.cos(thigh + knee)) / 2;
-  const legDrop = rig.legLen * (1 - Math.max(reachOf(rig.legL.rotation.x, rig.shinL.rotation.x), reachOf(rig.legR.rotation.x, rig.shinR.rotation.x)));
+  // (In the air the tucked legs lift the feet instead.)
+  const legDrop = airborne ? 0 : rig.legLen * (1 - Math.max(reachOf(rig.legL.rotation.x, rig.shinL.rotation.x), reachOf(rig.legR.rotation.x, rig.shinR.rotation.x)));
 
   // ---- body: lean into the run, bank into turns, lean out (Q/E), the kick of the gun.
   const sinceShot = p.sinceShot;
@@ -773,14 +847,18 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   const kick = (1 - kickT) * Math.cos(kickT * Math.PI * 1.5) * KICK[p.gun];
   // Running leans the body into it like a soldier on the move; firing straightens it a little.
   const bodyKick = p.gun === 'sniper' ? sniperKick(sinceShot) * (p.reducedMotion ? SNIPER_KICK.reducedScale : 1) : 0;
-  let leanX = (p.dashing ? 0.45 : 0.26 * fwd * amp + 0.05 - kick * 0.07) - bodyKick * SNIPER_KICK.bodyLean;
+  // Crouched the chest comes forward over the knees; a landing folds it a little more; the weight shifts with each start,
+  // stop and cut (accF, accS); in the air the body sits upright going up and leans in coming down.
+  const weight = p.reducedMotion ? 0.4 : 1;
+  let leanX = (p.dashing ? 0.45 : 0.26 * fwd * amp * (1 - crouch * 0.4) + 0.05 - kick * 0.07) - bodyKick * SNIPER_KICK.bodyLean +
+    crouch * 0.3 + land * 0.32 + weight * Math.max(-0.16, Math.min(0.2, accF * 0.012)) + (airborne ? Math.max(-0.08, Math.min(0.12, -(p.airV ?? 0) * 0.025)) : 0);
   // The model faces +z, so its own right is -x: a lean to the right (E) moves the body to -x and
   // tips the top that way (positive z rotation).
-  let bank = Math.max(-0.18, Math.min(0.18, -p.yawRate * 0.035)) + 0.08 * side * amp + p.lean * 0.38;
-  if (p.vault !== null) {
+  let bank = Math.max(-0.18, Math.min(0.18, -p.yawRate * 0.035)) + 0.08 * side * amp + p.lean * 0.38 + weight * Math.max(-0.12, Math.min(0.12, accS * 0.01));
+  if (vaultK !== null) {
     // Swing over sideways with the weight on the planted hand.
-    leanX = 0.35 * Math.sin(p.vault * Math.PI);
-    bank = -0.55 * Math.sin(p.vault * Math.PI);
+    leanX = 0.35 * Math.sin(vaultK * Math.PI);
+    bank = -0.55 * Math.sin(vaultK * Math.PI);
   }
   rig.body.rotation.x = damp(rig.body.rotation.x, leanX, bodyKick > 0 ? 80 : 14, dt);
   rig.body.rotation.z = damp(rig.body.rotation.z, bank, 10, dt);
@@ -798,24 +876,29 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   const sway = running ? Math.sin(rig.phase) * 0.05 * amp : Math.sin(p.time * 1.3) * 0.02;
   const r = p.reload;
   const reloadTilt = r === null ? 0 : Math.sin(Math.min(1, r * 1.3) * Math.PI) * 0.55;
-  rig.weapon.visible = p.gun !== 'fists' && p.vault === null;
+  rig.weapon.visible = p.gun !== 'fists' && vaultK === null;
   // The sniper's own kick (every fighter's model, bots too): the rifle pitches up hard and is driven back, then settles.
   const snipeScale = p.reducedMotion ? SNIPER_KICK.reducedScale : 1;
   const snipe = p.gun === 'sniper' ? sniperKick(sinceShot) * snipeScale : 0;
   // ...then the bolt: the rifle rolls over, dips and is pulled back to re-chamber, and comes back ready.
   const bolt = p.gun === 'sniper' ? sniperBolt(sinceShot) * snipeScale : 0;
-  rig.weapon.position.set(h.x + sway * 0.4, rig.chestY + h.y + step - reloadTilt * 0.12 - bolt * SNIPER_KICK.boltDrop + snipe * SNIPER_KICK.weaponRise, -Math.max(0, kick) * 0.12 - snipe * SNIPER_KICK.weaponPush - bolt * SNIPER_KICK.boltPull);
+  // The model's right is -x: the gun sits at the right shoulder, on the side the over-the-shoulder camera looks past.
+  rig.weapon.position.set(-h.x + sway * 0.4, rig.chestY + h.y + step - reloadTilt * 0.12 - bolt * SNIPER_KICK.boltDrop + snipe * SNIPER_KICK.weaponRise, -Math.max(0, kick) * 0.12 - snipe * SNIPER_KICK.weaponPush - bolt * SNIPER_KICK.boltPull);
   // Running without firing for a moment: the gun drops to low ready, muzzle down; it comes up
   // the moment you shoot.
   const lowReady = running && sinceShot > 0.8 && p.gun !== 'pistol' ? 0.35 * amp : 0;
-  rig.weapon.rotation.x = damp(rig.weapon.rotation.x, -kick * 0.35 - snipe * SNIPER_KICK.weaponPitch + sway * 0.4 + bolt * SNIPER_KICK.boltPitch + reloadTilt * 0.5 + lowReady, snipe > 0 ? 90 : 30 - lowReady * 40, dt);
+  // The muzzle follows the aim up or down (at someone on a roof, from a roof down at the street), less the body's lean.
+  const pitchAim = lowReady > 0 ? 0 : Math.max(-0.7, Math.min(0.7, p.aimPitch ?? 0));
+  rig.weapon.rotation.x = damp(rig.weapon.rotation.x, -kick * 0.35 - snipe * SNIPER_KICK.weaponPitch + sway * 0.4 + bolt * SNIPER_KICK.boltPitch + reloadTilt * 0.5 + lowReady - pitchAim - (rig.body.rotation.x - 0.05) * 0.85, snipe > 0 ? 90 : 30 - lowReady * 40, dt);
   rig.weapon.rotation.y = damp(rig.weapon.rotation.y, sway * 0.6, 10, dt);
-  rig.weapon.rotation.z = damp(rig.weapon.rotation.z, reloadTilt * 0.6 + p.lean * 0.2 + bolt * SNIPER_KICK.boltRoll, bolt > 0 ? 40 : 12, dt);
+  // Leaning, the body tips over but the rifle is held nearly level against it (only a little cant), so the sights stay
+  // on the line the round will fly.
+  rig.weapon.rotation.z = damp(rig.weapon.rotation.z, reloadTilt * 0.6 - p.lean * 0.26 + bolt * SNIPER_KICK.boltRoll, bolt > 0 ? 40 : 12, dt);
   rig.hand.position.set(0, 0, h.grip);
 
-  if (p.vault !== null) {
+  if (vaultK !== null) {
     // Both hands planted on the rail ahead, sliding back as the body goes over it.
-    const k = p.vault;
+    const k = vaultK;
     const z = 0.55 - Math.max(0, k - 0.15) * 1.4;
     const y = 0.95 - rig.body.position.y;
     tmpGrip.set(0.22, y, z);
@@ -848,12 +931,13 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   tmpGrip.set(0, -0.02, h.grip).applyMatrix4(rig.weapon.matrix);
   if (r !== null && r < 0.85) {
     const drop = Math.sin(Math.min(1, r / 0.85) * Math.PI);
-    tmpSupport.set(-0.05, -0.12 - drop * 0.35, h.grip + 0.1).applyMatrix4(rig.weapon.matrix);
+    tmpSupport.set(0.05, -0.12 - drop * 0.35, h.grip + 0.1).applyMatrix4(rig.weapon.matrix);
   } else {
-    tmpSupport.set(h.support === 0 ? -0.05 : 0, h.support === 0 ? -0.04 : 0.03, h.grip + h.support).applyMatrix4(rig.weapon.matrix);
+    tmpSupport.set(h.support === 0 ? 0.05 : 0, h.support === 0 ? -0.04 : 0.03, h.grip + h.support).applyMatrix4(rig.weapon.matrix);
   }
-  reach(rig.armR, rig.foreR, rig.shoulderR, tmpGrip, rig.armLen, 1);
-  reach(rig.armL, rig.foreL, rig.shoulderL, tmpSupport, rig.armLen, -1);
+  // Right hand (the arm on -x) on the grip, left hand (on +x) on the fore-end.
+  reach(rig.armL, rig.foreL, rig.shoulderL, tmpGrip, rig.armLen, -1);
+  reach(rig.armR, rig.foreR, rig.shoulderR, tmpSupport, rig.armLen, 1);
 };
 
 // ---------- in the air: free fall, the opening, hanging under the canopy

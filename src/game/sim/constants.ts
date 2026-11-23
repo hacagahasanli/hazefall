@@ -818,6 +818,52 @@ const buildMap = () => {
   for (const [cx, cy] of [[30, 12], [4, 22], [14, 27]]) for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 2; x++) if (get(x, y) === 'g') set(x, y, 'h');
   for (const [x, y] of [[28, 8], [29, 17], [5, 12], [6, 25], [18, 26], [24, 25]]) if (get(x, y) === 'g') set(x, y, 'k');
 
+  // Tall grass is tactical cover you choose, not a wall over the whole field (battleground-atmosphere.md item 1). In the
+  // plain frame, after everything that plants it: none in the four towns (walls are their cover), none within 3 tiles of a
+  // house or 1 of a road or path (doors, streets and yard fronts stay readable), and a big patch keeps only its heart.
+  // The three Mast Hill patches stay whole: that bare approach has no other cover by design.
+  {
+    const G = (x: number, y: number) => (x >= 0 && y >= 0 && x < SIZE && y < SIZE ? grid[y][x] : '#');
+    const towns = [[44, 42, 79, 79], [52, 90, 79, 105], [10, 90, 41, 115], [89, 36, 113, 83]];
+    const nearBuilding = new Uint8Array(SIZE * SIZE);
+    for (const b of buildings) for (let y = b.y0 - 3; y < b.y0 + b.h + 3; y++) for (let x = b.x0 - 3; x < b.x0 + b.w + 3; x++) if (x >= 0 && y >= 0 && x < SIZE && y < SIZE) nearBuilding[y * SIZE + x] = 1;
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = 0; x < SIZE; x++) {
+        if (grid[y][x] !== 'h') continue;
+        let road = false;
+        for (let j = -1; j <= 1 && !road; j++) for (let i = -1; i <= 1 && !road; i++) road = 'ap'.includes(G(x + i, y + j));
+        if (road || nearBuilding[y * SIZE + x] || towns.some(([x0, y0, x1, y1]) => x >= x0 && x <= x1 && y >= y0 && y <= y1)) grid[y][x] = 'g';
+      }
+    }
+    const seen = new Uint8Array(SIZE * SIZE);
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = 0; x < SIZE; x++) {
+        if (grid[y][x] !== 'h' || seen[y * SIZE + x]) continue;
+        const blob: [number, number][] = [];
+        const todo: [number, number][] = [[x, y]];
+        seen[y * SIZE + x] = 1;
+        while (todo.length) {
+          const [cx, cy] = todo.pop()!;
+          blob.push([cx, cy]);
+          for (const [nx, ny] of [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]]) {
+            if (G(nx, ny) !== 'h' || seen[ny * SIZE + nx]) continue;
+            seen[ny * SIZE + nx] = 1;
+            todo.push([nx, ny]);
+          }
+        }
+        if (blob.length <= 6 || blob.some(([bx, by]) => [[30, 12], [4, 22], [14, 27]].some(([mx, my]) => Math.abs(bx - mx) <= 2 && Math.abs(by - my) <= 2))) continue;
+        const keep = Math.max(6, Math.min(16, Math.round(blob.length * 0.45)));
+        const mx = blob.reduce((a, t) => a + t[0], 0) / blob.length;
+        const my = blob.reduce((a, t) => a + t[1], 0) / blob.length;
+        blob
+          .map(([bx, by]) => ({ bx, by, d: (bx - mx) ** 2 + (by - my) ** 2 + (((bx * 73856093) ^ (by * 19349663)) >>> 0) % 997 / 1e5 }))
+          .sort((a, b) => a.d - b.d)
+          .slice(keep)
+          .forEach(({ bx, by }) => (grid[by][bx] = 'g'));
+      }
+    }
+  }
+
   // Every door opens onto open ground: clear two tiles in front of it of fences, trees, rocks and crates that the yards,
   // farms and lone trees may have put there.
   for (const b of buildings) {
@@ -988,12 +1034,15 @@ export const WEAPONS: Record<WeaponKind, WeaponStats> = {
   // Damage is out of 100 HP (+ up to 100 armor). Each gun owns a distance (docs/BALANCE.md, held by balance.test.ts):
   // shotgun inside 6 m (one pump bare, two geared), SMG to 12 m, rifle 15-50 m, sniper beyond (2 hits bare, 3 geared at
   // any range); the pistol is the baseline and rockets the rare power weapon (a direct hit downs a bare fighter).
+  // `range` is where a round is let go (its life is range / speed); it is not a balance knob (falloff is): every gun reaches
+  // well past where it can still hit something, and the sniper and the rifle cross the whole 240 m map (340 m is its diagonal),
+  // so a round never vanishes in mid-air in front of a target you can see. Only the shotgun's pellets give up early (45 m).
   fists: { name: 'Fists', damage: 15, bullets: 1, spread: 0, speed: 30, range: 1.6, rate: 0.45, ammo: Infinity, mag: Infinity, reload: 0, falloff: { start: 9, end: 9, min: 1 } },
-  pistol: { name: 'Pistol', damage: 34, bullets: 1, spread: 0.03, speed: 34, range: 90, rate: 0.35, ammo: 36, mag: 12, reload: 1.1, falloff: { start: 12, end: 40, min: 0.4 } },
-  smg: { name: 'SMG', damage: 22, bullets: 1, spread: 0.1, speed: 36, range: 90, rate: 0.09, ammo: 90, mag: 30, reload: 1.7, falloff: { start: 12, end: 30, min: 0.25 } },
-  shotgun: { name: 'Shotgun', damage: 13, bullets: 8, spread: 0.22, speed: 28, range: 30, rate: 0.8, ammo: 18, mag: 6, reload: 2.2, falloff: { start: 6, end: 15, min: 0.1 } },
-  rifle: { name: 'Rifle', damage: 28, bullets: 1, spread: 0.035, speed: 48, range: 120, rate: 0.16, ammo: 75, mag: 25, reload: 1.9, falloff: { start: 25, end: 70, min: 0.55 } },
-  sniper: { name: 'Sniper', damage: 80, bullets: 1, spread: 0, speed: 80, range: 160, rate: 1.5, ammo: 10, mag: 5, reload: 2.6, falloff: { start: 60, end: 120, min: 0.85 } },
+  pistol: { name: 'Pistol', damage: 34, bullets: 1, spread: 0.03, speed: 34, range: 130, rate: 0.35, ammo: 36, mag: 12, reload: 1.1, falloff: { start: 12, end: 40, min: 0.4 } },
+  smg: { name: 'SMG', damage: 22, bullets: 1, spread: 0.1, speed: 36, range: 130, rate: 0.09, ammo: 90, mag: 30, reload: 1.7, falloff: { start: 12, end: 30, min: 0.25 } },
+  shotgun: { name: 'Shotgun', damage: 13, bullets: 8, spread: 0.22, speed: 28, range: 45, rate: 0.8, ammo: 18, mag: 6, reload: 2.2, falloff: { start: 6, end: 15, min: 0.1 } },
+  rifle: { name: 'Rifle', damage: 28, bullets: 1, spread: 0.035, speed: 48, range: 220, rate: 0.16, ammo: 75, mag: 25, reload: 1.9, falloff: { start: 25, end: 70, min: 0.55 } },
+  sniper: { name: 'Sniper', damage: 80, bullets: 1, spread: 0, speed: 80, range: 340, rate: 1.5, ammo: 10, mag: 5, reload: 2.6, falloff: { start: 60, end: 120, min: 0.85 } },
   // A rocket flies straight where you aim at 16 m/s (you see it coming), drops a little over long
   // distances, and explodes on whatever it meets.
   rockets: { name: 'Rockets', damage: 125, bullets: 1, spread: 0, speed: 16, range: 70, rate: 1.2, ammo: 4, mag: 1, reload: 2.4, lob: { radius: 3 }, falloff: { start: 999, end: 999, min: 1 } },
@@ -1144,6 +1193,19 @@ export const AUTO_AIM_RANGE = 28;
 export const REGEN = { after: 6, perSecond: 2.5 };
 /** Leaning out round a corner (Q / E): how far the shoulder and the muzzle move out, and the speed while leaning. */
 export const LEAN = { offset: 0.7, speed: 0.6, rate: 6 };
+/**
+ * Crouching (G, a toggle): lower and steadier. `drop` m off the chest (where rounds leave and are aimed), `bodyDrop` m off the
+ * top of the body for rounds, `speed` of the walking speed, `rate` how fast you go down and up (1/s), `spread` of the gun's
+ * spread. A rock (ROCK_TOP) hides a crouched body's chest; standing, you shoot over it.
+ */
+export const CROUCH = { drop: 0.38, bodyDrop: 0.6, speed: 0.55, rate: 9, spread: 0.6 };
+/**
+ * How tall rocks and crates are, for bodies and rounds: what the renderer draws (nature.ts rockGeo tops out near 0.95 m;
+ * world.ts stands a crate 1.3 m high). Rocks used to stop rounds up to 1.3 m, so a chest-high shot (1.1 m) died on a
+ * knee-high stone between you and someone far off.
+ */
+export const ROCK_TOP = 0.95;
+export const CRATE_TOP = 1.3;
 
 export const SUPERS = {
   deploy: { distance: 8, time: 0.28, damage: 35 },

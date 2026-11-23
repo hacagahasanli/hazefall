@@ -6,6 +6,9 @@ import {
   DT,
   fenceVertical,
   LEAN,
+  CROUCH,
+  ROCK_TOP,
+  CRATE_TOP,
   chuteSink,
   dragAt,
   ROCKET,
@@ -48,6 +51,7 @@ import {
   ZONE_START_RADIUS,
 } from './constants';
 import { BODY, buildingAt, CLIMB, EAVE, FEET, inRoofSlab, ladderAt, roofAt, roofBetween, ROOF_LAYER, roofHeightOf, supportAt } from './roofs';
+import { propOnTile, propTopAt } from './propSolids';
 import { NO_INPUT } from './types';
 
 import type { Field, FighterId, GameEvent, GameState, Gun, HealKind, Input, Loot, LootKind, Player, Projectile, WeaponKind } from './types';
@@ -71,6 +75,11 @@ const isWeapon = (k: LootKind): k is Exclude<WeaponKind, 'fists'> => k in WEAPON
 
 /** Bushes and crops hide you. */
 export const inPlant = (x: number, y: number) => 'bch'.includes(tileAt(toTile(x), toTile(y)));
+/** Hidden by plants: a bush or crops hide anyone in them; tall grass (waist to chest high) hides you only crouched. */
+export const plantHides = (p: { x: number; y: number; crouch?: number }) => {
+  const t = tileAt(toTile(p.x), toTile(p.y));
+  return t === 'b' || t === 'c' || (t === 'h' && (p.crouch ?? 0) > 0.5);
+};
 /** In the river or the pond: you swim, slowly, with no gun up. */
 export const inWater = (x: number, y: number) => tileAt(toTile(x), toTile(y)) === 'o';
 
@@ -104,9 +113,16 @@ const circleHit = (x: number, y: number, r: number, cx: number, cy: number, cr: 
  * roof the walls are under you), and a bullet only stops on it below its bullet top. Trunks stop you at any height;
  * rounds fly over everything else above 3 m as before, except a roof (see `inRoofSlab`).
  */
-const MOVE_TOP: Record<string, number> = { '#': EAVE, w: EAVE, v: EAVE, d: 1.1, u: 0.9, f: 1.1, t: Infinity, k: 1.3, r: 1.3 };
-const BULLET_TOP: Record<string, number> = { '#': EAVE, w: 0.9, v: EAVE, t: 3, k: 1.3, r: 1.3 };
+const MOVE_TOP: Record<string, number> = { '#': EAVE, w: EAVE, d: 1.1, u: 0.9, f: 1.1, t: Infinity, k: ROCK_TOP, r: CRATE_TOP };
+const BULLET_TOP: Record<string, number> = { '#': EAVE, w: 0.9, t: 3, k: ROCK_TOP, r: CRATE_TOP };
 const TEMP_WALL_TOP = 3;
+
+/** The top of what a big prop's tile holds at (x, y) for a body or a round at height z: its own box and height (propSolids.ts). */
+const propHit = (tx: number, ty: number, x: number, y: number, r: number, z: number) => {
+  const s = propOnTile(tx, ty);
+  if (!s) return boxHit(x, y, r, tx * TILE, ty * TILE, tx * TILE + TILE, ty * TILE + TILE) && z < EAVE - 0.05;
+  return z < s.top - 0.05 && boxHit(x, y, r, s.x0, s.y0, s.x1, s.y1);
+};
 
 /**
  * Does a circle (x, y, r) overlap what stands on tile (tx, ty)? Each obstacle has its real shape
@@ -121,8 +137,9 @@ const tileHit = (state: GameState, tx: number, ty: number, x: number, y: number,
   const c = TILE / 2;
   switch (t) {
     case '#':
-    case 'v':
       return boxHit(x, y, r, x0, y0, x0 + TILE, y0 + TILE);
+    case 'v':
+      return propHit(tx, ty, x, y, r, z);
     case 'd':
       // Bridge and pier rails: thin, on the sides that face the water; bullets pass.
       return !bullet && railBoxes(tx, ty).some((b) => boxHit(x, y, r, b[0], b[1], b[2], b[3]));
@@ -236,7 +253,13 @@ const pushOut = (state: GameState, pos: { x: number; y: number }, r: number, z =
         const x0 = tx * TILE;
         const y0 = ty * TILE;
         const c = TILE / 2;
-        if (t === '#' || t === 'v') outBox(x0, y0, x0 + TILE, y0 + TILE);
+        if (t === '#') outBox(x0, y0, x0 + TILE, y0 + TILE);
+        else if (t === 'v') {
+          const s = propOnTile(tx, ty);
+          if (!s) {
+            if (z < EAVE - 0.05) outBox(x0, y0, x0 + TILE, y0 + TILE);
+          } else if (z < s.top - 0.05) outBox(s.x0, s.y0, s.x1, s.y1);
+        }
         else if (t === 'w') {
           if (outBox(x0, y0, x0 + TILE, y0 + TILE)) vaultable = 'w';
         } else if (t === 'f') {
@@ -330,7 +353,9 @@ export const seesBody = (state: GameState, a: Player, b: Player) => lineOfSight(
 /** On the ground, or hanging under an open parachute: you can be seen, aimed at and hit. */
 export const targetable = (p: Player) => p.alive && (p.stage === 'ground' || p.stage === 'falling');
 /** How high a player's chest is above the ground (in the air: on the way down). */
-export const chestHeight = (p: Player) => feetOf(p) + 1.1;
+export const chestHeight = (p: Player) => feetOf(p) + 1.1 - CROUCH.drop * (p.crouch ?? 0);
+/** The top of a player's body for rounds: lower while crouched. */
+export const bodyTop = (p: Player) => BODY.top - CROUCH.bodyDrop * (p.crouch ?? 0);
 /** How high a player's feet are: in the air their height, on the ground the roof or hop they are on. */
 export const feetOf = (p: Player) => (p.stage === 'falling' ? Math.max(0, p.alt) : p.z ?? 0);
 
@@ -345,7 +370,7 @@ export const canSee = (state: GameState, viewer: Player, target: Player) => {
   if (viewer.id === target.id) return true;
   const d = Math.hypot(target.x - viewer.x, target.y - viewer.y);
   // Plants hide people standing in them, not the ones floating down over them.
-  if (target.stage === 'ground' && inPlant(target.x, target.y) && target.revealed <= 0 && d > PLANT_REVEAL) return false;
+  if (target.stage === 'ground' && plantHides(target) && target.revealed <= 0 && d > PLANT_REVEAL) return false;
   return true;
 };
 
@@ -542,6 +567,7 @@ export const newPlayer = (id: number, name: string, fighter: FighterId, bot: boo
   vaultTo: { x, y },
   pushing: 0,
   lean: 0,
+  crouch: 0,
   rolling: 0,
   rollDir: 0,
   rollCooldown: 0,
@@ -667,7 +693,8 @@ const updateDrop = (state: GameState, inputs: Input[]) => {
       updateFall(state, p, input);
       // A house is solid in the air too: coming down over it you land on its roof; drifting into its walls below the
       // eaves you are stopped there (and come down beside it, never inside).
-      const roof = roofAt(p.x, p.y);
+      // The flat tops of containers, boxcars and the HQ block hold you the same way.
+      const roof = Math.max(roofAt(p.x, p.y), propTopAt(p.x, p.y));
       if (roof >= 0 && p.alt <= roof && was.alt > roof - 0.01) {
         land(state, p, roof);
       } else if (roof >= 0 && p.alt <= roof) {
@@ -1131,19 +1158,24 @@ const shoot = (state: GameState, p: Player, input: Input) => {
   const w = WEAPONS[kind];
   p.cooldown = w.rate;
   p.revealed = 1;
-  // Bullets go straight at the aim point; the body catches up with its turn a moment later.
-  const aim = Math.hypot(input.aimX - p.x, input.aimY - p.y) > 0.3 ? Math.atan2(input.aimY - p.y, input.aimX - p.x) : p.heading;
+  // Bullets go straight at the aim point; the body catches up with its turn a moment later. They leave from the shoulder
+  // (out past the corner while leaning) and go to the aim point from there, so a leaned shot still lands on the crosshair.
+  const from = hitPoint(p);
+  const aim = Math.hypot(input.aimX - from.x, input.aimY - from.y) > 1.2
+    ? Math.atan2(input.aimY - from.y, input.aimX - from.x)
+    : Math.hypot(input.aimX - p.x, input.aimY - p.y) > 0.3 ? Math.atan2(input.aimY - p.y, input.aimX - p.x) : p.heading;
+  const spread = w.spread * (1 - (1 - CROUCH.spread) * p.crouch);
   const keep = p.weapon;
   p.weapon = kind; // fireBullet reads the weapon
   const at = { x: input.aimX, y: input.aimY };
   // The shot comes first in the event list, so a hit or a kill it causes this tick reads as its result.
-  const shot: GameEvent = { type: 'shot', owner: p.id, x: p.x, y: p.y, angle: aim, weapon: kind };
+  const shot: GameEvent = { type: 'shot', owner: p.id, x: from.x, y: from.y, angle: aim, weapon: kind };
   state.events.push(shot);
   if (kind === 'rockets') fireRocket(state, p, aim, input.pitch ?? 0);
   else if (w.bullets > 1) {
-    for (let i = 0; i < w.bullets; i++) fireBullet(state, p, aim - w.spread / 2 + (w.spread * i) / (w.bullets - 1), at);
+    for (let i = 0; i < w.bullets; i++) fireBullet(state, p, aim - spread / 2 + (spread * i) / (w.bullets - 1), at);
   } else {
-    const len = fireBullet(state, p, aim + (nextRandom(state) - 0.5) * w.spread, at);
+    const len = fireBullet(state, p, aim + (nextRandom(state) - 0.5) * spread, at);
     if (len !== undefined && shot.type === 'shot') shot.len = len;
   }
   p.weapon = keep;
@@ -1380,8 +1412,15 @@ const finishHeal = (state: GameState, p: Player) => {
  * Feet: on a surface they follow it (up and down a roof's slope); off it (a hop, or walking off a roof's edge) gravity
  * pulls them down to whatever is under them, the ground or another roof. A drop of more than a metre is a thud.
  */
+/** What holds your feet at (x, y) coming from height z: a roof, a container's or the HQ's flat top, else the ground. */
+const standAt = (x: number, y: number, z: number) => {
+  const r = supportAt(x, y, z);
+  const t = propTopAt(x, y);
+  return t >= 0 && z >= t - 0.6 ? Math.max(r, t) : r;
+};
+
 const updateFeet = (state: GameState, p: Player, hop: boolean) => {
-  const under = supportAt(p.x, p.y, p.z);
+  const under = standAt(p.x, p.y, p.z);
   if (p.jz === 0 && p.z <= under + 0.35 && p.z >= under - 0.6) {
     p.z = under;
     if (!hop) return;
@@ -1392,7 +1431,7 @@ const updateFeet = (state: GameState, p: Player, hop: boolean) => {
   p.jz -= FEET.gravity * DT;
   p.z += p.jz * DT;
   // You come down onto a roof only from above it; under it (never reached from the side) the floor is what holds you.
-  let below = supportAt(p.x, p.y, was);
+  let below = standAt(p.x, p.y, was);
   if (below > was + 0.35) below = 0;
   if (p.z <= below) {
     if (p.jz * p.jz > 2 * FEET.gravity * FEET.landDrop) state.events.push(below > 0 ? { type: 'thud', player: p.id, x: p.x, y: p.y, z: below } : { type: 'thud', player: p.id, x: p.x, y: p.y });
@@ -1469,6 +1508,7 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     p.rollCooldown = ROLL.cooldown;
     state.events.push({ type: 'roll', player: p.id, x: p.x, y: p.y });
   }
+  if (p.rolling > 0 || p.climb > 0 || p.vault > 0) p.crouch = 0; // a roll, a ladder or a vault stands you up
   if (p.rolling > 0) {
     p.rolling = Math.max(0, p.rolling - DT);
     const v = ROLL.distance / ROLL.time;
@@ -1523,8 +1563,12 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     // Accelerate towards the wanted velocity, ease off when the keys are released.
     const len = Math.hypot(input.mx, input.my);
     p.lean += ((swimming ? 0 : Math.max(-1, Math.min(1, input.lean))) - p.lean) * Math.min(1, LEAN.rate * DT);
+    // Crouched: down on the ground only (a hop, a ladder, the water or a roll stand you up).
+    const down = !!input.crouch && !swimming && p.jz === 0;
+    p.crouch = Math.max(0, Math.min(1, p.crouch + (down ? 1 : -1) * CROUCH.rate * DT));
     const top =
       FIGHTERS[p.fighter].speed * (p.slowed > 0 ? SUPERS.timebox.slow : 1) * (Math.abs(p.lean) > 0.3 ? LEAN.speed : 1) * (swimming ? SWIM.speed : 1) *
+      (1 - (1 - CROUCH.speed) * p.crouch) *
       (p.using ? HEALS.walk : 1) * (p.buzz > 0 ? HEALS.coffee.speed : 1);
     const wantX = len > 0.01 ? (input.mx / Math.max(1, len)) * top : 0;
     const wantY = len > 0.01 ? (input.my / Math.max(1, len)) * top : 0;
@@ -1679,7 +1723,7 @@ const updateProjectile = (state: GameState, pr: Projectile) => {
       const h = hitPoint(o);
       // The body runs from the feet to the top of the head: a round over or under it misses.
       const feet = feetOf(o);
-      if (ht < feet - 0.1 || ht > feet + BODY.top) continue;
+      if (ht < feet - 0.1 || ht > feet + bodyTop(o)) continue;
       if (Math.hypot(h.x - pr.x, h.y - pr.y) < PLAYER_RADIUS + 0.15) {
         o.lastHitWith = pr.weapon;
         state.players[pr.owner].hits += 1;

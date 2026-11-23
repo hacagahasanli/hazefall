@@ -4,7 +4,7 @@ import {
 } from './bot-params';
 import { DROP, DT, FIGHTERS, HEALS, magOf, NEWBIE, SUPERS, WEAPONS, WORLD } from './constants';
 import { buildingAt, doorstep, ROOF_LAYER } from './roofs';
-import { canSee, chestHeight, healChoice, hitPoint, inPlant, lootUnder, targetable } from './step';
+import { canSee, chestHeight, healChoice, hitPoint, inPlant, plantHides, lootUnder, targetable } from './step';
 import { NO_INPUT } from './types';
 
 import type { Persona } from './bot-params';
@@ -261,7 +261,7 @@ export const createBot = (id: number, seed: number) => {
           if (a < 1) {
             const t = spotTime(p!, {
               d, edge, moving: Math.hypot(o.vx, o.vy) > 1.5, firing: o.revealed > 0, light: lightAt(o.x, o.y),
-              plant: o.stage === 'ground' && inPlant(o.x, o.y), alert: shot || listening,
+              plant: o.stage === 'ground' && plantHides(o), alert: shot || listening,
             });
             a = Math.min(1, a + THINK_DT / t);
           }
@@ -477,9 +477,12 @@ export const createBot = (id: number, seed: number) => {
         wantY = me.y + ((me.y - lastTY) / d) * 5;
       }
       if (mode === 'heal') {
-        // Heal facing the way they were: whoever comes round that corner gets seen first.
+        // Heal facing the way they were, crouched low behind the cover: whoever comes round that corner gets seen first.
         lookAt = threat;
-        if (!me.using && canHeal(me)) out.heal = true;
+        const atCover = !!cover && Math.hypot(me.x - cover.x, me.y - cover.y) < 1.2;
+        out.crouch = atCover || !cover;
+        // Down first; then the heal, where the threat cannot see that crouched chest (or anywhere, with no cover to go to).
+        if (!me.using && canHeal(me)) out.heal = me.crouch > 0.85 && (!cover || !botSight(state, threat.x, threat.y, me.x, me.y, 1.1, chestHeight(me)));
       }
     } else if (mode === 'cover' && post) {
       lookAt = threat;
@@ -501,6 +504,8 @@ export const createBot = (id: number, seed: number) => {
       } else {
         wantX = post.x;
         wantY = post.y;
+        // Hiding behind it between peeks: down low (a rock hides a crouched chest, not a standing one).
+        out.crouch = atPost;
         if (atPost) {
           if (armed && me.reload <= 0 && me.ammo > 0 && me.mag < magOf(me.weapon, me.rarity) * 0.7) out.reload = true;
           if (now > peekUntil && me.reload <= 0) {
@@ -640,9 +645,17 @@ export const createBot = (id: number, seed: number) => {
       // in throwing range; the other supers work up close.
       out.super = me.superCharge >= 1 && (me.fighter === 'standup' ? td < SUPERS.timebox.range - 2 && td > 2.5 && botCanSee(state, me, target) : td < 9);
       out.use = me.bombs > 0 && td < 11 && td > 4;
-    } else if (mode !== 'heal' && !me.using && !target && !out.use && wantsHeal(me, mode)) out.heal = true;
-    else if (!me.using && !target && me.coffees > 0 && me.buzz <= 0 && (me.hp < me.maxHp * 0.85 || mustRun)) out.coffee = true;
+    } else if (mode !== 'heal' && mode !== 'retreat' && !me.using && !target && !out.use && wantsHeal(me, mode)) {
+      // (Backing out of a fight heals in the 'heal' mode, once out of sight: see above.)
+      // Down first, then the heal: a crouched body is behind a rock that a standing one is not.
+      out.crouch = true;
+      // ...and only where the last place they were cannot see that crouched chest (else keep backing off to cover).
+      out.heal = me.crouch > 0.85 && (lastSeen < -90 || !botSight(state, lastTX, lastTY, me.x, me.y, 1.1, chestHeight(me)));
+    } else if (!me.using && !target && me.coffees > 0 && me.buzz <= 0 && (me.hp < me.maxHp * 0.85 || mustRun)) out.coffee = true;
     else if (!target && armed && !me.using && me.reload <= 0 && me.ammo > 0 && me.mag < magOf(me.weapon, me.rarity) * 0.4) out.reload = true;
+    // Heals are taken low; so is any wait in tall grass (it hides only a crouched body).
+    if (me.using) out.crouch = true;
+    if (!out.crouch && !out.fire && Math.hypot(out.mx, out.my) < 0.35 && inPlant(me.x, me.y) && !(target && engaged)) out.crouch = true;
     pickGun(me, now, out);
     return out;
   };
@@ -690,8 +703,9 @@ export const createBot = (id: number, seed: number) => {
   const aimAndFire = (state: GameState, me: Player, now: number, out: Input) => {
     out.fire = false;
     if (!target || !target.alive) return out;
-    // Falling back is not running blind: it keeps shooting at whoever is on it while it makes for cover.
-    const shootBack = (mode === 'retreat' || (mode === 'heal' && !me.using)) && (now - hitAt < 3 || td < 12);
+    // Falling back is not running blind: it keeps shooting at whoever is on it while it makes for cover (someone who hit it
+    // lately, or who is right on top of it). It never opens a fight it is backing out of.
+    const shootBack = (mode === 'retreat' || (mode === 'heal' && !me.using)) && (now - hitAt < 3 || td < 6);
     if ((!engaged && !shootBack) || me.swapping > 0) return out;
     if (!botCanSee(state, me, target)) {
       // Gone behind something: keep the gun on where they were.
