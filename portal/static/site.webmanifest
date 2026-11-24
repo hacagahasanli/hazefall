@@ -1,6 +1,6 @@
 {
-  "name": "Last Commit Standing",
-  "short_name": "Last Commit Standing",
+  "name": "Hazefall",
+  "short_name": "Hazefall",
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
