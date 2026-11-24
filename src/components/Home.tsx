@@ -172,9 +172,7 @@ export const Home = () => {
         <section className="grid items-center gap-10 lg:grid-cols-[1fr_auto]">
           <div className="flex max-w-xl flex-col gap-6">
             <h1 className="font-display text-6xl leading-[0.95] drop-shadow-[0_4px_24px_rgba(0,0,0,0.6)] sm:text-8xl">
-              LAST COMMIT
-              <br />
-              <span className="text-gold">STANDING</span>
+              HAZE<span className="text-gold">FALL</span>
             </h1>
             <p className="max-w-md text-lg text-cream/85">
               Skydive into a living town, steer your parachute, grab a gun and outlast 19 rivals as the Haze closes in. A third-person

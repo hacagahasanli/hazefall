@@ -5,7 +5,7 @@
 export const STUDIO_NAME = 'Nalbaki Games';
 
 /** The game's name as players see it (the portal build's title and covers). */
-export const GAME_TITLE = 'Last Commit Standing';
+export const GAME_TITLE = 'Hazefall';
 
 /**
  * Online play (rooms with friends): off until the online plan ships. The code stays; with this false the menus show online

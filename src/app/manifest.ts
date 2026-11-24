@@ -2,11 +2,11 @@ import type { MetadataRoute } from 'next';
 
 /**
  * Installable as an app. On iPhone that is the only way to play without the browser bars:
- * Share -> Add to Home Screen, then open Last Commit Standing from the home screen.
+ * Share -> Add to Home Screen, then open Hazefall from the home screen.
  */
 const manifest = (): MetadataRoute.Manifest => ({
-  name: 'Last Commit Standing · Nalbaki Games',
-  short_name: 'Last Commit',
+  name: 'Hazefall · Nalbaki Games',
+  short_name: 'Hazefall',
   description: 'Twenty drop in. The Haze closes. One stays standing.',
   start_url: '/',
   display: 'fullscreen',

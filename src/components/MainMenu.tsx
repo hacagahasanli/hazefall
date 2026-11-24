@@ -20,7 +20,6 @@ import { deviceFacts } from '~/game/render/deviceFacts';
 import { resolveTier } from '~/game/render/quality';
 import { keyLabel } from '~/game/settings';
 import { FIGHTERS, PLAYERS } from '~/game/sim/constants';
-import { brandUrl } from '~/lib/assets';
 import { boot, loadCount, onLoadCount } from '~/lib/loading';
 import { GAME_TITLE, ONLINE_PLAY } from '~/lib/studio';
 import { showsOnlineRow } from '~/platform/menu';
@@ -345,15 +344,10 @@ export const MainMenu = ({
       >
         <div className="flex flex-col gap-1 [animation:slideIn_0.5s_ease-out] max-sm:mb-auto max-sm:mt-2 [@media(max-height:500px)]:gap-0 [@media(max-width:639px)_and_(max-height:760px)]:mt-0">
           <h1 className="m-0">
-            {/* The wordmark (brand/last-commit-standing/logo.svg): a fixed-ratio image, so a plain <img> is right. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={brandUrl('logo.svg')}
-              alt={GAME_TITLE}
-              width={1130}
-              height={306}
-              className={`h-auto w-full max-w-[400px] drop-shadow-[0_6px_28px_rgba(0,0,0,0.65)] [@media(max-height:640px)]:sm:max-w-[240px] [@media(max-height:500px)]:max-w-[200px] [@media(max-height:360px)]:max-w-[150px] ${settings.reducedMotion ? '' : 'lcs-glitch-in'}`}
-            />
+            {/* The wordmark (R-020 game-name-v1: HAZE white, FALL gold, Bungee), set as text in the display font. */}
+            <span aria-label={GAME_TITLE} className={`block font-display text-6xl leading-none sm:text-7xl [@media(max-height:640px)]:sm:text-5xl [@media(max-height:500px)]:text-4xl [@media(max-height:360px)]:text-3xl drop-shadow-[0_6px_28px_rgba(0,0,0,0.65)] ${settings.reducedMotion ? '' : 'lcs-glitch-in'}`}>
+              HAZE<span className="text-gold">FALL</span>
+            </span>
           </h1>
           {career && <LevelBar career={career} />}
         </div>

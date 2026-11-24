@@ -47,7 +47,7 @@ export const OnlinePanel = ({
     try {
       if (navigator.share && isTouchUi()) {
         await navigator.share({
-          title: 'Last Commit Standing',
+          title: 'Hazefall',
           text: 'Drop in with me:',
           url: link,
         });
