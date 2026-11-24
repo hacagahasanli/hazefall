@@ -37,7 +37,7 @@ Evidence is a file, a command or a test step. Update the status column as later 
 | Legible at DPR 1 and at 907x510, 1216x684, 1077x606, 821x462, 1366x768, 1920x1080, 1536x864, 1280x720 | OPEN | step 3 screenshots |
 | English localisation; locale from systemInfo, fallback English | PASS | game is English only (allowed) |
 | Intuitive controls; restricted keys | PASS | Esc and P both pause; key handling by `e.code` (physical keys, so AZERTY users get the same positions); Esc, Tab, F5, F11 reserved (`settings.ts`) |
-| Load quickly, no errors or crashes | OPEN | step 4 (console, 404s) |
+| Load quickly, no errors or crashes | PASS (local) | clean build ed36ef7 with real SDK at 1216x684: 0 console errors, 0 failed requests; CG QA tool still to run |
 | Original names, assets, content | OPEN | step 5 copyright list |
 | No custom fullscreen button | PASS | `disableAutoFullscreen()` in `portal/main.tsx`; no requestFullscreen call in portal path |
 | No cross-promotion / external links | PASS | portal-report "no outbound links"; neutral copy alias |
