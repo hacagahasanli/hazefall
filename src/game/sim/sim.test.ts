@@ -767,3 +767,38 @@ describe('healing is in your hands', () => {
     expect(p.using).toBe('medkit');
   });
 });
+
+describe('leaning past a corner: the round leaves from the camera line', () => {
+  it('a target the crosshair sees past a wall corner is hit; without the camera offset the wall takes it', () => {
+    const open = (x: number, y: number) => 'gpa'.includes(MAP[y]?.[x] ?? '#');
+    let spot: { x: number; y: number } | null = null;
+    for (let y = 10; y < 110 && !spot; y++) {
+      for (let x = 10; x < 100 && !spot; x++) {
+        if (MAP[y][x] !== '#') continue;
+        let ok = true;
+        for (let i = 1; i <= 4; i++) if (!open(x - i, y)) ok = false;
+        for (let i = -4; i <= 8; i++) if (!open(x + i, y + 1)) ok = false;
+        if (ok) spot = { x, y };
+      }
+    }
+    expect(spot).not.toBeNull();
+    const run = (camSide: number) => {
+      const s = createGame('hotfix', 1);
+      const [a, b] = s.players;
+      s.players.slice(2).forEach((p) => Object.assign(p, { stage: 'falling', alt: 60, canopy: -1, x: 10, y: 10 }));
+      s.drone.t = 1;
+      const wx = spot!.x * TILE;
+      const wy = spot!.y * TILE;
+      // Shooter west of the wall tile, its body line just inside the wall's span; the target past the wall's south edge.
+      Object.assign(a, { stage: 'ground', x: wx - 3, y: wy + 1.4, z: 0, heading: 0, lean: 0, weapon: 'sniper', mag: 5, ammo: 5, cooldown: 0, rarity: 0 });
+      Object.assign(b, { stage: 'ground', x: wx + 10, y: wy + 2.5, z: 0, hp: 100, armor: 0, vest: 0 });
+      const hp = b.hp;
+      const inputs = idle();
+      inputs[0] = { ...NO_INPUT, fire: true, snap: true, aimX: b.x, aimY: b.y, aimH: 1.1, camSide };
+      step(s, inputs);
+      return hp - b.hp;
+    };
+    expect(run(0)).toBe(0);
+    expect(run(0.62)).toBeGreaterThan(0);
+  });
+});

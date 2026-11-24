@@ -58,7 +58,7 @@ export const encodeInput = (tick: number, i: Input): WireInput => {
   if (i.bandage) bits |= BANDAGE;
   if (i.medkit) bits |= MEDKIT;
   if (i.bomb) bits |= BOMB;
-  return [tick, bits, Math.round(i.mx * 100), Math.round(i.my * 100), r2(i.aimX), r2(i.aimY), Math.round((i.pitch ?? 0) * 100), ...(i.aimH === undefined ? [] : [r2(i.aimH)])] as WireInput;
+  return [tick, bits, Math.round(i.mx * 100), Math.round(i.my * 100), r2(i.aimX), r2(i.aimY), Math.round((i.pitch ?? 0) * 100), ...(i.aimH === undefined ? [] : [r2(i.aimH), r2(i.camSide ?? 0)])] as WireInput;
 };
 
 export const decodeInput = (w: WireInput): Input => {
@@ -80,12 +80,13 @@ export const decodeInput = (w: WireInput): Input => {
   s.bomb = (w[1] & BOMB) !== 0;
   s.pitch = (w[6] ?? 0) / 100;
   if (typeof w[7] === 'number') s.aimH = w[7];
+  if (typeof w[8] === 'number' && w[8] !== 0) s.camSide = Math.max(-1, Math.min(1, w[8]));
   return s;
 };
 
 export const isWireInput = (w: unknown): w is WireInput =>
   Array.isArray(w) &&
-  (w.length === 7 || w.length === 8) &&
+  w.length >= 7 && w.length <= 9 &&
   w.every((n) => typeof n === 'number' && Number.isFinite(n)) &&
   Math.abs(w[2]) <= 100 &&
   Math.abs(w[3]) <= 100;
@@ -203,7 +204,7 @@ const reviver = (_k: string, v: unknown) =>
  * ride along in an object at the end, so nothing is lost if the two lists drift apart.
  */
 const PLAYER_KEYS = Object.keys(newPlayer(0, '', 'hotfix', false, 0, 0)).filter((k) => k !== 'prev');
-const INPUT_KEYS = [...Object.keys(NO_INPUT), 'snap', 'pitch', 'scope', 'throwAt', 'slot', 'cycle', 'heal', 'coffee', 'crouch', 'aimH', 'bandage', 'medkit', 'bomb'];
+const INPUT_KEYS = [...Object.keys(NO_INPUT), 'snap', 'pitch', 'scope', 'throwAt', 'slot', 'cycle', 'heal', 'coffee', 'crouch', 'aimH', 'camSide', 'bandage', 'medkit', 'bomb'];
 
 /** Loot the same way: the list is sent whenever it changes and once a second, and twenty fighters need ~150 pieces. */
 const LOOT_KEYS = ['id', 'kind', 'x', 'y', 'ammo', 'tier', 'active'];

@@ -7,7 +7,7 @@
  * `stand` props have a flat top you can land on from the sky (or walk on once there): containers, boxcars and the HQ roof.
  * Pure data from the map, shared by the simulation and the renderer.
  */
-import { PROPS, SIZE, TILE } from './constants';
+import { PROPS, SIZE, STADIUM, TILE } from './constants';
 
 import type { Prop } from './constants';
 
@@ -61,14 +61,23 @@ export const PROP_SOLIDS: PropSolid[] = PROPS.map(solidOf);
 /** Which prop stands on each tile (index into PROP_SOLIDS), -1 for none. */
 const BY_TILE = new Int16Array(SIZE * SIZE).fill(-1);
 PROPS.forEach((p, i) => {
+  // The river covers the whole map as decor, and The Pitch is a ring of walls and stands round an open pitch: neither is
+  // one box. The Pitch's solid tiles are handled one by one below.
+  if (p.kind === 'river' || p.kind === 'stadium') return;
   for (let y = p.y0; y < p.y0 + p.h; y++) for (let x = p.x0; x < p.x0 + p.w; x++) if (x >= 0 && y >= 0 && x < SIZE && y < SIZE) BY_TILE[y * SIZE + x] = i;
 });
+
+/** The Pitch's walls, stands, dugouts and set pieces: each 'v' tile is its own box, as tall as the outer wall. */
+const STADIUM_TOP = 3.6;
+const inStadium = (tx: number, ty: number) => tx >= STADIUM.x0 && tx < STADIUM.x0 + STADIUM.w && ty >= STADIUM.y0 && ty < STADIUM.y0 + STADIUM.h;
 
 /** The prop standing on tile (tx, ty), if any. */
 export const propOnTile = (tx: number, ty: number): PropSolid | null => {
   if (tx < 0 || ty < 0 || tx >= SIZE || ty >= SIZE) return null;
   const i = BY_TILE[ty * SIZE + tx];
-  return i >= 0 ? PROP_SOLIDS[i] : null;
+  if (i >= 0) return PROP_SOLIDS[i];
+  if (inStadium(tx, ty)) return { x0: tx * TILE, y0: ty * TILE, x1: tx * TILE + TILE, y1: ty * TILE + TILE, top: STADIUM_TOP, stand: false, kind: 'stadium' };
+  return null;
 };
 
 const inside = (s: PropSolid, x: number, y: number) => x >= s.x0 && x <= s.x1 && y >= s.y0 && y <= s.y1;

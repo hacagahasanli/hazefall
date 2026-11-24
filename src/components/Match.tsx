@@ -1223,69 +1223,6 @@ export const Match = ({
                 >
                   {online && hud.host ? 'End the round for everyone' : exitLabel === 'Back to lobby' ? 'Leave match' : 'Quit to menu'}
                 </button>
-                {/* The keys (they left the round's top-left corner when the minimap moved there). */}
-                {!touch && (
-                  <div aria-label="Keys" className="flex w-full flex-wrap justify-center gap-x-3 gap-y-1.5 border-t border-cream/10 pt-3 text-[11px] text-cream/60">
-                    <span className="flex items-center gap-1">
-                      <Key k={keyLabel(settings.keys.up)} />
-                      <Key k={keyLabel(settings.keys.left)} />
-                      <Key k={keyLabel(settings.keys.down)} />
-                      <Key k={keyLabel(settings.keys.right)} /> move
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Key k="Click" /> shoot
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Key k={keyLabel(settings.keys.jump)} /> jump
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Key k={keyLabel(settings.keys.leanL)} />
-                      <Key k={keyLabel(settings.keys.leanR)} /> lean
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Key k={keyLabel(settings.keys.super)} /> super
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Key k={keyLabel(settings.keys.use)} /> pick up
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Key k={keyLabel(settings.keys.reload)} /> reload
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Key k={keyLabel(settings.keys.slot1)} />
-                      <Key k={keyLabel(settings.keys.slot2)} />
-                      <Key k={keyLabel(settings.keys.swap)} /> / wheel · guns
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Key k={keyLabel(settings.keys.heal)} /> heal
-                      <Key k={keyLabel(settings.keys.coffee)} /> {COPY.items.coffee.toLowerCase()}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Key k={keyLabel(settings.keys.roll)} /> roll
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Key k={keyLabel(settings.keys.scope)} /> / right click · scope
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Key k={keyLabel(settings.keys.aim)} /> {hud.aimMode === 'mouse' || hud.firstPerson || hud.shoulder ? 'mouse aim' : 'auto-aim'}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Key k={keyLabel(settings.keys.mute)} /> mute
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Key k="Esc" /> / <Key k={keyLabel(settings.keys.pause)} /> menu
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Key k={keyLabel(settings.keys.crouch)} /> crouch
-                      <Key k={keyLabel(settings.keys.look)} /> hold · look around
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Key k={keyLabel(settings.keys.bandage)} /> bandage
-                      <Key k={keyLabel(settings.keys.medkit)} /> med kit
-                      <Key k={keyLabel(settings.keys.bomb)} /> bomb
-                    </span>
-                  </div>
-                )}
                 {!touch && <p className="text-[10px] text-cream/40">Esc or {keyLabel(settings.keys.pause)} to resume</p>}
                 {Support && <Support />}
                 {credit && <p className="text-[10px] tracking-widest text-cream/40">A game by {credit}</p>}

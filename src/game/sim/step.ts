@@ -1076,10 +1076,25 @@ const gunDamage = (p: Player) => WEAPONS[p.weapon].damage * (p.weapon === 'fists
 const INSTANT: ReadonlySet<WeaponKind> = new Set<WeaponKind>(['sniper']);
 
 /** Fires one round. Returns how far it flew if it was resolved at once (INSTANT), else undefined. */
-const fireBullet = (state: GameState, p: Player, angle: number, aim?: { x: number; y: number; h?: number }): number | undefined => {
+/**
+ * Where a person's round leaves from. With a 3D aim (the crosshair's point) it is the camera's side line: over the shoulder
+ * the camera sits ~0.6 m to the side, so what the crosshair clears round a corner the round clears too (Reis, 2026-11-24:
+ * leaning out, the crosshair was past the corner but the round hit the wall in front). Never through a wall: if anything
+ * solid stands between the body and that point, the round leaves from the body as before.
+ */
+const muzzleOf = (state: GameState, p: Player, input?: Input) => {
+  const o = hitPoint(p);
+  if (!input || input.aimH === undefined || !input.camSide || p.bot) return o;
+  const side = Math.max(-0.8, Math.min(0.8, input.camSide));
+  const m = { x: o.x - Math.sin(p.heading) * side, y: o.y + Math.cos(p.heading) * side };
+  const h = chestHeight(p);
+  return lineOfSight(state, o.x, o.y, m.x, m.y, h, h) && !circleBlocked(state, m.x, m.y, 0.15, feetOf(p)) ? m : o;
+};
+
+const fireBullet = (state: GameState, p: Player, angle: number, aim?: { x: number; y: number; h?: number }, from?: { x: number; y: number }): number | undefined => {
   const w = WEAPONS[p.weapon];
   // Leaning out, the muzzle is out past the corner too.
-  const o = hitPoint(p);
+  const o = from ?? hitPoint(p);
   const x = o.x + Math.cos(angle) * 0.6;
   const y = o.y + Math.sin(angle) * 0.6;
   const h0 = chestHeight(p);
@@ -1226,7 +1241,7 @@ const shoot = (state: GameState, p: Player, input: Input) => {
   p.revealed = 1;
   // Bullets go straight at the aim point; the body catches up with its turn a moment later. They leave from the shoulder
   // (out past the corner while leaning) and go to the aim point from there, so a leaned shot still lands on the crosshair.
-  const from = hitPoint(p);
+  const from = muzzleOf(state, p, input);
   const aim = Math.hypot(input.aimX - from.x, input.aimY - from.y) > 1.2
     ? Math.atan2(input.aimY - from.y, input.aimX - from.x)
     : Math.hypot(input.aimX - p.x, input.aimY - p.y) > 0.3 ? Math.atan2(input.aimY - p.y, input.aimX - p.x) : p.heading;
@@ -1239,9 +1254,9 @@ const shoot = (state: GameState, p: Player, input: Input) => {
   state.events.push(shot);
   if (kind === 'rockets') fireRocket(state, p, aim, input.pitch ?? 0);
   else if (w.bullets > 1) {
-    for (let i = 0; i < w.bullets; i++) fireBullet(state, p, aim - spread / 2 + (spread * i) / (w.bullets - 1), at);
+    for (let i = 0; i < w.bullets; i++) fireBullet(state, p, aim - spread / 2 + (spread * i) / (w.bullets - 1), at, from);
   } else {
-    const len = fireBullet(state, p, aim + (nextRandom(state) - 0.5) * spread, at);
+    const len = fireBullet(state, p, aim + (nextRandom(state) - 0.5) * spread, at, from);
     if (len !== undefined && shot.type === 'shot') {
       shot.len = len;
       if (pr3d(input)) shot.endH = Math.round(lastEndH * 100) / 100;

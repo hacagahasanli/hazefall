@@ -749,14 +749,17 @@ export const buildWorld = (scene: THREE.Scene): World => {
             [fx, fz] = face(0.08);
             piece(fx, 2.49, fz, TILE, 0.22, 0.08, alongX, look.trim);
             if (t === 'w') {
-              piece(fx, 2.42, fz, 1.9, 0.12, 0.08, alongX, look.trim);
+              // The window frame sits nearly flush with the wall (Reis, 2026-11-24: nothing should stick out in front of a
+              // window beyond the wall's own depth): 3 cm proud for the frame, 4 cm for the sill board.
+              [fx, fz] = face(0.03);
+              piece(fx, 2.42, fz, 1.9, 0.12, 0.03, alongX, look.trim);
               const ax = alongX ? 1 : 0;
               const az = alongX ? 0 : 1;
-              for (const o of [-0.9, 0.9]) piece(fx + ax * o, 1.65, fz + az * o, 0.12, 1.5, 0.08, alongX, look.trim);
+              for (const o of [-0.9, 0.9]) piece(fx + ax * o, 1.65, fz + az * o, 0.12, 1.5, 0.03, alongX, look.trim);
+              [fx, fz] = face(0.02);
+              piece(fx, 1.65, fz, 0.06, 1.5, 0.02, alongX, look.trim);
               [fx, fz] = face(0.04);
-              piece(fx, 1.65, fz, 0.06, 1.5, 0.04, alongX, look.trim);
-              [fx, fz] = face(0.22);
-              piece(fx, 0.92, fz, TILE, 0.08, 0.22, alongX, new THREE.Color(look.trim).multiplyScalar(0.85));
+              piece(fx, 0.92, fz, TILE, 0.06, 0.04, alongX, new THREE.Color(look.trim).multiplyScalar(0.85));
             }
           }
         }

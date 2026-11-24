@@ -64,6 +64,11 @@ export interface Input {
    * the truth. Missing (bots, old clients), rounds go to chest height over the aim point as before.
    */
   aimH?: number;
+  /**
+   * How far the camera sits to the right (+) or left (-) of the shooter's body line (m): the shoulder camera's side offset.
+   * With a 3D aim the round leaves from that line (as the crosshair sees), unless a wall stands between it and the body.
+   */
+  camSide?: number;
 }
 
 export const NO_INPUT: Input = { mx: 0, my: 0, fire: false, super: false, use: false, reload: false, lean: 0, roll: false, jump: false, aimX: 0, aimY: 0 };

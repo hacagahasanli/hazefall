@@ -1412,6 +1412,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         aimX: shoulder ? crossAim.x : fpAim.x,
         aimY: shoulder ? crossAim.y : fpAim.y,
         aimH: shoulder ? crossAim.h : fpAim.h,
+        // The camera's side line relative to the body's (the lean is in both): over the shoulder its side offset, in first
+        // person the eye's extra lean (0.72 m against the muzzle's 0.49 m).
+        camSide: shoulder ? sideNow : p.lean * (0.72 - LEAN.offset * 0.7),
       };
       // A bomb in hand goes where the crosshair meets the ground (look up to throw farther, up to its range).
       const bombAim = p.item === 'bomb';

@@ -467,9 +467,10 @@ const stadium = (p: Prop) => {
   const wallRun = (x0: number, z0: number, x1: number, z1: number) => {
     const w = x1 - x0;
     const d = z1 - z0;
-    parts.push(box(w, 3.6, d, x0 + w / 2, 1.8, z0 + d / 2, WALL));
-    parts.push(box(w + 0.04, 0.35, d + 0.04, x0 + w / 2, 3.6 - 0.175, z0 + d / 2, VIOLET));
-    parts.push(box(w + 0.04, 0.4, d + 0.04, x0 + w / 2, 0.2, z0 + d / 2, PLINTH));
+    // Plinth, wall and the violet band stacked, never overlapping: overlapping faces flicker (z-fighting).
+    parts.push(box(w, 0.4, d, x0 + w / 2, 0.2, z0 + d / 2, PLINTH));
+    parts.push(box(w, 2.85, d, x0 + w / 2, 0.4 + 2.85 / 2, z0 + d / 2, WALL));
+    parts.push(box(w, 0.35, d, x0 + w / 2, 3.25 + 0.175, z0 + d / 2, VIOLET));
   };
   // Outer walls: west (the tunnel rows 73-74 open), east, and the corners at both ends.
   wallRun(X(63), Z(67), X(64), Z(73));
@@ -585,7 +586,7 @@ const stadium = (p: Prop) => {
   tex.colorSpace = THREE.SRGBColorSpace;
   const board = new THREE.Mesh(new THREE.PlaneGeometry(4, 0.8), new THREE.MeshBasicMaterial({ map: tex }));
   board.rotation.y = -Math.PI / 2;
-  board.position.set(X(63) - 0.13, 4.3, Z(74));
+  board.position.set(X(63) - 0.18, 4.3, Z(74));
   g.add(board);
   return g;
 };
