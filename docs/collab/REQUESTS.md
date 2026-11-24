@@ -134,3 +134,10 @@ Format: `## R-001 — title` then Context, Expected deliverable, Priority (P0-P3
 - Expected deliverable: CREATIVE/specifications/game-name-v1.md with 5 one-word candidates, ranked. For each one: the meaning and why it fits (drop, haze, last one standing, countryside town), how it reads at 200 px on a cover, and checks done today with links: CrazyGames search, Poki search, Steam search, itch.io, a web search for the word + "game", USPTO/EUIPO trademark search where possible. Drop any candidate with a clash. Also say: the title lockup for the covers (one line or two, which part gold), and a tagline update if needed.
 - Priority: P0 (blocks the CG upload)
 - Status: done (CD 2026-11-24): Hazefall chosen; 5 ranked, clash-checked names + lockup (HAZE white, FALL gold, one line) in CREATIVE/specifications/game-name-v1.md
+
+## R-021 — Fighter redesign (faces, silhouettes, fighter select showcase) — PARKED, start in a new session
+- Context: Reis (2026-11-24) wants Blaze, Hedge, Tempo, Rookie to look like a polished indie game: expressive faceted low-poly faces (big readable eyes, brows, hair/headgear), four distinct silhouettes and outfits, subtle per-character idle, and a fighter select screen that makes you want to pick them. Keep the low-poly identity; no realistic military look, no noisy detail. Reference (style only): ENGINEERING/char-redesign/reis-ref-lowpoly-faces.png. Priority per Reis: how they look on the Fighter select screen. Characters are procedural (src/game/render/characters.ts buildRig).
+- Plan agreed: CD writes a spec; engineering tests on ONE fighter (Blaze) first with procedural geometry (path A), on a branch, not in the CG build under review; if not good enough, consider real GLB models (path B).
+- Expected deliverable: CREATIVE/specifications/fighters-v2.md (per fighter: face, head/hair, body proportions, outfit/equipment, palette, idle personality; select-screen lighting/composition).
+- Priority: P2 (after CG verdict and Poki)
+- Status: parked
