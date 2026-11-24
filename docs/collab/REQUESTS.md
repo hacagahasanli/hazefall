@@ -85,3 +85,9 @@ Format: `## R-001 — title` then Context, Expected deliverable, Priority (P0-P3
 - Expected deliverable: CREATIVE/specifications/mobile-quality-audit.md with problems, root causes, P0-P3, parallel work packages, tests, CG readiness.
 - Priority: P0
 - Status: done (CD, 2026-11-22): audit + plan ready. P0: lobby overlap (incl. CG 907x510), touch UI by touch detection (CG technical requirement), desktop shoulder camera inside tree crowns. Work packages WP-0 (device profile + layout test, first), A lobby/HUD/report, B touch/input/cameras (owns game.ts), C feel/feedback, D perf/render.
+
+## R-015 — Review the "Made for desktop" card (portal build, desktop only)
+- Context: Reis made LCS desktop only after the CrazyGames rejection (2026-11-24). On a phone or tablet (CG SDK `systemInfo.device.type`) the portal build shows one card instead of the game. Engineering reused the approved rotate-card look (same background, fonts, colours); the icon and the copy are placeholders: "Made for desktop" / "Last Commit Standing plays with a mouse and keyboard. Open it on a computer to drop in."
+- Expected deliverable: accept or replace the title, line and icon. Shot: ENGINEERING/desktop-only-card-844x390.png.
+- Priority: P1 (before the CG resubmit)
+- Status: open

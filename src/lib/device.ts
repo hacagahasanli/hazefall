@@ -53,6 +53,9 @@ export const resolveDevice = (platformType: DeviceType | null | undefined, env: 
 /** Touch buttons and forced auto-aim for tablets and phones; mouse and keyboard UI for desktops, touch screen or not. */
 export const touchUiFor = (type: DeviceType): boolean => type !== 'desktop';
 
+/** The portal build is desktop only: phones and tablets see the "Made for desktop" card instead of the game. */
+export const isDesktopOnlyBlocked = (type: DeviceType): boolean => type !== 'desktop';
+
 /** The spec's naming: phone | tablet | desktop. */
 export const classOf = (type: DeviceType): 'phone' | 'tablet' | 'desktop' => (type === 'mobile' ? 'phone' : type);
 
