@@ -50,6 +50,9 @@ import type { FighterId, GameEvent, GameState, HealKind, Input, Loot, LootKind, 
 // HUD snapshot for React (throttled to 10 Hz)
 // ---------------------------------------------------------------------------
 
+/** The tiles of the HUD rack, in key order. */
+export type RackSlot = 'slot1' | 'slot2' | 'bandage' | 'medkit' | 'bomb';
+
 export interface HudState {
   phase: GameState['phase'];
   stage: Player['stage'];
@@ -75,6 +78,12 @@ export interface HudState {
   bag: { bandages: number; medkits: number; coffees: number; bombs: number; cap: { bandage: number; medkit: number; coffee: number; bomb: number } };
   /** A heal in progress: which and how far along (0..1), else null. */
   using: { kind: HealKind; name: string; progress: number } | null;
+  /** A bomb in hand (taken out with 5): the trigger throws it. */
+  bombOut: boolean;
+  /** Whether pressing each item's key would do something now (the HUD rack dims the rest). */
+  itemReady: { bandage: boolean; medkit: boolean; bomb: boolean };
+  /** The last key press that could not act: which tile nudges, and a running id for the animation. */
+  denied: { slot: RackSlot; id: number } | null;
   /** Seconds of coffee left. */
   buzz: number;
   /** What the heal button would use now (its label), or null. */
@@ -1342,7 +1351,39 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     return input;
   };
   /** Gun slots and heals: 1 / 2 draw a slot, X or the mouse wheel (one notch, latched until read) the other gun; C heals, V drinks coffee. */
+  /** Why pressing an item's key would do nothing now, in the hint line's words (null = it would act). Matches the sim. */
+  const itemBlock = (p: Player, kind: 'bandage' | 'medkit' | 'bomb'): string | null => {
+    const count = kind === 'bandage' ? p.bandages : kind === 'medkit' ? p.medkits : p.bombs;
+    if (count <= 0) return kind === 'bandage' ? 'No bandages' : kind === 'medkit' ? 'No med kits' : 'No bombs';
+    if (kind === 'bomb' && p.stage !== 'ground') return 'Land first';
+    if (inWater(p.x, p.y)) return 'Not in the water';
+    if (p.using) return 'Already healing';
+    if (kind === 'bomb') return null;
+    if (p.hp >= p.maxHp) return 'Health is full';
+    if (kind === 'bandage' && p.hp >= HEALS.bandage.upTo) return p.medkits > 0 ? `Bandages heal up to ${HEALS.bandage.upTo} · ${keyLabel(settings.keys.medkit)} for a med kit` : `Bandages heal up to ${HEALS.bandage.upTo}`;
+    return null;
+  };
+  /** The last press that could not act (hint text for 1.5 s, and the tile that nudges). */
+  let denied: { slot: RackSlot; id: number; text: string; at: number } | null = null;
+  let deniedId = 0;
+  const rackHeld: Record<RackSlot, boolean> = { slot1: false, slot2: false, bandage: false, medkit: false, bomb: false };
+  const checkDenied = () => {
+    const p = state.players[me];
+    for (const a of ['slot1', 'slot2', 'bandage', 'medkit', 'bomb'] as const) {
+      const down = held(a);
+      if (down && !rackHeld[a] && p.alive && p.stage === 'ground') {
+        let text: string | null = null;
+        if (a === 'slot1' || a === 'slot2') {
+          const sl = slotsOf(p)[a === 'slot1' ? 0 : 1];
+          if (!sl.kind && !sl.active) text = `Slot ${a === 'slot1' ? 1 : 2} is empty`;
+        } else text = itemBlock(p, a);
+        if (text) denied = { slot: a, id: ++deniedId, text, at: performance.now() / 1000 };
+      }
+      rackHeld[a] = down;
+    }
+  };
   const slotKeys = () => {
+    checkDenied();
     const cycle = held('swap') || btn('swap') || wheelSwap;
     wheelSwap = false;
     return {
@@ -2914,7 +2955,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // Loot to take: a keycap over it in the world instead of a line of text.
     showKeycap(self.alive && !self.using ? k : null);
     const hintLive = lootHint !== null && time < lootHint.until && self.stage === 'ground';
-    const prompt = !self.alive
+    const deniedLive = denied && performance.now() / 1000 - denied.at < 1.5 ? denied : null;
+    const prompt = deniedLive && self.alive
+      ? deniedLive.text
+      : !self.alive
       ? null
       : self.stage === 'falling' && airHintAt >= 0 && time - airHintAt < 1.5
         ? 'Land first, then shoot'
@@ -2971,6 +3015,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       },
       using: self.using ? { kind: self.using, name: HEAL_NAME[self.using], progress: 1 - self.useLeft / HEALS[self.using].time } : null,
       buzz: self.buzz,
+      bombOut: !!self.bombOut,
+      itemReady: { bandage: !itemBlock(self, 'bandage'), medkit: !itemBlock(self, 'medkit'), bomb: !itemBlock(self, 'bomb') },
+      denied: deniedLive ? { slot: deniedLive.slot, id: deniedLive.id } : null,
       healNext: healNext ? HEAL_NAME[healNext] : null,
       promptGrade: k && !self.using && self.alive ? lootGrade(k) : null,
       superCharge: self.superCharge,

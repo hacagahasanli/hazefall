@@ -50,7 +50,7 @@ Evidence is a file, a command or a test step. Update the status column as later 
 | High-quality, consistent graphics, no defects | OPEN | F-011 black roofs fixed (9ffeec9); P0-3 camera in trees: step 3 |
 | Clear buttons, comfortable layout | OPEN | P0-1 lobby overlap at 907x510, F-012 Fighter panel at 1020x540: step 3 |
 | Skippable onboarding in gameplay, little text | OPEN | first 30 s review in CD preflight |
-| Show controls (keyboard overlay) | PASS | in-round key hints and How to play |
+| Show controls (keyboard overlay) | PASS | keycaps on every HUD action (rack 1-5, rings G/Shift, coffee V) + key list in the pause menu + How to play |
 | Interface designed for the device (desktop, optionally mobile) | PASS (step 2) | desktop only |
 | Solo as prominent as multiplayer | PASS | portal build is solo only (online hidden) |
 

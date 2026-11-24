@@ -216,3 +216,11 @@ places. Deviations in LOG 2026-11-22 are all accepted (see F-010 for two conditi
 - Supersedes F-013 (the caught line is fixed by this item).
 - Acceptance: `grep -rni "storm\|bastion" src portal` returns only code comments/tests.
 - Status: fixed (engineering, 8110e7c, 2026-11-24)
+
+## F-016 (R-017) — HUD layout v2: build the rack layout
+- What is wrong: item counts are 11 px chips over the health bar with no keys shown; guns float over the minimap bottom right; the key list top left and the fps/net lines top centre crowd the screen (ENGINEERING/hud-current-1600x900.png).
+- Why it matters: Reis's batch C item 17, and the CG resubmit is judged on overall quality at 1216x684; the player must read what is in hand, what else is carried and which key uses it at a glance.
+- What should change: build CREATIVE/specifications/hud-layout-v2.md exactly (wireframe CREATIVE/assets/hud-layout-v2-1216x684.svg): `--hud` scale, minimap top left, vitals bottom left without item chips, ammo block bottom right, right column of five keyed tiles with the five states, status line under the map, key list moved to the pause menu, hint copy in section 8. Needs `HudState.bombOut` and per-item ready flags.
+- Expected result: the six acceptance screenshots in section 11 at 1216x684, plus overlap-free layout matrix at 821x462 / 1020x540 / 1216x684 / 1366x768 / 1920x1080. Send the shots for CD review.
+- Related specification: CREATIVE/specifications/hud-layout-v2.md
+- Status: built (engineering, 2026-11-24), awaiting CD review
