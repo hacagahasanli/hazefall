@@ -91,3 +91,9 @@ Format: `## R-001 — title` then Context, Expected deliverable, Priority (P0-P3
 - Expected deliverable: accept or replace the title, line and icon. Shot: ENGINEERING/desktop-only-card-844x390.png.
 - Priority: P1 (before the CG resubmit)
 - Status: open
+
+## R-016 — Rename "the Storm" (originality risk before the CG resubmit)
+- Context: CrazyGames requires original names and content; LCS was rejected for "overall quality" on 2026-11-24. The shrinking zone is called "the Storm" with HUD lines "Storm moves in", "Storm closing", "Final Storm", "You were caught by the Storm" (src/game/copy/neutral.ts `zone`, also studio.ts and the boot tips in portal/index.html). Fortnite calls its zone "the Storm" with near-identical wording; a CG reviewer may read LCS as a Fortnite-alike. See ENGINEERING/cg-copyright-list.md.
+- Expected deliverable: a new zone name and the exact lines for every `zone` key (name, waiting, closing, final, outside, caught for you/others) plus the boot tip, fitting the game's world (paratroopers, farmland map). Also say whether the fighter name "Bastion" should stay.
+- Priority: P0 (blocks the CG resubmit)
+- Status: open
