@@ -32,3 +32,14 @@ Start here in the next session. Reis is switching to another Claude account; thi
    Then CD preflight (game-creative-director), all gates green, only then resubmit (Reis decides).
 
 Branch with later fixes: lcs-cg-v2 (lobby countdown pill, C4 camera acceptance, desktop HUD, sniper kick).
+
+## Progress 2026-11-24 (session 2, branch lcs-cg-v2)
+Done and committed:
+- 86c7d5c step 1: ENGINEERING/cg-requirements-checklist.md (all CG docs read; resubmit = clear improvements, same portal game).
+- bcaa10b step 2: desktop-only gate (CG systemInfo.device.type; phones/tablets see "Made for desktop" #desk card; touch laptops play). CD accepted (F-014).
+- 165850f step 3: layout matrix at every CG size; P0-1 lobby and F-012 clean; fixed 1216x684 report + Fighter panel (compact tier <= 720 px). P0-3 camera: 20 landings clean (e9db0b2).
+- abb6d2d + 8110e7c step 5: ENGINEERING/cg-copyright-list.md; zone "the Storm" -> "the Haze", fighter "Bastion" -> "Hedge" (CD F-015). 411 tests pass.
+- Clean build ed36ef7 in scratchpad (70 files, 1.7 MB gz). Step 4 partial: Playwright run with the real CG SDK (local env) at 907x510/1216x684/1366x768/1920x1080; result in LOG.
+Still open:
+- Step 4 in CG's own QA tool (needs Chrome: restart with `claude --chrome --resume`).
+- Reis: "fix all bugs" before any upload. Then upload to CrazyGames (desktop only; find the device field in the form) AND Poki (needs a Poki SDK adapter: src/platform/poki.ts + build; Poki rules: gameLoadingFinished, gameplayStart on first input, commercialBreak before resuming, Esc/Space pause, no external requests). Nothing is submitted without Reis's go and an open-blocker list.
