@@ -8,8 +8,8 @@ import { actionFor, DEFAULT_SETTINGS, keyLabel, keyMap } from '../settings';
 
 import type { VolumeKind } from '../sfx';
 import type { Action, Settings } from '../settings';
-import { ARMOR, HEALS, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITEMS, MAP, PLACE_TIER, placeAt, PLAYERS, PROPS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
-import { canSee, carryCap, chestHeight, feetOf, healChoice, inPlant, inWater, lineOfSight, lootUnder, reloadTime, solidAt, superThrowTarget, throwDistance } from '../sim/step';
+import { ARMOR, HEALS, LEAN, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITEMS, MAP, PLACE_TIER, placeAt, PLAYERS, PROPS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
+import { canSee, carryCap, chestHeight, feetOf, healChoice, inPlant, inWater, lineOfSight, lootUnder, reloadTime, solidAt, solidStep, superThrowTarget, throwDistance } from '../sim/step';
 import { buildingAt, roofAt } from '../sim/roofs';
 import { createOfflineSession } from '../net/session';
 import { arrowTo, LOOT_HINT } from './hints';
@@ -679,7 +679,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     return m;
   });
   let nextContrail = 0;
-  const contrail = (x: number, y: number, angle: number, h: number, len?: number) => {
+  const contrail = (x: number, y: number, angle: number, h: number, len?: number, endH?: number) => {
     // The sim says where the round stopped (it lands the tick it is fired): the line ends exactly there. Without it (an old
     // snapshot), march along the line until something solid or someone stops the round.
     let d = len !== undefined ? Math.max(0.8, len + 0.6) : 0.8;
@@ -690,9 +690,12 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       if (state.players.some((o) => o.alive && o.stage !== 'drone' && Math.hypot(o.x - px, o.y - py) < 0.6 && Math.hypot(o.x - x, o.y - y) > 1 && Math.abs(chestHeight(o) - h) < 1)) break;
     }
     const m = contrails[nextContrail++ % contrails.length];
+    // Aimed up or down (the sim says the end height): the line tilts to it.
+    const flat = d - 0.8;
+    const rise = endH !== undefined && len !== undefined ? ((endH - h) * flat) / Math.max(0.8, len) : 0;
     m.position.set(x + Math.cos(angle) * 0.8, h, y + Math.sin(angle) * 0.8);
-    m.rotation.set(0, -angle, 0);
-    m.scale.set(d - 0.8, 1, 1);
+    m.rotation.set(0, -angle, Math.atan2(rise, flat));
+    m.scale.set(Math.hypot(flat, rise), 1, 1);
     m.visible = true;
     m.userData.life = 0.5;
   };
@@ -1015,10 +1018,51 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** The arm length the view is easing to (without walls), and the side offset: both ease with the scope. */
   let armWant = 3.2;
   let sideNow = 0.62;
-  /** Where the crosshair points on the map this frame (the shoulder view aims there, not straight ahead of you). */
-  const crossAim = { x: 0, y: 0 };
-  /** First person: the fighter under the crosshair (in 3D, so someone on a roof or below one), else none (aim straight ahead). */
-  const fpAim = { x: 0, y: 0, on: false };
+  /**
+   * Where the crosshair points this frame, in 3D (x, y on the map, h the height): the first fighter, wall, roof, tree or
+   * the ground the view ray meets, else a point far out along it (in the sky too). Rounds fly from the muzzle through it.
+   */
+  const crossAim = { x: 0, y: 0, h: 1.1 };
+  /** First person: the same point for the first-person view ray. */
+  const fpAim = { x: 0, y: 0, h: 1.1, on: false };
+  const AIM_FAR = 170;
+  /** March the view ray (origin o, unit direction d, world axes: y up) from `t0` and fill `out` with the first thing it meets. */
+  const traceCrosshair = (ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, t0: number, out: { x: number; y: number; h: number }) => {
+    let end = AIM_FAR;
+    // Fighters: the nearest one whose body (feet to head, a little wider than the hit circle) the ray passes through.
+    for (let i = 0; i < state.players.length; i++) {
+      const o = state.players[i];
+      if (i === me || !o.alive || o.stage === 'drone') continue;
+      const ox2 = o.x - ox;
+      const oz2 = o.y - oz;
+      const flat = Math.hypot(dx, dz);
+      const along = flat > 1e-4 ? (ox2 * dx + oz2 * dz) / (flat * flat) : 0;
+      if (along <= t0 || along >= end) continue;
+      const off = Math.hypot(ox2 - dx * along, oz2 - dz * along);
+      const hy = oy + dy * along;
+      const feet = feetOf(o);
+      if (off < 0.6 && hy > feet - 0.1 && hy < feet + 1.9) end = along;
+    }
+    // The world: walls, roofs, trunks, rocks and the ground, in short steps up to the fighter (or the far point).
+    let px = ox + dx * t0;
+    let py = oy + dy * t0;
+    let pz = oz + dz * t0;
+    for (let t = t0 + 0.3; t < end; t += 0.3) {
+      const x = ox + dx * t;
+      const y = oy + dy * t;
+      const z = oz + dz * t;
+      if (y <= 0 || solidStep(state, px, pz, py, x, z, y)) {
+        end = t;
+        break;
+      }
+      px = x;
+      py = y;
+      pz = z;
+    }
+    out.x = ox + dx * end;
+    out.y = oz + dz * end;
+    out.h = Math.max(0, oy + dy * end);
+  };
   const onLockChange = () => {
     locked = document.pointerLockElement === canvas;
   };
@@ -1247,8 +1291,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         snap: true,
         scope: scopeHeld(p),
         pitch: viewPitch,
-        aimX: shoulder ? crossAim.x : fpAim.on ? fpAim.x : p.x + c * 30,
-        aimY: shoulder ? crossAim.y : fpAim.on ? fpAim.y : p.y + sn * 30,
+        aimX: shoulder ? crossAim.x : fpAim.x,
+        aimY: shoulder ? crossAim.y : fpAim.y,
+        aimH: shoulder ? crossAim.h : fpAim.h,
       };
       lastThrowAim = null;
       lastAim.x = input.aimX;
@@ -1392,7 +1437,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           trauma = Math.min(1, trauma + 0.45);
           sniperShotAt = time;
         }
-        if (e.weapon === 'sniper') contrail(e.x, e.y, e.angle, chestHeight(state.players[e.owner]) + 0.05, e.len);
+        if (e.weapon === 'sniper') contrail(e.x, e.y, e.angle, chestHeight(state.players[e.owner]) + 0.05, e.len, e.endH);
         break;
       }
       case 'hit':
@@ -2631,25 +2676,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       camera.lookAt(tmpV);
       camera.rotateZ(-self.lean * 0.3);
       {
-        // Who is under the crosshair (chest within 0.9 m of the view ray): rounds go to them, up or down.
-        const dx = c * Math.cos(viewPitch);
-        const dy = Math.sin(viewPitch);
-        const dz = sn * Math.cos(viewPitch);
-        let best = 60;
-        fpAim.on = false;
-        for (let i = 0; i < state.players.length; i++) {
-          const o = state.players[i];
-          if (i === me || !o.alive || o.stage === 'drone') continue;
-          const ox = o.x - camera.position.x;
-          const oy = chestHeight(o) - camera.position.y;
-          const oz = o.y - camera.position.z;
-          const along = ox * dx + oy * dy + oz * dz;
-          if (along <= 0.5 || along >= best) continue;
-          if (Math.hypot(ox - dx * along, oy - dy * along, oz - dz * along) < 0.9) {
-            best = along;
-            Object.assign(fpAim, { x: o.x, y: o.y, on: true });
-          }
-        }
+        // What is under the crosshair (a fighter, a wall, a roof, the ground, or the sky): rounds go there, up or down.
+        traceCrosshair(camera.position.x, camera.position.y, camera.position.z, c * Math.cos(viewPitch), Math.sin(viewPitch), sn * Math.cos(viewPitch), 0.3, fpAim);
+        fpAim.on = true;
       }
       // The shake in first person turns the view a little (about a degree at most) instead of
       // moving your eyes: a jolt, not a slide. Only the view: where you aim does not move.
@@ -2707,7 +2736,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // Right of the shoulder, so you see past yourself; scoped the arm comes in and the lens narrows (aim down sights).
       // The side offset and the arm length ease to their scoped values (no pop when the right button goes down or up).
       sideNow = air ? 0 : THREE.MathUtils.damp(sideNow, scoped ? 0.45 : 0.62, 20, dt);
-      const side = sideNow;
+      // Leaning (Q/E) swings the camera out with your shoulder, so the crosshair peeks past the corner as the muzzle does.
+      const side = sideNow + (air ? 0 : self.lean * LEAN.offset * 0.7);
       const px = selfX - sn * side;
       const pz = selfY + c * side;
       armWant = air ? 7 : THREE.MathUtils.damp(armWant, scoped ? 1.4 : 3.2, 20, dt);
@@ -2743,6 +2773,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // The view turns with the mouse unsmoothed (the crosshair is the aim); only the hit shake adds a small jolt.
       tmpV.set(camera.position.x + c * cp, camera.position.y + Math.sin(viewPitch), camera.position.z + sn * cp);
       camera.lookAt(tmpV);
+      if (!air && self.lean !== 0) camera.rotateZ(-self.lean * 0.12);
       if (shake > 0) camera.rotateZ(n(17, 2) * 0.02 * shake * (1 - 0.75 * zoomT));
       if (snipeKick > 0) {
         // Up by a few degrees and a little jitter; the aim (viewPitch, the crosshair ray) is untouched, so it settles back onto it.
@@ -2761,29 +2792,14 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // between you and the lens, under the canopy on the way down or walking through the woods.
       updateNature(performance.now() / 1000, (camera.position.x + selfX) / 2, (camera.position.z + selfY) / 2, armNow / 2 + 3);
       setFoliageFade(camera.position.x, camera.position.y, camera.position.z, selfX, selfH + 1.2, selfY);
-      // Where the crosshair lands: the first fighter near the ray, else the ground, else 60 m out. Shots go from you
-      // to that point, so what is under the crosshair is what you hit even though the camera is off to the side.
-      const dx = c * cp;
-      const dy = Math.sin(viewPitch);
-      const dz = sn * cp;
-      let hitT = dy < -0.01 ? Math.min(60, -camera.position.y / dy) : 60;
-      for (let i = 0; i < state.players.length; i++) {
-        const o = state.players[i];
-        if (i === me || !o.alive || o.stage === 'drone') continue;
-        const ox = o.x - camera.position.x;
-        const oy = chestHeight(o) - camera.position.y;
-        const oz = o.y - camera.position.z;
-        const along = ox * dx + oy * dy + oz * dz;
-        if (along <= armNow || along >= hitT) continue;
-        const off = Math.hypot(ox - dx * along, oy - dy * along, oz - dz * along);
-        if (off < 0.9) hitT = along;
-      }
-      crossAim.x = camera.position.x + dx * hitT;
-      crossAim.y = camera.position.z + dz * hitT;
-      // Never aim behind yourself (looking steeply down past your own feet).
+      // Where the crosshair lands in 3D (fighter, wall, roof, ground or sky). Shots go from your muzzle through that point,
+      // so what is under the crosshair is what you hit even though the camera is off to the side.
+      traceCrosshair(camera.position.x, camera.position.y, camera.position.z, c * cp, Math.sin(viewPitch), sn * cp, armNow, crossAim);
+      // Never aim behind yourself (looking steeply down past your own feet): straight ahead at chest height instead.
       if ((crossAim.x - self.x) * c + (crossAim.y - self.y) * sn < 1.5) {
         crossAim.x = self.x + c * 30;
         crossAim.y = self.y + sn * 30;
+        crossAim.h = chestHeight(self);
       }
     } else {
       viewmodel.visible = false;

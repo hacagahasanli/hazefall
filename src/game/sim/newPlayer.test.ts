@@ -33,7 +33,7 @@ describe('a safe first drop', () => {
     expect(events.some((e) => e.type === 'shot' && e.owner === 0)).toBe(false);
   });
 
-  it('a press in free fall or under the canopy says why nothing fired, once per press', () => {
+  it('a press in free fall says why nothing fired, once per press; under the open canopy it fires', () => {
     const s = createGame('hotfix', 3);
     s.drone.t = 0.5;
     const jump = idle(s);
@@ -50,14 +50,14 @@ describe('a safe first drop', () => {
       blocked.push(s.events.filter((e) => e.type === 'fireBlocked').length);
     }
     expect(blocked).toEqual([0, 1, 0, 0, 0, 1]);
-    // Under the open canopy it is the same.
+    // Under the open canopy a fresh press fires (Reis, 2026-11-24): no "blocked" note.
     s.players[0].canopy = 5;
     const inputs = idle(s);
-    inputs[0] = { ...NO_INPUT, fire: true };
+    inputs[0] = { ...NO_INPUT, fire: true, aimX: s.players[0].x + 5, aimY: s.players[0].y };
     step(s, idle(s));
     step(s, inputs);
-    expect(s.events.some((e) => e.type === 'fireBlocked')).toBe(true);
-    expect(s.players[0].mag).toBe(12);
+    expect(s.events.some((e) => e.type === 'fireBlocked')).toBe(false);
+    expect(s.events.some((e) => e.type === 'shot' && e.owner === 0)).toBe(true);
   });
 
   it('on the ground the pistol still fires', () => {

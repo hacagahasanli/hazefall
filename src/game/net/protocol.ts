@@ -23,8 +23,8 @@ const COFFEE = 1 << 15;
 /** Presses that must survive when inputs are folded together (everything but leaning and the held aim keys). */
 export const PRESS_BITS = 0b111111 | SLOT1 | SLOT2 | CYCLE | HEAL | COFFEE;
 
-/** One tick of input: [clientTick, buttons, mx * 100, my * 100, aimX, aimY, pitch * 100]. */
-export type WireInput = [number, number, number, number, number, number, number];
+/** One tick of input: [clientTick, buttons, mx * 100, my * 100, aimX, aimY, pitch * 100, aimH?]. */
+export type WireInput = [number, number, number, number, number, number, number, ...number[]];
 export const NO_WIRE: WireInput = [0, 0, 0, 0, 0, 0, 0];
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
@@ -44,7 +44,7 @@ export const encodeInput = (tick: number, i: Input): WireInput => {
   if (i.cycle) bits |= CYCLE;
   if (i.heal) bits |= HEAL;
   if (i.coffee) bits |= COFFEE;
-  return [tick, bits, Math.round(i.mx * 100), Math.round(i.my * 100), r2(i.aimX), r2(i.aimY), Math.round((i.pitch ?? 0) * 100)];
+  return [tick, bits, Math.round(i.mx * 100), Math.round(i.my * 100), r2(i.aimX), r2(i.aimY), Math.round((i.pitch ?? 0) * 100), ...(i.aimH === undefined ? [] : [r2(i.aimH)])] as WireInput;
 };
 
 export const decodeInput = (w: WireInput): Input => {
@@ -61,12 +61,13 @@ export const decodeInput = (w: WireInput): Input => {
   s.heal = (w[1] & HEAL) !== 0;
   s.coffee = (w[1] & COFFEE) !== 0;
   s.pitch = (w[6] ?? 0) / 100;
+  if (typeof w[7] === 'number') s.aimH = w[7];
   return s;
 };
 
 export const isWireInput = (w: unknown): w is WireInput =>
   Array.isArray(w) &&
-  w.length === 7 &&
+  (w.length === 7 || w.length === 8) &&
   w.every((n) => typeof n === 'number' && Number.isFinite(n)) &&
   Math.abs(w[2]) <= 100 &&
   Math.abs(w[3]) <= 100;
@@ -184,7 +185,7 @@ const reviver = (_k: string, v: unknown) =>
  * ride along in an object at the end, so nothing is lost if the two lists drift apart.
  */
 const PLAYER_KEYS = Object.keys(newPlayer(0, '', 'hotfix', false, 0, 0)).filter((k) => k !== 'prev');
-const INPUT_KEYS = [...Object.keys(NO_INPUT), 'snap', 'pitch', 'scope', 'throwAt', 'slot', 'cycle', 'heal', 'coffee'];
+const INPUT_KEYS = [...Object.keys(NO_INPUT), 'snap', 'pitch', 'scope', 'throwAt', 'slot', 'cycle', 'heal', 'coffee', 'aimH'];
 
 /** Loot the same way: the list is sent whenever it changes and once a second, and twenty fighters need ~150 pieces. */
 const LOOT_KEYS = ['id', 'kind', 'x', 'y', 'ammo', 'tier', 'active'];

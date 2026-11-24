@@ -50,6 +50,12 @@ export interface Input {
   /** Aim point on the map. */
   aimX: number;
   aimY: number;
+  /**
+   * Height (m) of the aim point: where the crosshair ray meets a wall, roof, the ground or a fighter, or a far point in
+   * the sky. Given, a round flies in a straight line from the muzzle through (aimX, aimY, aimH) and on: the crosshair is
+   * the truth. Missing (bots, old clients), rounds go to chest height over the aim point as before.
+   */
+  aimH?: number;
 }
 
 export const NO_INPUT: Input = { mx: 0, my: 0, fire: false, super: false, use: false, reload: false, lean: 0, roll: false, jump: false, aimX: 0, aimY: 0 };
@@ -121,6 +127,8 @@ export interface Player {
   pushing: number;
   /** Leaning: -1 (left) .. 1 (right), eased towards the input. */
   lean: number;
+  /** Under the open canopy the trigger was pressed afresh (a trigger held from the plane does not fire). */
+  chuteArmed?: boolean;
   /** Dodge roll: seconds left, its direction, and the recharge. */
   rolling: number;
   rollDir: number;
@@ -182,6 +190,8 @@ export interface Projectile {
   h0?: number;
   h1?: number;
   hd?: number;
+  /** The straight line through (`hd`, `h1`) goes on past it (aimed in 3D) instead of levelling off. */
+  ext?: boolean;
   vh?: number;
 }
 
@@ -247,7 +257,7 @@ export interface Drone {
 
 export type GameEvent =
   /** `len`: for a round that lands the tick it is fired (the sniper), how far it flew before it stopped, so the contrail ends there. */
-  | { type: 'shot'; owner: number; x: number; y: number; angle: number; weapon: WeaponKind; len?: number }
+  | { type: 'shot'; owner: number; x: number; y: number; angle: number; weapon: WeaponKind; len?: number; /** Instant rounds aimed up or down: the height where the line ends. */ endH?: number }
   | { type: 'hit'; target: number; by: number | null; x: number; y: number; damage: number; armor: boolean; ko: boolean }
   /** `z`: the height it happened at (absent = the old default height). */
   | { type: 'impact'; x: number; y: number; z?: number }

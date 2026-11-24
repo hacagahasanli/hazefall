@@ -1,5 +1,5 @@
 import { createBot } from './bot';
-import { BUILDINGS, DROP, DT, FIGHTERS, ITEMS, MAP, PLAYER_RADIUS, RIVER, riverCentre, SHAPES, SIZE, SWIM, TILE, treeSpot, WEAPONS, WORLD, ZONE_EDGE_SPEED, ZONE_PHASES, ZONE_RULES, ZONE_START_RADIUS } from './constants';
+import { BUILDINGS, DROP, DT, FIGHTERS, ITEMS, MAP, PLAYER_RADIUS, PROPS, RIVER, riverCentre, SHAPES, SIZE, SWIM, TILE, treeSpot, WEAPONS, WORLD, ZONE_EDGE_SPEED, ZONE_PHASES, ZONE_RULES, ZONE_START_RADIUS } from './constants';
 import { canSee, circleBlocked, createGame, falloffDamage, hitPoint, inPlant, inWater, lootUnder, solidAt, step } from './step';
 import { NO_INPUT } from './types';
 
@@ -440,11 +440,11 @@ describe('the drop', () => {
     expect(canSee(s, a, b)).toBe(true);
   });
 
-  it('under the parachute you cannot shoot, but someone on the ground can shoot you', () => {
+  it('under the open parachute a fresh press shoots, and someone on the ground can shoot you', () => {
     const s = createGame('hotfix', 1);
     const [a, b] = s.players;
     for (const p of [a, b]) Object.assign(p, { stage: 'falling', alt: 15, canopy: 2 });
-    // Two in the air: the trigger does nothing and spends nothing.
+    // Two in the air: the trigger works under the canopy.
     Object.assign(a, { x: 40, y: 89, cooldown: 0 });
     Object.assign(b, { x: 46, y: 89 });
     s.players.slice(2).forEach((p) => Object.assign(p, { stage: 'falling', alt: 60, canopy: -1, x: 10, y: 10 }));
@@ -452,8 +452,8 @@ describe('the drop', () => {
     const air = idle();
     air[0] = { ...NO_INPUT, fire: true, aimX: b.x, aimY: b.y };
     for (let i = 0; i < 30; i++) step(s, air);
-    expect(b.hp).toBe(b.maxHp);
-    expect(a.mag).toBe(12);
+    expect(a.mag).toBeLessThan(12);
+    b.hp = b.maxHp;
     // Now the shooter is down on the ground.
     // Over the open river, so nothing stands between them.
     const ty = MAP.findIndex((row) => row.includes('....'));
@@ -674,5 +674,59 @@ describe('the sniper lands the tick it is fired', () => {
     expect(s.projectiles.filter((p) => p.kind === 'bullet')).toHaveLength(1);
     const shot = s.events.find((e) => e.type === 'shot');
     expect(shot?.type === 'shot' && shot.len).toBeUndefined();
+  });
+});
+
+describe('the crosshair is the truth (3D aim)', () => {
+  const openSpot = () => {
+    const ty = MAP.findIndex((row) => row.includes('....'));
+    return { x: MAP[ty].indexOf('....') * TILE + 1, y: ty * TILE + 1 };
+  };
+  const fireOnce = (aimH: number | undefined, dx: number) => {
+    const s = createGame('hotfix', 1);
+    const a = s.players[0];
+    const o = openSpot();
+    Object.assign(a, { stage: 'ground', x: o.x, y: o.y, heading: 0, cooldown: 0, weapon: 'rifle', mag: 25, ammo: 0, rarity: 0 });
+    s.players.slice(1).forEach((p) => Object.assign(p, { stage: 'falling', alt: 60, canopy: -1, x: 10, y: 10 }));
+    s.drone.t = 1;
+    const inputs = idle();
+    inputs[0] = { ...NO_INPUT, fire: true, aimX: a.x + dx, aimY: a.y, aimH };
+    step(s, inputs);
+    return s.projectiles.find((p) => p.owner === 0 && p.kind === 'bullet');
+  };
+
+  it('aimed up into the sky, a round keeps climbing past the aim point', () => {
+    const pr = fireOnce(11.1, 10)!;
+    expect(pr.ext).toBe(true);
+    const s2 = { ...pr };
+    // Its height on the line at 20 m out is about chest + 2 x 10 m.
+    const k = 20 / pr.hd!;
+    expect(s2.h0! + (s2.h1! - s2.h0!) * k).toBeGreaterThan(18);
+  });
+
+  it('aimed at the ground 10 m ahead, a round comes down there (not at chest height)', () => {
+    const pr = fireOnce(0, 10)!;
+    expect(pr.h1).toBe(0);
+  });
+
+  it('without a height (bots), rounds still level off at chest height', () => {
+    const pr = fireOnce(undefined, 10)!;
+    expect(pr.ext).toBeUndefined();
+    expect(pr.h1).toBeCloseTo(1.1);
+  });
+});
+
+describe('landmarks on legs', () => {
+  it('between the crane legs you can stand and shoot; the legs themselves are solid', () => {
+    const s = createGame('hotfix', 1);
+    for (const kind of ['crane', 'tower', 'lookout']) {
+      const p = PROPS.find((q) => q.kind === kind)!;
+      const cx = (p.x0 + p.w / 2) * TILE;
+      const cy = (p.y0 + p.h / 2) * TILE;
+      expect(circleBlocked(s, cx, cy, PLAYER_RADIUS)).toBe(false);
+      expect(solidAt(s, cx, cy, 1.1)).toBe(false);
+      const leg = kind === 'crane' ? { x: cx + 2.6, y: cy + 1.5 } : { x: cx + 1.6, y: cy + 1.6 };
+      expect(circleBlocked(s, leg.x, leg.y, PLAYER_RADIUS)).toBe(true);
+    }
   });
 });

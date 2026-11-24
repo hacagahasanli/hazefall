@@ -837,6 +837,38 @@ const buildMap = () => {
     for (const [x, y] of [[i, 0], [i, 1], [i, SIZE - 1], [i, SIZE - 2], [0, i], [1, i], [SIZE - 1, i], [SIZE - 2, i]]) set(x, y, 't');
   }
 
+  // No house stands on a road: the old map's houses came first, and the roads laid later run straight through a few of them
+  // (Reis, 2026-11-24). A house whose footprint the centre line of a road, path or track crosses or touches is taken down:
+  // its tiles become the road where the road is, open ground elsewhere.
+  {
+    const HALF = { asphalt: 2.9, dirt: 1.3, rail: 1.6 } as const;
+    const pts = routes.flatMap((rt) =>
+      rt.points.slice(1).flatMap((b, i) => {
+        const a = rt.points[i];
+        const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 0.5));
+        return Array.from({ length: n + 1 }, (_, k) => ({ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n, kind: rt.kind }));
+      }),
+    );
+    for (let i = buildings.length - 1; i >= 0; i--) {
+      const b = buildings[i];
+      const x0 = b.x0 * TILE - 0.3;
+      const y0 = b.y0 * TILE - 0.3;
+      const x1 = (b.x0 + b.w) * TILE + 0.3;
+      const y1 = (b.y0 + b.h) * TILE + 0.3;
+      const on = pts.filter((q) => q.x >= x0 && q.x <= x1 && q.y >= y0 && q.y <= y1);
+      if (!on.length) continue;
+      buildings.splice(i, 1);
+      for (let y = b.y0; y < b.y0 + b.h; y++) {
+        for (let x = b.x0; x < b.x0 + b.w; x++) {
+          const cx = (x + 0.5) * TILE;
+          const cy = (y + 0.5) * TILE;
+          const road = pts.find((q) => Math.hypot(q.x - cx, q.y - cy) <= HALF[q.kind] + 0.5);
+          grid[y][x] = road ? (road.kind === 'asphalt' ? 'a' : 'p') : 'g';
+        }
+      }
+    }
+  }
+
   // Nothing is walled in: every open tile can be reached from Route 1. A pocket that trees or rocks have closed off gets one of
   // them cleared (the shortest way out); anything walled in by buildings is left for the map test to report.
   {

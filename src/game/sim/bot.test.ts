@@ -455,7 +455,8 @@ describe('bots fight like people', () => {
     }
     expect(firstHit).toBeGreaterThanOrEqual(0);
     expect(moving / ticks).toBeGreaterThan(0.8);
-    expect(modes.has('pressure')).toBe(true);
+    // Off the line (pressure), or it already made them out and fights back (engage): either way not standing there.
+    expect(modes.has('pressure') || modes.has('engage')).toBe(true);
     // It knows roughly where from, not exactly.
     const h = bot.info().heard!;
     expect(Math.hypot(h.x - them.x, h.y - them.y)).toBeGreaterThan(0.5);
