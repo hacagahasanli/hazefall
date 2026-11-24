@@ -48,8 +48,6 @@ describe('portal copy', () => {
   it('words the zone knock-out line for you and for others', () => {
     expect(NEUTRAL.zone.caught('Kiwi')).toBe('Kiwi was caught in the Haze');
     expect(NEUTRAL.zone.caught('you', true)).toBe('You were caught in the Haze');
-    expect(STUDIO.zone.caught('dev_1')).toBe('dev_1 missed the Deadline');
-    expect(STUDIO.zone.caught('you', true)).toBe('You missed the Deadline');
     for (const c of [NEUTRAL, STUDIO]) expect(c.zone.caught('you', true)).not.toMatch(/\byou\b/);
   });
 
@@ -57,8 +55,13 @@ describe('portal copy', () => {
     for (const s of strings(NEUTRAL)) expect(s, s).not.toMatch(JOKES);
   });
 
-  it('the studio copy really is the joke one (so the check above means something)', () => {
-    expect(strings(STUDIO).filter((s) => JOKES.test(s)).length).toBeGreaterThan(10);
+  it('the site uses the same plain words (Reis 2026-11-24: no developer jokes anywhere)', () => {
+    expect(STUDIO).toBe(NEUTRAL);
+    for (const s of strings(STUDIO)) expect(s, s).not.toMatch(JOKES);
+  });
+
+  it('the joke check really catches jokes (so the checks above mean something)', () => {
+    expect(['YOUR COMMIT WAS REVERTED', 'the Deadline', 'Hotfix', 'merge_bot'].every((s) => JOKES.test(s))).toBe(true);
   });
 
   it('has a distinct bot name for every seat after yours', () => {

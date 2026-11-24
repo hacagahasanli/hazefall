@@ -10,7 +10,7 @@ const ui = Chakra_Petch({ weight: ['400', '500', '600', '700'], subsets: ['latin
 
 export const metadata: Metadata = {
   title: { default: 'Last Commit Standing · Nalbaki Games', template: '%s · Last Commit Standing' },
-  description: 'Twenty developers, one countryside, and the Deadline closing in. The last commit standing ships.',
+  description: 'Twenty drop in. The Haze closes. One stays standing.',
   // Added to the iPhone home screen it opens full screen, with no browser bars.
   appleWebApp: { capable: true, title: 'Last Commit', statusBarStyle: 'black-translucent' },
   metadataBase: new URL('https://lastcommit.nalbakigames.com'),

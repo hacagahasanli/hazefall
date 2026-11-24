@@ -7,7 +7,7 @@ import type { MetadataRoute } from 'next';
 const manifest = (): MetadataRoute.Manifest => ({
   name: 'Last Commit Standing · Nalbaki Games',
   short_name: 'Last Commit',
-  description: 'A battle royale for developers who never agree. The last one standing gets to merge.',
+  description: 'Twenty drop in. The Haze closes. One stays standing.',
   start_url: '/',
   display: 'fullscreen',
   orientation: 'landscape',

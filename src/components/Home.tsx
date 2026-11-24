@@ -177,8 +177,8 @@ export const Home = () => {
               <span className="text-gold">STANDING</span>
             </h1>
             <p className="max-w-md text-lg text-cream/85">
-              Twenty developers jump from the cargo plane over the countryside. Land, loot a gun, take cover, and stay inside the
-              Deadline as it closes in. The last commit standing ships.
+              Skydive into a living town, steer your parachute, grab a gun and outlast 19 rivals as the Haze closes in. A third-person
+              survival shooter for mouse and keyboard.
             </p>
             <div className="flex flex-wrap gap-6 text-sm">
               {[
@@ -211,7 +211,7 @@ export const Home = () => {
           <aside className="panel-cut hidden w-[320px] flex-col gap-2 bg-ink-deep/80 p-3 backdrop-blur lg:flex">
             <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
               <span className="text-gold">Flight path</span>
-              <span className="text-blue">Deadline closing</span>
+              <span className="text-blue">Haze closing</span>
             </div>
             <div className="aspect-square w-full overflow-hidden">
               <TacticalMap />
@@ -262,7 +262,7 @@ export const Home = () => {
           {[
             ['01', 'Drop', 'The plane crosses the map. Jump when you like, free-fall through the clouds, steer your parachute down. You land with a pistol and two spare magazines. Shooting starts once you are on the ground.'],
             ['02', 'Loot', 'Guns, armor, ammo, med kits and bombs lie in the houses, barns and the yards. Walk over them or press F. Every gun sounds and kicks like itself.'],
-            ['03', 'Survive', 'The Deadline closes in phase by phase and hurts more each time. Hide in tall grass, lean round corners with Q and E, crouch behind rocks with C, vault fences. Be the last one.'],
+            ['03', 'Survive', 'The Haze closes in phase by phase and hurts more each time. Hide in tall grass, lean round corners with Q and E, crouch behind rocks with C, vault fences. Be the last one.'],
           ].map(([n, title, text]) => (
             <div key={n} className="panel-cut flex gap-4 bg-ink/80 p-4 backdrop-blur">
               <span className="font-display text-3xl text-gold/80">{n}</span>
