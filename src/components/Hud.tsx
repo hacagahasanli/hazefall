@@ -242,7 +242,7 @@ export const Vitals = ({
       <div className={`flex flex-col gap-1 ${rings ? "w-52 sm:w-60" : "w-48 [@media(max-height:400px)]:w-40"}`}>
         {items.length > 0 && <div className="flex flex-wrap items-center gap-1">{items}</div>}
         <div className="flex items-end gap-2">
-          <span className={`text-right font-display leading-[0.85] tabular-nums drop-shadow-[0_2px_0_rgba(10,13,24,0.8)] ${rings ? 'w-[52px] text-[34px]' : 'w-11 text-2xl'}`} style={{ color: low ? hpColor : '#e6ebf5' }}>
+          <span className={`text-right font-display leading-[0.85] tabular-nums drop-shadow-[0_2px_0_rgba(10,13,24,0.8)] ${rings ? 'min-w-[52px] text-[34px]' : 'w-11 text-2xl'}`} style={{ color: low ? hpColor : '#e6ebf5' }}>
             {Math.ceil(hud.hp)}
           </span>
           <div className="flex flex-1 flex-col gap-[3px]">

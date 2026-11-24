@@ -4,7 +4,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 import { assetUrl } from '../../lib/assets';
 import { trackLoad } from '../../lib/loading';
-import { BUILDINGS, fenceVertical, MAP, SIZE, TILE, tileHash, treeSpot, WORLD } from '../sim/constants';
+import { BUILDINGS, fenceVertical, MAP, SIZE, STADIUM, TILE, tileHash, treeSpot, WORLD } from '../sim/constants';
 import { EAVE, ridgeHeight, roofRise, ROOF_LAYER } from '../sim/roofs';
 
 import { buildFurniture, buildRugs } from './furniture';
@@ -863,7 +863,9 @@ export const buildWorld = (scene: THREE.Scene): World => {
     // Fences turn to follow their neighbours.
     // The Kenney rail sits on the edge of its tile; shift it to the middle, where the simulation's rail is.
     const centre = new THREE.Matrix4().makeTranslation(0, 0, 0.465);
-    const fences = tilesOf('f').map((t) => place(t.x, t.y, 2, fenceVertical(t.tx, t.ty) ? Math.PI / 2 : 0).multiply(centre));
+    // (The Pitch's end railings are steel, drawn with the stadium in props.ts, not the farm fence.)
+    const inPitch = (tx: number, ty: number) => tx >= STADIUM.x0 && tx < STADIUM.x0 + STADIUM.w && ty >= STADIUM.y0 && ty < STADIUM.y0 + STADIUM.h;
+    const fences = tilesOf('f').filter((t) => !inPitch(t.tx, t.ty)).map((t) => place(t.x, t.y, 2, fenceVertical(t.tx, t.ty) ? Math.PI / 2 : 0).multiply(centre));
     chunked(instanceChunked(models.fence_simple, fences, 2));
 
     const crateGroup = instance(models['box-large'], crateMatrices);

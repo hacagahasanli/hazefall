@@ -224,3 +224,11 @@ places. Deviations in LOG 2026-11-22 are all accepted (see F-010 for two conditi
 - Expected result: the six acceptance screenshots in section 11 at 1216x684, plus overlap-free layout matrix at 821x462 / 1020x540 / 1216x684 / 1366x768 / 1920x1080. Send the shots for CD review.
 - Related specification: CREATIVE/specifications/hud-layout-v2.md
 - Status: built (engineering, 2026-11-24), awaiting CD review
+
+## F-017 (R-018) — Map balance: tall grass, plain ground, The Pitch
+- What is wrong: tufts on 60 % of all tiles and 38 % of Old Town, so the town reads as a meadow; tall grass is 48 random blobs (5 %), 59 tiles of it inside town and little on the approaches; no plain ground; no stadium.
+- Why it matters: Reis batch D items 3/15/15b; ground grades should mean something (cover / countryside / where people live), and the town needs a second landmark fight space besides the Market Square.
+- What should change: build CREATIVE/specifications/map-balance-grass-stadium.md: fixed tall-grass patches T1-T11 + river reed belts + no `h` in town away from the water (no random numbers); `buildGrass` density table and the earth tint for yards and alleys; The Pitch as a late pass that removes buildings 40/9/10/35, stamps the 16-row grid at x 62-76, y 66-81, adds the `stadium` prop, `STADIUM`, `PLACES`/`PLACE_TIER` entries, pitch/track/line painting.
+- Expected result: acceptance criteria 1-7 in section 5 pass as tests (h 950-1,050, BUILDINGS 40, grid match, rest of MAP unchanged, placeAt, reachability per gate, tufts -25 %), and the six 1216x684 shots of section 5 item 8 sent for CD review.
+- Related specification: CREATIVE/specifications/map-balance-grass-stadium.md
+- Status: built (engineering, 2026-11-24), awaiting CD review
