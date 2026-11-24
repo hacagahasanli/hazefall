@@ -51,14 +51,16 @@ await ctx.addInitScript(() => {
     key('ShiftLeft', false);
     // Ground: get a better gun first (nearest active tuned+ gun within 45 m), then fight the nearest bot.
     const guns = ['rifle', 'smg', 'shotgun', 'sniper'];
-    if (picked < 1 && me.weapon === 'pistol') {
-      const g = st.loot.filter((l) => l.active && guns.includes(l.kind) && Math.hypot(l.x - me.x, l.y - me.y) < 45)
+    window.__skip ??= new Set(); window.__lootT = (window.__lootT ?? 0) + 1 / 60;
+    if (picked < 1 && me.weapon === 'pistol' && window.__lootT < 8) {
+      const g = st.loot.filter((l) => l.active && !window.__skip.has(l.id) && guns.includes(l.kind) && Math.hypot(l.x - me.x, l.y - me.y) < 45)
         .sort((a, b) => Math.hypot(a.x - me.x, a.y - me.y) - Math.hypot(b.x - me.x, b.y - me.y))[0];
       if (g) {
         const gd = Math.hypot(g.x - me.x, g.y - me.y);
         look(Math.atan2(g.y - me.y, g.x - me.x), -0.12, 0.12);
         key('KeyW', gd > 0.6);
         if (gd < 1.2 && Math.round(t * 60) % 20 === 0) tap('KeyF');
+        if (gd < 1.2) { window.__near = (window.__near ?? 0) + 1 / 60; if (window.__near > 2) { window.__skip.add(g.id); window.__near = 0; } }
         return { s: 'loot', kind: g.kind, gd: Math.round(gd * 10) / 10 };
       }
     }
