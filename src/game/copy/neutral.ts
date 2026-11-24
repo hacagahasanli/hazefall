@@ -7,7 +7,7 @@ import type { Copy } from './types';
 export const COPY: Copy = {
   fighters: {
     hotfix: { name: 'Blaze', role: 'Runner', superName: 'Rush', superText: 'a fast dash that hits everyone in its path' },
-    legacy: { name: 'Bastion', role: 'Defender', superName: 'Barricade', superText: 'drops a wall that blocks bullets' },
+    legacy: { name: 'Hedge', role: 'Defender', superName: 'Barricade', superText: 'drops a wall that blocks bullets' },
     standup: { name: 'Tempo', role: 'Controller', superName: 'Slow Bomb', superText: 'a thrown canister that bursts and slows enemies' },
     intern: { name: 'Rookie', role: 'Brawler', superName: 'Shockwave', superText: 'a blast that throws everyone back' },
   },
@@ -17,18 +17,18 @@ export const COPY: Copy = {
   ],
   guestPrefix: 'player_',
   zone: {
-    name: 'the Storm',
-    waiting: 'Storm moves in',
-    closing: 'Storm closing',
-    final: 'Final Storm',
+    name: 'the Haze',
+    waiting: 'Haze moves in',
+    closing: 'Haze closing',
+    final: 'Final Haze',
     outside: 'Outside the safe zone!',
-    caught: (who, you) => (you ? 'You were caught by the Storm' : `${who} was caught by the Storm`),
+    caught: (who, you) => (you ? 'You were caught in the Haze' : `${who} was caught in the Haze`),
   },
   result: { won: 'LAST ONE STANDING', lost: 'KNOCKED OUT', wonLine: (n) => `${n} down, one standing. The win is yours.` },
   intro: {
     above: null,
     title: (n) => [`${n} PLAYERS`, 'ONE WINNER'],
-    line: 'Land, grab a gun and stay inside the safe zone as the Storm closes in. The last one standing wins.',
+    line: 'Land, grab a gun and stay inside the safe zone as the Haze closes in. The last one standing wins.',
     below: null,
   },
   items: { rarity: ['Common', 'Tuned', 'Prime'], bandage: 'Bandage', medkit: 'Med kit', coffee: 'Energy drink' },

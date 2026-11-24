@@ -512,7 +512,7 @@ const Result = ({
                   with {hud.killedWith}.
                 </>
               ) : (
-                <>Caught outside by {hud.killedWith ?? COPY.zone.name}.</>
+                <>{hud.killedWith ? `Caught outside by ${hud.killedWith}.` : `Caught in ${COPY.zone.name}.`}</>
               )}
             </p>
           </div>
@@ -1059,7 +1059,7 @@ export const Match = ({
                       with {hud.killedWith}
                     </>
                   ) : (
-                    <>Caught outside by {hud.killedWith ?? COPY.zone.name}</>
+                    <>{hud.killedWith ? `Caught outside by ${hud.killedWith}` : `Caught in ${COPY.zone.name}`}</>
                   )}
                 </div>
                 <div className="text-sm font-bold tracking-widest text-cream/75">

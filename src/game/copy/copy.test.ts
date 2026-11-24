@@ -46,8 +46,8 @@ describe('portal copy', () => {
   });
 
   it('words the zone knock-out line for you and for others', () => {
-    expect(NEUTRAL.zone.caught('Kiwi')).toBe('Kiwi was caught by the Storm');
-    expect(NEUTRAL.zone.caught('you', true)).toBe('You were caught by the Storm');
+    expect(NEUTRAL.zone.caught('Kiwi')).toBe('Kiwi was caught in the Haze');
+    expect(NEUTRAL.zone.caught('you', true)).toBe('You were caught in the Haze');
     expect(STUDIO.zone.caught('dev_1')).toBe('dev_1 missed the Deadline');
     expect(STUDIO.zone.caught('you', true)).toBe('You missed the Deadline');
     for (const c of [NEUTRAL, STUDIO]) expect(c.zone.caught('you', true)).not.toMatch(/\byou\b/);
