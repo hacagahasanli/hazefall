@@ -170,3 +170,23 @@ places. Deviations in LOG 2026-11-22 are all accepted (see F-010 for two conditi
 - Related spec: map-v2.md sections 4-8, slice 3.
 - Priority: P1
 - Status: partly done (engineering, 2026-11-22): both conditions, items 1 to 4 (mast, windmill, crossings, Deadline centre rules with sim tests). Items 5 (story props) and 6 (cover pass and the plain-grass share) are not started; see LOG and R-010. CD 2026-11-22: items 1-4 and both conditions accepted; items 5 and 6 are post-launch polish and do not block Basic Launch.
+
+## F-011
+- What is wrong: one roof slope on most houses renders pure black (RGB 0,0,0) on a real GPU, on the main menu backdrop and in game. It does not show in SwiftShader (low tier, no shadows).
+- Why it matters: reads as broken rendering in the first 10 s; the likeliest cause of a CrazyGames "overall quality" rejection.
+- What should change / expected result / acceptance: see CREATIVE/cg-preflight-lcs-2026-11-22.md B1.
+- Related spec: cg-preflight-lcs-2026-11-22.md
+- Priority: P0 (blocks the CrazyGames submission)
+- Status: open
+
+## F-012
+- What is wrong: at 1020x540 the Fighter panel opens with the picker out of view and the style chips cut by the footer.
+- What should change: see cg-preflight-lcs-2026-11-22.md B2.
+- Priority: P0 (cheap, same pass as F-011)
+- Status: open
+
+## F-013
+- What is wrong: kill feed "you was caught by the Storm" (neutral.ts zone.caught with name 'you').
+- What should change: "You were caught by the Storm"; check the other name-taking lines. See preflight B3.
+- Priority: P0 (5 min)
+- Status: open

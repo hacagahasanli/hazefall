@@ -73,3 +73,15 @@ Format: `## R-001 — title` then Context, Expected deliverable, Priority (P0-P3
 - Expected deliverable: a verdict on the contact sheets in ~/.agents-know/personal/feedback4/shots/lcs-progression-v2/ (sheet-outfits, sheet-finishes, sheet-guns at 390x844 and 1280x720): do all four fighters keep their silhouettes in all six sets, do the sets read apart at gameplay distance, do Terminal and Legend stand out enough, does Gold Build read as gold (metalness was capped, see LOG). Also the lobby tray (tray-*) and the Level 5 gold card (report-l5-*, report-l6-* for a normal card).
 - Priority: P1
 - Status: open
+
+## R-013 — Public online play flow (quick match, bots fill, CrazyGames)
+- Context: Reis wants online to be the most fun part: public servers with random people, bots fill when too few humans gather in time, more humans as players grow, must work on the site and CrazyGames. Current online = private friend rooms, host-browser authority, hidden on CG.
+- Expected deliverable: CREATIVE/specifications/online-public-flow.md (flow, matchmaking rules, boarding screen, CG Instant Multiplayer/room data, disconnect/rejoin, 3 am case, abuse basics, copy, KPIs, phased rollout).
+- Priority: P1
+- Status: done (spec ready, 2026-11-22; 3 open engineering questions in section 14)
+
+## R-014 — Mobile + gameplay quality audit and plan (phases 1-3)
+- Context: owner brief before CrazyGames: too many mobile bugs, oversized UI, lobby names overlapping the top bar, touch controls, mobile camera, gameplay quality, CG readiness. QA runs a parallel technical bug hunt (ENGINEERING/mobile-bug-hunt.md).
+- Expected deliverable: CREATIVE/specifications/mobile-quality-audit.md with problems, root causes, P0-P3, parallel work packages, tests, CG readiness.
+- Priority: P0
+- Status: done (CD, 2026-11-22): audit + plan ready. P0: lobby overlap (incl. CG 907x510), touch UI by touch detection (CG technical requirement), desktop shoulder camera inside tree crowns. Work packages WP-0 (device profile + layout test, first), A lobby/HUD/report, B touch/input/cameras (owns game.ts), C feel/feedback, D perf/render.
