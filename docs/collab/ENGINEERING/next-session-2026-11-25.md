@@ -1,7 +1,8 @@
 # Next session starts here (2026-11-25)
 
 **Status:** Hazefall SUBMITTED to CrazyGames 24 Nov (game 1e6719fc, Awaiting review). Do not change the CG build while in review.
-**Next:** Poki (SDK adapter + build + upload). **Parked:** R-021 fighter redesign (REQUESTS.md; Reis cares most about the Fighter select screen look; test Blaze first, CD spec first).
+**FIRST (Reis asked):** brutally honest Hazefall audit + Steam potential, see docs/collab/ENGINEERING/steam-audit-request-2026-11-24.md (play live game + real Steam research, report as artifact).
+**Then:** Poki (SDK adapter + build + upload). **Parked:** R-021 fighter redesign (REQUESTS.md; Reis cares most about the Fighter select screen look; test Blaze first, CD spec first).
 
 Game is now **Hazefall** (R-020). Worktree lcs-deploy-main, branch main, all pushed. node_modules: `ln -sf ../last-commit-standing/node_modules node_modules`, `unlink node_modules` before commit. Commit as hacagahasanli, no Claude attribution.
 
