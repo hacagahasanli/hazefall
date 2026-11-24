@@ -1,3 +1,4 @@
+import { CAM_WALL, clampSide, wallSideWant } from './camWall';
 import * as THREE from 'three';
 
 import { COPY } from '../copy/studio';
@@ -273,17 +274,21 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   let tier: Tier = perfTier === 'low' || perfTier === 'medium' || perfTier === 'high' ? perfTier : (opts.tier ?? 'high');
   let settings: Settings = opts.settings ?? DEFAULT_SETTINGS;
   let bound = keyMap(settings.keys);
-  // Phones draw a fixed pixel budget (phoneRatio) times the dynamic-resolution step; everything else the tier's own ratio.
+  /** Phones and tablets: touch controls, always auto-aim, a lighter pixel ratio. */
+  const touch = isTouchUi();
+  // Phones draw a fixed pixel budget (phoneRatio) times the dynamic-resolution step. Desktops draw the tier's own ratio times
+  // the same step, never below 1 (or the screen's own ratio, if less): on a 2x screen Auto drops pixels before shadows.
   const pixelRatio = () =>
     touch
       ? phoneRatio(tier, canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, window.devicePixelRatio) * settings.resolution * resGuard.scale
-      : Math.min(window.devicePixelRatio, TIERS[tier].dprCap, 2) * settings.resolution;
+      : Math.max(Math.min(1, window.devicePixelRatio), Math.min(window.devicePixelRatio, TIERS[tier].dprCap, 2) * resGuard.scale) * settings.resolution;
   const shadowsOn = () => TIERS[tier].shadows && settings.shadows;
-  const fpsGuard = new FpsGuard();
-  const resGuard = new ResolutionGuard();
+  // Auto quality aims at 60 fps on a desktop (F-018 item 4c): it gives way under 52 fps; phones keep their gentler 45 / 40.
+  const fpsGuard = new FpsGuard(touch ? 40 : 50);
+  const resGuard = new ResolutionGuard(touch ? 45 : 52);
+  /** Lowering the resolution can help: a touch screen, or a desktop drawing above 1x. */
+  const resHelps = () => touch || Math.min(window.devicePixelRatio, TIERS[tier].dprCap, 2) * resGuard.scale > 1.01;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: TIERS[tier].antialias, powerPreference: 'high-performance' });
-  /** Phones and tablets: touch controls, always auto-aim, a lighter pixel ratio. */
-  const touch = isTouchUi();
   renderer.setPixelRatio(pixelRatio());
   renderer.shadowMap.enabled = shadowsOn();
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -1119,6 +1124,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** The arm length the view is easing to (without walls), and the side offset: both ease with the scope. */
   let armWant = 3.2;
   let sideNow = 0.62;
+  /** The shoulder camera's sideways ease off a wall beside the lens (m, + = further right; see CAM_WALL). */
+  let wallSide = 0;
   /** The shoulder camera's small roll with a lean (eased). */
   let leanRoll = 0;
   /**
@@ -1414,7 +1421,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         aimH: shoulder ? crossAim.h : fpAim.h,
         // The camera's side line relative to the body's (the lean is in both): over the shoulder its side offset, in first
         // person the eye's extra lean (0.72 m against the muzzle's 0.49 m).
-        camSide: shoulder ? sideNow : p.lean * (0.72 - LEAN.offset * 0.7),
+        camSide: shoulder ? clampSide(sideNow + wallSide) : p.lean * (0.72 - LEAN.offset * 0.7),
       };
       // A bomb in hand goes where the crosshair meets the ground (look up to throw farther, up to its range).
       const bombAim = p.item === 'bomb';
@@ -3000,7 +3007,19 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // Leaning (Q/E) takes the camera out with your shoulder, as far as the sim moves the muzzle (hitPoint), so the
       // crosshair, the rifle and the round all leave from round the same corner.
       const leanOut = air ? 0 : self.lean * LEAN.offset * 0.7;
-      const side = sideNow + leanOut;
+      // A wall beside the lens (F-018 item 4b): probe right and left of where the lens would sit without the push, and ease
+      // the side offset away from a wall closer than 1 m, so a wall beside you never fills the picture. The offset stays
+      // between 0.15 m (the crosshair still clears your head) and 0.8 m (the sim's corner-shot limit).
+      let wallWant = 0;
+      if (!air) {
+        const s0 = sideNow + leanOut;
+        const lx = selfX - sn * s0 - c * cp * armNow;
+        const lz = selfY + c * s0 - sn * cp * armNow;
+        const ly = pivotY - Math.sin(lookPitch) * armNow;
+        wallWant = wallSideWant((x, z, h) => solidAt(state, x, z, h), lx, lz, ly, c, sn);
+      }
+      wallSide = THREE.MathUtils.damp(wallSide, wallWant, CAM_WALL.rate, dt);
+      const side = (air ? sideNow : clampSide(sideNow + wallSide)) + leanOut;
       const px = selfX - sn * side;
       const pz = selfY + c * side;
       armWant = air ? 7 : THREE.MathUtils.damp(armWant, scoped ? 1.4 : 3.2, 20, dt);
@@ -3336,10 +3355,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     time += dt;
     if (dt > 0) fps += (1 / dt - fps) * 0.05;
     // Auto quality: a frame rate that stays low during real play steps the tier down (never up, so the picture does not pump).
-    // On a touch screen the resolution gives way first (0.1 at a time, see ResolutionGuard); the tier (shadows off, shorter
-    // view) only steps down once the resolution is at its floor and the frame rate is still low.
+    // The resolution gives way first (0.1 at a time, see ResolutionGuard; on a desktop only while it draws above 1x); the
+    // tier (smaller shadows, then none and a shorter view) only steps down once that cannot help and the frame rate is still low.
     if (opts.autoTier && !perfTier && !paused && state.phase !== 'drop' && tier !== 'low') {
-      if (touch && !resGuard.exhausted) {
+      if (resHelps() && !resGuard.exhausted) {
         if (resGuard.frame(dt) !== null) setTier(tier);
       } else if (fpsGuard.frame(dt)) {
         setTier(lowerTier(tier));

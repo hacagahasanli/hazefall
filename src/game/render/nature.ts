@@ -331,6 +331,8 @@ export const foliageAlpha = (p: [number, number, number], cam: [number, number, 
 /** How far (m, at reach scale 1) the lawn's tufts and the tall grass are drawn. */
 export const GRASS_REACH = 70;
 export const TALL_GRASS_REACH = 150;
+/** Grass and tall grass sink into the ground near the camera: gone within `fromM`, full size beyond `toM` (ground-plane metres). */
+export const GRASS_NEAR_FADE = { fromM: 1.8, toM: 2.6 } as const;
 
 /**
  * Adds wind sway (bigger the higher above `pivot` a vertex is) and, for canopies, a dithered
@@ -354,7 +356,10 @@ const windy = (m: THREE.MeshStandardMaterial, amount: number, pivot: number, cut
         #endif
         ${reach > 0 ? `// Small things shrink into the ground towards the edge of their reach (the chunks beyond it are not drawn).
         float reach = ${reach.toFixed(1)} * uReach;
-        transformed *= smoothstep(reach, reach * 0.7, distance(base, cameraPosition));` : ''}
+        transformed *= smoothstep(reach, reach * 0.7, distance(base, cameraPosition));
+        // And right at the lens (F-018 item 4a): tufts within ${GRASS_NEAR_FADE.fromM}-${GRASS_NEAR_FADE.toM} m of the camera (on the ground plane) sink away,
+        // so a low shoulder or first-person view never fills with giant blades.
+        transformed *= smoothstep(${GRASS_NEAR_FADE.fromM.toFixed(2)}, ${GRASS_NEAR_FADE.toM.toFixed(2)}, distance(base.xz, cameraPosition.xz));` : ''}
         float bend = max(0.0, transformed.y - ${pivot.toFixed(2)});
         float ph = base.x * 0.37 + base.z * 0.29;
         float gust = 0.6 + 0.4 * sin(uTime * 0.7 + base.x * 0.05);
