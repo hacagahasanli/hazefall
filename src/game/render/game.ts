@@ -9,7 +9,7 @@ import { actionFor, DEFAULT_SETTINGS, keyLabel, keyMap } from '../settings';
 import type { VolumeKind } from '../sfx';
 import type { Action, Settings } from '../settings';
 import { ARMOR, CROUCH, HEALS, LEAN, THROW, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITEMS, MAP, PLACE_TIER, placeAt, PLAYERS, PROPS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
-import { canSee, carryCap, chestHeight, feetOf, healChoice, inPlant, inWater, lineOfSight, lootUnder, reloadTime, solidAt, superThrowTarget, throwDistance } from '../sim/step';
+import { canSee, carryCap, chestHeight, feetOf, healChoice, inPlant, inWater, lineOfSight, lootUnder, reloadTime, solidAt, solidStep, superThrowTarget, throwDistance } from '../sim/step';
 import { buildingAt, CLIMB, roofAt } from '../sim/roofs';
 import { createOfflineSession } from '../net/session';
 import { arrowTo, LOOT_HINT } from './hints';
@@ -50,6 +50,9 @@ import type { FighterId, GameEvent, GameState, HealKind, Input, Loot, LootKind, 
 // HUD snapshot for React (throttled to 10 Hz)
 // ---------------------------------------------------------------------------
 
+/** The tiles of the HUD rack, in key order. */
+export type RackSlot = 'slot1' | 'slot2' | 'bandage' | 'medkit' | 'bomb';
+
 export interface HudState {
   phase: GameState['phase'];
   stage: Player['stage'];
@@ -75,6 +78,12 @@ export interface HudState {
   bag: { bandages: number; medkits: number; coffees: number; bombs: number; cap: { bandage: number; medkit: number; coffee: number; bomb: number } };
   /** A heal in progress: which and how far along (0..1), else null. */
   using: { kind: HealKind; name: string; progress: number } | null;
+  /** A bomb in hand (taken out with 5): the trigger throws it. */
+  bombOut: boolean;
+  /** Whether pressing each item's key would do something now (the HUD rack dims the rest). */
+  itemReady: { bandage: boolean; medkit: boolean; bomb: boolean };
+  /** The last key press that could not act: which tile nudges, and a running id for the animation. */
+  denied: { slot: RackSlot; id: number } | null;
   /** Seconds of coffee left. */
   buzz: number;
   /** What the heal button would use now (its label), or null. */
@@ -712,7 +721,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const cFrom = new THREE.Vector3();
   const cDir = new THREE.Vector3();
   const X_AXIS = new THREE.Vector3(1, 0, 0);
-  const contrail = (x: number, y: number, angle: number, h: number, len?: number, from?: THREE.Vector3) => {
+  const contrail = (x: number, y: number, angle: number, h: number, len?: number, from?: THREE.Vector3, endH?: number) => {
     // The sim says where the round stopped (it lands the tick it is fired): the line ends exactly there. Without it (an old
     // snapshot), march along the line until something solid or someone stops the round.
     let d = len !== undefined ? Math.max(0.8, len + 0.6) : 0.8;
@@ -723,9 +732,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       if (state.players.some((o) => o.alive && o.stage !== 'drone' && Math.hypot(o.x - px, o.y - py) < 0.6 && Math.hypot(o.x - x, o.y - y) > 1 && Math.abs(chestHeight(o) - h) < 1)) break;
     }
     const m = contrails[nextContrail++ % contrails.length];
-    // From the barrel you see (beside the body, leaned out) to where the round stopped on its true line.
+    // From the barrel you see (beside the body, leaned out) to where the round stopped on its true line (up or down too).
     cFrom.copy(from ?? cFrom.set(x + Math.cos(angle) * 0.8, h, y + Math.sin(angle) * 0.8));
-    cDir.set(x + Math.cos(angle) * d, h, y + Math.sin(angle) * d).sub(cFrom);
+    const hEnd = endH !== undefined && len !== undefined && len > 0 ? h + ((endH - h) * d) / len : h;
+    cDir.set(x + Math.cos(angle) * d, hEnd, y + Math.sin(angle) * d).sub(cFrom);
     const span = Math.max(0.2, cDir.length());
     m.position.copy(cFrom);
     m.quaternion.setFromUnitVectors(X_AXIS, cDir.multiplyScalar(1 / span));
@@ -1111,10 +1121,51 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   let sideNow = 0.62;
   /** The shoulder camera's small roll with a lean (eased). */
   let leanRoll = 0;
-  /** Where the crosshair points on the map this frame (the shoulder view aims there, not straight ahead of you). */
-  const crossAim = { x: 0, y: 0 };
-  /** First person: the fighter under the crosshair (in 3D, so someone on a roof or below one), else none (aim straight ahead). */
-  const fpAim = { x: 0, y: 0, on: false };
+  /**
+   * Where the crosshair points this frame, in 3D (x, y on the map, h the height): the first fighter, wall, roof, tree or
+   * the ground the view ray meets, else a point far out along it (in the sky too). Rounds fly from the muzzle through it.
+   */
+  const crossAim = { x: 0, y: 0, h: 1.1 };
+  /** First person: the same point for the first-person view ray. */
+  const fpAim = { x: 0, y: 0, h: 1.1, on: false };
+  const AIM_FAR = 170;
+  /** March the view ray (origin o, unit direction d, world axes: y up) from `t0` and fill `out` with the first thing it meets. */
+  const traceCrosshair = (ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, t0: number, out: { x: number; y: number; h: number }) => {
+    let end = AIM_FAR;
+    // Fighters: the nearest one whose body (feet to head, a little wider than the hit circle) the ray passes through.
+    for (let i = 0; i < state.players.length; i++) {
+      const o = state.players[i];
+      if (i === me || !o.alive || o.stage === 'drone') continue;
+      const ox2 = o.x - ox;
+      const oz2 = o.y - oz;
+      const flat = Math.hypot(dx, dz);
+      const along = flat > 1e-4 ? (ox2 * dx + oz2 * dz) / (flat * flat) : 0;
+      if (along <= t0 || along >= end) continue;
+      const off = Math.hypot(ox2 - dx * along, oz2 - dz * along);
+      const hy = oy + dy * along;
+      const feet = feetOf(o);
+      if (off < 0.6 && hy > feet - 0.1 && hy < feet + 1.9) end = along;
+    }
+    // The world: walls, roofs, trunks, rocks and the ground, in short steps up to the fighter (or the far point).
+    let px = ox + dx * t0;
+    let py = oy + dy * t0;
+    let pz = oz + dz * t0;
+    for (let t = t0 + 0.3; t < end; t += 0.3) {
+      const x = ox + dx * t;
+      const y = oy + dy * t;
+      const z = oz + dz * t;
+      if (y <= 0 || solidStep(state, px, pz, py, x, z, y)) {
+        end = t;
+        break;
+      }
+      px = x;
+      py = y;
+      pz = z;
+    }
+    out.x = ox + dx * end;
+    out.y = oz + dz * end;
+    out.h = Math.max(0, oy + dy * end);
+  };
   const onLockChange = () => {
     locked = document.pointerLockElement === canvas;
   };
@@ -1347,7 +1398,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       }
       const input: Input = {
         mx, my,
-        ...shootJump({ ground: p.stage === 'ground', key: held('fire'), mouse: mouseDown, touchFire: btn('fire') || btn('fire2'), jumpKey: jumpKey() }),
+        ...shootJump({ ground: p.stage === 'ground', key: false, mouse: mouseDown, touchFire: btn('fire') || btn('fire2'), jumpKey: jumpKey() }),
         super: held('super') || btn('super'),
         use: held('use') || btn('use'),
         lean: (held('leanR') || btn('leanR') ? 1 : 0) - (held('leanL') || btn('leanL') ? 1 : 0),
@@ -1358,8 +1409,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         snap: true,
         scope: scopeHeld(p),
         pitch: viewPitch,
-        aimX: shoulder ? crossAim.x : fpAim.on ? fpAim.x : p.x + c * 30,
-        aimY: shoulder ? crossAim.y : fpAim.on ? fpAim.y : p.y + sn * 30,
+        aimX: shoulder ? crossAim.x : fpAim.x,
+        aimY: shoulder ? crossAim.y : fpAim.y,
+        aimH: shoulder ? crossAim.h : fpAim.h,
       };
       // A bomb in hand goes where the crosshair meets the ground (look up to throw farther, up to its range).
       const bombAim = p.item === 'bomb';
@@ -1396,8 +1448,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // emulated mouse press never shoots (FIRE does).
     const input = {
       mx, my,
-      ...shootJump({ ground: p.stage === 'ground', key: held('fire'), mouse: mouseDown && !touch, touchFire: btn('fire') || btn('fire2'), jumpKey: jumpKey() }),
-      // Battle-royale keys: Q / E lean, C crouches, F picks up or uses, G is the super.
+      ...shootJump({ ground: p.stage === 'ground', key: false, mouse: mouseDown && !touch, touchFire: btn('fire') || btn('fire2'), jumpKey: jumpKey() }),
+      // Battle-royale keys: Q / E lean, C crouches, F picks up, G is the super.
       super: held('super') || btn('super'),
       use: held('use') || btn('use'),
       lean: clamp((held('leanR') || btn('leanR') ? 1 : 0) - (held('leanL') || btn('leanL') ? 1 : 0)),
@@ -1418,15 +1470,50 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     tapped.clear();
     return input;
   };
-  /** Gun slots and heals: 1 / 2 draw a slot, X or the mouse wheel (one notch, latched until read) the other gun; H heals, V drinks coffee. */
+  /** Gun slots and heals: 1 / 2 draw a slot, X or the mouse wheel (one notch, latched until read) the other gun; 3 bandage, 4 med kit, 5 bomb, H heals, V drinks coffee. */
+  /** Why pressing an item's key would do nothing now, in the hint line's words (null = it would act). Matches the sim. */
+  const itemBlock = (p: Player, kind: 'bandage' | 'medkit' | 'bomb'): string | null => {
+    const count = kind === 'bandage' ? p.bandages : kind === 'medkit' ? p.medkits : p.bombs;
+    if (count <= 0) return kind === 'bandage' ? 'No bandages' : kind === 'medkit' ? 'No med kits' : 'No bombs';
+    if (kind === 'bomb' && p.stage !== 'ground') return 'Land first';
+    if (inWater(p.x, p.y)) return 'Not in the water';
+    if (p.using) return 'Already healing';
+    if (kind === 'bomb') return null;
+    if (p.hp >= p.maxHp) return 'Health is full';
+    if (kind === 'bandage' && p.hp >= HEALS.bandage.upTo) return p.medkits > 0 ? `Bandages heal up to ${HEALS.bandage.upTo} · ${keyLabel(settings.keys.medkit)} for a med kit` : `Bandages heal up to ${HEALS.bandage.upTo}`;
+    return null;
+  };
+  /** The last press that could not act (hint text for 1.5 s, and the tile that nudges). */
+  let denied: { slot: RackSlot; id: number; text: string; at: number } | null = null;
+  let deniedId = 0;
+  const rackHeld: Record<RackSlot, boolean> = { slot1: false, slot2: false, bandage: false, medkit: false, bomb: false };
+  const checkDenied = () => {
+    const p = state.players[me];
+    for (const a of ['slot1', 'slot2', 'bandage', 'medkit', 'bomb'] as const) {
+      const down = held(a);
+      if (down && !rackHeld[a] && p.alive && p.stage === 'ground') {
+        let text: string | null = null;
+        if (a === 'slot1' || a === 'slot2') {
+          const sl = slotsOf(p)[a === 'slot1' ? 0 : 1];
+          if (!sl.kind && !sl.active) text = `Slot ${a === 'slot1' ? 1 : 2} is empty`;
+        } else text = itemBlock(p, a);
+        if (text) denied = { slot: a, id: ++deniedId, text, at: performance.now() / 1000 };
+      }
+      rackHeld[a] = down;
+    }
+  };
   const slotKeys = () => {
+    checkDenied();
     const cycle = held('swap') || btn('swap') || wheelSwap;
     wheelSwap = false;
     return {
-      slot: held('slot1') ? 1 : held('slot2') ? 2 : held('slot3') ? 3 : held('slot4') ? 4 : 0,
+      slot: held('slot1') ? 1 : held('slot2') ? 2 : 0,
       cycle,
-      // Keys take heals and bombs into the hand (3 / 4) and shoot uses them; the touch HEAL button still heals at once.
-      heal: btn('heal'),
+      heal: held('heal') || btn('heal'),
+      bandage: held('bandage'),
+      medkit: held('medkit'),
+      bomb: held('bomb'),
+      coffee: held('coffee'),
     };
   };
   /** The crouch toggle as this tick's input: a jump or a roll stands you up, and so does being off your feet or in water. */
@@ -1527,7 +1614,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           trauma = Math.min(1, trauma + 0.45);
           sniperShotAt = time;
         }
-        if (e.weapon === 'sniper') contrail(e.x, e.y, e.angle, chestHeight(state.players[e.owner]) + 0.05, e.len, shotFrom);
+        if (e.weapon === 'sniper') contrail(e.x, e.y, e.angle, chestHeight(state.players[e.owner]) + 0.05, e.len, shotFrom, e.endH);
         break;
       }
       case 'hit':
@@ -2722,7 +2809,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const ly = self.vy * 0.35 + Math.sin(self.heading) * camProfile.face;
       const ll = Math.hypot(lx, ly);
       const cap = ll > camProfile.cap ? camProfile.cap / ll : 1;
-      const still = Math.hypot(self.vx, self.vy) < 0.5 && !(mouseDown || held('fire'));
+      const still = Math.hypot(self.vx, self.vy) < 0.5 && !mouseDown;
       const ka = 1 - Math.exp(-2 * dt);
       ahead.x += ((still ? 0 : lx * cap) - ahead.x) * ka;
       ahead.y += ((still ? 0 : ly * cap) - ahead.y) * ka;
@@ -2844,25 +2931,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       camera.lookAt(tmpV);
       camera.rotateZ(-self.lean * 0.3);
       if (!fpFree) {
-        // Who is under the crosshair (chest within 0.9 m of the view ray): rounds go to them, up or down.
-        const dx = c * Math.cos(viewPitch);
-        const dy = Math.sin(viewPitch);
-        const dz = sn * Math.cos(viewPitch);
-        let best = Math.max(60, WEAPONS[self.weapon].range);
-        fpAim.on = false;
-        for (let i = 0; i < state.players.length; i++) {
-          const o = state.players[i];
-          if (i === me || !o.alive || o.stage === 'drone') continue;
-          const ox = o.x - camera.position.x;
-          const oy = chestHeight(o) - camera.position.y;
-          const oz = o.y - camera.position.z;
-          const along = ox * dx + oy * dy + oz * dz;
-          if (along <= 0.5 || along >= best) continue;
-          if (Math.hypot(ox - dx * along, oy - dy * along, oz - dz * along) < 0.9) {
-            best = along;
-            Object.assign(fpAim, { x: o.x, y: o.y, on: true });
-          }
-        }
+        // What is under the crosshair (a fighter, a wall, a roof, the ground, or the sky): rounds go there, up or down.
+        traceCrosshair(camera.position.x, camera.position.y, camera.position.z, c * Math.cos(viewPitch), Math.sin(viewPitch), sn * Math.cos(viewPitch), 0.3, fpAim);
+        fpAim.on = true;
       }
       // The shake in first person turns the view a little (about a degree at most) instead of
       // moving your eyes: a jolt, not a slide. Only the view: where you aim does not move.
@@ -2983,34 +3054,16 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       // between you and the lens, under the canopy on the way down or walking through the woods.
       updateNature(performance.now() / 1000, (camera.position.x + selfX) / 2, (camera.position.z + selfY) / 2, armNow / 2 + 3);
       setFoliageFade(camera.position.x, camera.position.y, camera.position.z, selfX, selfH + 1.2, selfY);
-      // Where the crosshair lands: the first fighter near the ray, else the ground, else as far as the gun reaches. Shots go
-      // from you to that point, so what is under the crosshair is what you hit even though the camera is off to the side.
-      // (Looking around with C, the aim stays on the last point.)
+      // Where the crosshair lands in 3D (fighter, wall, roof, ground or sky). Shots go from your muzzle through that point,
+      // so what is under the crosshair is what you hit even though the camera is off to the side. (Looking around with the
+      // look key, the aim stays on the last point.)
       const freeLook = Math.abs(freeYaw) + Math.abs(freePitch) > 0.02;
-      const reachM = Math.max(60, WEAPONS[self.weapon].range);
-      const dx = freeLook ? 0 : c * cp;
-      const dy = Math.sin(viewPitch);
-      const dz = freeLook ? 0 : sn * cp;
-      let hitT = freeLook ? 0 : dy < -0.01 ? Math.min(reachM, -camera.position.y / dy) : reachM;
-      for (let i = 0; i < state.players.length && !freeLook; i++) {
-        const o = state.players[i];
-        if (i === me || !o.alive || o.stage === 'drone') continue;
-        const ox = o.x - camera.position.x;
-        const oy = chestHeight(o) - camera.position.y;
-        const oz = o.y - camera.position.z;
-        const along = ox * dx + oy * dy + oz * dz;
-        if (along <= armNow || along >= hitT) continue;
-        const off = Math.hypot(ox - dx * along, oy - dy * along, oz - dz * along);
-        if (off < 0.9) hitT = along;
-      }
-      if (!freeLook) {
-        crossAim.x = camera.position.x + dx * hitT;
-        crossAim.y = camera.position.z + dz * hitT;
-      }
-      // Never aim behind yourself (looking steeply down past your own feet).
+      if (!freeLook) traceCrosshair(camera.position.x, camera.position.y, camera.position.z, c * cp, Math.sin(viewPitch), sn * cp, armNow, crossAim);
+      // Never aim behind yourself (looking steeply down past your own feet): straight ahead at chest height instead.
       if (!freeLook && (crossAim.x - self.x) * c + (crossAim.y - self.y) * sn < 1.5) {
         crossAim.x = self.x + c * 30;
         crossAim.y = self.y + sn * 30;
+        crossAim.h = chestHeight(self);
       }
     } else {
       viewmodel.visible = false;
@@ -3122,14 +3175,17 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // Loot to take: a keycap over it in the world instead of a line of text.
     showKeycap(self.alive && !self.using ? k : null);
     const hintLive = lootHint !== null && time < lootHint.until && self.stage === 'ground';
-    const prompt = !self.alive
+    const deniedLive = denied && performance.now() / 1000 - denied.at < 1.5 ? denied : null;
+    const prompt = deniedLive && self.alive
+      ? deniedLive.text
+      : !self.alive
       ? null
       : self.stage === 'falling' && airHintAt >= 0 && time - airHintAt < 1.5
         ? 'Land first, then shoot'
       : hintLive && !k
         ? firstPerson() ? 'Loot nearby' : `Loot nearby ${arrowTo(lootHint!.x - self.x, lootHint!.y - self.y)}`
       : opts.firstRound && self.stage === 'ground' && self.shots === 0 && landAt[me] !== undefined && time - landAt[me] < 10 && !k
-        ? (touch ? 'Tap FIRE · shoot' : `${keyLabel(settings.keys.fire)} · shoot`)
+        ? (touch ? 'Tap FIRE · shoot' : 'Click · shoot')
       : self.stage === 'drone'
         ? (touch ? 'Tap JUMP' : `${keyLabel(settings.keys.jump)} · jump`)
         : self.stage === 'falling' && self.canopy < 0 && DROP.height - self.alt >= DROP.minFreefallDrop
@@ -3142,16 +3198,20 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           ? `${HEAL_NAME[self.using]}… · shoot or roll to stop`
         : self.charging === 'super'
           ? `Aim where it lands · let go of ${touch ? 'SUPER' : keyLabel(settings.keys.super)} to throw`
+        : self.charging === 'bomb'
+            ? 'Point where it lands · let go to throw'
         : self.charging
             ? lastThrowAim ? `Point where it lands · let go of ${keyLabel(settings.keys.use)} to throw` : 'Hold to throw farther · let go to throw'
+        : self.item === 'bomb'
+            ? `Bomb in hand · click to throw · ${keyLabel(settings.keys.bomb)} puts it away`
             : self.weapon === 'sniper' && self.mag + self.ammo > 0 && !scoped && !touch
               ? `${aimMode === 'mouse' || fpp ? 'Right click' : 'Z'} · scope`
           : self.weapon !== 'fists' && self.mag + self.ammo === 0
             ? 'Out of ammo · find an ammo box or another gun'
             : self.hp < self.maxHp * 0.6 && healNext && healNext !== 'coffee' && self.sinceCombat > 1.5
-              ? `${touch ? 'HEAL' : `${keyLabel(settings.keys.slot3)} then ${keyLabel(settings.keys.fire)}`} · use ${HEAL_NAME[healNext].toLowerCase()}`
+              ? touch ? `HEAL · use ${HEAL_NAME[healNext].toLowerCase()}` : `${keyLabel(settings.keys[healNext === 'medkit' ? 'medkit' : 'bandage'])} · use ${HEAL_NAME[healNext].toLowerCase()}`
               : self.bombs > 0 && self.sinceCombat < 4 && !k
-                ? `Hold ${touch ? 'the pick-up button' : keyLabel(settings.keys.use)} to throw a bomb`
+                ? `${keyLabel(settings.keys.bomb)} · take a bomb in hand`
                 : null;
     opts.onHud({
       phase: state.phase,
@@ -3175,6 +3235,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       },
       using: self.using ? { kind: self.using, name: HEAL_NAME[self.using], progress: 1 - self.useLeft / HEALS[self.using].time } : null,
       buzz: self.buzz,
+      bombOut: self.item === 'bomb',
+      itemReady: { bandage: !itemBlock(self, 'bandage'), medkit: !itemBlock(self, 'medkit'), bomb: !itemBlock(self, 'bomb') },
+      denied: deniedLive ? { slot: deniedLive.slot, id: deniedLive.id } : null,
       healNext: healNext ? HEAL_NAME[healNext] : null,
       promptGrade: k && !self.using && self.alive ? lootGrade(k) : null,
       superCharge: self.superCharge,

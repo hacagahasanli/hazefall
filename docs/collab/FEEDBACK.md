@@ -170,3 +170,65 @@ places. Deviations in LOG 2026-11-22 are all accepted (see F-010 for two conditi
 - Related spec: map-v2.md sections 4-8, slice 3.
 - Priority: P1
 - Status: partly done (engineering, 2026-11-22): both conditions, items 1 to 4 (mast, windmill, crossings, Deadline centre rules with sim tests). Items 5 (story props) and 6 (cover pass and the plain-grass share) are not started; see LOG and R-010. CD 2026-11-22: items 1-4 and both conditions accepted; items 5 and 6 are post-launch polish and do not block Basic Launch.
+
+## F-011
+- What is wrong: one roof slope on most houses renders pure black (RGB 0,0,0) on a real GPU, on the main menu backdrop and in game. It does not show in SwiftShader (low tier, no shadows).
+- Why it matters: reads as broken rendering in the first 10 s; the likeliest cause of a CrazyGames "overall quality" rejection.
+- What should change / expected result / acceptance: see CREATIVE/cg-preflight-lcs-2026-11-22.md B1.
+- Related spec: cg-preflight-lcs-2026-11-22.md
+- Priority: P0 (blocks the CrazyGames submission)
+- Status: fixed (engineering, 9ffeec9: house materials were fully metallic with no environment map)
+
+## F-012
+- What is wrong: at 1020x540 the Fighter panel opens with the picker out of view and the style chips cut by the footer.
+- What should change: see cg-preflight-lcs-2026-11-22.md B2.
+- Priority: P0 (cheap, same pass as F-011)
+- Status: fixed (a1072bf); layout matrix 2026-11-24 clean at 1020x540 and every CG size
+
+## F-013
+- What is wrong: kill feed "you was caught by the Storm" (neutral.ts zone.caught with name 'you').
+- What should change: "You were caught by the Storm"; check the other name-taking lines. See preflight B3.
+- Priority: P0 (5 min)
+- Status: superseded by F-015
+
+## F-014 (R-015) — "Made for desktop" card: accepted
+- Reviewed: ENGINEERING/desktop-only-card-844x390.png and `#desk` in portal/index.html.
+- Verdict: accept as shipped. Title "Made for desktop", line "Last Commit Standing plays with a mouse and keyboard. Open it on a computer to drop in.", monitor-with-prompt icon (yellow `>`, green `_`). It matches the approved rotate card, is honest, and the prompt glyph ties to the commit theme without being a third-party icon.
+- Must not change: background, fonts, colours, centred stack. Keep the trailing period (it is two sentences; the rotate card is one fragment, so the difference is fine).
+- Status: closed (no change needed)
+
+## F-015 (R-016) — Rename "the Storm" to "the Haze"; rename fighter "Bastion" to "Hedge"
+- What is wrong: "the Storm" with "Storm closing" / "Final Storm" is Fortnite's zone wording; "Bastion" is an Overwatch hero name. Both read as borrowed to a CG reviewer checking originality.
+- Decision: the zone is **the Haze** (fits the blue shimmer wall #6fb6ff over farmland; not the zone name of Fortnite, PUBG, Apex, Free Fire or CoD). The fighter `legacy` is **Hedge** (farmland hedgerow = a living wall; role "Defender" and super "Barricade" stay).
+- Exact strings, src/game/copy/neutral.ts:
+  - `zone.name`: `'the Haze'`
+  - `zone.waiting`: `'Haze moves in'`
+  - `zone.closing`: `'Haze closing'`
+  - `zone.final`: `'Final Haze'`
+  - `zone.outside`: `'Outside the safe zone!'` (unchanged)
+  - `zone.caught`: you -> `'You were caught in the Haze'`; others -> `` `${who} was caught in the Haze` ``
+  - `intro.line`: `'Land, grab a gun and stay inside the safe zone as the Haze closes in. The last one standing wins.'`
+  - `fighters.legacy.name`: `'Hedge'`
+- portal/index.html boot tip (line ~202): `'The safe zone closes phase by phase, and the Haze hurts more each time.'`
+- src/components/Match.tsx lines 515 and 1062: change "Caught outside by" to "Caught in" when the cause is the zone, so it reads "Caught in the Haze." (keep "Caught outside by {weapon}" only if killedWith can be a weapon there; otherwise just use "Caught in {COPY.zone.name}").
+- Also check studio.ts `zone` and any portrait/asset file names or alt text with "Bastion"/"Storm" (grep found none player-facing in src/ and portal/ besides the above; the world.ts "storm" is a code comment, leave it).
+- Capitalise "Haze" everywhere; every new string is no longer than the old one.
+- Supersedes F-013 (the caught line is fixed by this item).
+- Acceptance: `grep -rni "storm\|bastion" src portal` returns only code comments/tests.
+- Status: fixed (engineering, 8110e7c, 2026-11-24)
+
+## F-016 (R-017) — HUD layout v2: build the rack layout
+- What is wrong: item counts are 11 px chips over the health bar with no keys shown; guns float over the minimap bottom right; the key list top left and the fps/net lines top centre crowd the screen (ENGINEERING/hud-current-1600x900.png).
+- Why it matters: Reis's batch C item 17, and the CG resubmit is judged on overall quality at 1216x684; the player must read what is in hand, what else is carried and which key uses it at a glance.
+- What should change: build CREATIVE/specifications/hud-layout-v2.md exactly (wireframe CREATIVE/assets/hud-layout-v2-1216x684.svg): `--hud` scale, minimap top left, vitals bottom left without item chips, ammo block bottom right, right column of five keyed tiles with the five states, status line under the map, key list moved to the pause menu, hint copy in section 8. Needs `HudState.bombOut` and per-item ready flags.
+- Expected result: the six acceptance screenshots in section 11 at 1216x684, plus overlap-free layout matrix at 821x462 / 1020x540 / 1216x684 / 1366x768 / 1920x1080. Send the shots for CD review.
+- Related specification: CREATIVE/specifications/hud-layout-v2.md
+- Status: built (engineering, 2026-11-24), awaiting CD review
+
+## F-017 (R-018) — Map balance: tall grass, plain ground, The Pitch
+- What is wrong: tufts on 60 % of all tiles and 38 % of Old Town, so the town reads as a meadow; tall grass is 48 random blobs (5 %), 59 tiles of it inside town and little on the approaches; no plain ground; no stadium.
+- Why it matters: Reis batch D items 3/15/15b; ground grades should mean something (cover / countryside / where people live), and the town needs a second landmark fight space besides the Market Square.
+- What should change: build CREATIVE/specifications/map-balance-grass-stadium.md: fixed tall-grass patches T1-T11 + river reed belts + no `h` in town away from the water (no random numbers); `buildGrass` density table and the earth tint for yards and alleys; The Pitch as a late pass that removes buildings 40/9/10/35, stamps the 16-row grid at x 62-76, y 66-81, adds the `stadium` prop, `STADIUM`, `PLACES`/`PLACE_TIER` entries, pitch/track/line painting.
+- Expected result: acceptance criteria 1-7 in section 5 pass as tests (h 950-1,050, BUILDINGS 40, grid match, rest of MAP unchanged, placeAt, reachability per gate, tufts -25 %), and the six 1216x684 shots of section 5 item 8 sent for CD review.
+- Related specification: CREATIVE/specifications/map-balance-grass-stadium.md
+- Status: built (engineering, 2026-11-24), awaiting CD review

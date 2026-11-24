@@ -4,11 +4,13 @@
  * applied live. Pure (no DOM): loading, clamping, rebinding and the key-to-action lookup are tested without a browser.
  */
 
+import { COPY } from './copy/studio';
+
 import type { QualitySetting } from './render/quality';
 
 export type Action =
-  | 'up' | 'down' | 'left' | 'right' | 'fire' | 'jump' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR' | 'scope' | 'crouch' | 'look'
-  | 'slot1' | 'slot2' | 'slot3' | 'slot4' | 'swap' | 'aim' | 'mute' | 'pause';
+  | 'up' | 'down' | 'left' | 'right' | 'jump' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR' | 'scope' | 'crouch' | 'look'
+  | 'slot1' | 'slot2' | 'swap' | 'heal' | 'bandage' | 'medkit' | 'bomb' | 'coffee' | 'aim' | 'mute' | 'pause';
 
 /** In the order the Controls tab lists them, with the words it shows. */
 export const ACTIONS: [Action, string][] = [
@@ -16,7 +18,6 @@ export const ACTIONS: [Action, string][] = [
   ['down', 'Move back'],
   ['left', 'Move left'],
   ['right', 'Move right'],
-  ['fire', 'Shoot'],
   ['jump', 'Jump / parachute'],
   ['use', 'Pick up / use'],
   ['super', 'Super'],
@@ -30,8 +31,11 @@ export const ACTIONS: [Action, string][] = [
   ['slot1', 'Gun slot 1'],
   ['slot2', 'Gun slot 2'],
   ['swap', 'Swap guns'],
-  ['slot3', 'Heals in hand (shoot to use)'],
-  ['slot4', 'Bomb in hand (hold shoot, let go to throw)'],
+  ['bandage', 'Use bandage'],
+  ['medkit', 'Use med kit'],
+  ['bomb', 'Bomb (then click to throw)'],
+  ['heal', 'Heal (best for now)'],
+  ['coffee', COPY.items.coffee],
   ['aim', 'Switch aim mode'],
   ['mute', 'Mute'],
   ['pause', 'Pause'],
@@ -42,7 +46,6 @@ export const DEFAULT_KEYS: Record<Action, string> = {
   down: 'KeyS',
   left: 'KeyA',
   right: 'KeyD',
-  fire: 'KeyJ',
   jump: 'Space',
   use: 'KeyF',
   super: 'KeyG',
@@ -56,15 +59,18 @@ export const DEFAULT_KEYS: Record<Action, string> = {
   slot1: 'Digit1',
   slot2: 'Digit2',
   swap: 'KeyX',
-  slot3: 'Digit3',
-  slot4: 'Digit4',
+  bandage: 'Digit3',
+  medkit: 'Digit4',
+  bomb: 'Digit5',
+  heal: 'KeyH',
+  coffee: 'KeyV',
   aim: 'KeyT',
   mute: 'KeyM',
   pause: 'KeyP',
 };
 
 /** Free keys handed to a newly added action when an old save already uses its default. */
-const SPARE_KEYS = ['Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'KeyN', 'KeyJ', 'KeyK', 'KeyL', 'KeyU', 'KeyI', 'KeyO', 'KeyY'];
+const SPARE_KEYS = ['Digit6', 'Digit7', 'Digit8', 'Digit9', 'KeyB', 'KeyN', 'KeyH', 'KeyJ', 'KeyK', 'KeyL', 'KeyU', 'KeyI', 'KeyO', 'KeyY'];
 
 /** Always on, whatever the bindings: arrows move, the right Shift rolls too, Esc belongs to menus and the browser. */
 export const FIXED_KEYS: Partial<Record<Action, string[]>> = {
@@ -139,7 +145,7 @@ export const DEFAULT_SETTINGS: Settings = {
   colorBlind: false,
   largeHud: false,
   showKeyHints: true,
-  keysVersion: 4,
+  keysVersion: 5,
 };
 
 export const SETTINGS_KEY = 'lcs:settings';
@@ -153,18 +159,15 @@ export const normalize = (raw: unknown): Settings => {
   const d = DEFAULT_SETTINGS;
   const keys = { ...DEFAULT_KEYS };
   let rk = (r.keys && typeof r.keys === 'object' ? r.keys : {}) as Record<string, unknown>;
-  // Layout 2: Space jumps in every view and J shoots (Space used to be the trigger with auto-aim). A save from before
-  // with Space on "shoot" moves once: Space to jump, J (or, if J is taken, the old jump key) to shoot.
-  if (r.keysVersion !== DEFAULT_SETTINGS.keysVersion && rk.fire === 'Space') {
-    const taken = new Set(Object.entries(rk).filter(([a]) => a !== 'fire' && a !== 'jump').map(([, k]) => k));
-    rk = { ...rk, fire: !taken.has('KeyJ') ? 'KeyJ' : typeof rk.jump === 'string' && rk.jump !== 'Space' ? rk.jump : 'KeyJ', jump: 'Space' };
-  }
+  // Shooting is the left mouse button only (Reis, 2026-11-24): an old save's "shoot" key is dropped, which also frees J.
+  // Layout 2 had moved Space from shoot to jump; a save from before it with Space on shoot gets Space as jump.
+  if (rk.fire === 'Space') rk = { ...rk, jump: 'Space' };
+  rk = { ...rk };
+  delete rk.fire;
   // Layout 4: C crouches, holding Left Alt looks around, G stays the super and heal moves from C to H. (Layout 3, out for a
   // few hours, had crouch on G, look on C and the super on B.) A save that still has an old default there moves once; a key
   // the player chose themselves stays theirs.
   if (typeof r.keysVersion !== 'number' || r.keysVersion < 4) {
-    rk = { ...rk };
-    // Left unbound here, they take their new defaults below (or a spare key if the save already uses those).
     if (rk.heal === 'KeyC') delete rk.heal;
     if (r.keysVersion === 3) {
       if (rk.crouch === 'KeyG') delete rk.crouch;
@@ -172,6 +175,9 @@ export const normalize = (raw: unknown): Settings => {
       if (rk.super === 'KeyB') delete rk.super;
     }
   }
+  // Layout 5: 3 bandage, 4 med kit, 5 bomb (Reis, 2026-11-24); layout 4's "heals in hand" (3) and "bomb in hand" (4) go.
+  delete rk.slot3;
+  delete rk.slot4;
   const used = new Set<string>();
   const saved = (a: Action) => {
     const k = rk[a];

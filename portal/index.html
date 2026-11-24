@@ -90,6 +90,14 @@
       @keyframes rTurn{0%,18%{transform:rotate(0)}52%,78%{transform:rotate(-90deg)}100%{transform:rotate(0)}}
       @media (orientation:portrait) and (pointer:coarse){html:not(.lcs-mouse) #rotate{display:flex}}
       @media (orientation:portrait){html.lcs-touch #rotate{display:flex}}
+      /* Desktop only (CrazyGames 2026-11-24): on a phone or tablet, by the platform's device type (portal/main.tsx), this card
+         replaces the game. Same look as the rotate card. */
+      #desk{display:none;position:fixed;inset:0;z-index:2001;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center;background:radial-gradient(ellipse at 50% 40%,#13213a,#0a0d18 65%,#05070e);color:#e6ebf5;font:600 18px/1.35 'BootChakra',system-ui,sans-serif}
+      #desk svg{width:96px;height:96px}
+      #desk b{display:block;font:400 28px/1 'BootBungee','BootChakra',Impact,sans-serif;color:#ffd23f;letter-spacing:.02em}
+      #desk span{display:block;margin-top:8px;font-size:15px;font-weight:500;color:rgba(230,235,245,.75);max-width:30ch}
+      html.lcs-desktop-only #desk{display:flex}
+      html.lcs-desktop-only #rotate,html.lcs-desktop-only #boot,html.lcs-desktop-only #root{display:none!important}
       @media (prefers-reduced-motion:reduce){#rotate svg{animation:none;transform:rotate(-90deg)}}
       @media (prefers-reduced-motion:reduce){#boot *,#boot *::before,#boot *::after{animation:none!important}#boot.out,#boot.out .all{transition:none!important}#boot .plane{left:56%;transform:none}#boot .jp{transform:translateY(44vh)}#boot .jp.j2{transform:translateY(52vh)}#boot .jp.j3,#boot .jp.j4{display:none}}
     </style>
@@ -135,6 +143,15 @@
         <div class="tip"><q id="bootTip"></q></div>
       </div>
       <div class="go" id="bootGo">Tap or press any key</div>
+    </div>
+    <div id="desk" role="alert">
+      <svg viewBox="0 0 96 96" aria-hidden="true" fill="none" stroke="#e6ebf5" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="8" y="14" width="80" height="52" rx="5"/>
+        <path d="M36 82h24M48 66v16"/>
+        <path d="M30 40l10 8-10 8" stroke="#ffd23f"/>
+        <path d="M46 56h18" stroke="#3ddc84"/>
+      </svg>
+      <div><b>Made for desktop</b><span>Last Commit Standing plays with a mouse and keyboard. Open it on a computer to drop in.</span></div>
     </div>
     <div id="rotate" role="alert">
       <svg viewBox="0 0 96 96" aria-hidden="true" fill="none" stroke="#e6ebf5" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
@@ -182,7 +199,7 @@
           '~Two gun slots: 1 and 2 pick one, X swaps.',
           '~Stand on a gun and press F to take it.',
           'Vests I to III soak up hits; a bigger backpack carries more heals.',
-          'The safe zone closes phase by phase, and the Storm hurts more each time.',
+          'The safe zone closes phase by phase, and the Haze hurts more each time.',
           'Your super is ready when its bar turns gold.'
         ];
         // Tips that name keys (marked ~) only where there is a keyboard.

@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1216 684" width="1216" height="684" font-family="Chakra Petch, sans-serif">
+  <!-- HUD layout v2 wireframe at the CrazyGames default iframe, 1216x684, --hud = 1. Boxes are placement only, not the final look. -->
+  <rect width="1216" height="684" fill="#3b5a3a"/>
+  <rect x="12" y="12" width="1192" height="660" fill="none" stroke="#e6ebf5" stroke-opacity="0.15" stroke-dasharray="4 4"/>
+
+  <!-- Minimap top left -->
+  <rect x="12" y="12" width="168" height="168" fill="#0a0d18" fill-opacity="0.8"/>
+  <rect x="16" y="16" width="160" height="160" fill="#5d8a4a"/>
+  <circle cx="96" cy="96" r="62" fill="none" stroke="#e6ebf5" stroke-width="1.5"/>
+  <text x="96" y="100" fill="#0a0d18" font-size="12" text-anchor="middle">minimap 160</text>
+  <text x="12" y="200" fill="#e6ebf5" fill-opacity="0.6" font-size="11">60 fps · high   (net line under it)</text>
+
+  <!-- Zone line top centre -->
+  <rect x="508" y="12" width="200" height="30" fill="#0a0d18" fill-opacity="0.85"/>
+  <text x="608" y="32" fill="#e6ebf5" font-size="13" text-anchor="middle">Haze closing <tspan fill="#ffd23f">42s</tspan></text>
+
+  <!-- Counters top right + kill feed -->
+  <rect x="1084" y="12" width="120" height="32" fill="#0a0d18" fill-opacity="0.8"/>
+  <text x="1144" y="34" fill="#e6ebf5" font-size="16" text-anchor="middle">20 | 0</text>
+  <rect x="1044" y="52" width="160" height="20" fill="#0a0d18" fill-opacity="0.75"/>
+  <rect x="1074" y="76" width="130" height="20" fill="#0a0d18" fill-opacity="0.75"/>
+  <text x="1196" y="66" fill="#e6ebf5" font-size="11" text-anchor="end">kill feed, max 5 lines</text>
+
+  <!-- Inventory column (right). Slot 1 active: pulled out 10 px -->
+  <rect x="1018" y="416" width="186" height="40" fill="#0a0d18" fill-opacity="0.9"/>
+  <rect x="1018" y="416" width="3" height="40" fill="#ffd23f"/>
+  <rect x="1026" y="427" width="18" height="18" fill="#ffd23f"/>
+  <text x="1035" y="440" fill="#0a0d18" font-size="11" text-anchor="middle" font-weight="700">1</text>
+  <text x="1100" y="441" fill="#e6ebf5" font-size="11" text-anchor="middle">rifle silhouette</text>
+  <text x="1196" y="442" fill="#e6ebf5" font-size="15" text-anchor="end">24</text>
+  <rect x="1018" y="454" width="186" height="2" fill="#3ec5ff"/>
+
+  <rect x="1028" y="460" width="176" height="40" fill="#0a0d18" fill-opacity="0.72"/>
+  <rect x="1034" y="471" width="18" height="18" fill="none" stroke="#e6ebf5" stroke-opacity="0.5"/>
+  <text x="1043" y="484" fill="#e6ebf5" font-size="11" text-anchor="middle">2</text>
+  <text x="1105" y="485" fill="#e6ebf5" fill-opacity="0.6" font-size="11" text-anchor="middle">shotgun</text>
+  <text x="1196" y="486" fill="#e6ebf5" fill-opacity="0.6" font-size="15" text-anchor="end">6</text>
+
+  <rect x="1084" y="508" width="120" height="30" fill="#0a0d18" fill-opacity="0.72"/>
+  <rect x="1090" y="514" width="18" height="18" fill="none" stroke="#e6ebf5" stroke-opacity="0.5"/>
+  <text x="1099" y="527" fill="#e6ebf5" font-size="11" text-anchor="middle">3</text>
+  <text x="1122" y="528" fill="#e6ebf5" font-size="11">band.</text>
+  <text x="1196" y="529" fill="#e6ebf5" font-size="14" text-anchor="end">2<tspan fill-opacity="0.45" font-size="11">/4</tspan></text>
+
+  <rect x="1084" y="542" width="120" height="30" fill="none" stroke="#e6ebf5" stroke-opacity="0.18" stroke-dasharray="3 3"/>
+  <text x="1099" y="561" fill="#e6ebf5" fill-opacity="0.5" font-size="11" text-anchor="middle">4</text>
+  <text x="1122" y="562" fill="#e6ebf5" fill-opacity="0.3" font-size="11">kit</text>
+  <text x="1196" y="563" fill="#e6ebf5" fill-opacity="0.35" font-size="14" text-anchor="end">0/1</text>
+
+  <rect x="1084" y="576" width="120" height="30" fill="#0a0d18" fill-opacity="0.72"/>
+  <text x="1099" y="595" fill="#e6ebf5" font-size="11" text-anchor="middle">5</text>
+  <text x="1122" y="596" fill="#e6ebf5" font-size="11">bomb</text>
+  <text x="1196" y="597" fill="#e6ebf5" font-size="14" text-anchor="end">1/1</text>
+
+  <!-- Ammo bottom right -->
+  <rect x="1028" y="616" width="176" height="56" fill="#0a0d18" fill-opacity="0.85"/>
+  <text x="1130" y="660" fill="#e6ebf5" font-size="38" text-anchor="end">24</text>
+  <rect x="1140" y="630" width="1" height="28" fill="#e6ebf5" fill-opacity="0.25"/>
+  <text x="1150" y="657" fill="#e6ebf5" fill-opacity="0.5" font-size="18">90</text>
+
+  <!-- Vitals bottom left -->
+  <rect x="72" y="608" width="34" height="18" fill="#0a0d18" fill-opacity="0.75"/>
+  <rect x="110" y="608" width="34" height="18" fill="#0a0d18" fill-opacity="0.75"/>
+  <rect x="148" y="608" width="56" height="18" fill="#0a0d18" fill-opacity="0.75"/>
+  <text x="76" y="621" fill="#e6ebf5" font-size="10">vest II</text>
+  <text x="114" y="621" fill="#e6ebf5" font-size="10">pack I</text>
+  <text x="152" y="621" fill="#e6ebf5" font-size="10">V coffee 1/2</text>
+  <text x="72" y="642" fill="#ff8a3d" font-size="11">Blaze</text>
+  <text x="272" y="642" fill="#3ec5ff" font-size="10" text-anchor="end">45</text>
+  <rect x="72" y="647" width="200" height="5" fill="#3ec5ff"/>
+  <rect x="72" y="656" width="200" height="12" fill="#3ddc84"/>
+  <text x="64" y="668" fill="#e6ebf5" font-size="34" text-anchor="end">100</text>
+  <circle cx="306" cy="650" r="22" fill="#0a0d18" fill-opacity="0.8" stroke="#ffd23f" stroke-width="3"/>
+  <circle cx="354" cy="654" r="18" fill="#0a0d18" fill-opacity="0.8" stroke="#3ec5ff" stroke-width="3"/>
+
+  <!-- Hint line, heal progress -->
+  <rect x="438" y="562" width="340" height="30" fill="#0a0d18" fill-opacity="0.85"/>
+  <text x="608" y="582" fill="#e6ebf5" font-size="13" text-anchor="middle">hint line (bottom 92)</text>
+  <rect x="504" y="540" width="208" height="8" fill="#0a0d18" fill-opacity="0.8"/>
+  <rect x="504" y="540" width="120" height="8" fill="#3ddc84"/>
+</svg>

@@ -86,3 +86,38 @@ Format: `## R-001 — title` then Context, Expected deliverable, Priority (P0-P3
 - Expected deliverable: accept or F-xxx: tall grass patches and meadow edges, facade kit colours, district palettes, yard items, light. Also say whether touch needs a crouch button now (and where), and pick the next items (6, 9, 11, 12).
 - Priority: P1
 - Status: open
+## R-013 — Public online play flow (quick match, bots fill, CrazyGames)
+- Context: Reis wants online to be the most fun part: public servers with random people, bots fill when too few humans gather in time, more humans as players grow, must work on the site and CrazyGames. Current online = private friend rooms, host-browser authority, hidden on CG.
+- Expected deliverable: CREATIVE/specifications/online-public-flow.md (flow, matchmaking rules, boarding screen, CG Instant Multiplayer/room data, disconnect/rejoin, 3 am case, abuse basics, copy, KPIs, phased rollout).
+- Priority: P1
+- Status: done (spec ready, 2026-11-22; 3 open engineering questions in section 14)
+
+## R-014 — Mobile + gameplay quality audit and plan (phases 1-3)
+- Context: owner brief before CrazyGames: too many mobile bugs, oversized UI, lobby names overlapping the top bar, touch controls, mobile camera, gameplay quality, CG readiness. QA runs a parallel technical bug hunt (ENGINEERING/mobile-bug-hunt.md).
+- Expected deliverable: CREATIVE/specifications/mobile-quality-audit.md with problems, root causes, P0-P3, parallel work packages, tests, CG readiness.
+- Priority: P0
+- Status: done (CD, 2026-11-22): audit + plan ready. P0: lobby overlap (incl. CG 907x510), touch UI by touch detection (CG technical requirement), desktop shoulder camera inside tree crowns. Work packages WP-0 (device profile + layout test, first), A lobby/HUD/report, B touch/input/cameras (owns game.ts), C feel/feedback, D perf/render.
+
+## R-015 — Review the "Made for desktop" card (portal build, desktop only)
+- Context: Reis made LCS desktop only after the CrazyGames rejection (2026-11-24). On a phone or tablet (CG SDK `systemInfo.device.type`) the portal build shows one card instead of the game. Engineering reused the approved rotate-card look (same background, fonts, colours); the icon and the copy are placeholders: "Made for desktop" / "Last Commit Standing plays with a mouse and keyboard. Open it on a computer to drop in."
+- Expected deliverable: accept or replace the title, line and icon. Shot: ENGINEERING/desktop-only-card-844x390.png.
+- Priority: P1 (before the CG resubmit)
+- Status: done (CD) -> F-014, accepted as shipped
+
+## R-016 — Rename "the Storm" (originality risk before the CG resubmit)
+- Context: CrazyGames requires original names and content; LCS was rejected for "overall quality" on 2026-11-24. The shrinking zone is called "the Storm" with HUD lines "Storm moves in", "Storm closing", "Final Storm", "You were caught by the Storm" (src/game/copy/neutral.ts `zone`, also studio.ts and the boot tips in portal/index.html). Fortnite calls its zone "the Storm" with near-identical wording; a CG reviewer may read LCS as a Fortnite-alike. See ENGINEERING/cg-copyright-list.md.
+- Expected deliverable: a new zone name and the exact lines for every `zone` key (name, waiting, closing, final, outside, caught for you/others) plus the boot tip, fitting the game's world (paratroopers, farmland map). Also say whether the fighter name "Bastion" should stay.
+- Priority: P0 (blocks the CG resubmit)
+- Status: done (CD) -> F-015, zone = "the Haze", Bastion -> "Hedge"
+
+## R-017 — HUD layout (Reis bug list batch C, item 17)
+- Context: Reis wants the in-match HUD rearranged, desktop only (CG 1216x684 default iframe, also 821x462 up to 1920x1080). Reference for LAYOUT ONLY (not the look, not a copy of that game): ENGINEERING/reis-ref-hud-layout.png. Current HUD: ENGINEERING/hud-current-1600x900.png. Asked: (1) inventory as a vertical column on the right: gun slot 1, gun slot 2, bandage, med kit, bomb, each with its key (1, 2, 3, 4, 5) and count/room (e.g. "2/5"), readable at a glance, the active one highlighted (gun in hand, or the bomb when taken out with 5); (2) minimap top left; (3) ammo and health placed like the reference. Also on screen today: vest and backpack grade, coffee count and buzz timer, super and roll cooldown rings (G, Shift), players-left and kills counter top right, zone line top centre, hint line, kill feed, damage numbers. Item keys since batch B: 3 bandage, 4 med kit, 5 bomb (then left click throws), C best heal, V coffee, F pick up; shooting is left mouse only. HUD code: src/components/Hud.tsx (Vitals, Count, slots), Match.tsx placement.
+- Expected deliverable: CREATIVE/specifications/hud-layout-v2.md: placement per element at 1216x684 and how it scales to 821x462 and 1920x1080, sizes, the inventory column design (states: empty, has items, active, full, cannot use), what moves where and what is removed, any copy. Must not collide with CG overlays or the pause button.
+- Priority: P0 (before the CG resubmit)
+- Status: done (CD, 2026-11-24) -> F-016, CREATIVE/specifications/hud-layout-v2.md: minimap top left, health bottom left, ammo bottom right, keyed "rack" column right (slots 1-2, bandage, med kit, bomb; active drawer pulled out with a gold edge), one --hud scale 0.8-1.35
+
+## R-018 — Map balance: tall grass and a small stadium (Reis bug list batch D, items 3/15, 15b)
+- Context: Reis (2026-11-24): tall grass is missing where it should be and the town is full of small grass; he wants balance: some tall-grass patches (cover), the town not full of small grass, some plain ground. And a small stadium in the town in place of a few houses. Nine houses that stood on roads were just removed (53 -> 44 buildings, see LOG 2026-11-24 batch A), which may free room. Map generator: src/game/sim/constants.ts `buildMap` (tiles: 'g' grass, 'h' tall grass, 'p' path, 'a' asphalt, 's' loot, '#' wall; districts and PLACES); ground decoration (small grass tufts) in src/game/render/nature.ts. The stadium must be original (no real venue).
+- Expected deliverable: CREATIVE/specifications/map-balance-grass-stadium.md: where tall grass goes (which districts / patch sizes / share of the map), where small grass decoration is thinned or removed (town, roads, yards), how much plain ground, and the stadium: which district and which houses it replaces (tile coordinates), footprint, what it is made of (stands, pitch, walls, entrances, cover inside), loot, how it reads from the plane and on the ground. Exact enough to build in the generator.
+- Priority: P1
+- Status: done (spec ready for implementation: CREATIVE/specifications/map-balance-grass-stadium.md, F-017, 2026-11-24)

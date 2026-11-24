@@ -32,7 +32,7 @@ describe('settings store', () => {
 
   it('saves and loads back the same settings', () => {
     const st = mem();
-    const s = { ...DEFAULT_SETTINGS, fov: 90, camera: 'first' as const, quality: 'low' as const, muted: true, keys: { ...DEFAULT_KEYS, fire: 'KeyK' } };
+    const s = { ...DEFAULT_SETTINGS, fov: 90, camera: 'first' as const, quality: 'low' as const, muted: true, keys: { ...DEFAULT_KEYS, reload: 'KeyK' } };
     saveSettings(st, s);
     expect(loadSettings(st)).toEqual(s);
   });
@@ -70,41 +70,32 @@ describe('settings store', () => {
     expect(keys.slot2).toBe('Digit2');
     expect(keys.swap).toBe('KeyX');
     expect(keys.slot1).not.toBe('Digit1');
-    expect(keys.slot3).toBe('Digit3');
+    expect(keys.bandage).toBe('Digit3');
     expect(new Set(Object.values(keys)).size).toBe(ACTIONS.length);
   });
 
-  it('moves a save from before layout 2 once: Space from shoot to jump, J shoots', () => {
-    const old = { keys: { ...V2, fire: 'Space', jump: 'KeyB' } };
-    const keys = normalize(old).keys;
-    expect(keys.fire).toBe('KeyJ');
+  it('drops an old save\'s shoot key (the mouse shoots): Space on shoot becomes jump', () => {
+    const keys = normalize({ keys: { ...V2, fire: 'Space', jump: 'KeyB' } }).keys as Record<string, string>;
+    expect(keys.fire).toBeUndefined();
     expect(keys.jump).toBe('Space');
     expect(new Set(Object.values(keys)).size).toBe(ACTIONS.length);
-    // J taken by another action: shoot takes the old jump key instead.
-    const jTaken = normalize({ keys: { ...V2, fire: 'Space', jump: 'KeyB', reload: 'KeyJ' } }).keys;
-    expect(jTaken).toMatchObject({ fire: 'KeyB', jump: 'Space', reload: 'KeyJ' });
-    // Only once: a layout-2 save that puts shoot on Space again keeps it.
-    const again = normalize({ ...normalize(old), keys: { ...keys, fire: 'Space', jump: 'KeyJ' } }).keys;
-    expect(again).toMatchObject({ fire: 'Space', jump: 'KeyJ' });
-    // A custom shoot key is left alone.
-    expect(normalize({ keys: { ...V2, fire: 'KeyK', jump: 'KeyB' } }).keys).toMatchObject({ fire: 'KeyK', jump: 'KeyB' });
+    const custom = normalize({ keys: { ...DEFAULT_KEYS, fire: 'KeyK' } }).keys as Record<string, string>;
+    expect(custom.fire).toBeUndefined();
   });
 
-  it('moves an older save once to layout 4: C crouches, Left Alt looks around, the super stays on G, 3 / 4 hold heals and a bomb', () => {
+  it('moves an older save to layout 5: C crouches, Left Alt looks around, G super, H heal, 3 bandage, 4 med kit, 5 bomb', () => {
     const keys = normalize({ keys: V2, keysVersion: 2 }).keys;
-    expect(keys).toMatchObject({ crouch: 'KeyC', look: 'AltLeft', super: 'KeyG', slot3: 'Digit3', slot4: 'Digit4' });
-    // The short-lived layout 3 (crouch G, look C, super B) moves too.
+    expect(keys).toMatchObject({ crouch: 'KeyC', look: 'AltLeft', super: 'KeyG', heal: 'KeyH', bandage: 'Digit3', medkit: 'Digit4', bomb: 'Digit5' });
     const v3 = normalize({ keys: { ...V2, heal: 'KeyH', crouch: 'KeyG', look: 'KeyC', super: 'KeyB' }, keysVersion: 3 }).keys;
-    expect(v3).toMatchObject({ crouch: 'KeyC', look: 'AltLeft', super: 'KeyG', slot3: 'Digit3', slot4: 'Digit4' });
+    expect(v3).toMatchObject({ crouch: 'KeyC', look: 'AltLeft', super: 'KeyG' });
     expect(new Set(Object.values(v3)).size).toBe(ACTIONS.length);
     expect(new Set(Object.values(keys)).size).toBe(ACTIONS.length);
-    // 3 already used by the save: the heals slot gets a spare key, nothing is lost.
-    const taken = normalize({ keys: { ...V2, reload: 'Digit3', fire: 'KeyJ' }, keysVersion: 2 }).keys;
-    expect(taken.reload).toBe('Digit3');
-    expect(taken.slot3).not.toBe('Digit3');
-    expect(new Set(Object.values(taken)).size).toBe(ACTIONS.length);
-    // Layout 4 saves keep whatever they chose.
-    expect(normalize({ keys: { ...DEFAULT_KEYS, crouch: 'KeyN', super: 'KeyB' }, keysVersion: 4 }).keys).toMatchObject({ crouch: 'KeyN', super: 'KeyB' });
+    // Layout 4's "heals in hand" on 3 and "bomb in hand" on 4 go; 3 and 4 become the bandage and the med kit.
+    const v4 = normalize({ keys: { ...DEFAULT_KEYS, slot3: 'Digit3', slot4: 'Digit4' }, keysVersion: 4 }).keys as Record<string, string>;
+    expect(v4.slot3).toBeUndefined();
+    expect(v4).toMatchObject({ bandage: 'Digit3', medkit: 'Digit4', bomb: 'Digit5' });
+    // A save's own keys stay theirs.
+    expect(normalize({ keys: { ...DEFAULT_KEYS, crouch: 'KeyN', super: 'KeyB' }, keysVersion: 5 }).keys).toMatchObject({ crouch: 'KeyN', super: 'KeyB' });
   });
 
   it('never throws when storage does', () => {
@@ -116,22 +107,22 @@ describe('settings store', () => {
 
 describe('rebinding keys', () => {
   it('binds a free key', () => {
-    const r = rebind(DEFAULT_SETTINGS, 'fire', 'KeyK');
-    expect(r.ok && r.settings.keys.fire).toBe('KeyK');
+    const r = rebind(DEFAULT_SETTINGS, 'reload', 'KeyK');
+    expect(r.ok && r.settings.keys.reload).toBe('KeyK');
     expect(r.ok && r.swapped).toBeNull();
   });
 
   it('swaps on a conflict so no key is shared and nothing is left unbound', () => {
-    const r = rebind(DEFAULT_SETTINGS, 'fire', 'KeyF');
+    const r = rebind(DEFAULT_SETTINGS, 'reload', 'KeyF');
     if (!r.ok) throw new Error('refused');
     expect(r.swapped).toBe('use');
-    expect(r.settings.keys.fire).toBe('KeyF');
-    expect(r.settings.keys.use).toBe('KeyJ');
+    expect(r.settings.keys.reload).toBe('KeyF');
+    expect(r.settings.keys.use).toBe('KeyR');
     expect(new Set(Object.values(r.settings.keys)).size).toBe(ACTIONS.length);
   });
 
   it('refuses keys that belong to menus, the browser or the fixed arrows', () => {
-    for (const k of ['Escape', 'Tab', 'ArrowUp', 'ShiftRight']) expect(rebind(DEFAULT_SETTINGS, 'fire', k).ok).toBe(false);
+    for (const k of ['Escape', 'Tab', 'ArrowUp', 'ShiftRight']) expect(rebind(DEFAULT_SETTINGS, 'reload', k).ok).toBe(false);
   });
 
   it('does not change the settings it was given', () => {
@@ -148,7 +139,6 @@ describe('applying key bindings', () => {
     expect(actionFor(keys, 'ArrowUp')).toBe('up');
     expect(actionFor(keys, 'ShiftRight')).toBe('roll');
     expect(keyMap(keys).up).toEqual(['KeyI', 'ArrowUp']);
-    expect(keyMap(keys).fire).toEqual(['KeyJ']);
     expect(keyMap(keys).jump).toEqual(['Space']);
   });
 

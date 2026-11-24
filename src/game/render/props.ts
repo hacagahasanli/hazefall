@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-import { DISTRICTS, MAP, PROPS, RIVER, SIZE, TILE, railSides, riverCentre, tileHash } from '../sim/constants';
+import { DISTRICTS, MAP, PROPS, RIVER, SIZE, STADIUM, TILE, railSides, riverCentre, tileHash } from '../sim/constants';
+
+const STADIUM_PITCH = STADIUM.pitch;
 
 import { mergeRigid, mergeStatic } from './merge';
 
@@ -443,6 +445,151 @@ const conveyor = () => {
   return mesh(join(parts));
 };
 
+/**
+ * The Pitch (CD spec map-balance-grass-stadium, 4.5): the town's football ground. Rendered blockwork walls with a violet
+ * band, a main stand on the west side under a pale cantilever roof, an open east stand, steel railings and open gates at
+ * the ends, dugouts, a roller, a line-marker cart, two goals and four floodlights. Local coordinates: x along the map's
+ * x, z along the map's y, origin at the stadium's centre. One vertex-colour mesh, plus the gate board's lettering.
+ */
+const stadium = (p: Prop) => {
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const cx = (p.x0 + p.w / 2) * TILE;
+  const cz = (p.y0 + p.h / 2) * TILE;
+  const X = (tx: number) => tx * TILE - cx; // west edge of tile tx
+  const Z = (ty: number) => ty * TILE - cz;
+  const WALL = 0xe6dcc6;
+  const VIOLET = 0x7a5cd0;
+  const PLINTH = 0xb9ae97;
+  const CONCRETE = 0xcdc4b0;
+  const CREAM = 0xefe6d2;
+  const STEEL = 0x9aa3a8;
+  const parts: THREE.BufferGeometry[] = [];
+  const wallRun = (x0: number, z0: number, x1: number, z1: number) => {
+    const w = x1 - x0;
+    const d = z1 - z0;
+    parts.push(box(w, 3.6, d, x0 + w / 2, 1.8, z0 + d / 2, WALL));
+    parts.push(box(w + 0.04, 0.35, d + 0.04, x0 + w / 2, 3.6 - 0.175, z0 + d / 2, VIOLET));
+    parts.push(box(w + 0.04, 0.4, d + 0.04, x0 + w / 2, 0.2, z0 + d / 2, PLINTH));
+  };
+  // Outer walls: west (the tunnel rows 73-74 open), east, and the corners at both ends.
+  wallRun(X(63), Z(67), X(64), Z(73));
+  wallRun(X(63), Z(75), X(64), Z(81));
+  wallRun(X(75), Z(67), X(76), Z(81));
+  for (const ty of [67, 80]) {
+    wallRun(X(64), Z(ty), X(66), Z(ty + 1));
+    wallRun(X(73), Z(ty), X(75), Z(ty + 1));
+  }
+  // Stands: a parapet at the front, three steps of seats rising to the back; violet seats, every 6th cream, a few missing.
+  const stand = (front: number, back: number, z0: number, z1: number) => {
+    const dir = Math.sign(back - front);
+    const depth = Math.abs(back - front);
+    const stepD = depth / 3;
+    parts.push(box(0.25, 1.1, z1 - z0, front + dir * 0.125, 0.55, (z0 + z1) / 2, CONCRETE));
+    for (let i = 0; i < 3; i++) {
+      const h = 1.1 + (i + 1) * 0.63;
+      const xa = front + dir * (0.25 + i * stepD);
+      parts.push(box(stepD, h, z1 - z0, xa + (dir * stepD) / 2, h / 2, (z0 + z1) / 2, CONCRETE));
+      let n = 0;
+      for (let z = z0 + 0.35; z < z1 - 0.3; z += 0.6, n++) {
+        if (tileHash(Math.round(xa * 10), n, 13) < 1 / 12) continue;
+        parts.push(box(0.45, 0.35, 0.45, xa + dir * stepD * 0.55, h + 0.175, z, n % 6 === 5 ? CREAM : VIOLET));
+      }
+    }
+  };
+  stand(X(66), X(64), Z(68), Z(73));
+  stand(X(66), X(64), Z(75), Z(80));
+  stand(X(73), X(75), Z(68), Z(80));
+  // The main stand's roof: flat, over x 63-65 only, on posts along the back wall, with a violet fascia.
+  parts.push(box(X(66) - X(63), 0.2, Z(80) - Z(68), (X(63) + X(66)) / 2, 4.6, (Z(68) + Z(80)) / 2, 0xd6d2c8));
+  parts.push(box(0.12, 0.45, Z(80) - Z(68), X(66) - 0.06, 4.45, (Z(68) + Z(80)) / 2, VIOLET));
+  for (const z of [Z(68) + 0.3, Z(72) + 1, Z(76), Z(80) - 0.3]) parts.push(box(0.25, 4.6, 0.25, X(63) + 0.4, 2.3, z, 0x8f8b82));
+  // West gate: two pillars, a lintel, and the board above (its lettering is a separate plane, below).
+  for (const z of [Z(73) + 0.3, Z(75) - 0.3]) parts.push(box(0.6, 4.7, 0.6, X(63) + 0.3, 2.35, z, WALL));
+  parts.push(box(0.6, 0.4, Z(75) - Z(73), X(63) + 0.3, 3.9, Z(74), WALL));
+  parts.push(box(0.12, 0.8, 4, X(63) - 0.06, 4.3, Z(74), VIOLET));
+  // End railings (galvanised steel: a top rail and bars every 0.25 m) and the open gates' posts.
+  for (const ty of [67, 80]) {
+    const z = Z(ty) + 1;
+    for (const [a, b] of [[66, 68], [71, 73]]) {
+      parts.push(box(X(b) - X(a), 0.06, 0.06, (X(a) + X(b)) / 2, 1.1, z, STEEL));
+      for (let x = X(a) + 0.125; x < X(b); x += 0.25) parts.push(box(0.035, 1.1, 0.035, x, 0.55, z, STEEL));
+    }
+    for (const x of [X(68), X(71)]) parts.push(box(0.14, 1.6, 0.14, x, 0.8, z, STEEL));
+  }
+  // Dugouts: a dark shell curving over a cream bench, open to the pitch.
+  for (const ty of [70, 76]) {
+    const z0 = Z(ty);
+    const z1 = Z(ty + 2);
+    parts.push(box(0.15, 2, z1 - z0, X(66) + 0.2, 1, (z0 + z1) / 2, 0x4a4f57));
+    parts.push(box(1.4, 0.12, z1 - z0, X(66) + 0.8, 2, (z0 + z1) / 2, 0x4a4f57));
+    for (const z of [z0 + 0.06, z1 - 0.06]) parts.push(box(1.4, 2, 0.12, X(66) + 0.8, 1, z, 0x4a4f57));
+    parts.push(box(0.45, 0.45, z1 - z0 - 0.4, X(66) + 0.55, 0.225, (z0 + z1) / 2, CREAM));
+  }
+  // The pitch roller (an iron drum with a cream handle frame) and the line-marker cart.
+  {
+    const g = new THREE.CylinderGeometry(0.55, 0.55, 3.4, 14).toNonIndexed();
+    g.deleteAttribute('uv');
+    g.rotateZ(Math.PI / 2);
+    g.translate((X(70) + X(72)) / 2, 0.55, Z(71) + 1);
+    const c = new THREE.Color(0x3b3f44);
+    const col = new Float32Array(g.getAttribute('position').count * 3);
+    for (let i = 0; i < col.length; i += 3) col.set([c.r, c.g, c.b], i);
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    parts.push(g);
+    parts.push(beam(v(X(70) + 0.2, 0.55, Z(71) + 1), v(X(70) - 0.9, 1.1, Z(71) + 1), 0.08, 0.08, CREAM));
+  }
+  parts.push(box(1.1, 0.6, 0.7, X(67) + 1, 0.55, Z(75) + 1, 0xf0ede4));
+  for (const dx of [-0.4, 0.4]) parts.push(cylX(0.2, 0.08, X(67) + 1 + dx, 0.2, Z(75) + 1 + 0.38, 0x8a8f96), cylX(0.2, 0.08, X(67) + 1 + dx, 0.2, Z(75) + 0.62, 0x8a8f96));
+  // Goals on the goal lines (decor), mouths to the centre.
+  const pz0 = STADIUM_PITCH.y0 * TILE - cz + 0.3;
+  const pz1 = (STADIUM_PITCH.y0 + STADIUM_PITCH.h) * TILE - cz - 0.3;
+  for (const [gz, out] of [[pz0, -1], [pz1, 1]] as const) {
+    for (const x of [-2.5, 2.5]) {
+      parts.push(box(0.12, 2, 0.12, x, 1, gz, 0xf4f1e8));
+      parts.push(beam(v(x, 2, gz), v(x, 0, gz + out * 1.2), 0.05, 0.05, 0xc9c6bd));
+    }
+    parts.push(box(5.12, 0.12, 0.12, 0, 2, gz, 0xf4f1e8));
+    parts.push(box(5, 0.04, 0.04, 0, 0.02, gz + out * 1.2, 0xc9c6bd));
+    for (let x = -2.25; x <= 2.25; x += 0.5) parts.push(beam(v(x, 2, gz), v(x, 0, gz + out * 1.2), 0.02, 0.02, 0xd8d5cc));
+  }
+  // Floodlights at the stand corners: an 11 m pole, a head tilted 30 degrees down toward the centre spot with 6 lamps.
+  for (const [tx, ty] of [[64, 68], [64, 79], [74, 68], [74, 79]]) {
+    const x = X(tx) + 1;
+    const z = Z(ty) + 1;
+    parts.push(box(0.35, 11, 0.35, x, 5.5, z, 0x8a8f96));
+    const head: THREE.BufferGeometry[] = [box(1.6, 1, 0.2, 0, 0, 0, 0x6b7076)];
+    for (let i = 0; i < 6; i++) head.push(box(0.4, 0.3, 0.06, -0.5 + (i % 3) * 0.5, i < 3 ? 0.22 : -0.22, 0.12, CREAM));
+    const yaw = Math.atan2(-x, -z);
+    for (const g of head) {
+      g.rotateX(0.52);
+      g.rotateY(yaw);
+      g.translate(x, 11.2, z);
+      parts.push(g);
+    }
+  }
+  const g = new THREE.Group();
+  g.add(mesh(join(parts)));
+  // The gate board's lettering, facing west toward Route 1.
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 102;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#7a5cd0';
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.fillStyle = '#efe6d2';
+  ctx.font = '700 64px Bungee, "Arial Black", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('THE PITCH', c.width / 2, c.height / 2 + 4);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const board = new THREE.Mesh(new THREE.PlaneGeometry(4, 0.8), new THREE.MeshBasicMaterial({ map: tex }));
+  board.rotation.y = -Math.PI / 2;
+  board.position.set(X(63) - 0.13, 4.3, Z(74));
+  g.add(board);
+  return g;
+};
+
 /** A boxcar: a container-sized rust-coloured wagon with a roof ridge, one per 3 x 2 tiles on a yard track. */
 const boxcar = (p: Prop) => {
   const colors = [0x8a4b32, 0x6b3a2a, 0x7a5a3a, 0x5a3c30];
@@ -619,7 +766,8 @@ export const buildProps = (scene: THREE.Scene) => {
     else if (p.kind === 'gantry') o = signalGantry(p);
     else if (p.kind === 'conveyor') o = conveyor();
     else if (p.kind === 'boxcar') o = boxcar(p);
-    if (o && ['tower', 'crane', 'sign', 'mast', 'hq', 'lookout', 'gantry', 'conveyor', 'boxcar'].includes(p.kind)) {
+    else if (p.kind === 'stadium') o = stadium(p);
+    if (o && ['tower', 'crane', 'sign', 'mast', 'hq', 'lookout', 'gantry', 'conveyor', 'boxcar', 'stadium'].includes(p.kind)) {
       // Landmarks stand square to the map (a crane's boom runs along the map's y axis towards `dir`) and keep their own look.
       o.position.set(c.x, 0, c.y);
       if (p.kind === 'crane') o.rotation.y = p.dir === -1 ? Math.PI : 0;

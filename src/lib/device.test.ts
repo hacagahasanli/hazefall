@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { classOf, detectFallback, deviceType, installDevice, isTouchUi, resetDeviceForTests, resolveDevice, setPlatformDevice, subscribe, touchUiFor } from './device';
+import { classOf, detectFallback, deviceType, installDevice, isDesktopOnlyBlocked, isTouchUi, resetDeviceForTests, resolveDevice, setPlatformDevice, subscribe, touchUiFor } from './device';
 
 const PIXEL = 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
 const ANDROID_TABLET = 'Mozilla/5.0 (Linux; Android 13; SM-X700) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -106,5 +106,20 @@ describe('runtime state', () => {
   it('answers desktop when there is no window at all', () => {
     expect(deviceType()).toBe('desktop');
     expect(isTouchUi()).toBe(false);
+  });
+});
+
+describe('desktop-only gate (portal build)', () => {
+  const touchLaptop = { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130', maxTouchPoints: 10, coarsePrimary: true, screenShort: 800 };
+  it('lets a touch-screen laptop play when the platform says desktop', () => {
+    expect(isDesktopOnlyBlocked(resolveDevice('desktop', touchLaptop))).toBe(false);
+  });
+  it('blocks phones and tablets by the platform answer, whatever the pointer', () => {
+    expect(isDesktopOnlyBlocked(resolveDevice('mobile', {}))).toBe(true);
+    expect(isDesktopOnlyBlocked(resolveDevice('tablet', { coarsePrimary: false }))).toBe(true);
+  });
+  it('without a platform answer, falls back to the UA guess', () => {
+    expect(isDesktopOnlyBlocked(resolveDevice(null, { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0) Mobile Safari' }))).toBe(true);
+    expect(isDesktopOnlyBlocked(resolveDevice(null, { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' }))).toBe(false);
   });
 });

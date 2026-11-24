@@ -25,7 +25,7 @@ import { TouchControls, useTouch } from '~/components/TouchControls';
 import { useRotateBlock } from '~/lib/orientation';
 import { ShockRing, Streaks } from '~/components/Transitions';
 import { uiImpact, uiTick, uiWhoosh } from '~/components/uiSound';
-import { capLabel, Counters, Vitals, Weapons } from '~/components/Hud';
+import { AmmoBlock, capLabel, Counters, Rack, Vitals, Weapons } from '~/components/Hud';
 import { createBootProgress } from '~/lib/bootProgress';
 import { loadCount, onLoadCount } from '~/lib/loading';
 import type { Look } from '~/game/cosmetics';
@@ -111,7 +111,7 @@ const Placement = ({ place, total, won, fx }: { place: number; total: number; wo
         />
         <span
           key={landed ? 'landed' : 'counting'}
-          className={`relative flex items-start font-display text-[7rem] sm:text-[10rem] [@media(min-height:521px)_and_(max-height:640px)]:sm:text-[6.5rem] [@media(max-height:520px)]:text-[5rem] ${landed ? '' : 'opacity-70'}`}
+          className={`relative flex items-start font-display text-[7rem] sm:text-[10rem] [@media(min-height:521px)_and_(max-height:720px)]:sm:text-[6.5rem] [@media(max-height:520px)]:text-[5rem] ${landed ? '' : 'opacity-70'}`}
           style={{
             color,
             textShadow: '0 0.045em 0 #0a0d18, 0 0.09em 0 rgba(10,13,24,0.55), 0 0.2em 0.5em rgba(0,0,0,0.45)',
@@ -395,10 +395,10 @@ const XpPanel = ({ summary, fx, fighter }: { summary: RoundSummary; fx: boolean;
   const shown = ordered.slice(0, 2);
   const next = !leveled ? nextReward(after.level) : null;
   return (
-    <div className="flex max-w-sm flex-col gap-1 pl-2 [@media(max-height:640px)_and_(min-width:560px)]:max-w-none" aria-label="Experience earned">
-      <ul className="flex flex-col gap-0.5 text-sm [@media(max-height:640px)_and_(min-width:720px)]:grid [@media(max-height:640px)_and_(min-width:720px)]:grid-cols-2 [@media(max-height:640px)_and_(min-width:720px)]:gap-x-6 [@media(max-height:360px)_and_(min-width:560px)]:grid [@media(max-height:360px)_and_(min-width:560px)]:grid-cols-2 [@media(max-height:360px)_and_(min-width:560px)]:gap-x-4 [@media(max-height:640px)_and_(min-width:560px)]:text-xs">
+    <div className="flex max-w-sm flex-col gap-1 pl-2 [@media(max-height:720px)_and_(min-width:560px)]:max-w-none" aria-label="Experience earned">
+      <ul className="flex flex-col gap-0.5 text-sm [@media(max-height:720px)_and_(min-width:720px)]:grid [@media(max-height:720px)_and_(min-width:720px)]:grid-cols-2 [@media(max-height:720px)_and_(min-width:720px)]:gap-x-6 [@media(max-height:360px)_and_(min-width:560px)]:grid [@media(max-height:360px)_and_(min-width:560px)]:grid-cols-2 [@media(max-height:360px)_and_(min-width:560px)]:gap-x-4 [@media(max-height:720px)_and_(min-width:560px)]:text-xs">
         {lines.map((l, i) => (
-          <li key={l.label} className={`flex items-baseline justify-between gap-6 [@media(max-height:640px)_and_(min-width:560px)]:gap-3 ${l.goal ? 'font-semibold text-gold' : 'text-cream/75'}`} style={at(i)}>
+          <li key={l.label} className={`flex items-baseline justify-between gap-6 [@media(max-height:720px)_and_(min-width:560px)]:gap-3 ${l.goal ? 'font-semibold text-gold' : 'text-cream/75'}`} style={at(i)}>
             <span>{l.label}</span>
             <span className="font-display tabular-nums">+{l.xp}</span>
           </li>
@@ -482,20 +482,20 @@ const Result = ({
       )}
       {/* A win: a warm gold light from above. */}
       {hud.won && <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-2/3 bg-[radial-gradient(ellipse_at_50%_0%,rgba(255,210,63,0.22),transparent_70%)]" />}
-      <div className="relative m-auto flex w-full max-w-3xl flex-col gap-7 [@media(max-height:520px)]:gap-3 [@media(max-height:640px)_and_(min-width:560px)]:grid [@media(max-height:640px)_and_(min-width:560px)]:max-w-5xl [@media(max-height:640px)_and_(min-width:560px)]:grid-cols-2 [@media(max-height:640px)_and_(min-width:560px)]:content-center [@media(max-height:640px)_and_(min-width:560px)]:gap-x-8 [@media(max-height:640px)_and_(min-width:560px)]:gap-y-3">
-        <div className="flex flex-wrap items-end gap-x-10 gap-y-4 [@media(max-height:520px)]:gap-y-2 [@media(max-height:640px)_and_(min-width:560px)]:col-start-1">
+      <div className="relative m-auto flex w-full max-w-3xl flex-col gap-7 [@media(max-height:520px)]:gap-3 [@media(max-height:720px)_and_(min-width:560px)]:grid [@media(max-height:720px)_and_(min-width:560px)]:max-w-5xl [@media(max-height:720px)_and_(min-width:560px)]:grid-cols-2 [@media(max-height:720px)_and_(min-width:560px)]:content-center [@media(max-height:720px)_and_(min-width:560px)]:gap-x-8 [@media(max-height:720px)_and_(min-width:560px)]:gap-y-3">
+        <div className="flex flex-wrap items-end gap-x-10 gap-y-4 [@media(max-height:520px)]:gap-y-2 [@media(max-height:720px)_and_(min-width:560px)]:col-start-1">
           <div className="flex flex-col items-start">
             {hud.won && (
               <Trophy
-                className="mb-1 ml-2 h-16 w-16 drop-shadow-[0_0_24px_rgba(255,210,63,0.6)] sm:h-20 sm:w-20 [@media(min-height:521px)_and_(max-height:640px)]:sm:h-10 [@media(min-height:521px)_and_(max-height:640px)]:sm:w-10 [@media(max-height:520px)]:h-8 [@media(max-height:520px)]:w-8 [@media(max-height:360px)]:hidden"
+                className="mb-1 ml-2 h-16 w-16 drop-shadow-[0_0_24px_rgba(255,210,63,0.6)] sm:h-20 sm:w-20 [@media(min-height:521px)_and_(max-height:720px)]:sm:h-10 [@media(min-height:521px)_and_(max-height:720px)]:sm:w-10 [@media(max-height:520px)]:h-8 [@media(max-height:520px)]:w-8 [@media(max-height:360px)]:hidden"
                 style={fx ? { animation: 'lcsLand 0.5s cubic-bezier(0.2,0.8,0.2,1) 0.55s both' } : undefined}
               />
             )}
             <Placement place={place} total={hud.total} won={hud.won} fx={fx} />
           </div>
-          <div className="flex max-w-sm flex-col gap-2 pb-4 [@media(max-height:520px)]:pb-1 [@media(max-height:640px)_and_(min-width:560px)]:max-w-none">
+          <div className="flex max-w-sm flex-col gap-2 pb-4 [@media(max-height:520px)]:pb-1 [@media(max-height:720px)_and_(min-width:560px)]:max-w-none">
             <h2
-              className={`font-display text-3xl leading-none sm:text-[2.6rem] [@media(min-height:521px)_and_(max-height:640px)]:sm:text-3xl [@media(max-height:520px)]:text-2xl [@media(max-height:360px)]:text-xl ${fx ? 'lcs-glitch-in' : ''}`}
+              className={`font-display text-3xl leading-none sm:text-[2.6rem] [@media(min-height:521px)_and_(max-height:720px)]:sm:text-3xl [@media(max-height:520px)]:text-2xl [@media(max-height:360px)]:text-xl ${fx ? 'lcs-glitch-in' : ''}`}
               style={{ color: hud.won ? '#ffd23f' : '#e6ebf5', ...(fx ? { animationDelay: '0.45s' } : {}) }}
             >
               {hud.won ? COPY.result.won : COPY.result.lost}
@@ -512,19 +512,19 @@ const Result = ({
                   with {hud.killedWith}.
                 </>
               ) : (
-                <>Caught outside by {hud.killedWith ?? COPY.zone.name}.</>
+                <>{hud.killedWith ? `Caught outside by ${hud.killedWith}.` : `Caught in ${COPY.zone.name}.`}</>
               )}
             </p>
           </div>
         </div>
 
-        <div className="flex flex-col gap-2 [@media(max-height:640px)_and_(min-width:560px)]:contents">
-          <div className="grid grid-cols-[auto_auto_auto] items-end justify-between justify-items-start gap-x-4 gap-y-2 pl-2 sm:grid-cols-3 sm:justify-normal sm:gap-x-10 [@media(max-height:640px)_and_(min-width:560px)]:col-start-1 [@media(max-height:640px)_and_(min-width:560px)]:gap-x-6">
+        <div className="flex flex-col gap-2 [@media(max-height:720px)_and_(min-width:560px)]:contents">
+          <div className="grid grid-cols-[auto_auto_auto] items-end justify-between justify-items-start gap-x-4 gap-y-2 pl-2 sm:grid-cols-3 sm:justify-normal sm:gap-x-10 [@media(max-height:720px)_and_(min-width:560px)]:col-start-1 [@media(max-height:720px)_and_(min-width:560px)]:gap-x-6">
             {stats.map((st, i) => (
               <StatSticker key={st.key} stat={st} index={i} fx={fx} />
             ))}
           </div>
-          <div className="flex flex-col gap-2 [@media(max-height:640px)_and_(min-width:560px)]:col-start-2 [@media(max-height:640px)_and_(min-width:560px)]:row-span-4 [@media(max-height:640px)_and_(min-width:560px)]:row-start-1 [@media(max-height:640px)_and_(min-width:560px)]:self-center">
+          <div className="flex flex-col gap-2 [@media(max-height:720px)_and_(min-width:560px)]:col-start-2 [@media(max-height:720px)_and_(min-width:560px)]:row-span-4 [@media(max-height:720px)_and_(min-width:560px)]:row-start-1 [@media(max-height:720px)_and_(min-width:560px)]:self-center">
             {report?.summary && <XpPanel summary={report.summary} fx={fx} fighter={fighter} />}
             {report?.line && <p className="animate-[riseIn_0.5s_ease-out_0.7s_both] pl-2 text-lg font-semibold text-gold">{report.line}</p>}
             {report?.nudge && <p className="animate-[riseIn_0.5s_ease-out_0.72s_both] pl-2 text-sm text-cream/75">{report.nudge}</p>}
@@ -537,12 +537,12 @@ const Result = ({
         </div>
 
         {hostWaits && (
-          <p className="text-sm text-cream/70 [@media(max-height:640px)_and_(min-width:560px)]:col-start-1">
+          <p className="text-sm text-cream/70 [@media(max-height:720px)_and_(min-width:560px)]:col-start-1">
             You are the host: the round runs on your device, so it goes on for the others until
             there is a winner. {hud.alive} still standing.
           </p>
         )}
-        <div className="flex flex-wrap gap-3 [animation:riseIn_0.4s_ease-out_0.8s_both] max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:-mx-6 max-sm:bg-ink-deep/95 max-sm:px-6 max-sm:py-3 [@media(max-height:640px)_and_(min-width:560px)]:col-start-1 [@media(max-height:500px)_and_(min-width:560px)]:flex-nowrap [@media(max-height:500px)_and_(min-width:560px)]:gap-2">
+        <div className="flex flex-wrap gap-3 [animation:riseIn_0.4s_ease-out_0.8s_both] max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:-mx-6 max-sm:bg-ink-deep/95 max-sm:px-6 max-sm:py-3 [@media(max-height:720px)_and_(min-width:560px)]:col-start-1 [@media(max-height:500px)_and_(min-width:560px)]:flex-nowrap [@media(max-height:500px)_and_(min-width:560px)]:gap-2">
           <button
             type="button"
             autoFocus
@@ -563,7 +563,7 @@ const Result = ({
           )}
         </div>
         {Support && (
-          <div className="[animation:riseIn_0.45s_ease-out_1s_both] [@media(max-height:640px)_and_(min-width:560px)]:col-start-1">
+          <div className="[animation:riseIn_0.45s_ease-out_1s_both] [@media(max-height:720px)_and_(min-width:560px)]:col-start-1">
             <Support variant="card" />
           </div>
         )}
@@ -624,7 +624,19 @@ export const Match = ({
   settingsRef.current = settings;
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** Larger HUD text (accessibility): the HUD blocks are zoomed as a whole, so nothing reflows. */
-  const hudZoom = `calc(${settings.largeHud ? 1.25 : 1} * var(--ui, 1))`;
+  // Desktop (CD spec hud-layout-v2): one scale from the 1216 x 684 design size, 0.8 .. 1.35; large HUD a fifth bigger
+  // but never so big the right column meets the kill feed. Touch keeps its own --ui scale.
+  const [deskScale, setDeskScale] = useState(1);
+  useEffect(() => {
+    const measure = () => {
+      const base = Math.min(1.35, Math.max(0.8, Math.min(window.innerWidth / 1216, window.innerHeight / 684)));
+      setDeskScale(settings.largeHud ? Math.min(base * 1.2, window.innerHeight / 520) : base);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [settings.largeHud]);
+  const touchZoom = `calc(${settings.largeHud ? 1.25 : 1} * var(--ui, 1))`;
 
   const [game, setGame] = useState<ReturnType<typeof startMatch> | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -639,6 +651,7 @@ export const Match = ({
   const [hud, setHud] = useState<HudState | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const touch = useTouch();
+  const hudZoom = touch ? touchZoom : String(deskScale);
   // Held upright, a touch screen shows the rotate card (portal/index.html); the round waits in the pause menu behind it.
   const rotateBlocked = useRotateBlock();
   useEffect(() => {
@@ -844,8 +857,8 @@ export const Match = ({
       <div
         ref={mapBoxRef}
         data-hud="minimap"
-        className={`panel-cut absolute bg-ink-deep/80 ${touch ? 'p-1' : 'p-1.5'} ${touch ? `right-2 ${mapTop === null ? 'top-2' : ''}` : 'bottom-3 right-3'}`}
-        style={touch ? { marginRight: 'env(safe-area-inset-right)', ...(mapTop !== null ? { top: mapTop } : {}) } : undefined}
+        className={`panel-cut absolute bg-ink-deep/80 p-1 ${touch ? `right-2 ${mapTop === null ? 'top-2' : ''}` : 'left-3 top-3'}`}
+        style={touch ? { marginRight: 'env(safe-area-inset-right)', ...(mapTop !== null ? { top: mapTop } : {}) } : { zoom: hudZoom }}
       >
         {/* Big while you're on the plane choosing where to jump. */}
         <canvas
@@ -859,7 +872,7 @@ export const Match = ({
                 : 'block h-[340px] w-[340px]'
               : touch
                 ? 'block h-[calc(112px*var(--ui,1))] w-[calc(112px*var(--ui,1))]'
-                : 'block h-48 w-48'
+                : 'block h-40 w-40'
           }
         />
       </div>
@@ -869,7 +882,7 @@ export const Match = ({
           {/* You: health, shield, what you carry and the ability rings, bottom left (top left on a phone, out of the thumbs' way). */}
           <div
             data-hud="vitals"
-            className={`pointer-events-none absolute flex flex-col gap-1.5 ${touch ? 'left-3 top-2' : 'bottom-4 left-4'}`}
+            className={`pointer-events-none absolute flex flex-col gap-1.5 ${touch ? 'left-3 top-2' : 'bottom-3 left-3'}`}
             style={{ ...(touch ? { marginLeft: 'env(safe-area-inset-left)' } : {}), zoom: hudZoom }}
           >
             <div ref={vitalsRef}>
@@ -877,7 +890,7 @@ export const Match = ({
                 hud={hud}
                 colorBlind={settings.colorBlind}
                 rings={!touch}
-                keys={settings.showKeyHints ? { super: capLabel(settings.keys.super), roll: capLabel(settings.keys.roll) } : null}
+                keys={settings.showKeyHints ? { super: capLabel(settings.keys.super), roll: capLabel(settings.keys.roll), coffee: capLabel(settings.keys.coffee) } : null}
               />
             </div>
             {/* The guns are put away in the plane, in free fall and under the canopy (nobody can fire there): they fade in over 0.2 s on touchdown. */}
@@ -887,19 +900,27 @@ export const Match = ({
               </div>
             )}
           </div>
-          {/* Your guns, over the minimap (bottom right). */}
+          {/* The rack (guns 1-2, bandage, med kit, bomb, each with its key) over the ammo block, bottom right. Only on your feet. */}
           {!touch && (
             <div
-              className={`pointer-events-none absolute bottom-[222px] right-3 w-[204px] transition-opacity duration-200 motion-reduce:transition-none ${hud.stage === 'ground' ? 'opacity-100' : 'opacity-0'}`}
+              data-hud="rack"
+              className={`pointer-events-none absolute bottom-3 right-3 flex flex-col items-end gap-2.5 transition-opacity duration-200 motion-reduce:transition-none ${hud.stage === 'ground' ? 'opacity-100' : 'opacity-0'}`}
               style={{ zoom: hudZoom }}
               aria-hidden={hud.stage !== 'ground'}
             >
-              <Weapons hud={hud} keys={settings.showKeyHints ? [capLabel(settings.keys.slot1), capLabel(settings.keys.slot2)] : null} compact={false} />
+              <Rack
+                hud={hud}
+                motion={!settings.reducedMotion}
+                keys={{ slot1: capLabel(settings.keys.slot1), slot2: capLabel(settings.keys.slot2), bandage: capLabel(settings.keys.bandage), medkit: capLabel(settings.keys.medkit), bomb: capLabel(settings.keys.bomb) }}
+              />
+              <div data-hud="ammo">
+                <AmmoBlock hud={hud} />
+              </div>
             </div>
           )}
           {/* Players left and your kills, top right, the kill feed under them. */}
           {!touch && (
-            <div className="panel-cut pointer-events-none absolute right-4 top-3 bg-ink-deep/80 px-3 py-1.5" style={{ zoom: hudZoom }}>
+            <div data-hud="counters" className="panel-cut pointer-events-none absolute right-3 top-3 bg-ink-deep/80 px-3 py-1.5" style={{ zoom: hudZoom }}>
               <Counters alive={hud.alive} kills={hud.kills} pulse={!settings.reducedMotion} />
             </div>
           )}
@@ -938,7 +959,7 @@ export const Match = ({
                 : {}),
             }}
           >
-            <div data-hud="pill" className="panel-cut flex items-center gap-3 whitespace-nowrap bg-ink-deep/85 px-3 py-1 sm:gap-4 sm:px-4 sm:py-1.5" style={{ zoom: hudZoom }}>
+            <div data-hud={touch ? 'pill' : 'zone'} className="panel-cut flex items-center gap-3 whitespace-nowrap bg-ink-deep/85 px-3 py-1 sm:gap-4 sm:px-4 sm:py-1.5" style={{ zoom: hudZoom }}>
               {touch && hud.stage !== 'drone' && (
                 <>
                   <Counters alive={hud.alive} kills={hud.kills} pulse={!settings.reducedMotion} />
@@ -1059,7 +1080,7 @@ export const Match = ({
                       with {hud.killedWith}
                     </>
                   ) : (
-                    <>Caught outside by {hud.killedWith ?? COPY.zone.name}</>
+                    <>{hud.killedWith ? `Caught outside by ${hud.killedWith}` : `Caught in ${COPY.zone.name}`}</>
                   )}
                 </div>
                 <div className="text-sm font-bold tracking-widest text-cream/75">
@@ -1071,20 +1092,30 @@ export const Match = ({
 
           {/* Online: how the line is doing. */}
           {hud.net && (
-            <div
-              className={`pointer-events-none absolute inset-x-0 flex justify-center ${touch ? 'top-[158px] sm:top-12' : 'top-12'}`}
-            >
-              <span className="rounded bg-ink-deep/70 px-2 py-0.5 text-[10px] font-semibold tracking-widest text-cream/60">
-                {hud.host
-                  ? `HOST · ${hud.net.total ? `${hud.net.direct}/${hud.net.total} DIRECT` : 'SOLO'}${hud.net.total ? ` · ${hud.net.rtt} MS` : ''}`
-                  : `${hud.net.direct ? 'DIRECT' : 'VIA SERVER'} · ${hud.net.rtt} MS`}
-              </span>
-            </div>
+            touch ? (
+              <div className="pointer-events-none absolute inset-x-0 top-[158px] flex justify-center sm:top-12">
+                <span className="rounded bg-ink-deep/70 px-2 py-0.5 text-[10px] font-semibold tracking-widest text-cream/60">
+                  {hud.host
+                    ? `HOST · ${hud.net.total ? `${hud.net.direct}/${hud.net.total} DIRECT` : 'SOLO'}${hud.net.total ? ` · ${hud.net.rtt} MS` : ''}`
+                    : `${hud.net.direct ? 'DIRECT' : 'VIA SERVER'} · ${hud.net.rtt} MS`}
+                </span>
+              </div>
+            ) : (
+              <div className={`pointer-events-none absolute left-3 ${settings.showFps ? 'top-[208px]' : 'top-[188px]'}`} style={{ zoom: hudZoom }}>
+                <span className="rounded bg-ink-deep/70 px-1.5 py-0.5 text-[11px] text-cream/70">
+                  {hud.host
+                    ? `Host · ${hud.net.total ? `${hud.net.direct}/${hud.net.total} direct` : 'solo'}${hud.net.total ? ` · ${hud.net.rtt} ms` : ''}`
+                    : `${hud.net.direct ? 'Direct' : 'Via server'} · ${hud.net.rtt} ms`}
+                </span>
+              </div>
+            )
           )}
 
           {/* Kill feed */}
           <div
-            className={`pointer-events-none absolute flex flex-col items-end gap-1 text-xs ${touch ? 'right-2 top-[176px] sm:top-[calc(124px*var(--ui,1)+14px)]' : 'right-4 top-[52px]'}`}
+            data-hud="feed"
+            className={`pointer-events-none absolute flex flex-col items-end gap-1 text-xs ${touch ? 'right-2 top-[176px] sm:top-[calc(124px*var(--ui,1)+14px)]' : 'right-3 top-[52px]'}`}
+            style={touch ? undefined : { zoom: hudZoom }}
           >
             {hud.feed.map((k) => (
               <span key={k.id} className="rounded bg-ink-deep/80 px-2 py-0.5 text-cream/80">
@@ -1096,10 +1127,12 @@ export const Match = ({
           {/* Prompt */}
           {hud.prompt && !over && (
             <div
-              className={`pointer-events-none absolute inset-x-0 flex justify-center ${touch ? 'bottom-[150px] sm:bottom-6' : 'bottom-16'}`}
+              className={`pointer-events-none absolute inset-x-0 flex justify-center ${touch ? 'bottom-[150px] sm:bottom-6' : ''}`}
+              style={touch ? undefined : { bottom: `calc(92px * ${hudZoom})` }}
             >
               <span
-                className="panel-cut bg-ink-deep/85 px-4 py-1.5 text-sm text-cream"
+                data-hud="hint"
+                className="panel-cut max-w-[460px] bg-ink-deep/85 px-4 py-1.5 text-[13px] text-cream"
                 style={{ zoom: hudZoom, ...(hud.promptGrade !== null && hud.promptGrade > 0 ? { color: GRADE_CSS[hud.promptGrade], boxShadow: `inset 3px 0 0 ${GRADE_CSS[hud.promptGrade]}` } : {}) }}
               >
                 {hud.prompt}
@@ -1109,9 +1142,12 @@ export const Match = ({
 
           {/* A heal in progress: what, and how far along. */}
           {hud.using && !over && (
-            <div className={`pointer-events-none absolute inset-x-0 flex justify-center ${touch ? 'bottom-[190px] sm:bottom-16' : 'bottom-24'}`}>
+            <div
+              className={`pointer-events-none absolute inset-x-0 flex justify-center ${touch ? 'bottom-[190px] sm:bottom-16' : ''}`}
+              style={touch ? undefined : { bottom: `calc(132px * ${hudZoom})` }}
+            >
               <div className="flex w-52 flex-col items-center gap-1" style={{ zoom: hudZoom }}>
-                <span className="text-xs font-bold tracking-wider text-green">{hud.using.name}</span>
+                <span className={touch ? 'text-xs font-bold tracking-wider text-green' : 'text-xs text-green'}>{hud.using.name}</span>
                 <span className="panel-cut h-2 w-full overflow-hidden bg-ink-deep/80">
                   <span className="block h-full bg-green" style={{ width: `${Math.min(1, hud.using.progress) * 100}%` }} />
                 </span>
@@ -1120,8 +1156,11 @@ export const Match = ({
           )}
 
           {settings.showFps && (
-            <div className={`pointer-events-none absolute z-[6] rounded bg-ink-deep/75 px-1.5 py-0.5 font-mono text-[11px] tabular-nums ${hud.fps < 40 ? 'text-orange' : 'text-green'} ${touch ? 'bottom-2 left-1/2 -translate-x-1/2' : 'left-1/2 top-12 -translate-x-1/2'}`}>
-              {hud.fps} FPS · {hud.tier.toUpperCase()}
+            <div
+              className={`pointer-events-none absolute z-[6] rounded bg-ink-deep/75 px-1.5 py-0.5 font-mono text-[11px] tabular-nums ${hud.fps < 40 ? 'text-orange' : 'text-green'} ${touch ? 'bottom-2 left-1/2 -translate-x-1/2' : 'left-3 top-[188px]'}`}
+              style={touch ? undefined : { zoom: hudZoom }}
+            >
+              {touch ? `${hud.fps} FPS · ${hud.tier.toUpperCase()}` : `${hud.fps} fps · ${hud.tier}`}
             </div>
           )}
 
@@ -1146,67 +1185,6 @@ export const Match = ({
               heal={hud.healNext}
               crouched={hud.crouched}
             />
-          )}
-
-          {/* Controls */}
-          {!touch && settings.showKeyHints && !firstRound && (
-            <div className="pointer-events-none absolute left-3 top-3 flex max-w-[calc(50vw-13rem)] flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-cream/50">
-              <span className="flex items-center gap-1">
-                <Key k={keyLabel(settings.keys.up)} />
-                <Key k={keyLabel(settings.keys.left)} />
-                <Key k={keyLabel(settings.keys.down)} />
-                <Key k={keyLabel(settings.keys.right)} /> move
-              </span>
-              <span className="flex items-center gap-1">
-                <Key k={keyLabel(settings.keys.fire)} /> shoot
-              </span>
-              <span className="flex items-center gap-1">
-                <Key k={keyLabel(settings.keys.jump)} /> jump
-              </span>
-              <span className="flex items-center gap-1">
-                <Key k={keyLabel(settings.keys.leanL)} />
-                <Key k={keyLabel(settings.keys.leanR)} /> lean
-              </span>
-              <span className="flex items-center gap-1">
-                <Key k={keyLabel(settings.keys.crouch)} /> crouch
-              </span>
-              <span className="flex items-center gap-1">
-                <Key k={keyLabel(settings.keys.look)} /> hold · look around
-              </span>
-              <span className="flex items-center gap-1">
-                <Key k={keyLabel(settings.keys.super)} /> super
-              </span>
-              <span className="flex items-center gap-1">
-                <Key k={keyLabel(settings.keys.use)} /> pick up / use
-              </span>
-              <span className="flex items-center gap-1">
-                <Key k={keyLabel(settings.keys.reload)} /> reload
-              </span>
-              <span className="flex items-center gap-1">
-                <Key k={keyLabel(settings.keys.slot1)} />
-                <Key k={keyLabel(settings.keys.slot2)} />
-                <Key k={keyLabel(settings.keys.swap)} /> / wheel · guns
-              </span>
-              <span className="flex items-center gap-1">
-                <Key k={keyLabel(settings.keys.slot3)} /> heals
-                <Key k={keyLabel(settings.keys.slot4)} /> bomb
-              </span>
-              <span className="flex items-center gap-1">
-                <Key k={keyLabel(settings.keys.roll)} /> roll
-              </span>
-              <span className="flex items-center gap-1">
-                <Key k={keyLabel(settings.keys.scope)} /> / right click · scope
-              </span>
-              <span className="flex items-center gap-1">
-                <Key k={keyLabel(settings.keys.aim)} /> {hud.aimMode === 'mouse' || hud.firstPerson || hud.shoulder ? 'mouse aim' : 'auto-aim'}
-              </span>
-              <span className="flex items-center gap-1">
-                <Key k={keyLabel(settings.keys.mute)} /> mute
-              </span>
-              <span className="flex items-center gap-1">
-                <Key k="Esc" /> / <Key k={keyLabel(settings.keys.pause)} /> menu
-              </span>
-            </div>
           )}
 
           {/* Esc / P menu */}
@@ -1245,6 +1223,69 @@ export const Match = ({
                 >
                   {online && hud.host ? 'End the round for everyone' : exitLabel === 'Back to lobby' ? 'Leave match' : 'Quit to menu'}
                 </button>
+                {/* The keys (they left the round's top-left corner when the minimap moved there). */}
+                {!touch && (
+                  <div aria-label="Keys" className="flex w-full flex-wrap justify-center gap-x-3 gap-y-1.5 border-t border-cream/10 pt-3 text-[11px] text-cream/60">
+                    <span className="flex items-center gap-1">
+                      <Key k={keyLabel(settings.keys.up)} />
+                      <Key k={keyLabel(settings.keys.left)} />
+                      <Key k={keyLabel(settings.keys.down)} />
+                      <Key k={keyLabel(settings.keys.right)} /> move
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Key k="Click" /> shoot
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Key k={keyLabel(settings.keys.jump)} /> jump
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Key k={keyLabel(settings.keys.leanL)} />
+                      <Key k={keyLabel(settings.keys.leanR)} /> lean
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Key k={keyLabel(settings.keys.super)} /> super
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Key k={keyLabel(settings.keys.use)} /> pick up
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Key k={keyLabel(settings.keys.reload)} /> reload
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Key k={keyLabel(settings.keys.slot1)} />
+                      <Key k={keyLabel(settings.keys.slot2)} />
+                      <Key k={keyLabel(settings.keys.swap)} /> / wheel · guns
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Key k={keyLabel(settings.keys.heal)} /> heal
+                      <Key k={keyLabel(settings.keys.coffee)} /> {COPY.items.coffee.toLowerCase()}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Key k={keyLabel(settings.keys.roll)} /> roll
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Key k={keyLabel(settings.keys.scope)} /> / right click · scope
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Key k={keyLabel(settings.keys.aim)} /> {hud.aimMode === 'mouse' || hud.firstPerson || hud.shoulder ? 'mouse aim' : 'auto-aim'}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Key k={keyLabel(settings.keys.mute)} /> mute
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Key k="Esc" /> / <Key k={keyLabel(settings.keys.pause)} /> menu
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Key k={keyLabel(settings.keys.crouch)} /> crouch
+                      <Key k={keyLabel(settings.keys.look)} /> hold · look around
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Key k={keyLabel(settings.keys.bandage)} /> bandage
+                      <Key k={keyLabel(settings.keys.medkit)} /> med kit
+                      <Key k={keyLabel(settings.keys.bomb)} /> bomb
+                    </span>
+                  </div>
+                )}
                 {!touch && <p className="text-[10px] text-cream/40">Esc or {keyLabel(settings.keys.pause)} to resume</p>}
                 {Support && <Support />}
                 {credit && <p className="text-[10px] tracking-widest text-cream/40">A game by {credit}</p>}

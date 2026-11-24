@@ -337,7 +337,7 @@ const CENTRES = BUILDINGS.map((b) => {
 });
 
 /** The most bots that land in one place: the hot places hold the crowd (Old Town 5, the Yard and the Campus 4), the quiet ones few. */
-const PLACE_CAPS: Record<string, number> = { 'Old Town': 5, 'Container Yard': 4, 'The Campus': 4, 'Mast Hill': 2 };
+const PLACE_CAPS: Record<string, number> = { 'The Pitch': 2, 'Old Town': 5, 'Container Yard': 4, 'The Campus': 4, 'Mast Hill': 2 };
 export const placeCap = (name: string | null) => (name === null ? 2 : PLACE_CAPS[name] ?? ((PLACE_TIER[name] ?? 1) >= 2 ? 3 : 2));
 /** Places within reach of the route that get no bot at all, so a person who wants quiet can find it. */
 export const QUIET_PLACES = 3;

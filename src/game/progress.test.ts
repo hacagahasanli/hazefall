@@ -14,23 +14,25 @@ const noon = (y: number, m: number, d: number) => new Date(y, m - 1, d, 12, 0, 0
 describe('xp and levels', () => {
   const sum = (r: RoundResult, first = false, streak = 0) => roundLines(r, first, streak).reduce((a, l) => a + l.xp, 0);
 
-  it('the curve: min(900, 230 + 35 * (level - 1)), as in the spec table', () => {
-    const table: Record<number, number> = { 1: 230, 2: 265, 3: 300, 4: 335, 5: 370, 6: 405, 7: 440, 8: 475, 9: 510, 10: 545, 12: 615, 15: 720, 20: 895, 21: 900, 40: 900 };
+  it('the curve: min(1800, 460 + 70 * (level - 1)), twice the v2 table', () => {
+    const table: Record<number, number> = { 1: 460, 2: 530, 3: 600, 4: 670, 5: 740, 6: 810, 7: 880, 8: 950, 9: 1020, 10: 1090, 12: 1230, 15: 1440, 20: 1790, 21: 1800, 40: 1800 };
     for (const [l, xp] of Object.entries(table)) expect(xpToNext(Number(l))).toBe(xp);
     // The spec's "total XP to reach it" column.
     const total = (level: number) => Array.from({ length: level - 1 }, (_, i) => xpToNext(i + 1)).reduce((a, b) => a + b, 0);
-    expect([2, 3, 4, 5, 6, 10, 15, 20].map(total)).toEqual([230, 495, 795, 1130, 1500, 3330, 6405, 10355]);
+    expect([2, 3, 4, 5, 6, 10, 15, 20].map(total)).toEqual([460, 990, 1590, 2260, 3000, 6660, 12810, 20710]);
   });
 
-  it('XP per round: played 20, survived 1 per 6 s (max 40), outlasted 2 each, knock-out 20, damage 1 per 25, win 60', () => {
+  it('XP per round: played 20, survived 1 per 6 s (max 40), outlasted 3 each, top 10/5/3 bonus 15/35/60, knock-out 20, damage 1 per 25, win 150', () => {
     // The four reference rounds of the spec.
-    expect(sum(round({ place: 16, survived: 70, kills: 0, damage: 40 }))).toBe(40);
-    expect(sum(round({ place: 10, survived: 150, kills: 1, damage: 150 }))).toBe(91);
-    expect(sum(round({ place: 4, survived: 210, kills: 2, damage: 300 }))).toBe(139);
-    expect(sum(round({ place: 1, won: true, survived: 240, kills: 4, damage: 500 }))).toBe(258);
+    expect(sum(round({ place: 16, survived: 70, kills: 0, damage: 40 }))).toBe(44);
+    expect(sum(round({ place: 10, survived: 150, kills: 1, damage: 150 }))).toBe(116);
+    expect(sum(round({ place: 4, survived: 210, kills: 2, damage: 300 }))).toBe(190);
+    expect(sum(round({ place: 1, won: true, survived: 240, kills: 4, damage: 500 }))).toBe(367);
     expect(sum(round({ place: 20, survived: 900 }))).toBe(20 + 40 + 0);
-    // #1 of 20 outlasts 19... the report says Outlasted 19 and pays 38.
-    expect(roundLines(round({ place: 1, won: true }), false).find((l) => l.label === 'Outlasted 19')?.xp).toBe(38);
+    // A win is worth far more than second place now.
+    expect(sum(round({ place: 1, won: true })) - sum(round({ place: 2 }))).toBeGreaterThanOrEqual(90);
+    // #1 of 20 outlasts 19... the report says Outlasted 19 and pays 57.
+    expect(roundLines(round({ place: 1, won: true }), false).find((l) => l.label === 'Outlasted 19')?.xp).toBe(57);
   });
 
   it('the report lines read as the spec words and zero lines are hidden', () => {
@@ -44,13 +46,20 @@ describe('xp and levels', () => {
     expect([0, 1, 3, 5, 9].map(first)).toEqual([50, 60, 80, 100, 100]);
   });
 
-  it('a fresh profile does not reach level 2 in round 1 (91 XP + 50 first round < 230) but does by round 3 of typical play', () => {
+  it('a fresh profile does not reach level 2 in round 1 (116 XP + 50 first round < 460) but does by round 4 of typical play', () => {
     const day = noon(2026, 11, 22);
     let c = defaultCareer();
     c = applyRound(c, round({ place: 10, survived: 150, kills: 1, damage: 150 }), NO_FACTS, day).career;
     expect(c.level).toBe(1);
-    expect(c.xp).toBe(141);
-    c = applyRound(c, round({ place: 10, survived: 150, kills: 1, damage: 150 }), NO_FACTS, day).career;
+    expect(c.xp).toBe(166);
+    // Twice as slow as v2 (which took 2 rounds): level 2 comes in round 3 or 4, daily goals included.
+    let rounds = 1;
+    while (c.level < 2 && rounds < 10) {
+      c = applyRound(c, round({ place: 10, survived: 150, kills: 1, damage: 150 }), NO_FACTS, day).career;
+      rounds += 1;
+    }
+    expect(rounds).toBeGreaterThanOrEqual(3);
+    expect(rounds).toBeLessThanOrEqual(4);
     expect(c.level).toBe(2);
     expect(c.unlocked).toContain('canopy:mint');
   });
@@ -61,7 +70,7 @@ describe('xp and levels', () => {
   });
 
   it('carries leftover xp over a level and can climb several levels at once, owning what the track gives', () => {
-    const { career, summary } = applyRound({ ...defaultCareer(), xp: 220 }, round({ place: 1, won: true, kills: 12, damage: 2400, survived: 300 }), NO_FACTS, noon(2026, 11, 22));
+    const { career, summary } = applyRound({ ...defaultCareer(), xp: 440 }, round({ place: 1, won: true, kills: 12, damage: 2400, survived: 300 }), NO_FACTS, noon(2026, 11, 22));
     expect(summary.levelUps.length).toBeGreaterThanOrEqual(2);
     expect(career.level).toBe(summary.after.level);
     expect(career.xp).toBeLessThan(xpToNext(career.level));
@@ -71,7 +80,7 @@ describe('xp and levels', () => {
   });
 
   it('a new item is worn at once: outfit sets on the fighter just played, the rest as the one setting', () => {
-    const c = { ...defaultCareer(), level: 2, xp: 229 };
+    const c = { ...defaultCareer(), level: 2, xp: xpToNext(2) - 1 };
     const { career } = applyRound(c, round({ fighter: 'legacy' }), NO_FACTS, noon(2026, 11, 22));
     expect(career.level).toBe(3);
     expect(career.look.outfit).toEqual({ hotfix: 'standard', legacy: 'darkmode', standup: 'standard', intern: 'standard' });

@@ -339,3 +339,40 @@ describe('determinism with roofs', () => {
     expect(longest / 60).toBeLessThan(20);
   }, 30000);
 });
+
+describe('the walkable roof is the drawn roof', () => {
+  it('reaches out over the eaves, so you can stand at the visible edge', () => {
+    const b = BUILDINGS[0];
+    const edgeX = b.x0 * TILE - 0.3;
+    const midY = (b.y0 + b.h / 2) * TILE;
+    expect(roofAt(edgeX, midY)).toBeGreaterThan(2);
+    expect(roofAt(b.x0 * TILE - 0.6, midY)).toBe(-1);
+  });
+});
+
+describe('jumping at a pitched roof from the side', () => {
+  it('lands on it or drops beside it, never falls through into the house', () => {
+    const b = BUILDINGS.findIndex((q) => ridgeHeight(q) > EAVE + 1.5 && q.w >= q.h);
+    const q = BUILDINGS[b];
+    for (const z0 of [2.7, 3.2, 3.8]) {
+      const s = createGame('hotfix', 1);
+      const p = s.players[0];
+      s.players.slice(1).forEach((o) => Object.assign(o, { stage: 'falling', alt: 60, canopy: -1, x: 10, y: 10 }));
+      s.drone.t = 1;
+      // Beside the long side, mid-air at z0, running straight in towards the ridge.
+      const x = (q.x0 + q.w / 2) * TILE;
+      Object.assign(p, { stage: 'ground', x, y: q.y0 * TILE - 1.2, z: z0, jz: 0.5, heading: Math.PI / 2 });
+      // Through the roof = inside the footprint, off the floor and under the roof surface (or under the ceiling) at once.
+      let through = false;
+      for (let i = 0; i < 90 && !(p.z === 0 && buildingAt(p.x, p.y) !== b); i++) {
+        const inputs = s.players.map(() => ({ ...NO_INPUT }));
+        inputs[0] = { ...NO_INPUT, my: 1, aimX: x, aimY: p.y + 10 };
+        const wasZ = p.z;
+        step(s, inputs);
+        // (A ladder climb passes the eaves on its way up: not a fall.)
+        if (p.climb <= 0 && buildingAt(p.x, p.y) === b && wasZ > 0.8 && p.z < roofAt(p.x, p.y) - 0.4) through = true;
+      }
+      expect(through).toBe(false);
+    }
+  });
+});

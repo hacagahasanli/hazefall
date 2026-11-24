@@ -13,6 +13,8 @@ const HEART = 88;
 const O = 12;
 /** The Market Square in tiles (the old town's 40,31 to 50,37 in the frame shifted by 16): one paved rectangle that Route 1 crosses. */
 export const MARKET_SQUARE = { x0: 56, y0: 47, w: 10, h: 6 };
+/** The Pitch: the town's small football ground on Old Town's south bank (CD spec map-balance-grass-stadium), in tiles. */
+export const STADIUM = { x0: 63, y0: 67, w: 13, h: 14, pitch: { x0: 67, y0: 69, w: 5, h: 10 } };
 export const WORLD = TILE * SIZE;
 export const PLAYER_RADIUS = 0.55;
 /** Fighters in a match: you and nineteen bots offline, or people plus bots online. */
@@ -49,7 +51,7 @@ export interface Route {
 export interface Prop {
   kind:
     | 'car' | 'container' | 'tent' | 'windmill' | 'campfire' | 'pond' | 'river'
-    | 'tower' | 'crane' | 'sign' | 'mast' | 'hq' | 'lookout' | 'gantry' | 'conveyor' | 'boxcar';
+    | 'tower' | 'crane' | 'sign' | 'mast' | 'hq' | 'lookout' | 'gantry' | 'conveyor' | 'boxcar' | 'stadium';
   /** Tile rectangle. */
   x0: number;
   y0: number;
@@ -694,6 +696,7 @@ const buildMap = () => {
     ['Hollis Farm', 34, 32, 51, 45],
     ['Redgate Farm', 72, 34, 89, 47],
     ['Lakeside', 4, 40, 31, 91],
+    ['The Pitch', 63, 67, 76, 81],
     ['Old Town', 44, 42, 79, 79],
     ['Quarry', 76, 48, 89, 57],
     ['Container Yard', 89, 36, 113, 83],
@@ -818,50 +821,46 @@ const buildMap = () => {
   for (const [cx, cy] of [[30, 12], [4, 22], [14, 27]]) for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 2; x++) if (get(x, y) === 'g') set(x, y, 'h');
   for (const [x, y] of [[28, 8], [29, 17], [5, 12], [6, 25], [18, 26], [24, 25]]) if (get(x, y) === 'g') set(x, y, 'k');
 
-  // Tall grass is tactical cover you choose, not a wall over the whole field (battleground-atmosphere.md item 1). In the
-  // plain frame, after everything that plants it: none in the four towns (walls are their cover), none within 3 tiles of a
-  // house or 1 of a road or path (doors, streets and yard fronts stay readable), and a big patch keeps only its heart.
-  // The three Mast Hill patches stay whole: that bare approach has no other cover by design.
+  // Tall grass where it means something (CD spec map-balance-grass-stadium, section 2), with no random numbers so the rest
+  // of the map comes out as before: designed patches on the approaches, broken reed belts on the river banks, and none in
+  // the town's yards (except by the water).
   {
-    const G = (x: number, y: number) => (x >= 0 && y >= 0 && x < SIZE && y < SIZE ? grid[y][x] : '#');
-    const towns = [[44, 42, 79, 79], [52, 90, 79, 105], [10, 90, 41, 115], [89, 36, 113, 83]];
-    const nearBuilding = new Uint8Array(SIZE * SIZE);
-    for (const b of buildings) for (let y = b.y0 - 3; y < b.y0 + b.h + 3; y++) for (let x = b.x0 - 3; x < b.x0 + b.w + 3; x++) if (x >= 0 && y >= 0 && x < SIZE && y < SIZE) nearBuilding[y * SIZE + x] = 1;
-    for (let y = 0; y < SIZE; y++) {
-      for (let x = 0; x < SIZE; x++) {
-        if (grid[y][x] !== 'h') continue;
-        let road = false;
-        for (let j = -1; j <= 1 && !road; j++) for (let i = -1; i <= 1 && !road; i++) road = 'ap'.includes(G(x + i, y + j));
-        if (road || nearBuilding[y * SIZE + x] || towns.some(([x0, y0, x1, y1]) => x >= x0 && x <= x1 && y >= y0 && y <= y1)) grid[y][x] = 'g';
-      }
-    }
-    const seen = new Uint8Array(SIZE * SIZE);
-    for (let y = 0; y < SIZE; y++) {
-      for (let x = 0; x < SIZE; x++) {
-        if (grid[y][x] !== 'h' || seen[y * SIZE + x]) continue;
-        const blob: [number, number][] = [];
-        const todo: [number, number][] = [[x, y]];
-        seen[y * SIZE + x] = 1;
-        while (todo.length) {
-          const [cx, cy] = todo.pop()!;
-          blob.push([cx, cy]);
-          for (const [nx, ny] of [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]]) {
-            if (G(nx, ny) !== 'h' || seen[ny * SIZE + nx]) continue;
-            seen[ny * SIZE + nx] = 1;
-            todo.push([nx, ny]);
-          }
+    const keepClear = (x: number, y: number) =>
+      (x >= 62 && x <= 76 && y >= 66 && y <= 81) || (y >= 87 && y <= 89 && x >= 62 && x <= 105) ||
+      (x >= MARKET_SQUARE.x0 && x < MARKET_SQUARE.x0 + MARKET_SQUARE.w && y >= MARKET_SQUARE.y0 && y < MARKET_SQUARE.y0 + MARKET_SQUARE.h);
+    const PATCHES: [number, number, number, number][] = [
+      [38, 25, 6, 3.5], [73, 6, 6, 3.5], [66, 37, 3.5, 2.5], [48, 22, 4, 2.5], [24, 40, 3.5, 2.5], [6, 90, 3, 2.5],
+      [12, 115, 4, 1.5], [30, 115, 4, 1.5], [70, 114, 4, 2], [80, 115, 4, 1.5], [112, 87, 3, 2],
+    ];
+    for (const [cx, cy, rx, ry] of PATCHES) {
+      for (let y = Math.floor(cy - ry - 1); y <= cy + ry + 1; y++) {
+        for (let x = Math.floor(cx - rx - 1); x <= cx + rx + 1; x++) {
+          if (x < 2 || y < 2 || x >= SIZE - 2 || y >= SIZE - 2 || grid[y][x] !== 'g' || nearHouse[y * SIZE + x] || keepClear(x, y)) continue;
+          if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1 + (tileHash(x, y, 7) - 0.5) * 0.5) grid[y][x] = 'h';
         }
-        if (blob.length <= 6 || blob.some(([bx, by]) => [[30, 12], [4, 22], [14, 27]].some(([mx, my]) => Math.abs(bx - mx) <= 2 && Math.abs(by - my) <= 2))) continue;
-        const keep = Math.max(6, Math.min(16, Math.round(blob.length * 0.45)));
-        const mx = blob.reduce((a, t) => a + t[0], 0) / blob.length;
-        const my = blob.reduce((a, t) => a + t[1], 0) / blob.length;
-        blob
-          .map(([bx, by]) => ({ bx, by, d: (bx - mx) ** 2 + (by - my) ** 2 + (((bx * 73856093) ^ (by * 19349663)) >>> 0) % 997 / 1e5 }))
-          .sort((a, b) => a.d - b.d)
-          .slice(keep)
-          .forEach(({ bx, by }) => (grid[by][bx] = 'g'));
       }
     }
+    // Reeds: the first grass tile on each bank, broken, away from the bridges, the town and the paved yard.
+    const nearBridge = (x: number) => RIVER.bridges.some(([bx, bw]) => x >= bx - 4 && x <= bx + bw + 3);
+    for (let x = 3; x <= 116; x++) {
+      if (nearBridge(x) || (x >= 44 && x <= 78) || (x >= 89 && x <= 113)) continue;
+      for (let y = 3; y < SIZE - 3; y++) {
+        const north = grid[y + 1][x] === 'o';
+        const south = grid[y - 1][x] === 'o';
+        if ((!north && !south) || grid[y][x] !== 'g' || nearHouse[y * SIZE + x] || keepClear(x, y)) continue;
+        if (tileHash(x, y, 11) < 0.7) {
+          grid[y][x] = 'h';
+          const fy = north ? y - 1 : y + 1;
+          if (tileHash(x, y, 12) < 0.35 && grid[fy][x] === 'g' && !keepClear(x, fy)) grid[fy][x] = 'h';
+        }
+      }
+    }
+    // Old Town: yards, not meadows (tall grass stays only within 3 tiles of the water).
+    const nearWater = (x: number, y: number) => {
+      for (let j = y - 3; j <= y + 3; j++) for (let i = x - 3; i <= x + 3; i++) if (grid[j]?.[i] === 'o') return true;
+      return false;
+    };
+    for (let y = 42; y <= 78; y++) for (let x = 44; x <= 78; x++) if (grid[y][x] === 'h' && (!nearWater(x, y) || keepClear(x, y))) grid[y][x] = 'g';
   }
 
   // Every door opens onto open ground: clear two tiles in front of it of fences, trees, rocks and crates that the yards,
@@ -881,6 +880,80 @@ const buildMap = () => {
   // The edge of the world: a tree line you can't pass.
   for (let i = 0; i < SIZE; i++) {
     for (const [x, y] of [[i, 0], [i, 1], [i, SIZE - 1], [i, SIZE - 2], [0, i], [1, i], [SIZE - 1, i], [SIZE - 2, i]]) set(x, y, 't');
+  }
+
+  // No house stands on a road: the old map's houses came first, and the roads laid later run straight through a few of them
+  // (Reis, 2026-11-24). A house whose footprint the centre line of a road, path or track crosses or touches is taken down:
+  // its tiles become the road where the road is, open ground elsewhere.
+  {
+    const HALF = { asphalt: 2.9, dirt: 1.3, rail: 1.6 } as const;
+    const pts = routes.flatMap((rt) =>
+      rt.points.slice(1).flatMap((b, i) => {
+        const a = rt.points[i];
+        const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 0.5));
+        return Array.from({ length: n + 1 }, (_, k) => ({ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n, kind: rt.kind }));
+      }),
+    );
+    for (let i = buildings.length - 1; i >= 0; i--) {
+      const b = buildings[i];
+      const x0 = b.x0 * TILE - 0.3;
+      const y0 = b.y0 * TILE - 0.3;
+      const x1 = (b.x0 + b.w) * TILE + 0.3;
+      const y1 = (b.y0 + b.h) * TILE + 0.3;
+      const on = pts.filter((q) => q.x >= x0 && q.x <= x1 && q.y >= y0 && q.y <= y1);
+      if (!on.length) continue;
+      buildings.splice(i, 1);
+      for (let y = b.y0; y < b.y0 + b.h; y++) {
+        for (let x = b.x0; x < b.x0 + b.w; x++) {
+          const cx = (x + 0.5) * TILE;
+          const cy = (y + 0.5) * TILE;
+          const road = pts.find((q) => Math.hypot(q.x - cx, q.y - cy) <= HALF[q.kind] + 0.5);
+          grid[y][x] = road ? (road.kind === 'asphalt' ? 'a' : 'p') : 'g';
+        }
+      }
+    }
+  }
+
+  // The Pitch (CD spec map-balance-grass-stadium, section 4): four houses on Old Town's south bank make way for the town's
+  // football ground. A fixed grid, no random numbers. Rows 66..81, columns 62..76; '.' keeps the tile (clearing trees,
+  // bushes, tall grass, crates and fences to grass), D/R/C are solid set pieces ('v'), G is the pitch's grass.
+  {
+    const X0 = 62;
+    const Y0 = 66;
+    const GRID = [
+      '..k............',
+      'gvvvffaaaffvvvg',
+      'gvvvpppspppvvvg',
+      'gvvvpGGGGGpvvvg',
+      'gvvvDGrsGGpvvvg',
+      'gvvvDGGGRRpvvvg',
+      'avvvsGGGGGpvvvg',
+      'aaaaaGGsGGrvvvg',
+      'aaasaGGsGGpvvvg',
+      'avvvsCGGGGpvvvg',
+      'gvvvDGGGGGpvvvg',
+      'gvvvDGGsrGpvvvg',
+      'gvvvpGGGGGpvvvg',
+      'gvvvpppspppvvvg',
+      'gvvvffaaaffvvvg',
+      'gggggpppppggggg',
+    ];
+    for (let i = buildings.length - 1; i >= 0; i--) {
+      const b = buildings[i];
+      if (b.x0 > X0 + 14 || b.x0 + b.w - 1 < X0 || b.y0 > Y0 + 15 || b.y0 + b.h - 1 < Y0) continue;
+      buildings.splice(i, 1);
+      for (let y = b.y0; y < b.y0 + b.h; y++) for (let x = b.x0; x < b.x0 + b.w; x++) grid[y][x] = 'g';
+    }
+    GRID.forEach((row, j) => {
+      [...row].forEach((c, i) => {
+        const x = X0 + i;
+        const y = Y0 + j;
+        if (c === '.') {
+          if ('tbhrf'.includes(grid[y][x])) grid[y][x] = 'g';
+        } else grid[y][x] = c === 'G' ? 'g' : 'DRC'.includes(c) ? 'v' : c;
+      });
+    });
+    props.push({ kind: 'stadium', x0: STADIUM.x0, y0: STADIUM.y0, w: STADIUM.w, h: STADIUM.h, seed: 0.5 });
   }
 
   // Nothing is walled in: every open tile can be reached from Route 1. A pocket that trees or rocks have closed off gets one of
@@ -957,12 +1030,12 @@ export const tileAt = (tx: number, ty: number) =>
   tx < 0 || ty < 0 || tx >= SIZE || ty >= SIZE ? '#' : MAP[ty][tx];
 
 /** A stable 0..1 number per tile, integer-only so the server and every browser agree. */
-export const tileHash = (x: number, y: number, k = 0) => {
+export function tileHash(x: number, y: number, k = 0) {
   let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(k + 1, 1274126177)) | 0;
   h = Math.imul(h ^ (h >>> 13), 1103515245);
   h ^= h >>> 16;
   return (h >>> 0) / 4294967296;
-};
+}
 
 /**
  * What you actually bump into. A tile is 2 m, but a tree is only its trunk, a rock and a crate are
@@ -1114,6 +1187,7 @@ export const LOOT_TABLES: { kinds: LootWeights; rarity: number[]; vest: number[]
 ];
 /** Which loot tier each named place has (anywhere else is tier 1). */
 export const PLACE_TIER: Record<string, number> = {
+  'The Pitch': 3,
   'Old Town': 3,
   'Container Yard': 3,
   'The Campus': 3,

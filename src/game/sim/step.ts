@@ -36,8 +36,8 @@ import {
   PLANT_REVEAL,
   PLAYER_RADIUS,
   PLAYERS,
+  PROPS,
   RACK_HP,
-  REGEN,
   SIZE,
   SUPERS,
   TILE,
@@ -72,6 +72,28 @@ const toTile = (v: number) => Math.floor(v / TILE);
 const isWeapon = (k: LootKind): k is Exclude<WeaponKind, 'fists'> => k in WEAPONS;
 
 // ---------- the map
+
+/**
+ * Landmarks on legs (the harbour cranes, the water tower, the fire lookout): only the legs stand on the ground. You walk
+ * and shoot between them; everything above (beams, cab, tank, cabin) is out of reach. Posts in metres, from the drawn
+ * models in render/props.ts; each tile of the footprint lists every post of its landmark.
+ */
+const OPEN_FRAME: Partial<Record<string, { posts: [number, number][]; r: number }>> = {
+  crane: { posts: [[-2.6, -1.5], [2.6, -1.5], [-2.6, 1.5], [2.6, 1.5]], r: 0.2 },
+  tower: { posts: [[-1.6, -1.6], [1.6, -1.6], [-1.6, 1.6], [1.6, 1.6]], r: 0.17 },
+  lookout: { posts: [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]], r: 0.2 },
+};
+const POSTS = new Map<number, { x: number; y: number; r: number }[]>();
+for (const pr of PROPS) {
+  const f = OPEN_FRAME[pr.kind];
+  if (!f) continue;
+  const cx = (pr.x0 + pr.w / 2) * TILE;
+  const cy = (pr.y0 + pr.h / 2) * TILE;
+  const list = f.posts.map(([px, py]) => ({ x: cx + px, y: cy + py, r: f.r }));
+  for (let y = pr.y0; y < pr.y0 + pr.h; y++) for (let x = pr.x0; x < pr.x0 + pr.w; x++) POSTS.set(y * SIZE + x, list);
+}
+/** The legs standing on tile (tx, ty), when it is under a landmark on legs. */
+export const postsAt = (tx: number, ty: number) => POSTS.get(tileIndex(tx, ty));
 
 /** Bushes and crops hide you. */
 export const inPlant = (x: number, y: number) => 'bch'.includes(tileAt(toTile(x), toTile(y)));
@@ -136,10 +158,14 @@ const tileHit = (state: GameState, tx: number, ty: number, x: number, y: number,
   const y0 = ty * TILE;
   const c = TILE / 2;
   switch (t) {
+    case 'v': {
+      // A landmark on legs: only its legs; any other prop as big as it is drawn.
+      const posts = POSTS.get(tileIndex(tx, ty));
+      if (posts) return posts.some((q) => circleHit(x, y, r, q.x, q.y, q.r));
+      return propHit(tx, ty, x, y, r, z);
+    }
     case '#':
       return boxHit(x, y, r, x0, y0, x0 + TILE, y0 + TILE);
-    case 'v':
-      return propHit(tx, ty, x, y, r, z);
     case 'd':
       // Bridge and pier rails: thin, on the sides that face the water; bullets pass.
       return !bullet && railBoxes(tx, ty).some((b) => boxHit(x, y, r, b[0], b[1], b[2], b[3]));
@@ -253,8 +279,12 @@ const pushOut = (state: GameState, pos: { x: number; y: number }, r: number, z =
         const x0 = tx * TILE;
         const y0 = ty * TILE;
         const c = TILE / 2;
+        const posts = t === 'v' ? POSTS.get(tileIndex(tx, ty)) : undefined;
         if (t === '#') outBox(x0, y0, x0 + TILE, y0 + TILE);
-        else if (t === 'v') {
+        else if (posts) {
+          // A landmark on legs: only its legs stop you.
+          for (const q of posts) outCircle(q.x, q.y, q.r);
+        } else if (t === 'v') {
           const s = propOnTile(tx, ty);
           if (!s) {
             if (z < EAVE - 0.05) outBox(x0, y0, x0 + TILE, y0 + TILE);
@@ -313,9 +343,20 @@ const moveBy = (state: GameState, p: Player, dx: number, dy: number) => {
   const pos = { x: p.x, y: p.y };
   let vaultable: string | null = null;
   for (let i = 0; i < steps; i++) {
+    const bx = pos.x;
+    const by = pos.y;
     pos.x += dx / steps;
     pos.y += dy / steps;
     vaultable = pushOut(state, pos, PLAYER_RADIUS, p.z) ?? vaultable;
+    // Off the ground, never into a roof from the side (jumping onto a pitched roof lower than its slope there): the
+    // roof is a wall to you, so you come down beside it or land on it, never fall through it into the house.
+    if (p.z > 0.8) {
+      const r = roofAt(pos.x, pos.y);
+      if (r >= 0 && p.z < r - 0.35 && !(roofAt(bx, by) >= 0 && p.z < roofAt(bx, by) - 0.35)) {
+        pos.x = bx;
+        pos.y = by;
+      }
+    }
   }
   p.x = pos.x;
   p.y = pos.y;
@@ -544,6 +585,7 @@ export const newPlayer = (id: number, name: string, fighter: FighterId, bot: boo
   slot: 0,
   holster: null,
   swapping: 0,
+  chuteArmed: false,
   vest: 0,
   pack: 0,
   bandages: 0,
@@ -610,8 +652,9 @@ export const windOf = (state: GameState) => {
 export const updateFall = (state: GameState, p: Player, input: Input) => {
   const out = DROP.height - p.alt;
   const pressed = input.jump && !p.prev.jump;
-  // No firing in the air (the first magazine used to be gone before landing): a fresh press tells the player why.
-  if (input.fire && !p.prev.fire && !p.bot) state.events.push({ type: 'fireBlocked', player: p.id });
+  // No firing in free fall (the first magazine used to be gone before landing): a fresh press tells the player why.
+  // Under the open canopy you can shoot (below).
+  if (input.fire && !p.prev.fire && !p.bot && p.canopy < DROP.deployTime) state.events.push({ type: 'fireBlocked', player: p.id });
   if (p.canopy < 0 && (p.alt <= DROP.deployAlt || (pressed && out >= DROP.minFreefallDrop))) p.canopy = 0;
   else if (p.canopy >= 0) p.canopy += DT;
   // How far the canopy has inflated (its numbers blend in), and its speed through the air (relative to the wind).
@@ -649,10 +692,14 @@ export const updateFall = (state: GameState, p: Player, input: Input) => {
   p.x = Math.min(WORLD - 4, Math.max(4, p.x + p.vx * DT));
   p.y = Math.min(WORLD - 4, Math.max(4, p.y + p.vy * DT));
   if (p.canopy >= DROP.deployTime) {
-    // Under the open canopy you can look where you aim, but nothing fires: the pistol's rounds are there on the ground.
+    // Under the open canopy you look where you aim and can shoot (people only: bots save their rounds for the ground).
     p.cooldown = Math.max(0, p.cooldown - DT);
+    p.swapping = Math.max(0, p.swapping - DT);
     updateReload(p);
     if (Math.hypot(input.aimX - p.x, input.aimY - p.y) > 0.05) p.heading = Math.atan2(input.aimY - p.y, input.aimX - p.x);
+    // A fresh press under the open canopy arms the trigger, so a trigger held all the way from the plane spends nothing.
+    if (input.fire && !p.prev.fire) p.chuteArmed = true;
+    if (input.fire && p.chuteArmed && !p.bot && p.cooldown <= 0 && p.weapon !== 'rockets' && p.weapon !== 'fists' && p.mag + p.ammo > 0) shoot(state, p, input);
   } else if (Math.hypot(p.vx, p.vy) > 1) {
     // Falling, you face the way you are going (the body turns to track).
     p.heading = Math.atan2(p.vy, p.vx);
@@ -1029,32 +1076,48 @@ const gunDamage = (p: Player) => WEAPONS[p.weapon].damage * (p.weapon === 'fists
 const INSTANT: ReadonlySet<WeaponKind> = new Set<WeaponKind>(['sniper']);
 
 /** Fires one round. Returns how far it flew if it was resolved at once (INSTANT), else undefined. */
-const fireBullet = (state: GameState, p: Player, angle: number, aim?: { x: number; y: number }): number | undefined => {
+const fireBullet = (state: GameState, p: Player, angle: number, aim?: { x: number; y: number; h?: number }): number | undefined => {
   const w = WEAPONS[p.weapon];
   // Leaning out, the muzzle is out past the corner too.
   const o = hitPoint(p);
   const x = o.x + Math.cos(angle) * 0.6;
   const y = o.y + Math.sin(angle) * 0.6;
-  const target = aim ? aimedAt(state, p, aim.x, aim.y) : null;
   const h0 = chestHeight(p);
-  // At nobody: the round goes to chest height over the aim point (from a roof, down at what you point at).
   const toAim = aim ? Math.max(1, Math.hypot(aim.x - x, aim.y - y)) : 1;
-  state.projectiles.push({
+  const pr: Projectile = {
     id: state.nextId++, owner: p.id, kind: 'bullet', weapon: p.weapon,
     x, y,
     vx: Math.cos(angle) * w.speed, vy: Math.sin(angle) * w.speed,
     damage: gunDamage(p), life: w.range / w.speed,
     sx: x, sy: y, tx: 0, ty: 0, t: 0, duration: 0, radius: 0,
-    h: h0, h0, h1: target ? chestHeight(target) : aim ? 1.1 : h0, hd: target ? Math.max(1, Math.hypot(target.x - x, target.y - y)) : toAim,
-  });
+    h: h0, h0, h1: h0, hd: toAim,
+  };
+  if (aim?.h !== undefined) {
+    // Aimed in 3D: a straight line from the muzzle through the crosshair point and on (up at the sky, down off a roof).
+    // Very close points are pushed out along the same line so a point under your nose does not give a wild slope.
+    pr.h1 = aim.h;
+    pr.ext = true;
+    if (toAim < 2) {
+      pr.h1 = h0 + ((aim.h - h0) * 2) / toAim;
+      pr.hd = 2;
+    }
+  } else {
+    // At nobody: the round goes to chest height over the aim point (from a roof, down at what you point at).
+    const target = aim ? aimedAt(state, p, aim.x, aim.y) : null;
+    pr.h1 = target ? chestHeight(target) : aim ? 1.1 : h0;
+    if (target) pr.hd = Math.max(1, Math.hypot(target.x - x, target.y - y));
+  }
+  state.projectiles.push(pr);
   if (!INSTANT.has(p.weapon)) return undefined;
-  const pr = state.projectiles[state.projectiles.length - 1];
   while (updateProjectile(state, pr)) {
     /* keep flying until it hits something or runs out of range */
   }
   state.projectiles.pop();
+  lastEndH = pr.h ?? h0;
   return Math.hypot(pr.x - pr.sx, pr.y - pr.sy);
 };
+/** Where the last instant round ended (its height), for the contrail. */
+let lastEndH = 0;
 
 /** Damage after the distance the bullet flew: full up close, down to `min` of it far away. */
 export const falloffDamage = (weapon: WeaponKind, damage: number, distance: number) => {
@@ -1146,6 +1209,8 @@ const startReload = (state: GameState, p: Player) => {
   state.events.push({ type: 'reload', player: p.id, weapon: p.weapon, x: p.x, y: p.y });
 };
 
+const pr3d = (input: Input) => input.aimH !== undefined;
+
 const shoot = (state: GameState, p: Player, input: Input) => {
   if (p.reload > 0 || p.swapping > 0) return;
   // Out of rounds altogether: the empty gun stays in your hands and you hit with it.
@@ -1168,7 +1233,7 @@ const shoot = (state: GameState, p: Player, input: Input) => {
   const spread = w.spread * (1 - (1 - CROUCH.spread) * p.crouch);
   const keep = p.weapon;
   p.weapon = kind; // fireBullet reads the weapon
-  const at = { x: input.aimX, y: input.aimY };
+  const at = input.aimH === undefined ? { x: input.aimX, y: input.aimY } : { x: input.aimX, y: input.aimY, h: input.aimH };
   // The shot comes first in the event list, so a hit or a kill it causes this tick reads as its result.
   const shot: GameEvent = { type: 'shot', owner: p.id, x: from.x, y: from.y, angle: aim, weapon: kind };
   state.events.push(shot);
@@ -1177,7 +1242,10 @@ const shoot = (state: GameState, p: Player, input: Input) => {
     for (let i = 0; i < w.bullets; i++) fireBullet(state, p, aim - spread / 2 + (spread * i) / (w.bullets - 1), at);
   } else {
     const len = fireBullet(state, p, aim + (nextRandom(state) - 0.5) * spread, at);
-    if (len !== undefined && shot.type === 'shot') shot.len = len;
+    if (len !== undefined && shot.type === 'shot') {
+      shot.len = len;
+      if (pr3d(input)) shot.endH = Math.round(lastEndH * 100) / 100;
+    }
   }
   p.weapon = keep;
   if (kind !== 'fists') p.shots += w.bullets;
@@ -1471,7 +1539,7 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     p.buzz = Math.max(0, p.buzz - DT);
     p.hp = Math.min(p.maxHp, p.hp + HEALS.coffee.perSecond * DT);
   }
-  if (p.sinceCombat >= REGEN.after) p.hp = Math.min(p.maxHp, p.hp + REGEN.perSecond * DT);
+  // No healing by itself (Reis, 2026-11-24): health comes back only from a bandage, a med kit or coffee you use.
 
   // Turn towards the aim at a limited rate, never snapping. Swimming, you face where you swim.
   const swimming = inWater(p.x, p.y);
@@ -1517,10 +1585,32 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
   if (p.using) {
     p.useLeft -= DT;
     if (p.useLeft <= 0) finishHeal(state, p);
-  } else if (!swimming && input.heal && !p.prev.heal) {
+  } else if (!swimming && input.bandage && !p.prev.bandage) startHeal(state, p, 'bandage');
+  else if (!swimming && input.medkit && !p.prev.medkit) startHeal(state, p, 'medkit');
+  else if (!swimming && input.heal && !p.prev.heal) {
     const kind = healChoice(p);
     if (kind) startHeal(state, p, kind);
   } else if (!swimming && input.coffee && !p.prev.coffee && p.coffees > 0) startHeal(state, p, 'coffee');
+
+  // 5 takes a bomb in hand, or puts it back (Reis, 2026-11-24: 3 bandage, 4 med kit, 5 bomb); a heal puts it away too.
+  if (input.bomb && !p.prev.bomb && !swimming) {
+    if (p.item === 'bomb') {
+      p.item = null;
+      p.swapping = SWAP_TIME * 0.5;
+      state.events.push({ type: 'swap', player: p.id, weapon: p.weapon });
+    } else if (p.bombs > 0) {
+      p.item = 'bomb';
+      p.reload = 0;
+      state.events.push({ type: 'swap', player: p.id, weapon: p.weapon });
+    }
+    p.charging = null;
+    p.charge = 0;
+  }
+  if (p.item === 'bomb' && p.using) {
+    p.item = null;
+    p.charging = null;
+    p.charge = 0;
+  }
 
   updateReload(p);
   if (pressed('reload') && !p.using) startReload(state, p);
@@ -1626,7 +1716,8 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
       }
     }
     // Keep pushing into a fence, window or low furniture and you climb over it; into a ladder, and you climb up it.
-    const pushingInto = vaultable && len > 0.01 && c > 1e-5 && (input.mx * cx + input.my * cy) / (len * c) < -0.6;
+    // Only from your feet (the floor or a hop): falling past a window off a roof you do not dive in through it.
+    const pushingInto = vaultable && p.z < 1 && len > 0.01 && c > 1e-5 && (input.mx * cx + input.my * cy) / (len * c) < -0.6;
     const ladder = p.z < 0.3 && p.jz === 0 && len > 0.01 && !swimming ? ladderAt(p.x, p.y, PLAYER_RADIUS + 0.3) : null;
     const climbing = !!ladder && -(input.mx * ladder.nx + input.my * ladder.ny) / len > 0.6;
     p.pushing = pushingInto || climbing ? p.pushing + DT : 0;
@@ -1653,8 +1744,8 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
       p.charge += DT;
     } else if (p.charging === 'bomb') {
       const toAim = Math.hypot(input.aimX - p.x, input.aimY - p.y);
-      const d = input.throwAt ? Math.min(ITEMS.bomb.range, Math.max(THROW.min, toAim)) : throwDistance(p.charge, ITEMS.bomb.range);
-      const a = input.throwAt && toAim > 0.3 ? Math.atan2(input.aimY - p.y, input.aimX - p.x) : p.heading;
+      const d = input.throwAt || input.aimH !== undefined ? Math.min(ITEMS.bomb.range, Math.max(THROW.min, toAim)) : throwDistance(p.charge, ITEMS.bomb.range);
+      const a = toAim > 0.3 ? Math.atan2(input.aimY - p.y, input.aimX - p.x) : p.heading;
       lob(state, p, p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, ITEMS.bomb.range, ITEMS.bomb.damage, ITEMS.bomb.radius);
       state.events.push({ type: 'throw', player: p.id });
       p.revealed = 1;
@@ -1696,25 +1787,10 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     }
   }
   if (auto) takeLoot(state, p, auto);
-  else if (!p.bot && !swimming && p.bombs > 0 && !k && !p.using && p.item !== 'bomb' && (input.use || p.charging === 'bomb')) {
-    // A bomb: hold F to throw it farther, let go to throw.
-    if (input.use) {
-      p.charging = 'bomb';
-      p.charge += DT;
-    } else {
-      // With the mouse it lands under the cursor (up to its range); otherwise hold to throw farther.
-      const toAim = Math.hypot(input.aimX - p.x, input.aimY - p.y);
-      const d = input.throwAt ? Math.min(ITEMS.bomb.range, toAim) : throwDistance(p.charge, ITEMS.bomb.range);
-      const a = input.throwAt && toAim > 0.3 ? Math.atan2(input.aimY - p.y, input.aimX - p.x) : p.heading;
-      lob(state, p, p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, ITEMS.bomb.range, ITEMS.bomb.damage, ITEMS.bomb.radius);
-      p.revealed = 1;
-      p.bombs -= 1;
-      p.charge = 0;
-      p.charging = null;
-    }
-  } else if (pressed('use')) {
+  else if (pressed('use')) {
+    // F picks up, never throws (a bomb is thrown from the hand, see 5). Bots still throw theirs with it.
     if (k) takeLoot(state, p, k);
-    else if (p.bombs > 0 && !swimming && !p.using) useItem(state, p, input);
+    else if (p.bot && p.bombs > 0 && !swimming && !p.using) useItem(state, p, input);
   }
   p.prev = { ...input };
 };
@@ -1763,7 +1839,10 @@ const updateProjectile = (state: GameState, pr: Projectile) => {
     pr.x += (pr.vx * DT) / steps;
     pr.y += (pr.vy * DT) / steps;
     // A round climbs to someone higher up (in the air, on a roof) or dips to someone lower, in a straight line.
-    if (pr.h0 !== undefined) pr.h = pr.h0 + ((pr.h1 ?? pr.h0) - pr.h0) * Math.min(1, Math.hypot(pr.x - pr.sx, pr.y - pr.sy) / (pr.hd ?? 1));
+    if (pr.h0 !== undefined) {
+      const k = Math.hypot(pr.x - pr.sx, pr.y - pr.sy) / (pr.hd ?? 1);
+      pr.h = pr.h0 + ((pr.h1 ?? pr.h0) - pr.h0) * (pr.ext ? k : Math.min(1, k));
+    }
     const ht = pr.h ?? 1.1;
     if (ht <= 0.02 || solidStep(state, px, py, ph, pr.x, pr.y, ht)) {
       hitRack(state, toTile(pr.x), toTile(pr.y), pr.damage);

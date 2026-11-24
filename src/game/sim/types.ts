@@ -49,9 +49,21 @@ export interface Input {
   coffee?: boolean;
   /** Crouched (G toggles it on the client; the sim gets the state). */
   crouch?: boolean;
+  /** Use a bandage (3). */
+  bandage?: boolean;
+  /** Use a med kit (4). */
+  medkit?: boolean;
+  /** Take a bomb in hand, or put it away (5); in hand, the trigger throws it. */
+  bomb?: boolean;
   /** Aim point on the map. */
   aimX: number;
   aimY: number;
+  /**
+   * Height (m) of the aim point: where the crosshair ray meets a wall, roof, the ground or a fighter, or a far point in
+   * the sky. Given, a round flies in a straight line from the muzzle through (aimX, aimY, aimH) and on: the crosshair is
+   * the truth. Missing (bots, old clients), rounds go to chest height over the aim point as before.
+   */
+  aimH?: number;
 }
 
 export const NO_INPUT: Input = { mx: 0, my: 0, fire: false, super: false, use: false, reload: false, lean: 0, roll: false, jump: false, aimX: 0, aimY: 0 };
@@ -125,8 +137,10 @@ export interface Player {
   lean: number;
   /** Crouching: 0 (standing) .. 1 (down), eased towards the input. */
   crouch: number;
-  /** In hand instead of the gun (3 / 4): the heals (shoot uses one) or a bomb (hold shoot, let go to throw). */
+  /** In hand instead of the gun: the heals (shoot uses one) or a bomb (5; hold shoot, let go to throw). */
   item: 'heal' | 'bomb' | null;
+  /** Under the open canopy the trigger was pressed afresh (a trigger held from the plane does not fire). */
+  chuteArmed?: boolean;
   /** Dodge roll: seconds left, its direction, and the recharge. */
   rolling: number;
   rollDir: number;
@@ -188,6 +202,8 @@ export interface Projectile {
   h0?: number;
   h1?: number;
   hd?: number;
+  /** The straight line through (`hd`, `h1`) goes on past it (aimed in 3D) instead of levelling off. */
+  ext?: boolean;
   vh?: number;
 }
 
@@ -253,7 +269,7 @@ export interface Drone {
 
 export type GameEvent =
   /** `len`: for a round that lands the tick it is fired (the sniper), how far it flew before it stopped, so the contrail ends there. */
-  | { type: 'shot'; owner: number; x: number; y: number; angle: number; weapon: WeaponKind; len?: number }
+  | { type: 'shot'; owner: number; x: number; y: number; angle: number; weapon: WeaponKind; len?: number; /** Instant rounds aimed up or down: the height where the line ends. */ endH?: number }
   | { type: 'hit'; target: number; by: number | null; x: number; y: number; damage: number; armor: boolean; ko: boolean }
   /** `z`: the height it happened at (absent = the old default height). */
   | { type: 'impact'; x: number; y: number; z?: number }

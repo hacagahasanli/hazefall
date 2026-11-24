@@ -1,6 +1,6 @@
 // The 240 m valley (docs/collab/CREATIVE/specifications/map-v2.md): nothing walled in, every named place where the plan has it.
 import { BUILDINGS, DISTRICTS, MAP, PLACE_TIER, placeAt, PROPS, RIVER, ROUTES, SIZE, TILE, WORLD } from './constants';
-import { LADDERS } from './roofs';
+import { buildingAt, LADDERS } from './roofs';
 
 /** Tiles you cannot walk onto at all (the rest can be walked, swum, vaulted or shot through). */
 const SOLID = 'tkv#ur';
@@ -25,17 +25,44 @@ const reached = () => {
 };
 
 describe('the valley', () => {
-  it('is 120 x 120 tiles (240 m) with five crossings and thirteen named places', () => {
+  it('is 120 x 120 tiles (240 m) with five crossings and fourteen named places (The Pitch inside Old Town)', () => {
     expect(SIZE).toBe(120);
     expect(WORLD).toBe(240);
     expect(RIVER.bridges).toHaveLength(5);
-    expect(new Set(DISTRICTS.map((d) => d.name)).size).toBe(13);
-    for (const name of ['Old Town', 'Container Yard', 'The Campus', 'Mast Hill', 'Quarry', 'Truck Stop', 'Railyard', 'Hollis Farm', 'Redgate Farm', 'Southfield Farm', 'Windmill Hill', 'Lakeside', 'Deadwood']) {
+    expect(new Set(DISTRICTS.map((d) => d.name)).size).toBe(14);
+    for (const name of ['The Pitch', 'Old Town', 'Container Yard', 'The Campus', 'Mast Hill', 'Quarry', 'Truck Stop', 'Railyard', 'Hollis Farm', 'Redgate Farm', 'Southfield Farm', 'Windmill Hill', 'Lakeside', 'Deadwood']) {
       expect(DISTRICTS.some((d) => d.name === name)).toBe(true);
     }
     expect(PLACE_TIER['The Campus']).toBe(3);
     expect(PLACE_TIER['Mast Hill']).toBe(3);
     expect(placeAt(62 * TILE, 50 * TILE)?.name).toBe('Old Town');
+    expect(placeAt(139, 148)?.name).toBe('The Pitch');
+    expect(placeAt(124, 140)?.name).toBe('Old Town');
+  });
+
+  it('balances tall grass: 950 to 1050 tiles, none in the town away from the water, none in the stadium', () => {
+    const h = MAP.join('').split('').filter((c) => c === 'h').length;
+    expect(h).toBeGreaterThanOrEqual(950);
+    expect(h).toBeLessThanOrEqual(1050);
+    for (let y = 66; y <= 81; y++) for (let x = 62; x <= 76; x++) expect(MAP[y][x]).not.toBe('h');
+    for (let y = 42; y <= 78; y++) {
+      for (let x = 44; x <= 78; x++) {
+        if (MAP[y][x] !== 'h') continue;
+        let water = false;
+        for (let j = y - 3; j <= y + 3; j++) for (let i = x - 3; i <= x + 3; i++) if (MAP[j]?.[i] === 'o') water = true;
+        expect(water).toBe(true);
+      }
+    }
+  });
+
+  it('The Pitch replaces four houses and matches its grid; the house east of it stays', () => {
+    expect(BUILDINGS.length).toBe(40);
+    expect(BUILDINGS.some((b) => b.x0 + b.w > 62 && b.x0 <= 76 && b.y0 + b.h > 66 && b.y0 <= 81)).toBe(false);
+    expect(BUILDINGS.some((b) => b.x0 === 77 && b.y0 === 68)).toBe(true);
+    expect(MAP.slice(67, 81).map((r) => r.slice(62, 77))).toEqual([
+      'gvvvffaaaffvvvg', 'gvvvpppspppvvvg', 'gvvvpgggggpvvvg', 'gvvvvgrsggpvvvg', 'gvvvvgggvvpvvvg', 'avvvsgggggpvvvg', 'aaaaaggsggrvvvg',
+      'aaasaggsggpvvvg', 'avvvsvggggpvvvg', 'gvvvvgggggpvvvg', 'gvvvvggsrgpvvvg', 'gvvvpgggggpvvvg', 'gvvvpppspppvvvg', 'gvvvffaaaffvvvg',
+    ]);
   });
 
   it('has the landmarks: water tower, two cranes, pole sign, mast, HQ tower, lookout, gantry, conveyor, boxcars', () => {
@@ -106,11 +133,23 @@ describe('the valley', () => {
     }
   });
 
-  it('has the density the plan asks for: 50 to 60 buildings, a ladder on nearly every one, plain grass under half', () => {
-    expect(BUILDINGS.length).toBeGreaterThanOrEqual(50);
+  // 40 to 60: nine houses that stood on roads were taken down (Reis, 2026-11-24).
+  it('has the density the plan asks for: 40 to 60 buildings, a ladder on nearly every one, plain grass under half', () => {
+    expect(BUILDINGS.length).toBeGreaterThanOrEqual(40);
     expect(BUILDINGS.length).toBeLessThanOrEqual(60);
     expect(LADDERS.length).toBeGreaterThanOrEqual(BUILDINGS.length - 2);
     const grass = [...MAP.join('')].filter((c) => c === 'g').length / (SIZE * SIZE);
     expect(grass).toBeLessThan(0.5);
+  });
+
+  it('no house stands on a road, path or track (its centre line never crosses a footprint)', () => {
+    for (const rt of ROUTES) {
+      for (let i = 1; i < rt.points.length; i++) {
+        const a = rt.points[i - 1];
+        const b = rt.points[i];
+        const n = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 0.5);
+        for (let k = 0; k <= n; k++) expect(buildingAt(a.x + ((b.x - a.x) * k) / n, a.y + ((b.y - a.y) * k) / n)).toBe(-1);
+      }
+    }
   });
 });

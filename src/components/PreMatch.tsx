@@ -7,7 +7,7 @@
  * and a "match starting" strip counts down at the bottom. The last seconds are the launch: the camera cranes over the
  * squad to the battleground, the engines spool up, a big 3-2-1, a fade to black, and the plane scene comes straight up
  * out of the black, already loaded. If the device is still building the map, the strip says so and waits. Esc goes back
- * to the menu. After a round, Play again skips the Ready press: the lobby is full and the countdown already running.
+ * to the menu. After a round, Play again comes back here (the lobby already full) and waits for Ready the same way.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -87,8 +87,8 @@ export const PreMatch = ({
   /** The player opened a category: these ids are no longer new. */
   onSeen?: (ids: string[]) => void;
 }) => {
-  /** Seconds from Ready to the match. A rematch is ready the moment the lobby is up, so its countdown is the launch plus a breath. */
-  const count = quick ? LAUNCH + 0.8 : 9;
+  /** Seconds from Ready to the match: always 10 (Reis, 2026-11-24), a rematch too. */
+  const count = 10;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const staging = useRef<Staging | null>(null);
   // A locked outfit or finish being looked at in the Style tray: shown on the fighter, never worn.
@@ -208,10 +208,7 @@ export const PreMatch = ({
     onReadyRef.current();
   }, [readied, live, t, count]);
 
-  // Play again: no Ready press, the countdown is already running.
-  useEffect(() => {
-    if (quick && live && !readied) ready();
-  }, [quick, live, readied, ready]);
+  // Play again lands here too and waits for Ready like the first round (Reis, 2026-11-24).
 
   const left = Math.max(0, end.current - t);
   const launching = left <= LAUNCH;

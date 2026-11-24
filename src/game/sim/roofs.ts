@@ -68,9 +68,24 @@ export const roofHeightOf = (i: number, x: number, y: number) => {
   return EAVE - 0.05 + (rise + 0.05) * k;
 };
 
-/** The roof's height at (x, y), or -1 off every roof. */
-export const roofAt = (x: number, y: number) => {
+/**
+ * Whose roof is over (x, y): the footprint's building, or one whose eaves overhang the spot (the drawn roof reaches
+ * OVERHANG past the walls on every side, so you can stand out to its visible edge). -1 under the open sky.
+ */
+export const roofOwnerAt = (x: number, y: number) => {
   const i = buildingAt(x, y);
+  if (i >= 0) return i;
+  const o = OVERHANG - 0.02;
+  for (const [dx, dy] of [[o, 0], [-o, 0], [0, o], [0, -o], [o, o], [o, -o], [-o, o], [-o, -o]]) {
+    const j = buildingAt(x + dx, y + dy);
+    if (j >= 0) return j;
+  }
+  return -1;
+};
+
+/** The roof's height at (x, y) (out to the eaves' edge), or -1 off every roof. */
+export const roofAt = (x: number, y: number) => {
+  const i = roofOwnerAt(x, y);
   return i < 0 ? -1 : roofHeightOf(i, x, y);
 };
 

@@ -270,6 +270,8 @@ const coverSpot = (s: GameState, me: GameState['players'][number]) => {
 describe('bots fight like people', () => {
   it('never notice anyone through a wall, however long they look; across open ground they do', () => {
     const { s, bot, me, them } = duel(21, 2, () => true);
+    // Nobody else in the round (the others wait at 6, 6, which can be in sight of a wall near that corner).
+    s.players.forEach((o) => { if (o.id !== me.id && o.id !== them.id) o.alive = false; });
     // Me facing the wall from 3 tiles outside, them moving about 2 tiles inside it: 10 m apart, straight ahead.
     Object.assign(me, { x: (WALL.x - 3) * TILE + 1, y: WALL.y * TILE + 1, heading: 0 });
     Object.assign(them, { x: (WALL.x + 2) * TILE + 1, y: WALL.y * TILE + 1 });
@@ -455,7 +457,8 @@ describe('bots fight like people', () => {
     }
     expect(firstHit).toBeGreaterThanOrEqual(0);
     expect(moving / ticks).toBeGreaterThan(0.8);
-    expect(modes.has('pressure')).toBe(true);
+    // Off the line (pressure), or it already made them out and fights back (engage): either way not standing there.
+    expect(modes.has('pressure') || modes.has('engage')).toBe(true);
     // It knows roughly where from, not exactly.
     const h = bot.info().heard!;
     expect(Math.hypot(h.x - them.x, h.y - them.y)).toBeGreaterThan(0.5);

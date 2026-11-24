@@ -2,9 +2,10 @@
  * Career level, unlocks, daily goals and the day streak: pure rules, applied to the saved `Career` after every round
  * (`applyRound`). The page only loads, calls this, saves, and shows the summary on the round report.
  *
- * XP per round (progression v2): 20 for playing, 1 per 6 s survived (up to 40), 2 per fighter outlasted, 20 per knock-out,
- * 1 per 25 damage, 60 for a win, 50 + 10 per streak day (up to 5) for the first round of the day, 75 per daily goal and 75
- * for all three. XP to the next level: `min(900, 230 + 35 * (level - 1))`.
+ * XP per round (progression v3, 2026-11-24): 20 for playing, 1 per 6 s survived (up to 40), 3 per fighter outlasted, a
+ * placement bonus (top 10: 15, top 5: 35, top 3: 60, not stacked; a win instead earns 150), 20 per knock-out, 1 per 25
+ * damage, 50 + 10 per streak day (up to 5) for the first round of the day, 75 per daily goal and 75 for all three.
+ * XP to the next level: `min(1800, 460 + 70 * (level - 1))` (twice v2).
  */
 import { equipNew, rewardsAtLevel, rewardsAtStreak } from './cosmetics';
 import { recordRound, xpToNext } from './career';
@@ -117,11 +118,13 @@ export const roundLines = (r: RoundResult, firstOfDay: boolean, streak = 0): XpL
   const lines: XpLine[] = [
     { label: 'Round played', xp: 20 },
     { label: `Survived ${clock(r.survived)}`, xp: Math.min(40, Math.floor(r.survived / 6)) },
-    { label: `Outlasted ${Math.max(0, r.total - r.place)}`, xp: Math.max(0, r.total - r.place) * 2 },
+    { label: `Outlasted ${Math.max(0, r.total - r.place)}`, xp: Math.max(0, r.total - r.place) * 3 },
+    // Where you finished counts for more than before (a win more still, below).
+    ...(!r.won && r.place <= 10 ? [{ label: r.place <= 3 ? 'Top 3' : r.place <= 5 ? 'Top 5' : 'Top 10', xp: r.place <= 3 ? 60 : r.place <= 5 ? 35 : 15 }] : []),
     { label: r.kills === 1 ? 'Knock-out' : `Knock-outs x${r.kills}`, xp: r.kills * 20 },
     { label: `Damage ${Math.round(r.damage)}`, xp: Math.floor(r.damage / 25) },
   ];
-  if (r.won) lines.push({ label: 'Win', xp: 60 });
+  if (r.won) lines.push({ label: 'Win', xp: 150 });
   if (firstOfDay) lines.push({ label: streak >= 2 ? `First round today, ${streak}-day streak` : 'First round today', xp: 50 + 10 * Math.min(streak, 5) });
   return lines.filter((l) => l.xp > 0);
 };

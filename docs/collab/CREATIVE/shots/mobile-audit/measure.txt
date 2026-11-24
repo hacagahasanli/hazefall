@@ -1,0 +1,186 @@
+
+== 568x320 (p) --ui=0.75
+play taps needed: 1
+lobby header: [{"n":"← Menu","x":20,"y":29,"w":84,"h":36,"vis":true},{"n":"Level 1, 0 of 230 XP","x":112,"y":24,"w":160,"h":46,"vis":true},{"n":"Lobby full20/20","x":456,"y":24,"w":92,"h":52,"vis":true}]
+lobby left stack: [["You drop as",8,20],["BLAZE",36,32],["Fighter",80,64],["Style",152,64],["Ready",223,50],["The match starts when you ar",280,16]]
+LOBBY OVERLAP header vs stack: ← Menu X BLAZE (84x29); Level 1, 0 of 230 XP X You drop as (156x4); Level 1, 0 of 230 XP X BLAZE (156x32)
+lobby gap headBottom 76 stackTop 8 => -68px; screen coverage of left stack width 268/568
+plane buttons: [{"n":"Jump","x":484,"y":236,"w":69,"h":69,"vis":true}]
+ground buttons (css px): Fire=69x69@484,236 | Roll=39x39@430,263 | Jump=39x39@442,214 | Reload=36x36@480,188 | Pick up=35x35@528,190 | Super=44x44@387,220 | ◀ Q=29x29@360,159 | E ▶=29x29@360,193 | Pause=30x30@429,8
+buttons under 44px: Roll 39, Jump 39, Reload 36, Pick up 35, ◀ Q 29, E ▶ 29, Pause 30
+hud: minimap=92x92@468,8 | vitals=180x57@9,6 | pill=225x24@196,12
+HUD vs buttons overlap: none
+button vs button overlap: Super X E ▶ (2x2); E ▶ X Super (2x2)
+full cluster: Fire=69x69@484,236 | Roll=39x39@430,263 | Jump=39x39@442,214 | Reload=36x36@480,188 | Pick up=35x35@528,190 | Scope=42x42@520,139 | Super=44x44@387,220 | Swap to SMG=32x32@386,274 | Heal=38x38@408,174 | ◀ Q=29x29@360,159 | E ▶=29x29@360,193 | Pause=30x30@429,8
+button area share of screen: 7.8%
+568x320 errors: none
+
+== 667x375 (p) --ui=0.88
+play taps needed: 1
+lobby header: [{"n":"← Menu","x":20,"y":29,"w":84,"h":36,"vis":true},{"n":"Level 1, 0 of 230 XP","x":112,"y":24,"w":160,"h":46,"vis":true},{"n":"Lobby full20/20","x":555,"y":24,"w":92,"h":52,"vis":true}]
+lobby left stack: [["You drop as",63,20],["BLAZE",91,32],["Fighter",135,64],["Style",207,64],["Ready",278,50],["The match starts when you ar",335,16]]
+LOBBY OVERLAP header vs stack: ← Menu X You drop as (84x2); Level 1, 0 of 230 XP X You drop as (156x7)
+lobby gap headBottom 76 stackTop 63 => -13px; screen coverage of left stack width 268/667
+plane buttons: [{"n":"Jump","x":568,"y":276,"w":81,"h":81,"vis":true}]
+ground buttons (css px): Fire=81x81@568,276 | Roll=46x46@505,308 | Jump=46x46@519,250 | Reload=42x42@563,220 | Pick up=40x40@620,223 | Super=51x51@455,258 | ◀ Q=33x33@423,186 | E ▶=33x33@423,226 | Pause=35x35@507,8
+buttons under 44px: Reload 42, Pick up 40, ◀ Q 33, E ▶ 33, Pause 35
+hud: minimap=107x107@552,8 | vitals=212x67@11,7 | pill=264x28@232,12
+HUD vs buttons overlap: none
+button vs button overlap: Jump X Reload (2x12); Reload X Jump (2x12)
+full cluster: Fire=81x81@568,276 | Roll=46x46@505,308 | Jump=46x46@519,250 | Reload=42x42@563,220 | Pick up=40x40@620,223 | Scope=49x49@611,162 | Super=51x51@455,258 | Swap to SMG=37x37@453,321 | Heal=44x44@480,203 | ◀ Q=33x33@423,186 | E ▶=33x33@423,226 | Pause=35x35@507,8
+button area share of screen: 7.7%
+667x375 errors: none
+
+== 844x390 (p) --ui=1
+play taps needed: 1
+lobby header: [{"n":"← Menu","x":20,"y":29,"w":84,"h":36,"vis":true},{"n":"Level 1, 0 of 230 XP","x":112,"y":24,"w":160,"h":46,"vis":true},{"n":"Lobby full20/20","x":732,"y":24,"w":92,"h":52,"vis":true}]
+lobby left stack: [["You drop as",78,20],["BLAZE",106,32],["Fighter",150,64],["Style",222,64],["Ready",293,50],["The match starts when you ar",350,16]]
+LOBBY OVERLAP header vs stack: none
+lobby gap headBottom 76 stackTop 78 => 2px; screen coverage of left stack width 268/844
+plane buttons: [{"n":"Jump","x":732,"y":278,"w":92,"h":92,"vis":true}]
+ground buttons (css px): Fire=92x92@732,278 | Roll=52x52@660,314 | Jump=52x52@676,248 | Reload=48x48@726,214 | Pick up=46x46@791,217 | Super=58x58@603,257 | ◀ Q=38x38@567,175 | E ▶=38x38@567,221 | Pause=40x40@664,8
+buttons under 44px: ◀ Q 38, E ▶ 38, Pause 40
+hud: minimap=120x120@716,8 | vitals=241x76@12,8 | pill=300x32@308,12
+HUD vs buttons overlap: none
+button vs button overlap: Jump X Reload (2x14); Reload X Jump (2x14); Super X E ▶ (2x2); E ▶ X Super (2x2)
+full cluster: Fire=92x92@732,278 | Roll=52x52@660,314 | Jump=52x52@676,248 | Reload=48x48@726,214 | Pick up=46x46@791,217 | Scope=56x56@780,148 | Super=58x58@603,257 | Swap to SMG=42x42@601,329 | Heal=50x50@631,195 | ◀ Q=38x38@567,175 | E ▶=38x38@567,221 | Pause=40x40@664,8
+button area share of screen: 7.6%
+844x390 errors: none
+
+== 932x430 (p) --ui=1
+play taps needed: 1
+lobby header: [{"n":"← Menu","x":20,"y":29,"w":84,"h":36,"vis":true},{"n":"Level 1, 0 of 230 XP","x":112,"y":24,"w":160,"h":46,"vis":true},{"n":"Lobby full20/20","x":820,"y":24,"w":92,"h":52,"vis":true}]
+lobby left stack: [["You drop as",118,20],["BLAZE",146,32],["Fighter",190,64],["Style",262,64],["Ready",333,50],["The match starts when you ar",390,16]]
+LOBBY OVERLAP header vs stack: none
+lobby gap headBottom 76 stackTop 118 => 42px; screen coverage of left stack width 268/932
+plane buttons: [{"n":"Jump","x":820,"y":318,"w":92,"h":92,"vis":true}]
+ground buttons (css px): Fire=92x92@820,318 | Roll=52x52@748,354 | Jump=52x52@764,288 | Reload=48x48@814,254 | Pick up=46x46@879,257 | Super=58x58@691,297 | ◀ Q=38x38@655,215 | E ▶=38x38@655,261 | Pause=40x40@752,8
+buttons under 44px: ◀ Q 38, E ▶ 38, Pause 40
+hud: minimap=120x120@804,8 | vitals=241x76@12,8 | pill=300x32@352,12
+HUD vs buttons overlap: none
+button vs button overlap: Jump X Reload (2x14); Reload X Jump (2x14); Super X E ▶ (2x2); E ▶ X Super (2x2)
+full cluster: Fire=92x92@820,318 | Roll=52x52@748,354 | Jump=52x52@764,288 | Reload=48x48@814,254 | Pick up=46x46@879,257 | Scope=56x56@868,188 | Super=58x58@691,297 | Swap to SMG=42x42@689,369 | Heal=50x50@719,235 | ◀ Q=38x38@655,215 | E ▶=38x38@655,261 | Pause=40x40@752,8
+button area share of screen: 6.3%
+932x430 errors: none
+
+== 640x360 (p) --ui=0.84
+play taps needed: 1
+lobby header: [{"n":"← Menu","x":20,"y":29,"w":84,"h":36,"vis":true},{"n":"Level 1, 0 of 230 XP","x":112,"y":24,"w":160,"h":46,"vis":true},{"n":"Lobby full20/20","x":528,"y":24,"w":92,"h":52,"vis":true}]
+lobby left stack: [["You drop as",48,20],["BLAZE",76,32],["Fighter",120,64],["Style",192,64],["Ready",263,50],["The match starts when you ar",320,16]]
+LOBBY OVERLAP header vs stack: ← Menu X You drop as (84x17); Level 1, 0 of 230 XP X You drop as (156x20)
+lobby gap headBottom 76 stackTop 48 => -28px; screen coverage of left stack width 268/640
+plane buttons: [{"n":"Jump","x":546,"y":266,"w":77,"h":77,"vis":true}]
+ground buttons (css px): Fire=77x77@546,266 | Roll=44x44@485,296 | Jump=44x44@499,241 | Reload=40x40@541,212 | Pick up=39x39@595,215 | Super=49x49@438,248 | ◀ Q=32x32@407,179 | E ▶=32x32@407,218 | Pause=34x34@486,8
+buttons under 44px: Reload 40, Pick up 39, ◀ Q 32, E ▶ 32, Pause 34
+hud: minimap=102x102@530,8 | vitals=202x64@10,7 | pill=252x27@223,12
+HUD vs buttons overlap: none
+button vs button overlap: Jump X Reload (2x11); Reload X Jump (2x11)
+full cluster: Fire=77x77@546,266 | Roll=44x44@485,296 | Jump=44x44@499,241 | Reload=40x40@541,212 | Pick up=39x39@595,215 | Scope=47x47@586,157 | Super=49x49@438,248 | Swap to SMG=35x35@436,309 | Heal=42x42@461,196 | ◀ Q=32x32@407,179 | E ▶=32x32@407,218 | Pause=34x34@486,8
+button area share of screen: 7.7%
+640x360 errors: none
+
+== 915x412 (p) --ui=1
+play taps needed: 1
+lobby header: [{"n":"← Menu","x":20,"y":29,"w":84,"h":36,"vis":true},{"n":"Level 1, 0 of 230 XP","x":112,"y":24,"w":160,"h":46,"vis":true},{"n":"Lobby full20/20","x":803,"y":24,"w":92,"h":52,"vis":true}]
+lobby left stack: [["You drop as",100,20],["BLAZE",128,32],["Fighter",172,64],["Style",244,64],["Ready",315,50],["The match starts when you ar",372,16]]
+LOBBY OVERLAP header vs stack: none
+lobby gap headBottom 76 stackTop 100 => 24px; screen coverage of left stack width 268/915
+plane buttons: [{"n":"Jump","x":803,"y":300,"w":92,"h":92,"vis":true}]
+ground buttons (css px): Fire=92x92@803,300 | Roll=52x52@731,336 | Jump=52x52@747,270 | Reload=48x48@797,236 | Pick up=46x46@862,239 | Super=58x58@674,279 | ◀ Q=38x38@638,197 | E ▶=38x38@638,243 | Pause=40x40@735,8
+buttons under 44px: ◀ Q 38, E ▶ 38, Pause 40
+hud: minimap=120x120@787,8 | vitals=241x76@12,8 | pill=300x32@344,12
+HUD vs buttons overlap: none
+button vs button overlap: Jump X Reload (2x14); Reload X Jump (2x14); Super X E ▶ (2x2); E ▶ X Super (2x2)
+full cluster: Fire=92x92@803,300 | Roll=52x52@731,336 | Jump=52x52@747,270 | Reload=48x48@797,236 | Pick up=46x46@862,239 | Scope=56x56@851,170 | Super=58x58@674,279 | Swap to SMG=42x42@672,351 | Heal=50x50@702,217 | ◀ Q=38x38@638,197 | E ▶=38x38@638,243 | Pause=40x40@735,8
+button area share of screen: 6.7%
+915x412 errors: none
+
+== 800x450 (p) --ui=1
+play taps needed: 1
+lobby header: [{"n":"← Menu","x":20,"y":29,"w":84,"h":36,"vis":true},{"n":"Level 1, 0 of 230 XP","x":112,"y":24,"w":160,"h":46,"vis":true},{"n":"Lobby full20/20","x":688,"y":24,"w":92,"h":52,"vis":true}]
+lobby left stack: [["You drop as",138,20],["BLAZE",166,32],["Fighter",210,64],["Style",282,64],["Ready",353,50],["The match starts when you ar",410,16]]
+LOBBY OVERLAP header vs stack: none
+lobby gap headBottom 76 stackTop 138 => 62px; screen coverage of left stack width 268/800
+plane buttons: [{"n":"Jump","x":688,"y":338,"w":92,"h":92,"vis":true}]
+ground buttons (css px): Fire=92x92@688,338 | Roll=52x52@616,374 | Jump=52x52@632,308 | Reload=48x48@682,274 | Pick up=46x46@747,277 | Super=58x58@559,317 | ◀ Q=38x38@523,235 | E ▶=38x38@523,281 | Pause=40x40@620,8
+buttons under 44px: ◀ Q 38, E ▶ 38, Pause 40
+hud: minimap=120x120@672,8 | vitals=241x76@12,8 | pill=300x32@286,12
+HUD vs buttons overlap: none
+button vs button overlap: Jump X Reload (2x14); Reload X Jump (2x14); Super X E ▶ (2x2); E ▶ X Super (2x2)
+full cluster: Fire=92x92@688,338 | Roll=52x52@616,374 | Jump=52x52@632,308 | Reload=48x48@682,274 | Pick up=46x46@747,277 | Scope=56x56@736,208 | Super=58x58@559,317 | Swap to SMG=42x42@557,389 | Heal=50x50@587,255 | ◀ Q=38x38@523,235 | E ▶=38x38@523,281 | Pause=40x40@620,8
+button area share of screen: 7.0%
+800x450 errors: none
+390x844 portrait card
+
+== 1020x540 (d) --ui=1
+play taps needed: 1
+lobby header: [{"n":"← MenuEsc","x":20,"y":24,"w":116,"h":36,"vis":true},{"n":"Level 1, 0 of 230 XP","x":20,"y":68,"w":160,"h":46,"vis":true},{"n":"Lobby full20/20","x":908,"y":24,"w":92,"h":52,"vis":true}]
+lobby left stack: [["You drop as",114,20],["BLAZE",142,65],["Runner · G Rush: a fast dash",215,25],["Fighter",252,96],["Style",356,64],["ReadySpace",435,58],["The match starts when you ar",500,16]]
+LOBBY OVERLAP header vs stack: none
+lobby gap headBottom 114 stackTop 114 => 0px; screen coverage of left stack width 452/1020
+1020x540 errors: none
+
+== 860x484 (d) --ui=1
+play taps needed: 1
+lobby header: [{"n":"← MenuEsc","x":20,"y":29,"w":116,"h":36,"vis":true},{"n":"Level 1, 0 of 230 XP","x":144,"y":24,"w":160,"h":46,"vis":true},{"n":"Lobby full20/20","x":748,"y":24,"w":92,"h":52,"vis":true}]
+lobby left stack: [["You drop as",172,20],["BLAZE",200,32],["Fighter",244,64],["Style",316,64],["ReadySpace",387,50],["The match starts when you ar",444,16]]
+LOBBY OVERLAP header vs stack: none
+lobby gap headBottom 76 stackTop 172 => 96px; screen coverage of left stack width 268/860
+860x484 errors: none
+
+== 907x510 (d) --ui=1
+play taps needed: 1
+lobby header: [{"n":"← MenuEsc","x":20,"y":24,"w":116,"h":36,"vis":true},{"n":"Level 1, 0 of 230 XP","x":20,"y":68,"w":160,"h":46,"vis":true},{"n":"Lobby full20/20","x":795,"y":24,"w":92,"h":52,"vis":true}]
+lobby left stack: [["You drop as",84,20],["BLAZE",112,65],["Runner · G Rush: a fast dash",185,25],["Fighter",222,96],["Style",326,64],["ReadySpace",405,58],["The match starts when you ar",470,16]]
+LOBBY OVERLAP header vs stack: Level 1, 0 of 230 XP X You drop as (160x20); Level 1, 0 of 230 XP X BLAZE (160x2)
+lobby gap headBottom 114 stackTop 84 => -30px; screen coverage of left stack width 452/907
+907x510 errors: none
+
+== 1366x768 (d) --ui=1
+play taps needed: 1
+lobby header: [{"n":"← MenuEsc","x":20,"y":24,"w":116,"h":36,"vis":true},{"n":"Level 1, 0 of 230 XP","x":20,"y":68,"w":160,"h":46,"vis":true},{"n":"Lobby full20/20","x":1254,"y":24,"w":92,"h":52,"vis":true}]
+lobby left stack: [["You drop as",318,20],["BLAZE",350,65],["Runner · G Rush: a fast dash",427,25],["Fighter",468,96],["Style",576,64],["ReadySpace",659,58],["The match starts when you ar",728,16]]
+LOBBY OVERLAP header vs stack: none
+lobby gap headBottom 114 stackTop 318 => 204px; screen coverage of left stack width 452/1366
+1366x768 errors: none
+
+== 1920x1080 (d) --ui=1
+play taps needed: 1
+lobby header: [{"n":"← MenuEsc","x":20,"y":24,"w":116,"h":36,"vis":true},{"n":"Level 1, 0 of 230 XP","x":20,"y":68,"w":160,"h":46,"vis":true},{"n":"Lobby full20/20","x":1808,"y":24,"w":92,"h":52,"vis":true}]
+lobby left stack: [["You drop as",630,20],["BLAZE",662,65],["Runner · G Rush: a fast dash",739,25],["Fighter",780,96],["Style",888,64],["ReadySpace",971,58],["The match starts when you ar",1040,16]]
+LOBBY OVERLAP header vs stack: none
+lobby gap headBottom 114 stackTop 630 => 516px; screen coverage of left stack width 452/1920
+1920x1080 errors: none
+
+== 1080x607 (t) --ui=1
+play taps needed: 1
+lobby header: [{"n":"← Menu","x":20,"y":24,"w":84,"h":36,"vis":true},{"n":"Level 1, 0 of 230 XP","x":20,"y":68,"w":160,"h":46,"vis":true},{"n":"Lobby full20/20","x":968,"y":24,"w":92,"h":52,"vis":true}]
+lobby left stack: [["You drop as",157,20],["BLAZE",185,65],["Runner · SUPER Rush: a fast ",258,49],["Fighter",319,96],["Style",423,64],["Ready",502,58],["The match starts when you ar",567,16]]
+LOBBY OVERLAP header vs stack: none
+lobby gap headBottom 114 stackTop 157 => 43px; screen coverage of left stack width 468/1080
+plane buttons: [{"n":"Jump","x":968,"y":495,"w":92,"h":92,"vis":true}]
+ground buttons (css px): Fire=92x92@968,495 | Roll=52x52@896,531 | Jump=52x52@912,465 | Reload=48x48@962,431 | Pick up=46x46@1027,434 | Super=58x58@839,474 | ◀ Q=38x38@803,392 | E ▶=38x38@803,438 | Pause=40x40@900,8
+buttons under 44px: ◀ Q 38, E ▶ 38, Pause 40
+hud: minimap=120x120@952,8 | vitals=241x76@12,8 | pill=300x32@426,12
+HUD vs buttons overlap: none
+button vs button overlap: Jump X Reload (2x14); Reload X Jump (2x14); Super X E ▶ (2x2); E ▶ X Super (2x2)
+full cluster: Fire=92x92@968,495 | Roll=52x52@896,531 | Jump=52x52@912,465 | Reload=48x48@962,431 | Pick up=46x46@1027,434 | Scope=56x56@1016,365 | Super=58x58@839,474 | Swap to SMG=42x42@837,546 | Heal=50x50@867,412 | ◀ Q=38x38@803,392 | E ▶=38x38@803,438 | Pause=40x40@900,8
+button area share of screen: 3.8%
+1080x607 errors: none
+
+== 1024x768 (t) --ui=1
+play taps needed: 1
+lobby header: [{"n":"← Menu","x":20,"y":24,"w":84,"h":36,"vis":true},{"n":"Level 1, 0 of 230 XP","x":20,"y":68,"w":160,"h":46,"vis":true},{"n":"Lobby full20/20","x":912,"y":24,"w":92,"h":52,"vis":true}]
+lobby left stack: [["You drop as",294,20],["BLAZE",326,65],["Runner · SUPER Rush: a fast ",403,49],["Fighter",468,96],["Style",576,64],["Ready",659,58],["The match starts when you ar",728,16]]
+LOBBY OVERLAP header vs stack: none
+lobby gap headBottom 114 stackTop 294 => 180px; screen coverage of left stack width 468/1024
+plane buttons: [{"n":"Jump","x":912,"y":656,"w":92,"h":92,"vis":true}]
+ground buttons (css px): Fire=92x92@912,656 | Roll=52x52@840,692 | Jump=52x52@856,626 | Reload=48x48@906,592 | Pick up=46x46@971,595 | Super=58x58@783,635 | ◀ Q=38x38@747,553 | E ▶=38x38@747,599 | Pause=40x40@844,8
+buttons under 44px: ◀ Q 38, E ▶ 38, Pause 40
+hud: minimap=120x120@896,8 | vitals=241x76@12,8 | pill=300x32@398,12
+HUD vs buttons overlap: none
+button vs button overlap: Jump X Reload (2x14); Reload X Jump (2x14); Super X E ▶ (2x2); E ▶ X Super (2x2)
+full cluster: Fire=92x92@912,656 | Roll=52x52@840,692 | Jump=52x52@856,626 | Reload=48x48@906,592 | Pick up=46x46@971,595 | Scope=56x56@960,526 | Super=58x58@783,635 | Swap to SMG=42x42@781,707 | Heal=50x50@811,573 | ◀ Q=38x38@747,553 | E ▶=38x38@747,599 | Pause=40x40@844,8
+button area share of screen: 3.2%
+1024x768 errors: none
+768x1024 portrait card

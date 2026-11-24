@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-import { BUILDINGS, MAP, MARKET_SQUARE, SIZE, TILE, tileHash, WORLD } from '../sim/constants';
+import { BUILDINGS, DISTRICTS, MAP, MARKET_SQUARE, PLACE_TIER, SIZE, STADIUM, TILE, tileHash, WORLD } from '../sim/constants';
 
 import { chunkedInstances } from './chunks';
 import { routeDistance } from './roads';
@@ -105,6 +105,29 @@ export const warmTerrain = () => {
 };
 
 /** The ground texture: 4.4 px per metre (roads and paths are geometry), meadow greens with dry patches, soft dirt, mud. */
+
+/** Tiles within 2 of a building's footprint (the trodden yards: no lawn tufts, packed earth in the places). */
+const NEAR_BUILDING = (() => {
+  const a = new Uint8Array(SIZE * SIZE);
+  for (const b of BUILDINGS) for (let y = b.y0 - 2; y < b.y0 + b.h + 2; y++) for (let x = b.x0 - 2; x < b.x0 + b.w + 2; x++) if (x >= 0 && y >= 0 && x < SIZE && y < SIZE) a[y * SIZE + x] = 1;
+  return a;
+})();
+/** The loot tier of the named place a tile is in (0 = out in the fields). */
+const placeTierAt = (tx: number, ty: number) => {
+  let t = 0;
+  const x = tx * TILE + 1;
+  const y = ty * TILE + 1;
+  for (const d of DISTRICTS) if (x >= d.x0 && x < d.x1 && y >= d.y0 && y < d.y1) t = Math.max(t, PLACE_TIER[d.name] ?? 1);
+  return t;
+};
+const inStadium = (tx: number, ty: number) => tx >= STADIUM.x0 && tx < STADIUM.x0 + STADIUM.w && ty >= STADIUM.y0 && ty < STADIUM.y0 + STADIUM.h;
+/** A wall within 2 tiles on two opposite sides: an alley between houses. */
+const alleyAt = (tx: number, ty: number) => {
+  const wall = (x: number, y: number) => '#w'.includes(MAP[y]?.[x] ?? '');
+  const near = (dx: number, dy: number) => [1, 2].some((k) => wall(tx + dx * k, ty + dy * k));
+  return (near(-1, 0) && near(1, 0)) || (near(0, -1) && near(0, 1));
+};
+
 export const paintTerrain = () => {
   const p = terrainPainter();
   p.step(Infinity);
@@ -131,6 +154,10 @@ const makeTerrainPainter = () => {
   const pond = weightGrid((t) => t === 'o' || t === 'd');
   const meadow = weightGrid((t) => t === 'h');
   const floor = weightGrid((t, tx, ty) => '.lwr#u'.includes(t) && insideBuilding(tx, ty));
+  // Yards in the places: packed earth near the houses (CD spec map-balance-grass-stadium, 3), more in the alleys.
+  const yard = weightGrid((t, tx, ty) => t === 'g' && NEAR_BUILDING[ty * SIZE + tx] === 1 && placeTierAt(tx, ty) > 0 && !inStadium(tx, ty));
+  const alley = weightGrid((t, tx, ty) => t === 'g' && NEAR_BUILDING[ty * SIZE + tx] === 1 && placeTierAt(tx, ty) > 0 && alleyAt(tx, ty));
+  const EARTH = [138, 118, 86];
   const GRASS_A = [62, 112, 42];
   const GRASS_B = [104, 138, 64];
   const DRY = [146, 150, 74];
@@ -180,6 +207,35 @@ const makeTerrainPainter = () => {
       if (wGravel > 0) col = mix(col, mix(GRAVEL, DIRT, fine * 0.6), wGravel * 0.85);
       const wPath = sstep(0.4, 0.5, sampleGrid(path, tx, ty) + e);
       if (wPath > 0) col = mix(col, mix(DIRT, DIRT_DARK, fbm(wx * 0.9, wy * 0.9, 2)), wPath);
+      const wYard = sstep(0.35, 0.65, sampleGrid(yard, tx, ty) + e);
+      if (wYard > 0) col = mix(col, EARTH, wYard * 0.45 + sstep(0.35, 0.65, sampleGrid(alley, tx, ty) + e) * 0.2);
+      // The Pitch: mown stripes and worn white lines; a cinder track; concrete at the gates and the tunnel.
+      if (inStadium(Math.floor(tx), Math.floor(ty)) || (tx >= 62 && tx < 63 && ty >= 72 && ty < 76)) {
+        const t0 = MAP[Math.floor(ty)][Math.floor(tx)];
+        const pq = STADIUM.pitch;
+        const px0 = pq.x0 * TILE;
+        const px1 = (pq.x0 + pq.w) * TILE;
+        const py0 = pq.y0 * TILE;
+        const py1 = (pq.y0 + pq.h) * TILE;
+        if (wx >= px0 && wx < px1 && wy >= py0 && wy < py1) {
+          col = Math.floor((wy - py0) / 2) % 2 === 0 ? [95, 174, 62] : [79, 154, 53];
+          col = [col[0] + grain * 0.4, col[1] + grain * 0.4, col[2] + grain * 0.3];
+          const cx = (px0 + px1) / 2;
+          const cy = (py0 + py1) / 2;
+          const lw = 0.06;
+          const gap = tileHash(Math.floor(wx / 3), Math.floor(wy / 3), 9) < 0.12;
+          const onLine =
+            Math.abs(wx - (px0 + 0.3)) < lw || Math.abs(wx - (px1 - 0.3)) < lw ||
+            ((Math.abs(wy - (py0 + 0.3)) < lw || Math.abs(wy - (py1 - 0.3)) < lw) && wx > px0 + 0.3 && wx < px1 - 0.3) ||
+            (Math.abs(wy - cy) < lw && wx > px0 + 0.3 && wx < px1 - 0.3) ||
+            Math.abs(Math.hypot(wx - cx, wy - cy) - 2) < lw ||
+            (Math.abs(wx - cx) <= 2 && (Math.abs(wy - (py0 + 1.9)) < lw || Math.abs(wy - (py1 - 1.9)) < lw)) ||
+            (Math.abs(Math.abs(wx - cx) - 2) < lw && (wy > py0 + 0.3 && wy < py0 + 1.9 || wy < py1 - 0.3 && wy > py1 - 1.9)) ||
+            Math.hypot(wx - cx, wy - (py0 + 3)) < 0.125 || Math.hypot(wx - cx, wy - (py1 - 3)) < 0.125;
+          if (onLine && !gap) col = mix(col, [236, 232, 218], 0.85);
+        } else if (t0 === 'p') col = mix([154, 91, 69], [125, 72, 54], fbm(wx * 0.9, wy * 0.9, 2));
+        else if (t0 === 'a' || t0 === 'v' || t0 === 'f') col = [184 + grain * 0.4, 178 + grain * 0.4, 166 + grain * 0.4];
+      }
       // Under the road strip (roads.ts): packed gravel, which shows only as a soft shoulder.
       const wRoad = sstep(0.3, 0.6, sampleGrid(road, tx, ty) + e);
       if (wRoad > 0) col = mix(col, [ASPHALT[0] + grain * 0.5, ASPHALT[1] + grain * 0.5, ASPHALT[2] + grain * 0.5], wRoad);
@@ -670,11 +726,29 @@ export const buildGrass = () => {
     for (let tx = 2; tx < SIZE - 2; tx++) {
       const t = MAP[ty][tx];
       if (t !== 'g' && t !== 't' && t !== 'b') continue;
-      if (routeDistance(tx * TILE + 1, ty * TILE + 1) < -0.4) continue;
-      // Denser in the lush patches, sparse in the dry ones; fuller and taller at a meadow's edge (2 tiles round tall grass).
+      const rd = routeDistance(tx * TILE + 1, ty * TILE + 1);
+      if (rd < -0.4) continue;
+      // Denser in the lush patches, sparse in the dry ones.
       const lush = fbm(tx * 0.09, ty * 0.09, 3);
+      // How much lawn this tile keeps (CD spec map-balance-grass-stadium, 3; the first rule that matches): none on the pitch
+      // or in the yards, a few clumps in the riskiest places, thinner in the others and on the verges, bald spots in the fields.
+      const tier = placeTierAt(tx, ty);
+      // Fuller and taller at a meadow's edge (2 tiles round tall grass).
       const edge = meadowEdge(tx, ty);
-      const count = Math.round((5 + lush * 9) * (edge ? 1.5 : 1));
+      const k = inStadium(tx, ty) || NEAR_BUILDING[ty * SIZE + tx]
+        ? 0
+        : tier === 3
+          ? lush > 0.55 ? 0.25 : 0
+          : tier > 0
+            ? 0.6
+            : rd >= 0.1 && rd <= 1.5
+              ? 0.3
+              : edge
+                ? 1.5
+                : fbm(tx * 0.05 + 70, ty * 0.05 + 31, 3) < 0.33
+                  ? 0
+                  : t !== 'g' ? 0.5 : 1;
+      const count = Math.round((5 + lush * 9) * k);
       for (let i = 0; i < count; i++) {
         const x = tx * TILE + r() * TILE;
         const y = ty * TILE + r() * TILE;

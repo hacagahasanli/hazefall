@@ -53,7 +53,8 @@ export interface Career {
 }
 
 /** XP to the next level: `min(900, 230 + 35 * (level - 1))`. Lives here so loading a save can clamp to it. */
-export const xpToNext = (level: number) => Math.min(900, 230 + 35 * (level - 1));
+/** XP to the next level: twice the v2 curve (Reis, 2026-11-24: levels at least 2x slower). */
+export const xpToNext = (level: number) => Math.min(1800, 460 + 70 * (level - 1));
 
 export const defaultCareer = (): Career => ({
   v: 2,

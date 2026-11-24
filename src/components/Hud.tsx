@@ -6,11 +6,12 @@
  * rings with a tiny keycap. On a phone the thumbs own both bottom corners, so the same pieces sit compact at the top left.
  */
 
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { GRADE_CSS } from '~/game/render/game';
 import { FIGHTERS } from '~/game/sim/constants';
-import type { HudState } from '~/game/render/game';
+import type { HudState, RackSlot } from '~/game/render/game';
 import type { FighterId, WeaponKind } from '~/game/sim/types';
 
 // ---------------------------------------------------------------------------
@@ -191,8 +192,8 @@ const Ring = ({ value, color, icon, cap, label, size }: { value: number; color: 
 // The pieces
 // ---------------------------------------------------------------------------
 
-const Count = ({ icon, n, of, color }: { icon: ReactNode; n: number | string; of?: number; color?: string }) => (
-  <span className="flex items-center gap-0.5 rounded-[3px] bg-ink-deep/75 py-0.5 pl-1 pr-1.5" style={color ? { color } : { color: 'rgba(230,235,245,0.85)' }}>
+const Count = ({ icon, n, of, color, dim }: { icon: ReactNode; n: number | string; of?: number; color?: string; dim?: boolean }) => (
+  <span className={`flex items-center gap-0.5 rounded-[3px] bg-ink-deep/75 py-0.5 pl-1 pr-1.5 ${dim ? 'opacity-45' : ''}`} style={color ? { color } : { color: 'rgba(230,235,245,0.85)' }}>
     {icon}
     <span className="font-display text-[11px] leading-none text-cream">{n}</span>
     {of !== undefined && <span className="text-[9px] leading-none text-cream/45">/{of}</span>}
@@ -212,7 +213,7 @@ export const Vitals = ({
   colorBlind: boolean;
   /** Show the cooldown rings (on a phone the buttons carry their own). */
   rings: boolean;
-  keys: { super: string; roll: string } | null;
+  keys: { super: string; roll: string; coffee?: string } | null;
 }) => {
   const f = FIGHTERS[hud.fighter];
   const low = hud.hp / hud.maxHp <= 0.35;
@@ -220,17 +221,28 @@ export const Vitals = ({
   const items: ReactNode[] = [];
   if (hud.vest > 0) items.push(<Count key="vest" icon={<Icon size={13} color={GRADE_CSS[hud.vest - 1]}>{ITEM_ICONS.vest}</Icon>} n={ROMAN[hud.vest]} />);
   if (hud.pack > 0) items.push(<Count key="pack" icon={<Icon size={13} color={GRADE_CSS[hud.pack - 1]}>{ITEM_ICONS.pack}</Icon>} n={ROMAN[hud.pack]} />);
-  if (hud.bag.bandages > 0) items.push(<Count key="b" icon={<Icon size={13}>{ITEM_ICONS.bandage}</Icon>} n={hud.bag.bandages} of={hud.bag.cap.bandage} />);
-  if (hud.bag.medkits > 0) items.push(<Count key="m" icon={<Icon size={13}>{ITEM_ICONS.medkit}</Icon>} n={hud.bag.medkits} of={hud.bag.cap.medkit} />);
-  if (hud.bag.coffees > 0) items.push(<Count key="c" icon={<Icon size={13}>{ITEM_ICONS.coffee}</Icon>} n={hud.bag.coffees} />);
-  if (hud.bag.bombs > 0) items.push(<Count key="x" icon={<Icon size={13}>{ITEM_ICONS.bomb}</Icon>} n={hud.bag.bombs} />);
-  if (hud.buzz > 0) items.push(<Count key="buzz" color="#ffd23f" icon={<Icon size={13} color="#ffd23f">{ITEM_ICONS.coffee}</Icon>} n={`${Math.ceil(hud.buzz)}s`} />);
+  // On a keyboard bandages, med kits and bombs live in the rack (right column); on touch they stay here.
+  if (!rings) {
+    items.push(<Count key="b" icon={<Icon size={13}>{ITEM_ICONS.bandage}</Icon>} n={hud.bag.bandages} of={hud.bag.cap.bandage} dim={hud.bag.bandages === 0} />);
+    items.push(<Count key="m" icon={<Icon size={13}>{ITEM_ICONS.medkit}</Icon>} n={hud.bag.medkits} of={hud.bag.cap.medkit} dim={hud.bag.medkits === 0} />);
+    items.push(<Count key="x" icon={<Icon size={13}>{ITEM_ICONS.bomb}</Icon>} n={hud.bag.bombs} of={hud.bag.cap.bomb} dim={hud.bag.bombs === 0} />);
+  }
+  // Coffee: n/room, or while the buzz runs its seconds in gold with a line draining under the chip (20 s full).
+  if (hud.buzz > 0)
+    items.push(
+      <span key="buzz" className="relative">
+        <Count color="#ffd23f" icon={<Icon size={13} color="#ffd23f">{ITEM_ICONS.coffee}</Icon>} n={`${Math.ceil(hud.buzz)}s`} />
+        <span className="absolute bottom-0 left-0 h-[2px] bg-gold" style={{ width: `${Math.min(1, hud.buzz / 20) * 100}%` }} />
+      </span>,
+    );
+  else if (hud.bag.coffees > 0)
+    items.push(<Count key="c" icon={<>{keys?.coffee && <Cap k={keys.coffee} className="mr-0.5" />}<Icon size={13}>{ITEM_ICONS.coffee}</Icon></>} n={hud.bag.coffees} of={hud.bag.cap.coffee} />);
   return (
     <div className="flex items-end gap-2.5">
       <div className={`flex flex-col gap-1 ${rings ? "w-52 sm:w-60" : "w-48 [@media(max-height:400px)]:w-40"}`}>
         {items.length > 0 && <div className="flex flex-wrap items-center gap-1">{items}</div>}
         <div className="flex items-end gap-2">
-          <span className="w-11 text-right font-display text-2xl leading-[0.85] tabular-nums drop-shadow-[0_2px_0_rgba(10,13,24,0.8)]" style={{ color: low ? hpColor : '#e6ebf5' }}>
+          <span className={`text-right font-display leading-[0.85] tabular-nums drop-shadow-[0_2px_0_rgba(10,13,24,0.8)] ${rings ? 'min-w-[52px] text-[34px]' : 'w-11 text-2xl'}`} style={{ color: low ? hpColor : '#e6ebf5' }}>
             {Math.ceil(hud.hp)}
           </span>
           <div className="flex flex-1 flex-col gap-[3px]">
@@ -324,3 +336,148 @@ export const Counters = ({ alive, kills, pulse }: { alive: number; kills: number
 
 // Shared with the round report.
 export const StatIcon = { kills: KillIcon, person: PersonIcon };
+
+// ---------------------------------------------------------------------------
+// The rack (right column) and the ammo block (bottom right): CD spec hud-layout-v2
+// ---------------------------------------------------------------------------
+
+/** A number that pops (scale 1 -> 1.25 -> 1) when it goes up, never when it goes down. */
+const usePop = (n: number, on: boolean) => {
+  const prev = useRef(n);
+  const [pop, setPop] = useState(0);
+  useEffect(() => {
+    if (on && n > prev.current) setPop((x) => x + 1);
+    prev.current = n;
+  }, [n, on]);
+  return pop;
+};
+
+const RackKey = ({ k, active, dim }: { k: string; active: boolean; dim: 'empty' | 'off' | 'on' }) => (
+  <kbd
+    className={`absolute left-1.5 top-1/2 inline-flex h-[18px] min-w-[18px] -translate-y-1/2 items-center justify-center rounded-[3px] border px-[3px] font-sans text-[11px] font-bold leading-none ${
+      active ? 'border-gold bg-gold text-ink-deep' : dim === 'empty' ? 'border-cream/30 text-cream/50' : dim === 'off' ? 'border-cream/25 text-cream/70' : 'border-cream/50 text-cream/90'
+    }`}
+  >
+    {k}
+  </kbd>
+);
+
+type TileState = 'empty' | 'has' | 'active' | 'full' | 'off';
+
+const tileClass = (st: TileState) =>
+  st === 'empty' ? 'border border-dashed border-cream/20 bg-transparent' : st === 'active' ? 'bg-ink-deep/90' : 'bg-ink-deep/70';
+
+const Tile = ({
+  st, k, w, h, cut, nudge, flash, using, children, label,
+}: {
+  st: TileState; k: string; w: number; h: number; cut: string; nudge: number | null; flash: number; using: number | null; children: ReactNode; label: string;
+}) => {
+  const active = st === 'active';
+  return (
+    <div
+      key={nudge ?? 'n'}
+      aria-label={label}
+      className={`relative ${cut} ${tileClass(st)} transition-[translate,width] duration-[120ms] ease-out motion-reduce:transition-none ${nudge !== null ? 'motion-safe:animate-[rackNudge_0.16s_linear]' : ''}`}
+      style={{ width: active ? w + 10 : w, height: h, boxShadow: st === 'full' ? 'inset 0 0 0 1px rgba(230,235,245,0.35)' : undefined }}
+    >
+      {flash > 0 && <span key={flash} className="absolute inset-0 motion-safe:animate-[rackFlash_0.25s_ease-out_forwards]" />}
+      {active && <span className={`absolute inset-y-0 left-0 w-[3px] ${using !== null ? 'bg-green' : 'bg-gold'}`} />}
+      {using !== null && (
+        <span className="absolute bottom-0 left-0 h-[2px] bg-green" style={{ width: `${Math.min(1, using) * 100}%` }} />
+      )}
+      <RackKey k={k} active={active} dim={st === 'empty' ? 'empty' : st === 'off' ? 'off' : 'on'} />
+      {children}
+    </div>
+  );
+};
+
+/** Slot 1 and 2 (guns), then bandage, med kit and bomb: each with its key and count/room; what is in your hands pulled out. */
+export const Rack = ({ hud, keys, motion }: { hud: HudState; keys: Record<RackSlot, string>; motion: boolean }) => {
+  const nudge = (s: RackSlot) => (hud.denied && hud.denied.slot === s ? hud.denied.id : null);
+  const heldGun = !hud.bombOut && !hud.using;
+  const gunFlash = [usePop(hud.slots[0].kind ? 1 : 0, motion), usePop(hud.slots[1].kind ? 1 : 0, motion)];
+  const items = [
+    { s: 'bandage' as const, n: hud.bag.bandages, room: hud.bag.cap.bandage, icon: ITEM_ICONS.bandage, ready: hud.itemReady.bandage, name: 'Bandages' },
+    { s: 'medkit' as const, n: hud.bag.medkits, room: hud.bag.cap.medkit, icon: ITEM_ICONS.medkit, ready: hud.itemReady.medkit, name: 'Med kits' },
+    { s: 'bomb' as const, n: hud.bag.bombs, room: hud.bag.cap.bomb, icon: ITEM_ICONS.bomb, ready: hud.itemReady.bomb, name: 'Bombs' },
+  ];
+  const pops = [usePop(items[0].n, motion), usePop(items[1].n, motion), usePop(items[2].n, motion)];
+  return (
+    <div className="flex flex-col items-end">
+      <div className="flex flex-col items-end gap-1">
+        {hud.slots.map((sl, i) => {
+          const st: TileState = !sl.kind ? (sl.active && heldGun ? 'active' : 'empty') : sl.active && heldGun ? 'active' : 'has';
+          const color = sl.kind ? (sl.rarity > 0 ? GRADE_CSS[sl.rarity] : '#e6ebf5') : 'rgba(230,235,245,0.6)';
+          const kind: WeaponKind | null = sl.kind ?? (sl.active ? 'fists' : null);
+          const slot = i === 0 ? ('slot1' as const) : ('slot2' as const);
+          return (
+            <Tile key={i} st={st} k={keys[slot]} w={176} h={40} cut="panel-cut-sm" nudge={nudge(slot)} flash={gunFlash[i]} using={null} label={sl.name ? `Slot ${i + 1}: ${sl.name}, ${sl.mag} in the magazine` : `Slot ${i + 1} empty`}>
+              {kind && (
+                <GunIcon
+                  kind={kind}
+                  color={color}
+                  className={`absolute left-8 top-1/2 h-[27px] w-[72px] -translate-y-1/2 ${st === 'active' ? '' : 'opacity-60'}`}
+                />
+              )}
+              {sl.kind && (
+                <span className={`absolute right-2 top-1/2 -translate-y-1/2 font-display text-[15px] leading-none tabular-nums ${st === 'active' ? 'text-cream' : 'text-cream/70'}`}>{sl.mag}</span>
+              )}
+              {sl.kind && <span className="absolute inset-x-0 bottom-0 h-[2px]" style={{ background: sl.rarity > 0 ? GRADE_CSS[sl.rarity] : 'rgba(230,235,245,0.35)' }} />}
+            </Tile>
+          );
+        })}
+      </div>
+      <div className="mt-2 flex flex-col items-end gap-1">
+        {items.map((it, i) => {
+          const usingThis = hud.using && hud.using.kind === it.s ? hud.using.progress : null;
+          const active = usingThis !== null || (it.s === 'bomb' && hud.bombOut);
+          const st: TileState = active ? 'active' : it.n <= 0 ? 'empty' : !it.ready ? 'off' : it.n >= it.room ? 'full' : 'has';
+          const dimBody = st === 'off' ? 'opacity-40' : '';
+          return (
+            <Tile key={it.s} st={st} k={keys[it.s]} w={120} h={30} cut="panel-cut-xs" nudge={nudge(it.s)} flash={0} using={usingThis} label={`${it.name}: ${it.n} of ${it.room}`}>
+              <span className={`absolute left-8 top-1/2 -translate-y-1/2 ${st === 'empty' ? 'text-cream/30' : st === 'active' ? 'text-cream' : 'text-cream/85'} ${dimBody}`}>
+                <Icon size={18}>{it.icon}</Icon>
+              </span>
+              <span className={`absolute right-2 top-1/2 flex -translate-y-1/2 items-baseline leading-none ${dimBody}`}>
+                <span key={pops[i]} className={`inline-block font-display text-[14px] tabular-nums ${st === 'empty' ? 'text-cream/35' : 'text-cream'} ${pops[i] > 0 ? 'motion-safe:animate-[rackPop_0.2s_ease-out]' : ''}`}>{it.n}</span>
+                <span className={`text-[11px] ${st === 'empty' ? 'text-cream/35' : st === 'full' ? 'text-cream' : 'text-cream/45'}`}>/{it.room}</span>
+              </span>
+            </Tile>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+/** Magazine | spare (or the bomb count while a bomb is in hand), bottom right under the rack. */
+export const AmmoBlock = ({ hud }: { hud: HudState }) => {
+  const inHand = hud.slots.find((s) => s.active);
+  const reloading = hud.reloading !== null;
+  return (
+    <div className="panel-cut relative flex h-14 w-[176px] items-center justify-end gap-2.5 overflow-hidden bg-ink-deep/85 px-3" aria-label="Ammo">
+      {hud.bombOut ? (
+        <>
+          <span className="text-gold"><Icon size={24}>{ITEM_ICONS.bomb}</Icon></span>
+          <span className="flex items-baseline leading-none">
+            <span className="font-display text-[38px] tabular-nums text-cream">{hud.bag.bombs}</span>
+            <span className="font-display text-[18px] text-cream/50">/{hud.bag.cap.bomb}</span>
+          </span>
+        </>
+      ) : !inHand?.kind ? (
+        <GunIcon kind="fists" color="rgba(230,235,245,0.8)" className="h-7 w-16" />
+      ) : (
+        <>
+          <span className={`font-display text-[38px] leading-none tabular-nums ${reloading ? 'text-gold/70' : hud.mag === 0 ? 'text-orange' : 'text-cream'}`}>{hud.mag}</span>
+          <span className="h-7 w-px bg-cream/25" />
+          <span className={`font-display text-[18px] leading-none tabular-nums ${hud.ammo === 0 ? 'text-orange/80' : 'text-cream/50'}`}>{hud.ammo}</span>
+        </>
+      )}
+      {reloading && !hud.bombOut && (
+        <span className="absolute inset-x-0 bottom-0 h-[3px] bg-ink-deep">
+          <span className="block h-full bg-gold" style={{ width: `${hud.reloading! * 100}%` }} />
+        </span>
+      )}
+    </div>
+  );
+};

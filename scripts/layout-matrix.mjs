@@ -74,7 +74,7 @@ const SIZES = [
   // tablets (1080x607 is CrazyGames' tablet size)
   '1024x768:t', '1080x607:t', '1180x820:t', '768x1024:t',
   // CrazyGames desktop iframe sizes
-  '860x484:d', '907x510:d', '1020x540:d', '1216x684:d',
+  '821x462:d', '860x484:d', '907x510:d', '1020x540:d', '1077x606:d', '1216x684:d', '1536x864:d',
   // desktop
   '1280x720:d', '1366x768:d', '1440x900:d', '1920x1080:d',
   // a Windows touch laptop on CrazyGames
