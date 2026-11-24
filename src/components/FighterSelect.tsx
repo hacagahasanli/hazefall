@@ -100,14 +100,14 @@ export const usePortraits = (skip = false, look?: Look): Portraits => {
 export const FighterCard = ({ fighter, portraits, tight = false }: { fighter: FighterId; portraits: Portraits; tight?: boolean }) => {
   const f = FIGHTERS[fighter];
   return (
-      <div className="panel-cut relative flex shrink-0 min-h-[300px] overflow-hidden border border-cream/10 bg-ink/70 backdrop-blur sm:min-h-[380px] [@media(max-height:640px)]:sm:min-h-0">
+      <div className="panel-cut relative flex shrink-0 min-h-[300px] overflow-hidden border border-cream/10 bg-ink/70 backdrop-blur sm:min-h-[380px] [@media(max-height:720px)]:sm:min-h-0">
         <div
           className="absolute inset-0 opacity-50 transition-[background] duration-700"
           style={{
             background: `radial-gradient(circle at 70% 65%, ${f.color}, transparent 60%)`,
           }}
         />
-        <div className={`relative z-10 flex flex-1 flex-col justify-between gap-4 p-5 sm:p-6 [@media(max-height:640px)]:sm:gap-2 [@media(max-height:640px)]:sm:p-4 ${tight ? '[@media(max-height:600px)]:sm:gap-1.5 [@media(max-height:600px)]:sm:p-3' : ''} [@media(max-height:420px)]:sm:gap-1! [@media(max-height:420px)]:sm:p-2.5!`}>
+        <div className={`relative z-10 flex flex-1 flex-col justify-between gap-4 p-5 sm:p-6 [@media(max-height:720px)]:sm:gap-2 [@media(max-height:720px)]:sm:p-4 ${tight ? '[@media(max-height:600px)]:sm:gap-1.5 [@media(max-height:600px)]:sm:p-3' : ''} [@media(max-height:420px)]:sm:gap-1! [@media(max-height:420px)]:sm:p-2.5!`}>
           <div className="flex flex-col gap-2 [@media(max-height:600px)]:sm:gap-1">
             <span className={`text-sm font-semibold text-cream/60 ${tight ? '[@media(max-height:420px)]:sm:hidden' : ''}`}>
               You drop as

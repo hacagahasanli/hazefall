@@ -189,4 +189,30 @@ places. Deviations in LOG 2026-11-22 are all accepted (see F-010 for two conditi
 - What is wrong: kill feed "you was caught by the Storm" (neutral.ts zone.caught with name 'you').
 - What should change: "You were caught by the Storm"; check the other name-taking lines. See preflight B3.
 - Priority: P0 (5 min)
-- Status: open
+- Status: superseded by F-015
+
+## F-014 (R-015) — "Made for desktop" card: accepted
+- Reviewed: ENGINEERING/desktop-only-card-844x390.png and `#desk` in portal/index.html.
+- Verdict: accept as shipped. Title "Made for desktop", line "Last Commit Standing plays with a mouse and keyboard. Open it on a computer to drop in.", monitor-with-prompt icon (yellow `>`, green `_`). It matches the approved rotate card, is honest, and the prompt glyph ties to the commit theme without being a third-party icon.
+- Must not change: background, fonts, colours, centred stack. Keep the trailing period (it is two sentences; the rotate card is one fragment, so the difference is fine).
+- Status: closed (no change needed)
+
+## F-015 (R-016) — Rename "the Storm" to "the Haze"; rename fighter "Bastion" to "Hedge"
+- What is wrong: "the Storm" with "Storm closing" / "Final Storm" is Fortnite's zone wording; "Bastion" is an Overwatch hero name. Both read as borrowed to a CG reviewer checking originality.
+- Decision: the zone is **the Haze** (fits the blue shimmer wall #6fb6ff over farmland; not the zone name of Fortnite, PUBG, Apex, Free Fire or CoD). The fighter `legacy` is **Hedge** (farmland hedgerow = a living wall; role "Defender" and super "Barricade" stay).
+- Exact strings, src/game/copy/neutral.ts:
+  - `zone.name`: `'the Haze'`
+  - `zone.waiting`: `'Haze moves in'`
+  - `zone.closing`: `'Haze closing'`
+  - `zone.final`: `'Final Haze'`
+  - `zone.outside`: `'Outside the safe zone!'` (unchanged)
+  - `zone.caught`: you -> `'You were caught in the Haze'`; others -> `` `${who} was caught in the Haze` ``
+  - `intro.line`: `'Land, grab a gun and stay inside the safe zone as the Haze closes in. The last one standing wins.'`
+  - `fighters.legacy.name`: `'Hedge'`
+- portal/index.html boot tip (line ~202): `'The safe zone closes phase by phase, and the Haze hurts more each time.'`
+- src/components/Match.tsx lines 515 and 1062: change "Caught outside by" to "Caught in" when the cause is the zone, so it reads "Caught in the Haze." (keep "Caught outside by {weapon}" only if killedWith can be a weapon there; otherwise just use "Caught in {COPY.zone.name}").
+- Also check studio.ts `zone` and any portrait/asset file names or alt text with "Bastion"/"Storm" (grep found none player-facing in src/ and portal/ besides the above; the world.ts "storm" is a code comment, leave it).
+- Capitalise "Haze" everywhere; every new string is no longer than the old one.
+- Supersedes F-013 (the caught line is fixed by this item).
+- Acceptance: `grep -rni "storm\|bastion" src portal` returns only code comments/tests.
+- Status: open (engineering)
