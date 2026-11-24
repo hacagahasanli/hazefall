@@ -20,11 +20,11 @@ export const readAim = (): AimMode => {
 
 export const AimChoice = ({ value, onChange }: { value: AimMode; onChange: (m: AimMode) => void }) => (
   <div className="flex w-full flex-col gap-1.5 text-left">
-    <span className="text-[10px] font-semibold tracking-widest text-cream/50">AIM AND SHOOT</span>
+    <span className="text-xs text-cream/60">Aim</span>
     <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Aim and shoot">
       {(
         [
-          ['auto', 'Auto-aim', 'J shoots the nearest enemy you can see'],
+          ['auto', 'Auto-aim', 'Left click shoots the nearest enemy you can see'],
           ['mouse', 'Mouse', 'Point to aim, left click to shoot'],
         ] as const
       ).map(([id, label, hint]) => (

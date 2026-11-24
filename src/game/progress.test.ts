@@ -258,3 +258,11 @@ describe('the day streak', () => {
     expect(hoursToReset(new Date(2026, 10, 22, 23, 59, 30))).toBe(1);
   });
 });
+
+describe('in-game copy teaches the keys that work', () => {
+  it('no copy string names J as a key (shooting is the mouse only)', async () => {
+    const { COPY: studio } = await import('./copy/studio');
+    const all = JSON.stringify(studio);
+    expect(/\bJ (or|shoots|·)/.test(all)).toBe(false);
+  });
+});

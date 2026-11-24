@@ -30,9 +30,9 @@ export const COPY: Copy = {
   },
   items: { rarity: ['Common', 'Tuned', 'Prime'], bandage: 'Bandage', medkit: 'Med kit', coffee: 'Coffee' },
   howTo: [
-    ['Drop', 'Jump from the plane when you like, free-fall, then steer the parachute down. You land with a pistol and two spare magazines. Shooting starts once you are on the ground.'],
-    ['Loot', 'Two gun slots (1 / 2 or X to swap), vests I to III, backpacks, heals and bombs. The busy places hide the best gear: blue and gold beams. Walk over loot to take it; when a key shows over an item (a gun with both slots full), press F. 3 takes your heals in hand and 4 a bomb: then shoot uses it.'],
-    ['Survive', 'Stay inside the Deadline. J or the left button shoots, Space jumps, Q / E lean, C crouches, hold Alt to look around, Shift rolls, G is your super, hide in tall grass. Esc or P pauses.'],
+    ['Drop', 'Jump from the plane when you like, free-fall, then steer the parachute down. You land with a pistol and two spare magazines.'],
+    ['Loot', 'Walk over loot to take it; press F when a key shows over an item. Two gun slots: 1 / 2, X or the mouse wheel to swap. Blue and gold beams mark the best gear.'],
+    ['Survive', 'Left click shoots, right click scopes a sniper. 3 bandage, 4 med kit, 5 bomb then click to throw. Q / E lean, C crouch, Shift roll, G super. Stay inside the Deadline.'],
   ],
   tips: [
     'Jump from the plane whenever you like, then steer your parachute down.',

@@ -1006,9 +1006,10 @@ export const Match = ({
                 <span className="absolute right-0 top-1/2 h-0.5 w-2 -translate-y-1/2 bg-cream/90 shadow" />
                 <span className="absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold" />
               </div>
-              {!hud.mouseLocked && !touch && (
-                <div className="pointer-events-none absolute inset-x-0 top-[84px] flex justify-center">
-                  <span className="panel-cut bg-ink-deep/85 px-4 py-2 text-sm text-cream">Click to look around with the mouse · Esc pauses</span>
+              {/* Under the crosshair, on the ground only, so it never stacks with the place name and the zone line at the top. */}
+              {!hud.mouseLocked && !touch && hud.stage === 'ground' && (
+                <div className="pointer-events-none absolute inset-x-0 flex justify-center" style={{ top: `calc(50% + 56px * ${hudZoom})` }}>
+                  <span className="panel-cut bg-ink-deep/85 px-4 py-1.5 text-sm text-cream" style={{ zoom: hudZoom }}>Click to aim with the mouse</span>
                 </div>
               )}
             </>
