@@ -54,7 +54,12 @@ Evidence is a file, a command or a test step. Update the status column as later 
 | Interface designed for the device (desktop, optionally mobile) | PASS (step 2) | desktop only |
 | Solo as prominent as multiplayer | PASS | portal build is solo only (online hidden) |
 
-## Portal (to read in the developer portal, Chrome, step 4)
-- How a game is marked desktop only (supported devices / mobile toggle in the submission form): the docs do not name the
-  field. FAQ: "Your game doesn't need to be mobile-first". Read the form and record the field here.
-- Resubmit path for a rejected game (Submit new version on 3de1b152 vs new game): record here.
+## Portal (read in the developer portal, 2026-11-24)
+- Game 3de1b152 (ID 181110) shows REJECTED: "You can't update your game info anymore"; Game Versions has no "Submit new
+  version" button, only Preview and old drafts. So the resubmit is a NEW game via "Submit a game" (matches the FAQ: resubmit
+  with clear improvements). Reis decides whether to "Remove game" the old entry first or ask developer relations.
+- No device field in Game Info. The desktop-only switch is expected in the upload/QA flow (earlier uploads had Yes/No
+  toggles there); confirm when the new submission is started.
+- The old metadata must change in the new submission: description says "the storm closes in" (now the Haze) and "Play
+  against bots on desktop or mobile" (now desktop only); controls list a "Mobile:" line; tag "Top-Down" is wrong (the game
+  is third-person shoulder camera). New copy is the CD's (request it before upload).
