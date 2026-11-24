@@ -1,6 +1,6 @@
 # CrazyGames requirements checklist: Last Commit Standing (lcs-cg-v2)
 
-Sources read 2026-11-24: docs.crazygames.com `requirements/intro`, `requirements/technical`, `requirements/gameplay`,
+Sources read 2026-11-24 (re-read in the evening: intro, technical, gameplay, quality, ads, sdk/game, faq; no rule changed): docs.crazygames.com `requirements/intro`, `requirements/technical`, `requirements/gameplay`,
 `requirements/quality`, `sdk/game`, `sdk/user`, `faq`. Status: PASS / FAIL / OPEN (not yet verified) / N/A.
 Evidence is a file, a command or a test step. Update the status column as later steps verify things.
 
@@ -15,7 +15,7 @@ Evidence is a file, a command or a test step. Update the status column as later 
 ## Technical
 | Rule | Status | Evidence |
 | --- | --- | --- |
-| Initial download <= 50 MB (<= 20 MB for mobile homepage) | PASS | `npm run build:portal`: 2.8 MB on disk, 1.7 MB gzip |
+| Initial download <= 50 MB (<= 20 MB for mobile homepage) | PASS | `npm run build:portal` on merged main 3823812: 70 files, 2.8 MB on disk, 1.75 MB gzip; portal checks pass |
 | Total size <= 250 MB, file count <= 1500 | PASS | 70 files |
 | Relative paths only | PASS | `scripts/portal-report.mjs` check; only absolute URL is the SDK script |
 | Works in Chrome and Edge; Safari ok or disabled there | OPEN | Chrome tested in step 4; Safari not tested |
@@ -24,8 +24,8 @@ Evidence is a file, a command or a test step. Update the status column as later 
 | `user-select: none` on body | PASS | `portal/portal.css` |
 | Mouse + keyboard (touch only if mobile supported) | PASS | desktop only from step 2 |
 | User consent notice if personal data beyond SDK events | PASS | portal build sends no telemetry and has no lobby server (portal-report check) |
-| AudioContext resumed in a user gesture | OPEN | verify in step 4 (sound after first click) |
-| SDK: `init`, `loadingStart/Stop`, `gameplayStart/Stop` | OPEN | `src/platform/crazygames.ts`; verify in QA tool, step 4 |
+| AudioContext resumed in a user gesture | PASS (code) | `uiSound.ts` / `sfx.ts` create and `resume()` the context inside click/key handlers |
+| SDK: `init`, `loadingStart/Stop`, `gameplayStart/Stop` | PASS (code) | `crazygames.ts`; `usePlatformRound.ts` starts gameplay when the match is on screen (not held, no menu, not over) and stops on every break; CG QA tool still to run on the new upload |
 | SDK: `game.settings.muteAudio` + change listener honoured | PASS (code) | `crazygames.ts` `muted/onMutedChange` |
 | Basic Launch: no ad or banner calls | PASS | ads gated by `VITE_CG_ADS` (off); banner calls only when on |
 | Saves through SDK `data` module | PASS (code) | `crazygames.ts` `storage` |
@@ -34,15 +34,15 @@ Evidence is a file, a command or a test step. Update the status column as later 
 ## Gameplay
 | Rule | Status | Evidence |
 | --- | --- | --- |
-| Legible at DPR 1 and at 907x510, 1216x684, 1077x606, 821x462, 1366x768, 1920x1080, 1536x864, 1280x720 | OPEN | step 3 screenshots |
+| Legible at DPR 1 and at 907x510, 1216x684, 1077x606, 821x462, 1366x768, 1920x1080, 1536x864, 1280x720 | PASS | layout matrix on merged main 3823812 (2026-11-24 evening): all 8 sizes clean in menu, panels, lobby, plane, free fall, canopy and ground; only Settings key rows half-visible at the edge of their scroll list at 821x462 / 1077x606 / 1920x1080 (normal scrolling). 800x450 and 1080x607 are mobile/tablet sizes: desktop only |
 | English localisation; locale from systemInfo, fallback English | PASS | game is English only (allowed) |
-| Intuitive controls; restricted keys | PASS | Esc and P both pause; key handling by `e.code` (physical keys, so AZERTY users get the same positions); Esc, Tab, F5, F11 reserved (`settings.ts`) |
+| Intuitive controls; restricted keys | PASS (guideline note: CG advises avoiding Escape, which also leaves fullscreen; P pauses too) | Esc and P both pause; key handling by `e.code` (physical keys, so AZERTY users get the same positions); Esc, Tab, F5, F11 reserved (`settings.ts`) |
 | Load quickly, no errors or crashes | PASS (local) | clean build ed36ef7 with real SDK at 1216x684: 0 console errors, 0 failed requests; CG QA tool still to run |
 | Original names, assets, content | OPEN | step 5 copyright list |
 | No custom fullscreen button | PASS | `disableAutoFullscreen()` in `portal/main.tsx`; no requestFullscreen call in portal path |
 | No cross-promotion / external links | PASS | portal-report "no outbound links"; neutral copy alias |
 | PEGI 12 | PASS | stylised shooter, no blood/gore (attested PEGI 12 on 2026-11-22) |
-| Land in gameplay (max one click) | OPEN | boot -> menu -> Play; count clicks in step 4 |
+| Land in gameplay (max one click) | FAIL for Full Launch (Basic Launch does not require it) | boot -> menu -> Play (click 1) -> lobby -> Ready (click 2, Space) -> 10 s countdown -> plane. Reis decides: e.g. on CrazyGames skip Ready on the first round, or Play straight into the countdown |
 
 ## Quality guidelines (optional, but the reason we were rejected)
 | Guideline | Status | Notes |
