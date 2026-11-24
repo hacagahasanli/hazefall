@@ -737,6 +737,8 @@ export const Match = ({
 
   const f = FIGHTERS[fighter];
   const over = hud && (hud.dead || hud.phase === 'over');
+  /** "Click to aim with the mouse" under the crosshair: while it shows it is the one hint line (F-018 item 8: zone line + one hint). */
+  const aimPill = !!hud && (hud.firstPerson || hud.shoulder) && !over && !hud.scoped && !hud.mouseLocked && !touch && hud.stage === 'ground';
   // Let the fall play out first (or the win sink in) before the report comes up: going down,
   // a short card says who took you out and with what, then the report follows.
   const showResult =
@@ -1007,7 +1009,7 @@ export const Match = ({
                 <span className="absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold" />
               </div>
               {/* Under the crosshair, on the ground only, so it never stacks with the place name and the zone line at the top. */}
-              {!hud.mouseLocked && !touch && hud.stage === 'ground' && (
+              {aimPill && (
                 <div className="pointer-events-none absolute inset-x-0 flex justify-center" style={{ top: `calc(50% + 56px * ${hudZoom})` }}>
                   <span className="panel-cut bg-ink-deep/85 px-4 py-1.5 text-sm text-cream" style={{ zoom: hudZoom }}>Click to aim with the mouse</span>
                 </div>
@@ -1016,7 +1018,7 @@ export const Match = ({
           )}
 
           {/* You walked into a named place: its name, top centre, for 1.6 s (the placement sticker's language: cream with a hard dark drop). */}
-          {hud.place && !over && !hud.dead && (
+          {hud.place && !over && !hud.dead && !aimPill && !hud.prompt && (
             <div className={`pointer-events-none absolute inset-x-0 z-[4] flex justify-center px-4 ${touch ? 'top-[22%]' : 'top-[9%]'}`} role="status" aria-live="polite">
               <div
                 key={hud.place.id}
@@ -1126,7 +1128,7 @@ export const Match = ({
           </div>
 
           {/* Prompt */}
-          {hud.prompt && !over && (
+          {hud.prompt && !over && !aimPill && (
             <div
               className={`pointer-events-none absolute inset-x-0 flex justify-center ${touch ? 'bottom-[150px] sm:bottom-6' : ''}`}
               style={touch ? undefined : { bottom: `calc(92px * ${hudZoom})` }}

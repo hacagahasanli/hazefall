@@ -3206,10 +3206,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         ? 'Land first, then shoot'
       : hintLive && !k
         ? firstPerson() ? 'Loot nearby' : `Loot nearby ${arrowTo(lootHint!.x - self.x, lootHint!.y - self.y)}`
-      : opts.firstRound && self.stage === 'ground' && self.shots === 0 && landAt[me] !== undefined && time - landAt[me] < 10 && !k
+      : opts.firstRound && self.stage === 'ground' && self.weapon !== 'fists' && self.mag + self.ammo > 0 && self.shots === 0 && landAt[me] !== undefined && time - landAt[me] < 10 && !k
         ? (touch ? 'Tap FIRE · shoot' : 'Click · shoot')
       : self.stage === 'drone'
-        ? (touch ? 'Tap JUMP' : `${keyLabel(settings.keys.jump)} · jump`)
+        ? null // the zone line already says "Jump with Space" (F-018 item 8: no line twice)
         : self.stage === 'falling' && self.canopy < 0 && DROP.height - self.alt >= DROP.minFreefallDrop
           ? (touch ? 'Tap OPEN · open the parachute' : `${keyLabel(settings.keys.jump)} · open the parachute`)
         : self.stage === 'falling' && self.canopy >= DROP.deployTime && self.alt > DROP.flareAlt + 4
