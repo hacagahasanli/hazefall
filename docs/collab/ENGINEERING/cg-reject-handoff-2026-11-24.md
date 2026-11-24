@@ -43,3 +43,6 @@ Done and committed:
 Still open:
 - Step 4 in CG's own QA tool (needs Chrome: restart with `claude --chrome --resume`).
 - Reis: "fix all bugs" before any upload. Then upload to CrazyGames (desktop only; find the device field in the form) AND Poki (needs a Poki SDK adapter: src/platform/poki.ts + build; Poki rules: gameLoadingFinished, gameplayStart on first input, commercialBreak before resuming, Esc/Space pause, no external requests). Nothing is submitted without Reis's go and an open-blocker list.
+
+## Next session starts here
+Read ENGINEERING/reis-bugs-2026-11-24.md and fix in its order (batch A first). Mouse: left click fires, right click aims (confirm with Reis if not yet confirmed). After each batch: tests, layout/real browser check, commit as hacagahasanli, one short status line to Reis. Then CG new submission + Poki adapter and upload (Reis gives the go).
