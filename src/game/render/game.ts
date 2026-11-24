@@ -3475,6 +3475,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       fire: (on: boolean) => { mouseDown = on; },
       lock: (on: boolean) => { locked = on; },
       god: (on: boolean) => { directorGod = on; },
+      /** Puts fighter `id` at (x, y) on the ground (staging a shot). */
+      place: (id: number, x: number, y: number) => { Object.assign(state.players[id], { x, y, vx: 0, vy: 0 }); Object.assign(prev[id], { x, y }); },
       /** Can you see fighter `id` with a clear shot at them, and the exact view (from the lens) onto their chest. */
       sight: (id: number) => {
         const p = state.players[me];

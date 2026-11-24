@@ -65,22 +65,38 @@ await ctx.addInitScript(() => {
       }
     }
     if (me.weapon !== 'pistol') picked = 1;
+    // Staged fight (STAGE=1): once you have a gun (or gave up looking), you stand at the north end of The Pitch and the three
+    // nearest bots are put 24 m away at the south end; from there it is a real fight.
+    if (window.__STAGE && !window.__staged && (picked || window.__lootT >= 8)) {
+      d.place(d.me, 139, 162);
+      d.view(-Math.PI / 2, -0.06);
+      st.players.map((p, i) => ({ p, i, dd: Math.hypot(p.x - me.x, p.y - me.y) })).filter((o) => o.i !== d.me && o.p.alive && o.p.stage === 'ground')
+        .sort((a, b) => a.dd - b.dd).slice(0, 3).forEach((o, k) => d.place(o.i, [133, 139, 145][k], [138, 135, 139][k]));
+      window.__staged = true;
+      return { s: 'staged' };
+    }
+    // Staged: pinned to a 3 m strafe line at the south end of The Pitch (keys still pressed, so the body runs and leans).
+    if (window.__staged) { window.__pinT = (window.__pinT ?? 0) + 1 / 60; d.place(d.me, 139 + 1.5 * Math.sin(window.__pinT * 1.9), 162); }
     // Fight: the nearest bot you can really see (clear shot); bots are softened once (video only) so knockouts come fast.
-    if (!window.__soft) { st.players.forEach((p, i) => { if (i !== d.me) p.hp = Math.min(p.hp, 30); }); window.__soft = true; }
     if (me.mag === 0 && me.ammo > 0) tap('KeyR');
     const foes = st.players.map((p, i) => ({ p, i, dd: Math.hypot(p.x - me.x, p.y - me.y) }))
-      .filter((o) => o.i !== d.me && o.p.alive && o.p.stage === 'ground' && o.dd < 30).sort((a, b) => a.dd - b.dd);
+      .filter((o) => o.i !== d.me && o.p.alive && o.p.stage === 'ground' && o.dd < 35).sort((a, b) => a.dd - b.dd);
     const seen = foes.map((o) => ({ ...o, s: d.sight(o.i) })).find((o) => o.s.see);
     leanT += 1 / 60;
     if (seen) {
       look(seen.s.yaw, seen.s.pitch, 0.18);
       const e = Math.abs(ang(seen.s.yaw - v.yaw)) + Math.abs(seen.s.pitch - v.pitch);
-      d.fire(e < 0.025);
-      key('KeyW', false);
-      key('KeyE', (leanT % 3) < 1.2);
+      d.fire(e < 0.02);
+      // Keep a fighting distance (back off inside 10 m, close in past 28 m) and strafe while shooting, never stand still.
+      key('KeyW', !window.__staged && seen.dd > 28);
+      key('KeyS', !window.__staged && seen.dd < 10);
+      const side = Math.cos((window.__pinT ?? 0) * 1.9) > 0;
+      key('KeyA', !side); key('KeyD', side);
+      key('KeyE', false);
       return { s: 'fight', dd: Math.round(seen.dd), e: Math.round(e * 1000) / 1000, alive: st.players.filter((p) => p.alive).length };
     }
-    d.fire(false); key('KeyE', false);
+    d.fire(false); ['KeyE', 'KeyA', 'KeyD', 'KeyS'].forEach((c) => key(c, false));
+    if (window.__staged) { look(-Math.PI / 2, -0.06, 0.05); key('KeyW', false); const sd = Math.cos((window.__pinT ?? 0) * 1.9) > 0; key('KeyA', !sd); key('KeyD', sd); return { s: 'hold', alive: st.players.filter((p) => p.alive).length }; }
     const f = foes[0] ?? st.players.map((p, i) => ({ p, i, dd: Math.hypot(p.x - me.x, p.y - me.y) })).filter((o) => o.i !== d.me && o.p.alive).sort((a, b) => a.dd - b.dd)[0];
     if (!f) { key('KeyW', false); return { s: 'idle' }; }
     look(Math.atan2(f.p.y - me.y, f.p.x - me.x), -0.1, 0.08);
@@ -89,6 +105,8 @@ await ctx.addInitScript(() => {
   };
 });
 const page = await ctx.newPage();
+if (process.env.STAGE) await ctx.addInitScript(() => { window.__STAGE = true; });
+if (process.env.HIDEHUD) await ctx.addInitScript(() => { const st = document.createElement('style'); st.textContent = '[data-hud]:not([data-hud="feed"]){display:none!important}'; document.addEventListener('DOMContentLoaded', () => document.head.appendChild(st)); });
 page.on('pageerror', (e) => console.log('pageerror', String(e).slice(0, 200)));
 await page.goto(URL);
 await page.getByRole('link', { name: /drop in/i }).first().click().catch(() => page.goto(URL + 'play'));
