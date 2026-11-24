@@ -177,13 +177,13 @@ places. Deviations in LOG 2026-11-22 are all accepted (see F-010 for two conditi
 - What should change / expected result / acceptance: see CREATIVE/cg-preflight-lcs-2026-11-22.md B1.
 - Related spec: cg-preflight-lcs-2026-11-22.md
 - Priority: P0 (blocks the CrazyGames submission)
-- Status: open
+- Status: fixed (engineering, 9ffeec9: house materials were fully metallic with no environment map)
 
 ## F-012
 - What is wrong: at 1020x540 the Fighter panel opens with the picker out of view and the style chips cut by the footer.
 - What should change: see cg-preflight-lcs-2026-11-22.md B2.
 - Priority: P0 (cheap, same pass as F-011)
-- Status: open
+- Status: fixed (a1072bf); layout matrix 2026-11-24 clean at 1020x540 and every CG size
 
 ## F-013
 - What is wrong: kill feed "you was caught by the Storm" (neutral.ts zone.caught with name 'you').
@@ -215,4 +215,4 @@ places. Deviations in LOG 2026-11-22 are all accepted (see F-010 for two conditi
 - Capitalise "Haze" everywhere; every new string is no longer than the old one.
 - Supersedes F-013 (the caught line is fixed by this item).
 - Acceptance: `grep -rni "storm\|bastion" src portal` returns only code comments/tests.
-- Status: open (engineering)
+- Status: fixed (engineering, 8110e7c, 2026-11-24)
