@@ -1281,7 +1281,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       }
       const input: Input = {
         mx, my,
-        ...shootJump({ ground: p.stage === 'ground', key: held('fire'), mouse: mouseDown, touchFire: btn('fire'), jumpKey: jumpKey() }),
+        ...shootJump({ ground: p.stage === 'ground', key: false, mouse: mouseDown, touchFire: btn('fire'), jumpKey: jumpKey() }),
         super: held('super') || btn('super'),
         use: held('use') || btn('use'),
         lean: (held('leanR') || btn('leanR') ? 1 : 0) - (held('leanL') || btn('leanL') ? 1 : 0),
@@ -1320,7 +1320,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     // emulated mouse press never shoots (FIRE does).
     const input = {
       mx, my,
-      ...shootJump({ ground: p.stage === 'ground', key: held('fire'), mouse: mouseDown && !touch, touchFire: btn('fire'), jumpKey: jumpKey() }),
+      ...shootJump({ ground: p.stage === 'ground', key: false, mouse: mouseDown && !touch, touchFire: btn('fire'), jumpKey: jumpKey() }),
       // Battle-royale keys: Q / E lean, F picks up or uses, G is the super.
       super: held('super') || btn('super'),
       use: held('use') || btn('use'),
@@ -1349,6 +1349,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       slot: held('slot1') ? 1 : held('slot2') ? 2 : 0,
       cycle,
       heal: held('heal') || btn('heal'),
+      bandage: held('bandage'),
+      medkit: held('medkit'),
+      bomb: held('bomb'),
       coffee: held('coffee'),
     };
   };
@@ -2566,7 +2569,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const ly = self.vy * 0.35 + Math.sin(self.heading) * camProfile.face;
       const ll = Math.hypot(lx, ly);
       const cap = ll > camProfile.cap ? camProfile.cap / ll : 1;
-      const still = Math.hypot(self.vx, self.vy) < 0.5 && !(mouseDown || held('fire'));
+      const still = Math.hypot(self.vx, self.vy) < 0.5 && !mouseDown;
       const ka = 1 - Math.exp(-2 * dt);
       ahead.x += ((still ? 0 : lx * cap) - ahead.x) * ka;
       ahead.y += ((still ? 0 : ly * cap) - ahead.y) * ka;
@@ -2918,7 +2921,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       : hintLive && !k
         ? firstPerson() ? 'Loot nearby' : `Loot nearby ${arrowTo(lootHint!.x - self.x, lootHint!.y - self.y)}`
       : opts.firstRound && self.stage === 'ground' && self.shots === 0 && landAt[me] !== undefined && time - landAt[me] < 10 && !k
-        ? (touch ? 'Tap FIRE · shoot' : `${keyLabel(settings.keys.fire)} · shoot`)
+        ? (touch ? 'Tap FIRE · shoot' : 'Click · shoot')
       : self.stage === 'drone'
         ? (touch ? 'Tap JUMP' : `${keyLabel(settings.keys.jump)} · jump`)
         : self.stage === 'falling' && self.canopy < 0 && DROP.height - self.alt >= DROP.minFreefallDrop
@@ -2931,16 +2934,20 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           ? `${HEAL_NAME[self.using]}… · shoot or roll to stop`
         : self.charging === 'super'
           ? `Aim where it lands · let go of ${touch ? 'SUPER' : keyLabel(settings.keys.super)} to throw`
+        : self.charging === 'bomb'
+            ? 'Point where it lands · let go to throw'
         : self.charging
             ? lastThrowAim ? `Point where it lands · let go of ${keyLabel(settings.keys.use)} to throw` : 'Hold to throw farther · let go to throw'
+        : self.bombOut
+            ? `Bomb in hand · click to throw · ${keyLabel(settings.keys.bomb)} puts it away`
             : self.weapon === 'sniper' && self.mag + self.ammo > 0 && !scoped && !touch
               ? `${aimMode === 'mouse' || fpp ? 'Right click' : 'Z'} · scope`
           : self.weapon !== 'fists' && self.mag + self.ammo === 0
             ? 'Out of ammo · find an ammo box or another gun'
             : self.hp < self.maxHp * 0.6 && healNext && healNext !== 'coffee' && self.sinceCombat > 1.5
-              ? `${touch ? 'HEAL' : keyLabel(settings.keys.heal)} · use ${HEAL_NAME[healNext].toLowerCase()}`
+              ? touch ? `HEAL · use ${HEAL_NAME[healNext].toLowerCase()}` : `${keyLabel(settings.keys[healNext === 'medkit' ? 'medkit' : 'bandage'])} · use ${HEAL_NAME[healNext].toLowerCase()}`
               : self.bombs > 0 && self.sinceCombat < 4 && !k
-                ? `Hold ${touch ? 'the pick-up button' : keyLabel(settings.keys.use)} to throw a bomb`
+                ? `${keyLabel(settings.keys.bomb)} · take a bomb in hand`
                 : null;
     opts.onHud({
       phase: state.phase,

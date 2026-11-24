@@ -8,8 +8,8 @@ import { COPY } from './copy/studio';
 import type { QualitySetting } from './render/quality';
 
 export type Action =
-  | 'up' | 'down' | 'left' | 'right' | 'fire' | 'jump' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR' | 'scope'
-  | 'slot1' | 'slot2' | 'swap' | 'heal' | 'coffee' | 'aim' | 'mute' | 'pause';
+  | 'up' | 'down' | 'left' | 'right' | 'jump' | 'use' | 'super' | 'roll' | 'reload' | 'leanL' | 'leanR' | 'scope'
+  | 'slot1' | 'slot2' | 'swap' | 'heal' | 'bandage' | 'medkit' | 'bomb' | 'coffee' | 'aim' | 'mute' | 'pause';
 
 /** In the order the Controls tab lists them, with the words it shows. */
 export const ACTIONS: [Action, string][] = [
@@ -17,7 +17,6 @@ export const ACTIONS: [Action, string][] = [
   ['down', 'Move back'],
   ['left', 'Move left'],
   ['right', 'Move right'],
-  ['fire', 'Shoot'],
   ['jump', 'Jump / parachute'],
   ['use', 'Pick up / use'],
   ['super', 'Super'],
@@ -29,7 +28,10 @@ export const ACTIONS: [Action, string][] = [
   ['slot1', 'Gun slot 1'],
   ['slot2', 'Gun slot 2'],
   ['swap', 'Swap guns'],
-  ['heal', 'Heal'],
+  ['bandage', 'Use bandage'],
+  ['medkit', 'Use med kit'],
+  ['bomb', 'Bomb (then click to throw)'],
+  ['heal', 'Heal (best for now)'],
   ['coffee', COPY.items.coffee],
   ['aim', 'Switch aim mode'],
   ['mute', 'Mute'],
@@ -41,7 +43,6 @@ export const DEFAULT_KEYS: Record<Action, string> = {
   down: 'KeyS',
   left: 'KeyA',
   right: 'KeyD',
-  fire: 'KeyJ',
   jump: 'Space',
   use: 'KeyF',
   super: 'KeyG',
@@ -54,6 +55,9 @@ export const DEFAULT_KEYS: Record<Action, string> = {
   slot2: 'Digit2',
   swap: 'KeyX',
   heal: 'KeyC',
+  bandage: 'Digit3',
+  medkit: 'Digit4',
+  bomb: 'Digit5',
   coffee: 'KeyV',
   aim: 'KeyT',
   mute: 'KeyM',
@@ -61,7 +65,7 @@ export const DEFAULT_KEYS: Record<Action, string> = {
 };
 
 /** Free keys handed to a newly added action when an old save already uses its default. */
-const SPARE_KEYS = ['Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'KeyB', 'KeyN', 'KeyH', 'KeyJ', 'KeyK', 'KeyL', 'KeyU', 'KeyI', 'KeyO', 'KeyY'];
+const SPARE_KEYS = ['Digit6', 'Digit7', 'Digit8', 'Digit9', 'KeyB', 'KeyN', 'KeyH', 'KeyJ', 'KeyK', 'KeyL', 'KeyU', 'KeyI', 'KeyO', 'KeyY'];
 
 /** Always on, whatever the bindings: arrows move, the right Shift rolls too, Esc belongs to menus and the browser. */
 export const FIXED_KEYS: Partial<Record<Action, string[]>> = {
@@ -150,12 +154,11 @@ export const normalize = (raw: unknown): Settings => {
   const d = DEFAULT_SETTINGS;
   const keys = { ...DEFAULT_KEYS };
   let rk = (r.keys && typeof r.keys === 'object' ? r.keys : {}) as Record<string, unknown>;
-  // Layout 2: Space jumps in every view and J shoots (Space used to be the trigger with auto-aim). A save from before
-  // with Space on "shoot" moves once: Space to jump, J (or, if J is taken, the old jump key) to shoot.
-  if (r.keysVersion !== DEFAULT_SETTINGS.keysVersion && rk.fire === 'Space') {
-    const taken = new Set(Object.entries(rk).filter(([a]) => a !== 'fire' && a !== 'jump').map(([, k]) => k));
-    rk = { ...rk, fire: !taken.has('KeyJ') ? 'KeyJ' : typeof rk.jump === 'string' && rk.jump !== 'Space' ? rk.jump : 'KeyJ', jump: 'Space' };
-  }
+  // Shooting is the left mouse button only (Reis, 2026-11-24): an old save's "shoot" key is dropped, which also frees J.
+  // Layout 2 had moved Space from shoot to jump; a save from before it with Space on shoot gets Space as jump.
+  if (rk.fire === 'Space') rk = { ...rk, jump: 'Space' };
+  rk = { ...rk };
+  delete rk.fire;
   const used = new Set<string>();
   const saved = (a: Action) => {
     const k = rk[a];

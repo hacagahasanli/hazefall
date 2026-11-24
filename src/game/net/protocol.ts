@@ -20,8 +20,11 @@ const SLOT2 = 1 << 12;
 const CYCLE = 1 << 13;
 const HEAL = 1 << 14;
 const COFFEE = 1 << 15;
+const BANDAGE = 1 << 16;
+const MEDKIT = 1 << 17;
+const BOMB = 1 << 18;
 /** Presses that must survive when inputs are folded together (everything but leaning and the held aim keys). */
-export const PRESS_BITS = 0b111111 | SLOT1 | SLOT2 | CYCLE | HEAL | COFFEE;
+export const PRESS_BITS = 0b111111 | SLOT1 | SLOT2 | CYCLE | HEAL | COFFEE | BANDAGE | MEDKIT | BOMB;
 
 /** One tick of input: [clientTick, buttons, mx * 100, my * 100, aimX, aimY, pitch * 100, aimH?]. */
 export type WireInput = [number, number, number, number, number, number, number, ...number[]];
@@ -44,6 +47,9 @@ export const encodeInput = (tick: number, i: Input): WireInput => {
   if (i.cycle) bits |= CYCLE;
   if (i.heal) bits |= HEAL;
   if (i.coffee) bits |= COFFEE;
+  if (i.bandage) bits |= BANDAGE;
+  if (i.medkit) bits |= MEDKIT;
+  if (i.bomb) bits |= BOMB;
   return [tick, bits, Math.round(i.mx * 100), Math.round(i.my * 100), r2(i.aimX), r2(i.aimY), Math.round((i.pitch ?? 0) * 100), ...(i.aimH === undefined ? [] : [r2(i.aimH)])] as WireInput;
 };
 
@@ -60,6 +66,9 @@ export const decodeInput = (w: WireInput): Input => {
   s.cycle = (w[1] & CYCLE) !== 0;
   s.heal = (w[1] & HEAL) !== 0;
   s.coffee = (w[1] & COFFEE) !== 0;
+  s.bandage = (w[1] & BANDAGE) !== 0;
+  s.medkit = (w[1] & MEDKIT) !== 0;
+  s.bomb = (w[1] & BOMB) !== 0;
   s.pitch = (w[6] ?? 0) / 100;
   if (typeof w[7] === 'number') s.aimH = w[7];
   return s;
@@ -185,7 +194,7 @@ const reviver = (_k: string, v: unknown) =>
  * ride along in an object at the end, so nothing is lost if the two lists drift apart.
  */
 const PLAYER_KEYS = Object.keys(newPlayer(0, '', 'hotfix', false, 0, 0)).filter((k) => k !== 'prev');
-const INPUT_KEYS = [...Object.keys(NO_INPUT), 'snap', 'pitch', 'scope', 'throwAt', 'slot', 'cycle', 'heal', 'coffee', 'aimH'];
+const INPUT_KEYS = [...Object.keys(NO_INPUT), 'snap', 'pitch', 'scope', 'throwAt', 'slot', 'cycle', 'heal', 'coffee', 'aimH', 'bandage', 'medkit', 'bomb'];
 
 /** Loot the same way: the list is sent whenever it changes and once a second, and twenty fighters need ~150 pieces. */
 const LOOT_KEYS = ['id', 'kind', 'x', 'y', 'ammo', 'tier', 'active'];

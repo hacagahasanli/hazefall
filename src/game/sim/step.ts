@@ -35,7 +35,6 @@ import {
   PLAYERS,
   PROPS,
   RACK_HP,
-  REGEN,
   SIZE,
   SUPERS,
   TILE,
@@ -1496,7 +1495,7 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     p.buzz = Math.max(0, p.buzz - DT);
     p.hp = Math.min(p.maxHp, p.hp + HEALS.coffee.perSecond * DT);
   }
-  if (p.sinceCombat >= REGEN.after) p.hp = Math.min(p.maxHp, p.hp + REGEN.perSecond * DT);
+  // No healing by itself (Reis, 2026-11-24): health comes back only from a bandage, a med kit or coffee you use.
 
   // Turn towards the aim at a limited rate, never snapping. Swimming, you face where you swim.
   const swimming = inWater(p.x, p.y);
@@ -1518,10 +1517,20 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
   if (p.using) {
     p.useLeft -= DT;
     if (p.useLeft <= 0) finishHeal(state, p);
-  } else if (!swimming && input.heal && !p.prev.heal) {
+  } else if (!swimming && input.bandage && !p.prev.bandage) startHeal(state, p, 'bandage');
+  else if (!swimming && input.medkit && !p.prev.medkit) startHeal(state, p, 'medkit');
+  else if (!swimming && input.heal && !p.prev.heal) {
     const kind = healChoice(p);
     if (kind) startHeal(state, p, kind);
   } else if (!swimming && input.coffee && !p.prev.coffee && p.coffees > 0) startHeal(state, p, 'coffee');
+
+  // 5 takes a bomb in hand (or puts it away); drawing a gun, a heal or running out puts it away too.
+  if (input.bomb && !p.prev.bomb) p.bombOut = !p.bombOut && p.bombs > 0;
+  if (slotPress >= 0 || (input.cycle && !p.prev.cycle) || p.using || p.bombs <= 0 || swimming) p.bombOut = false;
+  if (!p.bombOut && p.charging === 'bomb') {
+    p.charging = null;
+    p.charge = 0;
+  }
 
   updateReload(p);
   if (pressed('reload') && !p.using) startReload(state, p);
@@ -1637,6 +1646,23 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     // Both hands are swimming: no shooting, no throwing.
     p.charging = null;
     p.charge = 0;
+  } else if (p.bombOut && !p.bot) {
+    // A bomb in hand: hold the trigger to throw farther, let go to throw (with the mouse it lands under the cursor).
+    if (input.fire) {
+      p.charging = 'bomb';
+      p.charge += DT;
+    } else if (p.charging === 'bomb') {
+      const toAim = Math.hypot(input.aimX - p.x, input.aimY - p.y);
+      const d = input.throwAt || input.aimH !== undefined ? Math.min(ITEMS.bomb.range, toAim) : throwDistance(p.charge, ITEMS.bomb.range);
+      const a = toAim > 0.3 ? Math.atan2(input.aimY - p.y, input.aimX - p.x) : p.heading;
+      lob(state, p, p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, ITEMS.bomb.range, ITEMS.bomb.damage, ITEMS.bomb.radius);
+      p.revealed = 1;
+      p.bombs -= 1;
+      p.charge = 0;
+      p.charging = null;
+      // Back to the gun after the throw.
+      p.bombOut = false;
+    }
   } else if (input.fire && p.using) {
     // Pulling the trigger puts the heal away (a fresh press, so holding fire through a heal you started does not).
     if (!p.prev.fire) p.using = null;
@@ -1668,25 +1694,10 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
     }
   }
   if (auto) takeLoot(state, p, auto);
-  else if (!p.bot && !swimming && p.bombs > 0 && !k && !p.using && (input.use || p.charging === 'bomb')) {
-    // A bomb: hold F to throw it farther, let go to throw.
-    if (input.use) {
-      p.charging = 'bomb';
-      p.charge += DT;
-    } else {
-      // With the mouse it lands under the cursor (up to its range); otherwise hold to throw farther.
-      const toAim = Math.hypot(input.aimX - p.x, input.aimY - p.y);
-      const d = input.throwAt ? Math.min(ITEMS.bomb.range, toAim) : throwDistance(p.charge, ITEMS.bomb.range);
-      const a = input.throwAt && toAim > 0.3 ? Math.atan2(input.aimY - p.y, input.aimX - p.x) : p.heading;
-      lob(state, p, p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, ITEMS.bomb.range, ITEMS.bomb.damage, ITEMS.bomb.radius);
-      p.revealed = 1;
-      p.bombs -= 1;
-      p.charge = 0;
-      p.charging = null;
-    }
-  } else if (pressed('use')) {
+  else if (pressed('use')) {
+    // F picks up, never throws (a bomb is thrown from the hand, see 5). Bots still throw theirs with it.
     if (k) takeLoot(state, p, k);
-    else if (p.bombs > 0 && !swimming && !p.using) useItem(state, p, input);
+    else if (p.bot && p.bombs > 0 && !swimming && !p.using) useItem(state, p, input);
   }
   p.prev = { ...input };
 };

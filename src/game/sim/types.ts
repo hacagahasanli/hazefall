@@ -47,6 +47,12 @@ export interface Input {
   heal?: boolean;
   /** Drink a coffee. */
   coffee?: boolean;
+  /** Use a bandage (3). */
+  bandage?: boolean;
+  /** Use a med kit (4). */
+  medkit?: boolean;
+  /** Take a bomb in hand, or put it away (5); in hand, the trigger throws it. */
+  bomb?: boolean;
   /** Aim point on the map. */
   aimX: number;
   aimY: number;
@@ -127,6 +133,8 @@ export interface Player {
   pushing: number;
   /** Leaning: -1 (left) .. 1 (right), eased towards the input. */
   lean: number;
+  /** A bomb in hand (taken out with 5): the trigger throws it instead of shooting. */
+  bombOut?: boolean;
   /** Under the open canopy the trigger was pressed afresh (a trigger held from the plane does not fire). */
   chuteArmed?: boolean;
   /** Dodge roll: seconds left, its direction, and the recharge. */

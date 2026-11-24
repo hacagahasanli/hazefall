@@ -191,8 +191,8 @@ const Ring = ({ value, color, icon, cap, label, size }: { value: number; color: 
 // The pieces
 // ---------------------------------------------------------------------------
 
-const Count = ({ icon, n, of, color }: { icon: ReactNode; n: number | string; of?: number; color?: string }) => (
-  <span className="flex items-center gap-0.5 rounded-[3px] bg-ink-deep/75 py-0.5 pl-1 pr-1.5" style={color ? { color } : { color: 'rgba(230,235,245,0.85)' }}>
+const Count = ({ icon, n, of, color, dim }: { icon: ReactNode; n: number | string; of?: number; color?: string; dim?: boolean }) => (
+  <span className={`flex items-center gap-0.5 rounded-[3px] bg-ink-deep/75 py-0.5 pl-1 pr-1.5 ${dim ? 'opacity-45' : ''}`} style={color ? { color } : { color: 'rgba(230,235,245,0.85)' }}>
     {icon}
     <span className="font-display text-[11px] leading-none text-cream">{n}</span>
     {of !== undefined && <span className="text-[9px] leading-none text-cream/45">/{of}</span>}
@@ -220,10 +220,11 @@ export const Vitals = ({
   const items: ReactNode[] = [];
   if (hud.vest > 0) items.push(<Count key="vest" icon={<Icon size={13} color={GRADE_CSS[hud.vest - 1]}>{ITEM_ICONS.vest}</Icon>} n={ROMAN[hud.vest]} />);
   if (hud.pack > 0) items.push(<Count key="pack" icon={<Icon size={13} color={GRADE_CSS[hud.pack - 1]}>{ITEM_ICONS.pack}</Icon>} n={ROMAN[hud.pack]} />);
-  if (hud.bag.bandages > 0) items.push(<Count key="b" icon={<Icon size={13}>{ITEM_ICONS.bandage}</Icon>} n={hud.bag.bandages} of={hud.bag.cap.bandage} />);
-  if (hud.bag.medkits > 0) items.push(<Count key="m" icon={<Icon size={13}>{ITEM_ICONS.medkit}</Icon>} n={hud.bag.medkits} of={hud.bag.cap.medkit} />);
+  // Bandages, med kits and bombs always show as count / room (Reis, 2026-11-24), dimmed when there are none.
+  items.push(<Count key="b" icon={<Icon size={13}>{ITEM_ICONS.bandage}</Icon>} n={hud.bag.bandages} of={hud.bag.cap.bandage} dim={hud.bag.bandages === 0} />);
+  items.push(<Count key="m" icon={<Icon size={13}>{ITEM_ICONS.medkit}</Icon>} n={hud.bag.medkits} of={hud.bag.cap.medkit} dim={hud.bag.medkits === 0} />);
   if (hud.bag.coffees > 0) items.push(<Count key="c" icon={<Icon size={13}>{ITEM_ICONS.coffee}</Icon>} n={hud.bag.coffees} />);
-  if (hud.bag.bombs > 0) items.push(<Count key="x" icon={<Icon size={13}>{ITEM_ICONS.bomb}</Icon>} n={hud.bag.bombs} />);
+  items.push(<Count key="x" icon={<Icon size={13}>{ITEM_ICONS.bomb}</Icon>} n={hud.bag.bombs} of={hud.bag.cap.bomb} dim={hud.bag.bombs === 0} />);
   if (hud.buzz > 0) items.push(<Count key="buzz" color="#ffd23f" icon={<Icon size={13} color="#ffd23f">{ITEM_ICONS.coffee}</Icon>} n={`${Math.ceil(hud.buzz)}s`} />);
   return (
     <div className="flex items-end gap-2.5">

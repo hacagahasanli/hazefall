@@ -220,20 +220,34 @@ describe('loot and fighting', () => {
     expect(fly(-0.3)).toBeLessThan(0);
   });
 
-  it('with the mouse a bomb lands under the cursor, as far as 30 m', () => {
+  it('5 takes a bomb in hand, the trigger throws it under the cursor (as far as 30 m); F never throws', () => {
     const s = landed();
     clearAround(s);
     const p = s.players[0];
     Object.assign(p, { bombs: 1, heading: 0, x: OPEN.x, y: OPEN.y });
+    // F with a bomb and nothing to pick up: nothing is thrown.
+    const f = idle();
+    f[0] = { ...NO_INPUT, use: true, throwAt: true, aimX: p.x + 25, aimY: p.y };
+    for (let i = 0; i < 3; i++) step(s, f);
+    step(s, idle());
+    expect(s.projectiles.some((q) => q.kind === 'lob')).toBe(false);
+    expect(p.bombs).toBe(1);
+    const five = idle();
+    five[0] = { ...NO_INPUT, bomb: true, aimX: p.x + 25, aimY: p.y };
+    step(s, five);
+    expect(p.bombOut).toBe(true);
     const hold = idle();
-    hold[0] = { ...NO_INPUT, use: true, throwAt: true, aimX: p.x + 25, aimY: p.y };
+    hold[0] = { ...NO_INPUT, fire: true, throwAt: true, aimX: p.x + 25, aimY: p.y };
     for (let i = 0; i < 3; i++) step(s, hold);
+    expect(p.shots).toBe(0);
     const letGo = idle();
     letGo[0] = { ...NO_INPUT, throwAt: true, aimX: p.x + 25, aimY: p.y };
     step(s, letGo);
     const pr = s.projectiles.find((q) => q.kind === 'lob')!;
     expect(Math.hypot(pr.tx - pr.sx, pr.ty - pr.sy)).toBeCloseTo(25, 0);
     expect(ITEMS.bomb.range).toBeGreaterThanOrEqual(30);
+    // Back to the gun after the throw.
+    expect(p.bombOut).toBe(false);
   });
 
   it('tall grass hides you like a bush', () => {
@@ -728,5 +742,28 @@ describe('landmarks on legs', () => {
       const leg = kind === 'crane' ? { x: cx + 2.6, y: cy + 1.5 } : { x: cx + 1.6, y: cy + 1.6 };
       expect(circleBlocked(s, leg.x, leg.y, PLAYER_RADIUS)).toBe(true);
     }
+  });
+});
+
+describe('healing is in your hands', () => {
+  it('nothing heals by itself; 3 uses a bandage, 4 a med kit', () => {
+    const s = createGame('hotfix', 1);
+    const p = s.players[0];
+    s.players.slice(1).forEach((o) => Object.assign(o, { stage: 'falling', alt: 60, canopy: -1, x: 10, y: 10 }));
+    s.drone.t = 1;
+    Object.assign(p, { stage: 'ground', hp: 40, sinceCombat: 60, bandages: 2, medkits: 1 });
+    for (let i = 0; i < 60 * 10; i++) step(s, idle());
+    expect(p.hp).toBe(40);
+    const three = idle();
+    three[0] = { ...NO_INPUT, bandage: true };
+    step(s, three);
+    expect(p.using).toBe('bandage');
+    for (let i = 0; i < 90; i++) step(s, idle());
+    expect(p.hp).toBe(55);
+    expect(p.bandages).toBe(1);
+    const four = idle();
+    four[0] = { ...NO_INPUT, medkit: true };
+    step(s, four);
+    expect(p.using).toBe('medkit');
   });
 });

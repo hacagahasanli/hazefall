@@ -460,7 +460,10 @@ export const MainMenu = ({
                 ['up', 'Move'],
                 ['fire', 'Shoot'],
                 ['jump', 'Jump'],
-                ['use', 'Pick up / use'],
+                ['use', 'Pick up'],
+                ['bandage', 'Bandage'],
+                ['medkit', 'Med kit'],
+                ['bomb', 'Bomb'],
                 ['reload', 'Reload'],
                 ['roll', 'Roll'],
                 ['super', 'Super'],
@@ -472,7 +475,7 @@ export const MainMenu = ({
               <div key={a} className="flex items-center justify-between gap-2 border-b border-cream/5 py-1.5">
                 <span className="text-cream/70">{label}</span>
                 <kbd className="rounded-sm border border-b-2 border-cream/30 bg-cream/10 px-1.5 text-xs font-bold">
-                  {a === 'up' ? [settings.keys.up, settings.keys.left, settings.keys.down, settings.keys.right].map(keyLabel).join(' ') : keyLabel(settings.keys[a])}
+                  {a === 'up' ? [settings.keys.up, settings.keys.left, settings.keys.down, settings.keys.right].map(keyLabel).join(' ') : a === 'fire' ? 'Left click' : keyLabel(settings.keys[a])}
                 </kbd>
               </div>
             ))}
