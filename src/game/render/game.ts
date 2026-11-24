@@ -991,6 +991,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** The mouse on the canvas in normalised device coordinates, and the left button. */
   const mouse = new THREE.Vector2(0, 0);
   let mouseDown = false;
+  /** Dev only (video director): no damage to you. */
+  let directorGod = false;
   /** Right mouse button held: look through the sniper's scope (Z does the same). */
   let rightDown = false;
   /** Mouse aim with a bomb: where it will land (null when throwing by holding). */
@@ -3429,6 +3431,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const events = session.tick(state.players[me].alive ? readInput() : NO_INPUT);
       // A guest's state is replaced by the host's on every correction: always read it back.
       state = session.state;
+      // Dev only (video director, video-plan-v1.md): your fighter takes no damage, so a take never ends early.
+      if (directorGod) Object.assign(state.players[me], { directorGod: true, ammo: Math.max(state.players[me].ammo, 90) });
       events.forEach(handle);
       // The height the canopy opened at (a daily goal asks for it below 60 m).
       const mine = state.players[me];
@@ -3463,7 +3467,25 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     const w = canvas.clientWidth, h = canvas.clientHeight;
     const xs = pts.map((v) => ((v.x + 1) / 2) * w), ys = pts.map((v) => ((1 - v.y) / 2) * h);
     return { w, h, x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys), height: Math.max(...ys) - Math.min(...ys), arm: armNow, shoulder: shoulderView(), cam: camera.position.toArray() };
-  }, state: () => state, buildings: BUILDINGS, map: MAP, animals: props.animals, preview: () => ({ ring: landRing.visible, x: landRing.position.x, y: landRing.position.y, z: landRing.position.z, s: landRing.scale.x, parent: !!landRing.parent, op: (landRing.material as THREE.MeshBasicMaterial).opacity, dots: arcDots.filter((d) => d.visible).length, aim: lastThrowAim }) };
+  }, state: () => state,
+    /** Video director (dev only, video-plan-v1.md): set the view, hold the left button, look captured, no damage, the HUD/fps. */
+    director: {
+      view: (yaw: number, pitch: number) => { viewYaw = yaw; viewPitch = pitch; viewInit = true; },
+      viewNow: () => ({ yaw: viewYaw, pitch: viewPitch }),
+      fire: (on: boolean) => { mouseDown = on; },
+      lock: (on: boolean) => { locked = on; },
+      god: (on: boolean) => { directorGod = on; },
+      /** Can you see fighter `id` with a clear shot at them, and the exact view (from the lens) onto their chest. */
+      sight: (id: number) => {
+        const p = state.players[me];
+        const o = state.players[id];
+        const see = !!o && o.alive && canSee(state, p, o) && clearShot(p, o);
+        const dx = o.x - camera.position.x, dz = o.y - camera.position.z, dy = (o.z ?? 0) + chestHeight(o) - camera.position.y;
+        return { see, yaw: Math.atan2(dz, dx), pitch: Math.atan2(dy, Math.hypot(dx, dz)) };
+      },
+      me,
+    },
+    buildings: BUILDINGS, map: MAP, animals: props.animals, preview: () => ({ ring: landRing.visible, x: landRing.position.x, y: landRing.position.y, z: landRing.position.z, s: landRing.scale.x, parent: !!landRing.parent, op: (landRing.material as THREE.MeshBasicMaterial).opacity, dots: arcDots.filter((d) => d.visible).length, aim: lastThrowAim }) };
 
   // Measuring (?perf only, any build): draw calls and triangles of the last frame, the world's build time, a synchronous
   // render benchmark, and a way to put the player at a fixed spot with the sim frozen, so before/after shots match.

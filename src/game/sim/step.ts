@@ -944,6 +944,8 @@ const alivePlayers = (state: GameState) => state.players.filter((p) => p.alive);
 
 const hurt = (state: GameState, target: Player, amount: number, by: number | null, quiet = false, ignoreArmor = false) => {
   if (state.phase === 'over' || !targetable(target)) return;
+  // Dev-only video director (render/game.ts __lcs.director.god): this fighter takes no damage.
+  if ((target as { directorGod?: boolean }).directorGod) return;
   if (target.dashTime > 0 && by !== null) return;
   // Early in a dodge roll, bullets and blasts from players miss.
   if (target.rolling > ROLL.time - ROLL.iframes && by !== null) return;
