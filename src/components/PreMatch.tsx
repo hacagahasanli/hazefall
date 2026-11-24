@@ -62,6 +62,8 @@ export const PreMatch = ({
   onLaunch,
   onBack,
   quick = false,
+  autoStart = false,
+  lockFighter = false,
   touch,
   career,
   onLook,
@@ -79,6 +81,10 @@ export const PreMatch = ({
   onBack: () => void;
   /** Play again: a shorter wait, the lobby already full. */
   quick?: boolean;
+  /** CrazyGames, first round: no Ready press, the countdown starts as soon as the lobby is on screen (max one click to play). */
+  autoStart?: boolean;
+  /** CrazyGames: the fighter is chosen on the Fighter page only; the lobby shows who you drop as but no picker. */
+  lockFighter?: boolean;
   touch: boolean;
   /** What the game remembers: what is unlocked and worn (the portal build). */
   career?: Career;
@@ -208,14 +214,18 @@ export const PreMatch = ({
     onReadyRef.current();
   }, [readied, live, t, count]);
 
-  // Play again lands here too and waits for Ready like the first round (Reis, 2026-11-24).
+  // Play again lands here too and waits for Ready like the first round (Reis, 2026-11-24). On CrazyGames the first round
+  // starts by itself: Play is the one click to the game (CG gameplay rule).
+  useEffect(() => {
+    if (autoStart && live && !readied) ready();
+  }, [autoStart, live, readied, ready]);
 
   const left = Math.max(0, end.current - t);
   const launching = left <= LAUNCH;
   const pick = useCallback(
     (id: FighterId) => {
       // Ready locks your fighter: the match is already being built with it.
-      if (readied || id === fighter) return;
+      if (lockFighter || readied || id === fighter) return;
       uiTick(false);
       onFighter(id);
     },
@@ -318,7 +328,7 @@ export const PreMatch = ({
         <p className="max-w-md text-sm text-cream/85 sm:text-base [@media(max-height:500px)]:hidden">
           {f.role} · <kbd className="mx-0.5 inline-flex min-w-5 items-center justify-center rounded-sm border border-b-2 border-cream/40 bg-cream/10 px-1 text-xs font-bold leading-5 text-cream">{touch ? 'SUPER' : keyLabel(settings.keys.super)}</kbd> <b className="text-gold">{f.superName}</b>: {f.superText}
         </p>
-        <div className="mt-1 flex gap-2" role="radiogroup" aria-label="Fighter">
+        {!lockFighter && <div className="mt-1 flex gap-2" role="radiogroup" aria-label="Fighter">
           {IDS.map((id, i) => {
             const on = id === fighter;
             const c = FIGHTERS[id];
@@ -343,8 +353,8 @@ export const PreMatch = ({
               </button>
             );
           })}
-        </div>
-        {career && onLook && (
+        </div>}
+        {career && onLook && !lockFighter && (
           <StyleRow
             career={career}
             fighter={fighter}

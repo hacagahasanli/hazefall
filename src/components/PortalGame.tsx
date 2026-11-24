@@ -144,6 +144,8 @@ export const PortalGame = ({
               fighter={fighter}
               onFighter={pickFighter}
               quick={quick}
+              autoStart={platform.id === 'crazygames' && !quick}
+              lockFighter={platform.id === 'crazygames'}
               touch={touch}
               loaded={loaded}
               onReady={() => {

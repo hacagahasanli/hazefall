@@ -232,3 +232,17 @@ places. Deviations in LOG 2026-11-22 are all accepted (see F-010 for two conditi
 - Expected result: acceptance criteria 1-7 in section 5 pass as tests (h 950-1,050, BUILDINGS 40, grid match, rest of MAP unchanged, placeAt, reachability per gate, tufts -25 %), and the six 1216x684 shots of section 5 item 8 sent for CD review.
 - Related specification: CREATIVE/specifications/map-balance-grass-stadium.md
 - Status: built (engineering, 2026-11-24), awaiting CD review
+
+## F-018 (R-019) — CG resubmit preflight: fix before upload
+- What is wrong: in-game text teaches dead keys (J shoots; 3 heals / 4 bomb) in How to play and the lobby aim picker; three messages stack top-centre right after landing (place title over the mouse-capture pill); first action is 60 s+ after Play; close shoulder views fill with giant grass blades and flat walls (30 fps on high); Left Alt as a default key may hand focus to the browser on Windows.
+- Why it matters: CG rejected the last build for "overall quality"; their quality guidelines judge exactly the first minute: clear language, consistent controls, no defects, onboarding in gameplay, restricted keys.
+- What should change (ranked by impact; full detail and copy in the spec, section 6):
+  1. Replace stale control copy in neutral.ts + studio.ts howTo and AimChoice ("Left click shoots the nearest enemy you can see"); test that no copy names J as a key.
+  2. One top-centre message at a time: mouse-capture prompt moves under the crosshair ("Click to aim with the mouse", ground only, no "Esc pauses").
+  3. First round of a portal session: Play -> lobby with Ready already set and the 10 s countdown running; "Space · jump" from second 0 in the plane. Needs Reis's OK.
+  4. Near-camera grass fade (1.8-2.6 m), camera eases off walls closer than 1.0 m, Auto quality holds 60 fps at 1216x684 in the Campus.
+  5. Test hold-Alt look-around on Windows Chrome/Edge; if focus leaves the game, default -> KeyB, bump keysVersion.
+  6. Verify 100 HP numeral never overlaps the fighter name. 7. Show FPS off in every capture; portal-report check. 8. Max two text lines on screen (zone line + one hint, priority order in spec). 9. Lobby "AIM AND SHOOT" eyebrow -> sentence-case "Aim" or none. 10. New CG entry uses only spec sections 2-4.
+- Expected result: items 1-5 done and shown in 1216x684 shots (menu, lobby, plane, canopy, first 5 s on the ground, report) plus the three covers and two videos per spec section 5; CD signs off here before Reis uploads.
+- Related specification: CREATIVE/specifications/cg-store-copy-v2.md
+- Status: open
