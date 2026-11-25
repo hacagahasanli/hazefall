@@ -1091,11 +1091,13 @@ export const muzzleOf = (state: GameState, p: Player, input?: Input) => {
   const c = Math.cos(p.heading);
   const sn = Math.sin(p.heading);
   const chest = chestHeight(p);
-  // The modelled muzzle, relative to the body centre: [right, up from the feet, forward].
-  const lean = p.lean * LEAN.offset * 0.7;
-  let r = MUZZLE.side + lean;
-  let u = chest - feetOf(p) + MUZZLE.up;
-  let f = MUZZLE.fwd;
+  // The modelled muzzle (each fighter's and gun's, crouched, leaned), relative to the body centre: [right, up from the feet, forward].
+  const g = MUZZLE.gun[p.weapon] ?? MUZZLE.gun.rifle;
+  const fm = MUZZLE.fighter[p.fighter] ?? MUZZLE.fighter.hotfix;
+  const crouch = p.crouch ?? 0;
+  let r = g.side + p.lean * (p.lean > 0 ? fm.leanR : fm.leanL);
+  let u = fm.up - fm.crouch * crouch + g.up - Math.abs(p.lean) * (p.lean > 0 ? fm.dropR : fm.dropL);
+  let f = g.fwd + fm.crouchFwd * crouch;
   const m = input?.muzzle;
   if (m && !p.bot && m.every((v) => Number.isFinite(v))) {
     const dr = m[0] - r;
@@ -1109,6 +1111,34 @@ export const muzzleOf = (state: GameState, p: Player, input?: Input) => {
   const at = { x: p.x + c * f - sn * r, y: p.y + sn * f + c * r, h: feetOf(p) + Math.max(0.2, u) };
   const clear = lineOfSight(state, o.x, o.y, at.x, at.y, chest, at.h) && !solidAt(state, at.x, at.y, at.h);
   return clear ? at : { x: o.x, y: o.y, h: chest };
+};
+
+/**
+ * Does the wall take the shot? Follows the line a round fired from `from` (the muzzle) at `aim` (the crosshair's point)
+ * would fly, with the same steps and collision as a flying round (updateProjectile), and returns where it first meets the
+ * ground, a wall, a roof or a rock if that is more than `slack` m short of the aim point, else null. The HUD shows it.
+ */
+export const shotObstruction = (state: GameState, from: { x: number; y: number; h: number }, aim: { x: number; y: number; h: number }, slack = 0.5) => {
+  const total = Math.hypot(aim.x - from.x, aim.y - from.y);
+  if (total < 1.2) return null;
+  // The same slope as fireBullet: very close points are pushed out along the line over 2 m.
+  const h1 = total < 2 ? from.h + ((aim.h - from.h) * 2) / total : aim.h;
+  const hd = total < 2 ? 2 : total;
+  const ux = (aim.x - from.x) / total;
+  const uy = (aim.y - from.y) / total;
+  let px = from.x;
+  let py = from.y;
+  let ph = from.h;
+  for (let d = 0.4; d < total - slack; d += 0.4) {
+    const x = from.x + ux * d;
+    const y = from.y + uy * d;
+    const h = from.h + (h1 - from.h) * (d / hd);
+    if (h <= 0.02 || solidStep(state, px, py, ph, x, y, h)) return { x, y, h: Math.max(0, h), d };
+    px = x;
+    py = y;
+    ph = h;
+  }
+  return null;
 };
 
 /** Fires one round from `from` (the muzzle) at `angle`. Returns how far it flew if it was resolved at once (INSTANT), else undefined. */
@@ -1165,11 +1195,10 @@ export const falloffDamage = (weapon: WeaponKind, damage: number, distance: numb
  * level from the top-down view (sinking slowly over long distances), up or down with your view
  * in first person. It explodes on the first wall, tree or person it meets, or the ground.
  */
-const fireRocket = (state: GameState, p: Player, angle: number, pitch: number) => {
+const fireRocket = (state: GameState, p: Player, angle: number, pitch: number, from: { x: number; y: number; h: number }) => {
   const w = WEAPONS.rockets;
-  const o = hitPoint(p);
-  const x = o.x + Math.cos(angle) * 0.8;
-  const y = o.y + Math.sin(angle) * 0.8;
+  // From the launcher's muzzle (the one you see on the shoulder), then its own arc.
+  const { x, y } = from;
   const pt = Math.max(-0.6, Math.min(0.9, pitch));
   const flat = Math.cos(pt) * w.speed;
   state.projectiles.push({
@@ -1177,7 +1206,7 @@ const fireRocket = (state: GameState, p: Player, angle: number, pitch: number) =
     x, y, vx: Math.cos(angle) * flat, vy: Math.sin(angle) * flat,
     damage: gunDamage(p), life: w.range / w.speed,
     sx: x, sy: y, tx: 0, ty: 0, t: 0, duration: 0, radius: w.lob!.radius, rocket: true,
-    h: chestHeight(p) + (ROCKET.launchHeight - 1.1), vh: Math.sin(pt) * w.speed,
+    h: from.h, vh: Math.sin(pt) * w.speed,
   });
 };
 
@@ -1272,7 +1301,7 @@ const shoot = (state: GameState, p: Player, input: Input) => {
   // The shot comes first in the event list, so a hit or a kill it causes this tick reads as its result.
   const shot: GameEvent = { type: 'shot', owner: p.id, x: from.x, y: from.y, h: from.h, angle: aim, weapon: kind };
   state.events.push(shot);
-  if (kind === 'rockets') fireRocket(state, p, aim, input.pitch ?? 0);
+  if (kind === 'rockets') fireRocket(state, p, aim, input.pitch ?? 0, from);
   else if (w.bullets > 1) {
     for (let i = 0; i < w.bullets; i++) fireBullet(state, p, aim - spread / 2 + (spread * i) / (w.bullets - 1), from, at);
   } else {

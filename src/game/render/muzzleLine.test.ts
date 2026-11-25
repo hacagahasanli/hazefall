@@ -18,14 +18,14 @@ import type { FighterId, Input, WeaponKind } from '../sim/types';
 
 const FIGHTERS: FighterId[] = ['hotfix', 'legacy', 'standup', 'intern'];
 const GUNS: Exclude<WeaponKind, 'fists' | 'rockets'>[] = ['pistol', 'smg', 'shotgun', 'rifle', 'sniper'];
-const MODEL: Record<string, GunKind> = { pistol: 'pistol', smg: 'smg', shotgun: 'shotgun', rifle: 'rifle', sniper: 'sniper' };
+const MODEL: Record<string, GunKind> = { pistol: 'pistol', smg: 'smg', shotgun: 'shotgun', rifle: 'rifle', sniper: 'sniper', rockets: 'launcher' };
 
 const openSpot = () => {
   const ty = MAP.findIndex((row) => row.includes('....'));
   return { x: MAP[ty].indexOf('....') * TILE + 4, y: ty * TILE + 1 };
 };
 
-interface Case { fighter: FighterId; gun: (typeof GUNS)[number]; lean: number; crouch: number; aim: { dx: number; dy: number; h: number } }
+interface Case { fighter: FighterId; gun: (typeof GUNS)[number] | 'rockets'; lean: number; crouch: number; aim: { dx: number; dy: number; h: number } }
 
 /** One shot, as the game makes it: returns the drawn muzzle and barrel (world), and the round's start and line. */
 const shoot = (c: Case) => {
@@ -118,6 +118,21 @@ describe('the round leaves the barrel you see and flies straight into the crossh
     const level = shoot({ fighter: 'hotfix', gun: 'rifle', lean: 0, crouch: 0, aim: { dx: 10, dy: 0, h: 1.3 } });
     const up = shoot({ fighter: 'hotfix', gun: 'rifle', lean: 0, crouch: 0, aim: { dx: 10, dy: 0, h: 6 } });
     expect(Math.asin(up.barrel.y) - Math.asin(level.barrel.y)).toBeGreaterThan(0.35);
+  });
+});
+
+describe('bots: the modelled muzzle is where their drawn gun is (their tracers leave the barrel too)', () => {
+  it('within 10 cm for every fighter, gun (rockets too), crouched, leaning', () => {
+    let worst = 0;
+    let where = '';
+    for (const fighter of FIGHTERS) for (const gun of [...GUNS, 'rockets'] as const) for (const lean of [-1, 0, 1]) for (const crouch of [0, 1]) {
+      const r = shoot({ fighter, gun: gun as Case['gun'], lean, crouch, aim: { dx: 40, dy: 0, h: 1 } });
+      // (The sim swaps the hand back to the slot's gun after the tick; the model is asked for the gun drawn.)
+      const m = muzzleOf(r.s, { ...r.a, weapon: gun, lean, crouch });
+      const d = Math.hypot(m.x - r.muzzle.x, m.h - r.muzzle.y, m.y - r.muzzle.z);
+      if (d > worst) [worst, where] = [d, `${fighter} ${gun} lean ${lean} crouch ${crouch}`];
+    }
+    expect(worst, where).toBeLessThan(0.1);
   });
 });
 

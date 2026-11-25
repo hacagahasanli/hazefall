@@ -131,3 +131,27 @@ then flies straight; (3) "the aim point is too close". Same code on `main` (8a08
 - Jumping: the sim fires from ground-level chest, the drawn gun is in the air (pre-existing).
 - Camera proposal (not changed): shoulder arm 3.2 m -> 3.6 m, side 0.62 -> 0.68 m, scoped arm 1.4 -> 1.8 m, if Reis meant the
   camera sits too close while aiming.
+
+## 2026-11-25 (2) — Reis approved: honest crosshair (obstruction marker), farther shoulder camera, rocket + bot muzzles
+
+- **Corner rule approved** (standing behind a corner the wall takes the shot; lean out with Q/E to hit).
+- **Obstruction marker**: every frame `game.ts` traces your round's real line (sim `shotObstruction`: your muzzle
+  (`muzzleOf`, with the drawn muzzle) to the crosshair's point, the same 0.4 m steps, slope and `solidStep` collision as a
+  flying round). If the ground, a wall, a roof or a rock takes it more than 0.5 m short of the point, a small "blocked" ring
+  (circle with a slash, white over a dark outline, 22 px, 1.25x with the large HUD; `render/aimBlock.ts`) sits on screen where
+  it will hit, and the crosshair dims to 30% (`HudState.aimBlocked`). Lean out until the line clears and both go back. Your
+  own aim only (over the shoulder and first person), alive on the ground with a gun up; not for rockets (they arc), bombs,
+  heals, bots or spectators. Touch players use the high follow view with auto-aim (no crosshair), so it does not apply
+  there. Static marker, nothing for reducedMotion to calm. The look is engineering's placeholder: Creative Director to review.
+- **Shoulder camera** (`SHOULDER_CAM` in game.ts): arm 3.2 -> 3.6 m, side 0.62 -> 0.68 m, scoped arm 1.4 -> 1.8 m (scoped side
+  0.45, pivot, fov unchanged). The arm's wall/roof/trunk march and the side-wall push are unchanged and read the new values;
+  the crosshair ray starts where the arm ends. Live check behind a house corner: arm 3.60, no clipping.
+- **Rockets** leave from the launcher's muzzle (`muzzleOf`, height included) with their own pitch and gravity arc as before.
+- **Bots' muzzle** is modelled per fighter (height, crouch drop and push, lean left/right side shift and drop) and per gun
+  (`MUZZLE` in constants.ts): within 8 cm of the drawn muzzle for every fighter x bullet gun x lean x crouch, 10 cm for the
+  launcher (test), so their tracers no longer bend.
+
+Tests: 465 pass (new: bots' model vs the drawn rig, obstruction standing vs leaning at a real corner, open ground / ground
+hit, rocket start). tsc clean, `npm run build:web` ok; the preview on 127.0.0.1:3320 serves the new bundle.
+Capture: `/private/tmp/hazefall-aim/block/sheet.png` and `zoom.png` (top/left standing: marker on the wall, dim crosshair;
+bottom/right leaning with E: clear). Script `/private/tmp/hazefall-aim/capture-block.mjs <port> <outDir>`.
