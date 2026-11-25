@@ -1,5 +1,4 @@
 import { CAM_WALL, clampSide, wallSideWant } from './camWall';
-import { createAimBlockOverlay } from './aimBlock';
 import { gunAim, toBodyFrame } from './muzzleLine';
 import * as THREE from 'three';
 
@@ -12,7 +11,7 @@ import { actionFor, DEFAULT_SETTINGS, keyLabel, keyMap } from '../settings';
 import type { VolumeKind } from '../sfx';
 import type { Action, Settings } from '../settings';
 import { ARMOR, CROUCH, HEALS, LEAN, THROW, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITEMS, MAP, PLACE_TIER, placeAt, PLAYERS, PROPS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
-import { canSee, carryCap, chestHeight, feetOf, healChoice, inPlant, inWater, lineOfSight, lootUnder, muzzleOf as simMuzzle, reloadTime, shotPreview, solidAt, solidStep, superThrowTarget, throwDistance } from '../sim/step';
+import { canSee, carryCap, chestHeight, feetOf, healChoice, inPlant, inWater, lineOfSight, lootUnder, muzzleOf as simMuzzle, reloadTime, solidAt, solidStep, superThrowTarget, throwDistance } from '../sim/step';
 import { buildingAt, CLIMB, roofAt } from '../sim/roofs';
 import { createOfflineSession } from '../net/session';
 import { arrowTo, LOOT_HINT } from './hints';
@@ -146,8 +145,6 @@ export interface HudState {
   /** Over the shoulder: crosshair in the middle, mouse look. */
   shoulder: boolean;
   mouseLocked: boolean;
-  /** Your round's line meets a wall short of the crosshair's point: the crosshair dims (a marker shows where it hits). */
-  aimBlocked: boolean;
   /** The quality tier being drawn. */
   tier: Tier;
   /** Your latest elimination, while its banner shows (about 1.4 s): who, and how many are left. */
@@ -338,12 +335,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const smokeB = new THREE.Vector3();
   /** The hitmarker and the damage-direction arcs, on a DOM layer over the canvas. */
   const hitFx = canvas.parentElement ? createHitOverlay(canvas.parentElement) : null;
-  const aimBlockFx = canvas.parentElement ? createAimBlockOverlay(canvas.parentElement) : null;
-  /** The round's real line meets a wall short of the crosshair's point (HudState.aimBlocked: the crosshair dims). */
-  let aimBlocked = false;
   /** The last input sent over the shoulder or in first person (held lean and crouch), for the obstruction trace. */
   let lastInput: Input = { ...NO_INPUT };
-  const blockV = new THREE.Vector3();
 
   // ---------- light
   scene.add(new THREE.HemisphereLight(0xd2e6ff, 0x6a6848, 1.4));
@@ -3125,28 +3118,6 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       camera.lookAt(camLook);
       camFocus.set(camLook.x, 0, camLook.z);
     }
-    // The obstruction marker: trace the round's real line (your muzzle to the crosshair's point, the sim's own collision)
-    // and, if a wall or the ground takes it more than 0.5 m short, mark where on screen and dim the crosshair. Your own
-    // aim only (not a bot's, not while spectating); guns that fly straight (rockets arc, bombs and heals are not shots).
-    {
-      const aimView = shoulderView() || firstPerson();
-      const gunUp = self.alive && self.stage === 'ground' && self.weapon !== 'fists' && self.weapon !== 'rockets' && !self.item && !self.using && self.vault <= 0 && self.climb <= 0;
-      let hit: ReturnType<typeof shotPreview> = null;
-      if (aimView && gunUp) {
-        // The next tick's input as it will be sent (lean and crouch held, this frame's crosshair point and drawn muzzle),
-        // planned and flown by the sim's own code (shotPreview): the marker and the round cannot disagree.
-        const aim = shoulderView() ? crossAim : fpAim;
-        hit = shotPreview(state, self, { ...lastInput, snap: true, aimX: aim.x, aimY: aim.y, aimH: aim.h, muzzle: shoulderView() ? drawnMuzzle(me) : undefined });
-      }
-      aimBlocked = !!hit;
-      if (hit && aimBlockFx) {
-        camera.updateMatrixWorld();
-        blockV.set(hit.x, hit.h, hit.y).project(camera);
-        if (blockV.z < 1 && Math.abs(blockV.x) <= 1 && Math.abs(blockV.y) <= 1) {
-          aimBlockFx.show(((blockV.x + 1) / 2) * canvas.clientWidth, ((1 - blockV.y) / 2) * canvas.clientHeight, settings.largeHud ? 1.25 : 1);
-        } else aimBlockFx.hide();
-      } else aimBlockFx?.hide();
-    }
     // Tall landmarks (the HQ, cranes, water tower, mast, lookout) ghost when they stand between the camera and your chest.
     props.fade(camera.position, tmpV.set(selfX, selfH + 1.2, selfY), dt, tier === 'low', self.stage !== 'drone');
     trauma = Math.max(0, trauma - dt * 1.5);
@@ -3354,7 +3325,6 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       canUse: self.stage === 'ground' && (!!k || self.bombs > 0),
       chute: self.canopy >= 0,
       mouseLocked: locked,
-      aimBlocked,
       tier,
       elim: elim && time - elim.at < 1.4 ? { id: elim.id, name: elim.name, left: elim.left } : null,
       place: placeBanner && self.alive && time - placeBanner.at < 1.6 ? { id: placeBanner.id, name: placeBanner.name } : null,
@@ -3646,7 +3616,6 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       cancelAnimationFrame(raf);
       dropSmoke.dispose();
       hitFx?.dispose();
-      aimBlockFx?.dispose();
       document.removeEventListener('pointerlockchange', onLockChange);
       document.removeEventListener('mousemove', onLook);
       canvas.removeEventListener('click', onLockClick);

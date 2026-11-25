@@ -1002,7 +1002,7 @@ export const Match = ({
           {(hud.firstPerson || hud.shoulder) && !over && !hud.scoped && (
             <>
               {/* Dimmed while the wall takes the shot (the round's real line from the muzzle is blocked short of it). */}
-              <div className="pointer-events-none absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 transition-opacity duration-75" style={{ opacity: hud.aimBlocked ? 0.3 : 1 }} aria-hidden>
+              <div className="pointer-events-none absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2" aria-hidden>
                 <span className="absolute left-1/2 top-0 h-2 w-0.5 -translate-x-1/2 bg-cream/90 shadow" />
                 <span className="absolute bottom-0 left-1/2 h-2 w-0.5 -translate-x-1/2 bg-cream/90 shadow" />
                 <span className="absolute left-0 top-1/2 h-0.5 w-2 -translate-y-1/2 bg-cream/90 shadow" />
