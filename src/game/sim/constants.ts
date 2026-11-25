@@ -1280,7 +1280,7 @@ export const LEAN = { offset: 0.64, speed: 0.6, rate: 6 };
  */
 export const MUZZLE = {
   fighter: {
-    hotfix: { up: 1.34, crouch: 0.38, crouchFwd: 0.38, leanL: 0.44, leanR: 0.39, dropL: 0.04, dropR: 0.14 },
+    hotfix: { up: 1.16, crouch: 0.32, crouchFwd: 0.34, leanL: 0.44, leanR: 0.39, dropL: 0.03, dropR: 0.14 },
     legacy: { up: 1.05, crouch: 0.25, crouchFwd: 0.31, leanL: 0.43, leanR: 0.38, dropL: 0.04, dropR: 0.13 },
     standup: { up: 0.77, crouch: 0.2, crouchFwd: 0.22, leanL: 0.33, leanR: 0.29, dropL: 0, dropR: 0.11 },
     intern: { up: 1.08, crouch: 0.3, crouchFwd: 0.31, leanL: 0.39, leanR: 0.35, dropL: 0.02, dropR: 0.13 },

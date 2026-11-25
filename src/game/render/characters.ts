@@ -109,13 +109,14 @@ const addEyes = (head: THREE.Group, r: number, y = 0.03) => {
 
 const SPECS: Record<CharacterId, Spec> = {
   hotfix: {
-    legLen: 0.9,
+    // Shorter since 2026-11-25 (Reis): about 12% less height, still the lean runner.
+    legLen: 0.76,
     legR: 0.085,
     torsoW: 0.5,
-    torsoH: 0.66,
+    torsoH: 0.6,
     torsoD: 0.32,
     headR: 0.19,
-    armLen: 0.78,
+    armLen: 0.72,
     armR: 0.07,
     skin: PALETTE.skinB,
     top: PALETTE.orange,
