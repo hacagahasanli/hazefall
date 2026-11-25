@@ -1266,8 +1266,17 @@ export const NEWBIE = { human: 35, aimError: 1.35, spareSeconds: 8 };
 export const PLANT_REVEAL = 2.4;
 export const AUTO_AIM_RANGE = 28;
 export const REGEN = { after: 6, perSecond: 2.5 };
-/** Leaning out round a corner (Q / E): how far the shoulder and the muzzle move out, and the speed while leaning. */
-export const LEAN = { offset: 1.1, speed: 0.6, rate: 6 };
+/**
+ * Leaning out round a corner (Q / E): how far the shoulder and the muzzle move out (`offset * 0.7` m at a full lean, where
+ * the drawn body's chest and gun are: chest ~0.40 m, rifle muzzle ~0.45 m, head ~0.55 m), and the speed while leaning.
+ */
+export const LEAN = { offset: 0.64, speed: 0.6, rate: 6 };
+/**
+ * Where a round leaves the gun when the shooter's client does not say (bots, first person, old clients): `side` m to the
+ * right of the (leaned) shoulder line, `up` m over the chest, `fwd` m out in front, about where the drawn muzzle is.
+ * A person's client sends its drawn muzzle instead (Input.muzzle), held to `reach` m from that point.
+ */
+export const MUZZLE = { side: 0.11, up: 0.2, fwd: 1.0, reach: 1.25 };
 /**
  * Crouching (G, a toggle): lower and steadier. `drop` m off the chest (where rounds leave and are aimed), `bodyDrop` m off the
  * top of the body for rounds, `speed` of the walking speed, `rate` how fast you go down and up (1/s), `spread` of the gun's

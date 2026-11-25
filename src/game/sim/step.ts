@@ -6,6 +6,7 @@ import {
   DT,
   fenceVertical,
   LEAN,
+  MUZZLE,
   CROUCH,
   ROCK_TOP,
   CRATE_TOP,
@@ -1077,29 +1078,44 @@ const gunDamage = (p: Player) => WEAPONS[p.weapon].damage * (p.weapon === 'fists
  */
 const INSTANT: ReadonlySet<WeaponKind> = new Set<WeaponKind>(['sniper']);
 
-/** Fires one round. Returns how far it flew if it was resolved at once (INSTANT), else undefined. */
 /**
- * Where a person's round leaves from. With a 3D aim (the crosshair's point) it is the camera's side line: over the shoulder
- * the camera sits ~0.6 m to the side, so what the crosshair clears round a corner the round clears too (Reis, 2026-11-24:
- * leaning out, the crosshair was past the corner but the round hit the wall in front). Never through a wall: if anything
- * solid stands between the body and that point, the round leaves from the body as before.
+ * Where a person's round leaves from: the gun's muzzle. A person's client sends where its drawn muzzle is (Input.muzzle,
+ * held within MUZZLE.reach of the modelled one), bots and old clients get the modelled muzzle: right of the (leaned)
+ * shoulder line, a little over the chest, out in front. The round then flies in a straight line from there through the
+ * crosshair's point, so the tracer you see leave the barrel is the line that hits (Reis, 2026-11-25: rounds swerved right
+ * out of the barrel because they left from the camera's side line, 0.5 m right of the gun). Never through a wall: if
+ * anything solid stands between the shoulder and the muzzle, the round leaves from the shoulder.
  */
-const muzzleOf = (state: GameState, p: Player, input?: Input) => {
+export const muzzleOf = (state: GameState, p: Player, input?: Input) => {
   const o = hitPoint(p);
-  if (!input || input.aimH === undefined || !input.camSide || p.bot) return o;
-  const side = Math.max(-0.8, Math.min(0.8, input.camSide));
-  const m = { x: o.x - Math.sin(p.heading) * side, y: o.y + Math.cos(p.heading) * side };
-  const h = chestHeight(p);
-  return lineOfSight(state, o.x, o.y, m.x, m.y, h, h) && !circleBlocked(state, m.x, m.y, 0.15, feetOf(p)) ? m : o;
+  const c = Math.cos(p.heading);
+  const sn = Math.sin(p.heading);
+  const chest = chestHeight(p);
+  // The modelled muzzle, relative to the body centre: [right, up from the feet, forward].
+  const lean = p.lean * LEAN.offset * 0.7;
+  let r = MUZZLE.side + lean;
+  let u = chest - feetOf(p) + MUZZLE.up;
+  let f = MUZZLE.fwd;
+  const m = input?.muzzle;
+  if (m && !p.bot && m.every((v) => Number.isFinite(v))) {
+    const dr = m[0] - r;
+    const du = m[1] - u;
+    const df = m[2] - f;
+    const k = Math.min(1, MUZZLE.reach / Math.max(1e-6, Math.hypot(dr, du, df)));
+    r += dr * k;
+    u += du * k;
+    f += df * k;
+  }
+  const at = { x: p.x + c * f - sn * r, y: p.y + sn * f + c * r, h: feetOf(p) + Math.max(0.2, u) };
+  const clear = lineOfSight(state, o.x, o.y, at.x, at.y, chest, at.h) && !solidAt(state, at.x, at.y, at.h);
+  return clear ? at : { x: o.x, y: o.y, h: chest };
 };
 
-const fireBullet = (state: GameState, p: Player, angle: number, aim?: { x: number; y: number; h?: number }, from?: { x: number; y: number }): number | undefined => {
+/** Fires one round from `from` (the muzzle) at `angle`. Returns how far it flew if it was resolved at once (INSTANT), else undefined. */
+const fireBullet = (state: GameState, p: Player, angle: number, from: { x: number; y: number; h: number }, aim?: { x: number; y: number; h?: number }): number | undefined => {
   const w = WEAPONS[p.weapon];
-  // Leaning out, the muzzle is out past the corner too.
-  const o = from ?? hitPoint(p);
-  const x = o.x + Math.cos(angle) * 0.6;
-  const y = o.y + Math.sin(angle) * 0.6;
-  const h0 = chestHeight(p);
+  const { x, y } = from;
+  const h0 = from.h;
   const toAim = aim ? Math.max(1, Math.hypot(aim.x - x, aim.y - y)) : 1;
   const pr: Projectile = {
     id: state.nextId++, owner: p.id, kind: 'bullet', weapon: p.weapon,
@@ -1241,9 +1257,11 @@ const shoot = (state: GameState, p: Player, input: Input) => {
   const w = WEAPONS[kind];
   p.cooldown = w.rate;
   p.revealed = 1;
-  // Bullets go straight at the aim point; the body catches up with its turn a moment later. They leave from the shoulder
+  // Bullets go straight at the aim point; the body catches up with its turn a moment later. They leave from the muzzle
   // (out past the corner while leaning) and go to the aim point from there, so a leaned shot still lands on the crosshair.
-  const from = muzzleOf(state, p, input);
+  // Fists (or an empty gun swung) reach from the body, as before.
+  const body = hitPoint(p);
+  const from = kind === 'fists' ? { x: body.x + Math.cos(p.heading) * 0.6, y: body.y + Math.sin(p.heading) * 0.6, h: chestHeight(p) } : muzzleOf(state, p, input);
   const aim = Math.hypot(input.aimX - from.x, input.aimY - from.y) > 1.2
     ? Math.atan2(input.aimY - from.y, input.aimX - from.x)
     : Math.hypot(input.aimX - p.x, input.aimY - p.y) > 0.3 ? Math.atan2(input.aimY - p.y, input.aimX - p.x) : p.heading;
@@ -1252,13 +1270,13 @@ const shoot = (state: GameState, p: Player, input: Input) => {
   p.weapon = kind; // fireBullet reads the weapon
   const at = input.aimH === undefined ? { x: input.aimX, y: input.aimY } : { x: input.aimX, y: input.aimY, h: input.aimH };
   // The shot comes first in the event list, so a hit or a kill it causes this tick reads as its result.
-  const shot: GameEvent = { type: 'shot', owner: p.id, x: from.x, y: from.y, angle: aim, weapon: kind };
+  const shot: GameEvent = { type: 'shot', owner: p.id, x: from.x, y: from.y, h: from.h, angle: aim, weapon: kind };
   state.events.push(shot);
   if (kind === 'rockets') fireRocket(state, p, aim, input.pitch ?? 0);
   else if (w.bullets > 1) {
-    for (let i = 0; i < w.bullets; i++) fireBullet(state, p, aim - spread / 2 + (spread * i) / (w.bullets - 1), at, from);
+    for (let i = 0; i < w.bullets; i++) fireBullet(state, p, aim - spread / 2 + (spread * i) / (w.bullets - 1), from, at);
   } else {
-    const len = fireBullet(state, p, aim + (nextRandom(state) - 0.5) * spread, at, from);
+    const len = fireBullet(state, p, aim + (nextRandom(state) - 0.5) * spread, from, at);
     if (len !== undefined && shot.type === 'shot') {
       shot.len = len;
       if (pr3d(input)) shot.endH = Math.round(lastEndH * 100) / 100;

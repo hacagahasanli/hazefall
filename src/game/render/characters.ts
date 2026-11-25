@@ -702,6 +702,8 @@ const tmpQ1 = new THREE.Quaternion();
 const tmpQ2 = new THREE.Quaternion();
 const tmpQ3 = new THREE.Quaternion();
 const AXIS_X = new THREE.Vector3(1, 0, 0);
+const tmpAim = new THREE.Vector3();
+const tmpQW = new THREE.Quaternion();
 const AXIS_Y = new THREE.Vector3(0, 1, 0);
 
 /**
@@ -876,6 +878,11 @@ export interface TopDownPose {
   climb?: number | null;
   /** The aim's elevation (radians, + up): the gun points at a target above or below you. */
   aimPitch?: number;
+  /**
+   * The aim's bearing from the muzzle relative to the body's facing (radians, + right): the barrel toes in to the crosshair's
+   * point (the gun sits right of the camera line, and the body's turn trails a flick of the mouse).
+   */
+  aimYaw?: number;
   /** In hand instead of the gun: a bomb, or a heal being used (which, and 0..1 through it). */
   item?: 'bomb' | 'heal' | null;
   using?: 'bandage' | 'medkit' | 'coffee' | null;
@@ -1149,10 +1156,18 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   // Running without firing for a moment: the gun drops to low ready, muzzle down; it comes up
   // the moment you shoot.
   const lowReady = running && sinceShot > 0.8 && p.gun !== 'pistol' ? 0.35 * amp : 0;
-  // The muzzle follows the aim up or down (at someone on a roof, from a roof down at the street), less the body's lean.
+  // The barrel points at the crosshair's point: up or down (at someone on a roof, from a roof down at the street) and
+  // across (toe-in from the right shoulder). The aim is a direction in the body's frame, carried into the spine's frame
+  // (the run's forward tip, the lean's roll, the breath), so a lean never swings the barrel off the aim while it is raised.
   const pitchAim = lowReady > 0 ? 0 : Math.max(-0.7, Math.min(0.7, p.aimPitch ?? 0));
-  rig.weapon.rotation.x = damp(rig.weapon.rotation.x, -kick * 0.35 - snipe * SNIPER_KICK.weaponPitch + sway * 0.4 + bolt * SNIPER_KICK.boltPitch + reloadTilt * 0.5 + lowReady - pitchAim - (rig.body.rotation.x - 0.05) * 0.85, snipe > 0 ? 90 : 30 - lowReady * 40, dt);
-  rig.weapon.rotation.y = damp(rig.weapon.rotation.y, sway * 0.6, 10, dt);
+  const yawAim = lowReady > 0 ? 0 : Math.max(-0.6, Math.min(0.6, p.aimYaw ?? 0));
+  tmpAim.set(-Math.sin(yawAim) * Math.cos(pitchAim), Math.sin(pitchAim), Math.cos(yawAim) * Math.cos(pitchAim));
+  tmpAim.applyQuaternion(tmpQW.copy(rig.body.quaternion).multiply(rig.upper.quaternion).invert());
+  // The weapon's Euler order is XYZ: its barrel (+z) points along (sin y, -cos y sin x, cos y cos x).
+  const aimRx = Math.atan2(-tmpAim.y, tmpAim.z);
+  const aimRy = Math.asin(Math.max(-1, Math.min(1, tmpAim.x)));
+  rig.weapon.rotation.x = damp(rig.weapon.rotation.x, -kick * 0.35 - snipe * SNIPER_KICK.weaponPitch + sway * 0.4 + bolt * SNIPER_KICK.boltPitch + reloadTilt * 0.5 + lowReady + aimRx, snipe > 0 ? 90 : 30 - lowReady * 40, dt);
+  rig.weapon.rotation.y = damp(rig.weapon.rotation.y, sway * 0.6 + aimRy, 10, dt);
   // Leaning, the body tips over but the rifle is held nearly level against it (only a little cant), so the sights stay
   // on the line the round will fly.
   rig.weapon.rotation.z = damp(rig.weapon.rotation.z, reloadTilt * 0.6 - rollUpper * 0.72 + bolt * SNIPER_KICK.boltRoll, bolt > 0 ? 40 : 12, dt);
