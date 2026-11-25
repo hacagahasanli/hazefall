@@ -1,6 +1,6 @@
 import { createBot } from './bot';
 import { BUILDINGS, DROP, DT, FIGHTERS, ITEMS, MAP, PLAYER_RADIUS, PROPS, RIVER, riverCentre, SHAPES, SIZE, SWIM, TILE, treeSpot, WEAPONS, WORLD, ZONE_EDGE_SPEED, ZONE_PHASES, ZONE_RULES, ZONE_START_RADIUS } from './constants';
-import { canSee, circleBlocked, createGame, falloffDamage, hitPoint, inPlant, inWater, lootUnder, muzzleOf, shotObstruction, solidAt, step } from './step';
+import { canSee, circleBlocked, createGame, falloffDamage, hitPoint, inPlant, inWater, lootUnder, muzzleOf, shotPreview, solidAt, step } from './step';
 import { NO_INPUT } from './types';
 
 import type { GameState, Input } from './types';
@@ -809,9 +809,8 @@ describe('leaning past a corner: the round leaves from the muzzle', () => {
       const a = s.players[0];
       const wx = spot!.x * TILE;
       const wy = spot!.y * TILE;
-      // Facing the target, as the sim turns the body (snap) before it fires.
-      Object.assign(a, { stage: 'ground', x: wx - 3, y: wy + 1.4, z: 0, heading: Math.atan2(1.1, 13), lean, weapon: 'sniper' });
-      return shotObstruction(s, muzzleOf(s, a), { x: wx + 10, y: wy + 2.5, h: 1.1 });
+      Object.assign(a, { stage: 'ground', x: wx - 3, y: wy + 1.4, z: 0, heading: 0, lean, weapon: 'sniper', mag: 5, ammo: 5 });
+      return shotPreview(s, a, { ...NO_INPUT, fire: true, snap: true, lean, aimX: wx + 10, aimY: wy + 2.5, aimH: 1.1 });
     };
     const blocked = traced(0);
     expect(blocked).not.toBeNull();
@@ -823,13 +822,15 @@ describe('leaning past a corner: the round leaves from the muzzle', () => {
 describe('the obstruction trace (HUD) and rockets', () => {
   it('open ground: nothing in the way, aimed at the ground: the line ends there, not short of it', () => {
     const s = createGame('hotfix', 1);
-    const ty = MAP.findIndex((row) => row.includes('....'));
-    const o = { x: MAP[ty].indexOf('....') * TILE + 1, y: ty * TILE + 1 };
-    expect(shotObstruction(s, { x: o.x, y: o.y, h: 1.3 }, { x: o.x + 4, y: o.y, h: 1.3 })).toBeNull();
-    expect(shotObstruction(s, { x: o.x, y: o.y, h: 1.3 }, { x: o.x + 4, y: o.y, h: 0 })).toBeNull();
+    const a = s.players[0];
+    const ty = MAP.findIndex((row) => row.includes('........'));
+    const o = { x: MAP[ty].indexOf('........') * TILE + 1, y: ty * TILE + 1 };
+    Object.assign(a, { stage: 'ground', x: o.x, y: o.y, z: 0, heading: 0, lean: 0, weapon: 'sniper', mag: 5, ammo: 5 });
+    const aimAt = (dx: number, h: number) => shotPreview(s, a, { ...NO_INPUT, fire: true, snap: true, aimX: o.x + dx, aimY: o.y, aimH: h });
+    expect(aimAt(8, 1.3)).toBeNull();
+    expect(aimAt(8, 0)).toBeNull();
     // Aimed past a point under the ground: the ground takes it first.
-    const g = shotObstruction(s, { x: o.x, y: o.y, h: 1.3 }, { x: o.x + 4, y: o.y, h: -2 });
-    expect(g).not.toBeNull();
+    expect(aimAt(8, -2)).not.toBeNull();
   });
 
   it('a rocket leaves from the launcher muzzle and keeps its arc', () => {

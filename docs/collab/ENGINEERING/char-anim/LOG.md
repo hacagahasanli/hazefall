@@ -155,3 +155,35 @@ Tests: 465 pass (new: bots' model vs the drawn rig, obstruction standing vs lean
 hit, rocket start). tsc clean, `npm run build:web` ok; the preview on 127.0.0.1:3320 serves the new bundle.
 Capture: `/private/tmp/hazefall-aim/block/sheet.png` and `zoom.png` (top/left standing: marker on the wall, dim crosshair;
 bottom/right leaning with E: clear). Script `/private/tmp/hazefall-aim/capture-block.mjs <port> <outDir>`.
+
+## 2026-11-25 (3) — The marker and the real round now share one code path
+
+Reis: "in some places the crosshair shows clear, yet my shot hits the wall". New randomized test
+(`sim/shotPreview.test.ts`): ~1330 shots per seed, from open tiles next to walls, window sills, trunks, rocks and props,
+aimed like the shoulder camera (a ray from the lens through the crosshair, first solid hit), random gun, lean, crouch,
+movement; compares the HUD's answer with what the fired round really does (stopped by something more than 0.5 m short).
+
+| | agreement | blocked shots shown clear | clear shots shown blocked |
+|---|---|---|---|
+| afadb05 (same harness, seed 7) | 85.0% | 113 of 199 (57%) | 87 |
+| now, seed 7 / 21 / 99 / 5 / 1234 | 95.9 / 95.0 / 95.7 / 96.1 / 96.8% | 0 in 6742 shots | 44-67 per seed (spread edge only) |
+
+Root causes (measured with the harness):
+1. **Different pose (suspect b)**: the trace used the player as drawn, but the sim fired after that tick's step: moved by
+   up to 0.11 m, lean and crouch one step closer to the keys, body turned to the new aim. About a third of the false clears.
+   Fix: a shot now fires from the pose the tick began with (`poseOf`, `planShot`), which is exactly the state the HUD traced.
+2. **Spread (suspect e)**: the trace followed the centre line only; a random round off-centre clipped the corner. The rest of
+   the false clears. Fix: the trace flies every bearing the shot can take (each shotgun pellet; for one round, 9 bearings
+   across its spread) and marks if any is blocked. The 4-5% "shown blocked but this round got through" are these edges.
+3. **Separate stepping (suspect c)**: the trace stepped 0.4 m from the muzzle with its own slope code; the round stepped
+   speed*DT/steps and checks at its own points, so a corner clipped for less than a step could be hit by one and missed by
+   the other. Fix: one shared `advanceBullet` (the real round's flight, people optional) and `newBullet` used by both; round
+   sub-steps 0.4 -> 0.2 m, so a clipped corner is missed only for a sliver.
+4. Suspects (a) and (d): the shoulder fallback is part of `muzzleOf`, which `planShot` uses for both, so (a) cannot differ.
+   (d): the 0.5 m slack is kept (a crosshair on a wall must not read as blocked by that same wall); no false clear came
+   from it in the runs. (f): crouch and lean come from the same tick-start pose for both.
+`shotPreview(state, player, input)` (sim) plans with `planShot` and flies with `advanceBullet`; `shoot` uses `planShot`.
+The HUD calls it with the next input as it will be sent (held lean/crouch, this frame's crosshair point and drawn muzzle).
+The old `shotObstruction` is gone. Online, a client's state trails the host's, so it can still differ there by a tick.
+Once, the muzzle-model bot test failed twice in a row (rockets lean 1: 0.23 m), then passed in 7 later runs with the same
+code; not reproduced, cause unknown (the sim and rig have no random or clock input).

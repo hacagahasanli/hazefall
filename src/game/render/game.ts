@@ -12,7 +12,7 @@ import { actionFor, DEFAULT_SETTINGS, keyLabel, keyMap } from '../settings';
 import type { VolumeKind } from '../sfx';
 import type { Action, Settings } from '../settings';
 import { ARMOR, CROUCH, HEALS, LEAN, THROW, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITEMS, MAP, PLACE_TIER, placeAt, PLAYERS, PROPS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
-import { canSee, carryCap, chestHeight, feetOf, healChoice, inPlant, inWater, lineOfSight, lootUnder, muzzleOf as simMuzzle, reloadTime, shotObstruction, solidAt, solidStep, superThrowTarget, throwDistance } from '../sim/step';
+import { canSee, carryCap, chestHeight, feetOf, healChoice, inPlant, inWater, lineOfSight, lootUnder, muzzleOf as simMuzzle, reloadTime, shotPreview, solidAt, solidStep, superThrowTarget, throwDistance } from '../sim/step';
 import { buildingAt, CLIMB, roofAt } from '../sim/roofs';
 import { createOfflineSession } from '../net/session';
 import { arrowTo, LOOT_HINT } from './hints';
@@ -341,7 +341,8 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const aimBlockFx = canvas.parentElement ? createAimBlockOverlay(canvas.parentElement) : null;
   /** The round's real line meets a wall short of the crosshair's point (HudState.aimBlocked: the crosshair dims). */
   let aimBlocked = false;
-  const blockIn: Input = { ...NO_INPUT };
+  /** The last input sent over the shoulder or in first person (held lean and crouch), for the obstruction trace. */
+  let lastInput: Input = { ...NO_INPUT };
   const blockV = new THREE.Vector3();
 
   // ---------- light
@@ -1454,6 +1455,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       lastThrowAim = bombAim ? { x: input.aimX, y: input.aimY } : null;
       lastAim.x = input.aimX;
       lastAim.y = input.aimY;
+      lastInput = input;
       touchLatched.clear();
       tapped.clear();
       return input;
@@ -3129,10 +3131,12 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
     {
       const aimView = shoulderView() || firstPerson();
       const gunUp = self.alive && self.stage === 'ground' && self.weapon !== 'fists' && self.weapon !== 'rockets' && !self.item && !self.using && self.vault <= 0 && self.climb <= 0;
-      let hit: ReturnType<typeof shotObstruction> = null;
+      let hit: ReturnType<typeof shotPreview> = null;
       if (aimView && gunUp) {
-        blockIn.muzzle = shoulderView() ? drawnMuzzle(me) : undefined;
-        hit = shotObstruction(state, simMuzzle(state, self, blockIn), shoulderView() ? crossAim : fpAim);
+        // The next tick's input as it will be sent (lean and crouch held, this frame's crosshair point and drawn muzzle),
+        // planned and flown by the sim's own code (shotPreview): the marker and the round cannot disagree.
+        const aim = shoulderView() ? crossAim : fpAim;
+        hit = shotPreview(state, self, { ...lastInput, snap: true, aimX: aim.x, aimY: aim.y, aimH: aim.h, muzzle: shoulderView() ? drawnMuzzle(me) : undefined });
       }
       aimBlocked = !!hit;
       if (hit && aimBlockFx) {
