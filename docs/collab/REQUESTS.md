@@ -140,4 +140,5 @@ Format: `## R-001 — title` then Context, Expected deliverable, Priority (P0-P3
 - Plan agreed: CD writes a spec; engineering tests on ONE fighter (Blaze) first with procedural geometry (path A), on a branch, not in the CG build under review; if not good enough, consider real GLB models (path B).
 - Expected deliverable: CREATIVE/specifications/fighters-v2.md (per fighter: face, head/hair, body proportions, outfit/equipment, palette, idle personality; select-screen lighting/composition).
 - Priority: P2 (after CG verdict and Poki)
-- Status: parked
+- Status: spec delivered (CD, 2026-11-25) -> CREATIVE/specifications/fighters-v2.md. Phase 1 = Blaze only, on a branch; gate on the CD/Reis screenshot review before Hedge/Tempo/Rookie
+- Path B (2026-11-25): Reis rejected the procedural faces (blaze-v2-r1). CD spec CREATIVE/specifications/fighters-v3-ai3d.md: AI 3D (Tripo3D/Meshy) models, concept image -> image-to-3D -> auto-rig; Blaze first (shorter, ~5.5 heads, Hedge now tallest), Reis gate, then Hedge, Tempo, Rookie. Status: spec delivered, awaiting Blaze generations
