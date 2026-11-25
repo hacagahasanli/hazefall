@@ -1,4 +1,4 @@
-# Last Commit Standing lobby server: gathers players, starts rounds, introduces browsers.
+# Hazefall lobby server: gathers players, starts rounds, introduces browsers.
 # It never runs the match (the host's browser does), so it needs no game code.
 FROM node:20-alpine
 WORKDIR /app

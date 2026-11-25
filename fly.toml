@@ -1,4 +1,4 @@
-# Last Commit Standing lobby server on Fly.io. One small machine that stops when nobody plays.
+# Hazefall lobby server on Fly.io. One small machine that stops when nobody plays.
 app = "lcs-game"
 primary_region = "fra"
 

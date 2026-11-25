@@ -274,9 +274,9 @@
   12% { opacity: 1; transform: translateX(10px); clip-path: inset(0 0 62% 0); text-shadow: -6px 0 #ff3d6e, 6px 0 #3ec5ff; }
   24% { transform: translateX(-6px); clip-path: inset(58% 0 0 0); }
   36% { transform: translateX(4px); clip-path: inset(20% 0 30% 0); text-shadow: -3px 0 #ff3d6e, 3px 0 #3ec5ff; }
-  50% { transform: translateX(-2px); clip-path: inset(0 0 0 0); }
+  50% { transform: translateX(-2px); clip-path: none; }
   66% { transform: none; text-shadow: -1px 0 rgba(255, 61, 110, 0.6), 1px 0 rgba(62, 197, 255, 0.6); }
-  100% { opacity: 1; transform: none; clip-path: inset(0 0 0 0); }
+  100% { opacity: 1; transform: none; clip-path: none; }
 }
 
 /* The countdown number: slams in from huge, overshoots, settles, then fades as the next one comes (1 s). */

@@ -13,8 +13,8 @@ export const metadata: Metadata = {
   description: 'Twenty drop in. The Haze closes. One stays standing.',
   // Added to the iPhone home screen it opens full screen, with no browser bars.
   appleWebApp: { capable: true, title: 'Hazefall', statusBarStyle: 'black-translucent' },
-  metadataBase: new URL('https://lastcommit.nalbakigames.com'),
-  // The studio's logo set (brand/last-commit-standing): favicons, home-screen icons, the share card.
+  metadataBase: new URL('https://hazefall.nalbakigames.com'),
+  // The studio's logo set (brand/hazefall): favicons, home-screen icons, the share card.
   icons: {
     icon: [
       { url: '/favicon.ico', sizes: '48x48' },

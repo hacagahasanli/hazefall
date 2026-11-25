@@ -1,12 +1,12 @@
 <div align="center">
 
-# Last Commit Standing
+# Hazefall
 
 ### Ten developers. One merge.
 
 A game by **[Nalbaki Games](https://nalbakigames.com)**.
 
-### [▶ Play with friends](https://lastcommit.nalbakigames.com/play) · [Studio](https://nalbakigames.com) · [Floor 42](https://floor42.nalbakigames.com)
+### [▶ Play with friends](https://hazefall.nalbakigames.com/play) · [Studio](https://nalbakigames.com) · [Floor 42](https://floor42.nalbakigames.com)
 
 </div>
 
@@ -46,7 +46,7 @@ vests, ammo boxes and med kits. Loot glows by rarity.
 
 ## Support
 
-Last Commit Standing is free. If you enjoyed it, you can [☕ support the studio](https://nalbakigames.com/support).
+Hazefall is free. If you enjoyed it, you can [☕ support the studio](https://nalbakigames.com/support).
 
 ## Run it
 

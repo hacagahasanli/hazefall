@@ -31,7 +31,7 @@ const webPage: Plugin = {
       const share = [
         `<meta property="og:title" content="%GAME_TITLE%" />`,
         `<meta property="og:description" content="${DESCRIPTION}" />`,
-        `<meta property="og:image" content="https://lastcommit.nalbakigames.com/og.jpg" />`,
+        `<meta property="og:image" content="https://hazefall.nalbakigames.com/og.jpg" />`,
         `<meta name="twitter:card" content="summary_large_image" />`,
       ].join('\n    ');
       return html

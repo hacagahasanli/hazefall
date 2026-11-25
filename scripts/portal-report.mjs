@@ -4,7 +4,7 @@
  *  - relative paths only (no "/assets/..." in index.html or in the code);
  *  - no links or requests to our own sites, GitHub or other portals (the only absolute URL allowed is the CrazyGames SDK);
  *  - no lobby server (Colyseus) in the bundle: the portal build is solo only;
- *  - none of the studio's developer jokes in the shipped text (the game's name, Last Commit Standing, stays).
+ *  - none of the studio's developer jokes in the shipped text (the game's name, Hazefall, stays).
  * Exits with 1 when a rule is broken, so `npm run build:portal` fails.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';

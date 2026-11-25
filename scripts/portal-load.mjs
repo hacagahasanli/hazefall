@@ -25,7 +25,7 @@ for (const [name, net] of Object.entries(profiles)) {
     const errs = [];
     p.on('pageerror', (e) => errs.push(e.message));
     const t0 = Date.now();
-    await p.goto('http://localhost:3202/games/last-commit-standing/');
+    await p.goto('http://localhost:3202/games/hazefall/');
     await p.getByRole('navigation', { name: 'Main menu' }).waitFor({ timeout: 60000 });
     menu.push(Date.now() - t0);
     const t1 = Date.now();

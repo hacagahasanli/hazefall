@@ -24,7 +24,7 @@ for (const [name, img, focus, tag] of variants) {
       .t{position:absolute;${kind === 'landscape' ? `left:${5 * u}px;top:50%;transform:translateY(-50%)` : `left:${6 * u}px;right:${6 * u}px;bottom:${7 * u}px`};font-family:Bungee;color:#e6ebf5;line-height:.92;font-size:${kind === 'landscape' ? 15 * u : 15.5 * u}px;text-shadow:0 ${u * .6}px ${u * 2.4}px rgba(0,0,0,.7)}
       .t b{display:block;color:#ffd23f;font-weight:400}
       .tag{margin-top:${2.4 * u}px;font:700 ${4.6 * u}px Chakra;letter-spacing:.06em;color:#e6ebf5;text-transform:uppercase}
-    </style><div class="bg"></div><div class="shade"></div><div class="t">LAST COMMIT<b>STANDING</b><div class="tag">${tag}</div></div>`);
+    </style><div class="bg"></div><div class="shade"></div><div class="t">HAZEFALL<div class="tag">${tag}</div></div>`);
     await p.goto(`file://${RAW}/_c.html`);
     await p.evaluate(() => document.fonts.ready);
     await p.waitForTimeout(300);

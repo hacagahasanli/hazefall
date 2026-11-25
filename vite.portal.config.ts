@@ -15,7 +15,7 @@ const out = path.resolve(__dirname, 'dist/portal');
 export default defineConfig({
   root: path.resolve(__dirname, 'portal'),
   base: './',
-  // Favicons, app icons, the web manifest and the logo (brand/last-commit-standing), copied next to index.html. The game's
+  // Favicons, app icons, the web manifest and the logo (brand/hazefall), copied next to index.html. The game's
   // models and sounds are copied from public/assets below; the site's other public files stay out.
   publicDir: path.resolve(__dirname, 'portal/static'),
   resolve: {

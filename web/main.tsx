@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 /**
- * The web build's entry (lastcommit.nalbakigames.com): the portal build's game, menu and boot screen, plus a small Support
+ * The web build's entry (hazefall.nalbakigames.com): the portal build's game, menu and boot screen, plus a small Support
  * us pill (main menu, pause menu, round report), the "Online is coming" button on the menu, and the studio's anonymous
  * stats. No CrazyGames SDK: the plain web adapter, so no ads and no banners. If this page ever runs on CrazyGames, the pill,
  * the button and the stats stay off.

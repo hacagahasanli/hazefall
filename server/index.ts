@@ -13,5 +13,5 @@ const server = new Server({ transport: new WebSocketTransport({ maxPayload: 256 
 server.define(ROOM_NAME, LcsRoom);
 
 server.listen(port, '0.0.0.0').then(() => {
-  console.log(`Last Commit Standing lobby server on :${port}`);
+  console.log(`Hazefall lobby server on :${port}`);
 });
