@@ -10,6 +10,7 @@ import { GLOW_MATERIAL, GOLD_MATERIAL, outfitParts } from '../cosmetics';
 import type { OutfitParts, PartColor } from '../cosmetics';
 import type { FighterId as CharacterId, WeaponKind } from '../sim/types';
 import { SNIPER_KICK, sniperBolt, sniperKick } from './sniperKick';
+import { ankleOf, clampHip, kneeOf, solveLeg, spring } from './legIk';
 
 /**
  * Low-poly fighters built from primitives. Each one has a different silhouette:
@@ -52,6 +53,30 @@ export interface Rig {
   airPivot: number;
   /** Last frame's velocity and the smoothed acceleration (m/s^2, map axes): the body leans into a start, a stop and a cut. */
   motion: { vx: number; vy: number; ax: number; ay: number };
+  /**
+   * The spine and pelvis. `upper` holds everything above the hips (chest, head, arms, gun) and rotates about the hip
+   * centre, so leaning bends the body there while the legs stay under it; `pelvis` holds the belt kit and tilts with the
+   * hips (half the spine's lean), the thighs hang from hip joints that move with it and the feet stay planted.
+   */
+  upper: THREE.Group;
+  pelvis: THREE.Group;
+  footL: THREE.Group;
+  footR: THREE.Group;
+  hipL0: THREE.Vector3;
+  hipR0: THREE.Vector3;
+  /** Sizes the roll needs to keep the body off the floor. */
+  shape: { torsoW: number; torsoH: number; torsoD: number; headR: number; legR: number; armR: number };
+  stance: {
+    /** Joint rotations when the roll began (legs, shins, head), so the roll eases out of the run. */
+    rollFrom: THREE.Quaternion[] | null;
+    /** The smoothed lean (spring), -1..1. */
+    lean: { x: number; v: number };
+    /** 0..1: how flat the feet are kept (planted, not pitched with the shin). */
+    flat: number;
+    /** True when the legs were last solved by IK: the gait angles then live in `gait`, not in the joints. */
+    ik: boolean;
+    gait: { lx: number; lz: number; rx: number; rz: number; kl: number; kr: number };
+  };
 }
 
 interface Spec {
@@ -439,13 +464,17 @@ export const buildRig = (id: CharacterId, outfit = 'standard'): Rig => {
     const sh = mesh(cyl(s.legR * 0.95, half), c('pants'));
     sh.position.y = -half / 2;
     shin.add(sh);
+    // The foot is its own joint at the ankle so it can stay flat on the ground whatever the leg does.
+    const foot = new THREE.Group();
+    foot.position.y = -half;
     const shoe = mesh(box(s.legR * 2.2, s.legR * 1.2, s.legR * 3.2), c('shoes'));
     // The sole, not the middle of the shoe, sits at the end of the leg: on a bridge deck the
     // feet rest on the planks instead of sinking into them.
-    shoe.position.set(0, -half + s.legR * 0.6, s.legR * 0.7);
-    shin.add(shoe);
+    shoe.position.set(0, s.legR * 0.6, s.legR * 0.7);
+    foot.add(shoe);
+    shin.add(foot);
     thigh.add(shin);
-    return { thigh, shin };
+    return { thigh, shin, foot };
   };
   const ll = makeLeg();
   const lr = makeLeg();
@@ -466,6 +495,15 @@ export const buildRig = (id: CharacterId, outfit = 'standard'): Rig => {
   weapon.add(hand);
   body.add(weapon);
 
+  // Spine and pelvis: everything above the hips moves as `upper` (pivoting at the hips), the belt kit as `pelvis`.
+  const upper = new THREE.Group();
+  body.add(upper);
+  upper.add(torso, head, armL, armR, weapon);
+  const pelvis = new THREE.Group();
+  pelvis.position.y = s.legLen;
+  body.add(pelvis);
+  pelvis.add(belt, buckle, holster, beltPouchL, beltPouchR);
+
   // Drawn as a skinned mesh (the groups above are its bones): a fighter is two or three draw calls instead of ~40.
   skinRig(root, new Set([weapon]), [vest]);
   root.traverse((o) => {
@@ -477,6 +515,9 @@ export const buildRig = (id: CharacterId, outfit = 'standard'): Rig => {
     head, vest, hipYaw: 0, hipInit: false, chuteSwing: { vx: 0, vz: 0 }, airPivot: 0, motion: { vx: 0, vy: 0, ax: 0, ay: 0 },
     shoulderL: armL.position.clone(), shoulderR: armR.position.clone(),
     legL, legR, weapon, hand, chestY, phase: 0, turn: 0,
+    upper, pelvis, footL: ll.foot, footR: lr.foot, hipL0: legL.position.clone(), hipR0: legR.position.clone(),
+    shape: { torsoW: s.torsoW, torsoH: s.torsoH, torsoD: s.torsoD, headR: s.headR, legR: s.legR, armR: s.armR },
+    stance: { rollFrom: null, lean: { x: 0, v: 0 }, flat: 0, ik: false, gait: { lx: 0, lz: 0, rx: 0, rz: 0, kl: 0, kr: 0 } },
   };
 };
 
@@ -629,6 +670,176 @@ const reach = (upper: THREE.Group, fore: THREE.Group, shoulder: THREE.Vector3, t
   fore.quaternion.setFromUnitVectors(DOWN, handDir);
 };
 
+/** Back to a plain skeleton: no spine lean, the hips and feet where the rig was built (every pose that is not top-down). */
+const neutralStance = (rig: Rig) => {
+  rig.upper.position.set(0, 0, 0);
+  rig.upper.quaternion.identity();
+  rig.pelvis.position.set(0, rig.legLen, 0);
+  rig.pelvis.quaternion.identity();
+  rig.legL.position.copy(rig.hipL0);
+  rig.legR.position.copy(rig.hipR0);
+  rig.footL.quaternion.identity();
+  rig.footR.quaternion.identity();
+  rig.head.rotation.z = 0;
+  const st = rig.stance;
+  st.lean.x = 0;
+  st.lean.v = 0;
+  st.flat = 0;
+  st.ik = false;
+};
+
+/** How far a full lean (Q/E) tips the spine and how far it shifts the pelvis (m, for a 0.9 m leg). */
+export const LEAN_POSE = { spine: 0.52, pelvis: 0.26, shift: 0.22, drop: 0.035, spring: 13 };
+
+const tmpC = new THREE.Vector3();
+const tmpS = new THREE.Vector3();
+const tmpV = new THREE.Vector3();
+const tmpH = new THREE.Vector3();
+const tmpA = new THREE.Vector3();
+const tmpK = new THREE.Vector3();
+const tmpF = new THREE.Vector3();
+const tmpQ1 = new THREE.Quaternion();
+const tmpQ2 = new THREE.Quaternion();
+const tmpQ3 = new THREE.Quaternion();
+const AXIS_X = new THREE.Vector3(1, 0, 0);
+const AXIS_Y = new THREE.Vector3(0, 1, 0);
+
+/**
+ * The body's hips and spine for a lean, a recoil or a breath, with the feet kept where the gait put them: the upper body
+ * rotates about the hip centre, the pelvis block tilts half as far and the hip joints follow it, then each leg is solved
+ * by two-bone IK to the ankle position the gait produced (so shifting the pelvis bends the knees instead of sliding the
+ * feet) and the foot is levelled by `flat`. Run after the legs' gait angles are set; nothing is left to damp from.
+ */
+const applyStance = (rig: Rig, o: { rollUpper: number; rollPelvis: number; sx: number; sy: number; sz: number; breathe: number; twist: number; flat: number }) => {
+  const half = rig.legLen / 2;
+  tmpC.set(0, rig.legLen, 0);
+  tmpS.set(o.sx, o.sy, o.sz);
+  rig.upper.rotation.set(o.breathe * 0.7, 0, o.rollUpper);
+  rig.upper.position.copy(tmpC).sub(tmpV.copy(tmpC).applyQuaternion(rig.upper.quaternion)).add(tmpS);
+  rig.upper.position.y += o.breathe * 0.35;
+  rig.pelvis.position.copy(tmpC).add(tmpS);
+  rig.pelvis.rotation.set(0, 0, o.rollPelvis);
+  const cosP = Math.cos(o.rollPelvis);
+  const sinP = Math.sin(o.rollPelvis);
+  const legs = [
+    { thigh: rig.legL, shin: rig.shinL, foot: rig.footL, h0: rig.hipL0 },
+    { thigh: rig.legR, shin: rig.shinR, foot: rig.footR, h0: rig.hipR0 },
+  ];
+  for (const l of legs) {
+    // Where the gait wants the ankle and the knee, and which way the foot points (all body space).
+    ankleOf(l.h0, l.thigh.quaternion, l.shin.quaternion, half, tmpA);
+    kneeOf(l.h0, l.thigh.quaternion, half, tmpK).sub(l.h0);
+    tmpQ1.copy(rig.body.quaternion).multiply(l.thigh.quaternion).multiply(l.shin.quaternion); // the foot's gait orientation, on the ground (the body's own tilt included)
+    // The hip joint on the tilted, shifted pelvis.
+    tmpH.set(o.sx + l.h0.x * cosP, rig.legLen + o.sy + l.h0.x * sinP, o.sz);
+    clampHip(tmpH, tmpA, half);
+    tmpF.set(-Math.sin(o.twist), 0, Math.cos(o.twist));
+    const knee = solveLeg(tmpH, tmpA, tmpK, tmpF, half, tmpQ2);
+    l.thigh.position.copy(tmpH);
+    l.thigh.quaternion.copy(tmpQ2);
+    l.shin.rotation.set(knee, 0, 0);
+    // The foot: level (no roll, pitch eased out) whatever the leg does.
+    tmpF.set(0, 0, 1).applyQuaternion(tmpQ1);
+    tmpQ3.setFromAxisAngle(AXIS_Y, Math.atan2(tmpF.x, tmpF.z));
+    tmpQ1.slerp(tmpQ3, o.flat);
+    tmpQ3.copy(rig.body.quaternion).multiply(tmpQ2).multiply(l.shin.quaternion).invert().multiply(tmpQ1);
+    l.foot.quaternion.copy(tmpQ3);
+  }
+};
+
+const smooth01 = (a: number, b: number, x: number) => {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+const rollEuler = new THREE.Euler();
+const rollTmp = { m: new THREE.Matrix4(), inv: new THREE.Matrix4(), v: new THREE.Vector3(), q: new THREE.Quaternion(), a: new THREE.Vector3(), k: new THREE.Vector3(), t0: new THREE.Vector3(), t1: new THREE.Vector3() };
+
+/**
+ * The dodge roll and the roll out of a parachute landing: a real forward roll. `k` is 0..1 through it (a pure function of
+ * the time, so it is frame-rate independent and keeps the sim's duration). The body folds up (chin to chest, spine
+ * rounded, thighs up and out past the chest, heels at the hips, arms round the gun held close), turns over about the
+ * curled centre of mass (the stomach, not the feet) with the pack and shoulders meeting the ground first, then opens: the
+ * legs reach under it and it stands into the ready stance. The lowest point of the body always rests on the ground, so
+ * nothing sinks into it or floats. Reduced motion: the same fold, but only a forward dip, no somersault.
+ */
+const poseRoll = (rig: Rig, k: number, gun: WeaponKind, reduced: boolean) => {
+  const { shape: sh } = rig;
+  const st = rig.stance;
+  const T = rollTmp;
+  if (!st.rollFrom) st.rollFrom = [rig.legL, rig.legR, rig.shinL, rig.shinR, rig.head].map((o) => o.quaternion.clone());
+  const from = st.rollFrom;
+  const blend = smooth01(0, 0.12, k);
+  // Fold: quickly in (the dive), held through the turn, out again as the feet come under.
+  const tuck = smooth01(0, 0.2, k) * (1 - smooth01(0.74, 0.96, k));
+  const ease = k - Math.sin(Math.PI * 2 * k) / (Math.PI * 2);
+  const turn = reduced ? Math.sin(Math.PI * k) * 0.8 : ease * Math.PI * 2;
+  const wrapped = turn > Math.PI ? turn - Math.PI * 2 : turn;
+
+  const joint = (o: THREE.Object3D, i: number, x: number, y: number, z: number, order: THREE.EulerOrder = 'XYZ') => {
+    T.q.setFromEuler(rollEuler.set(x, y, z, order));
+    o.quaternion.copy(from[i]).slerp(T.q, blend);
+  };
+  const t = tuck * (reduced ? 0.6 : 1);
+  joint(rig.legL, 0, -1.8 * t - 0.13 * (1 - t), 0, -0.5 * t, 'YXZ');
+  joint(rig.legR, 1, -1.75 * t - 0.13 * (1 - t), 0, 0.5 * t, 'YXZ');
+  joint(rig.shinL, 2, 2.35 * t + 0.22 * (1 - t), 0, 0);
+  joint(rig.shinR, 3, 2.3 * t + 0.22 * (1 - t), 0, 0);
+  joint(rig.head, 4, 0.6 * t, 0, 0);
+  for (const foot of [rig.footL, rig.footR]) foot.rotation.set(0.5 * t, 0, 0);
+  // The spine rounds forward over the thighs, the belt follows halfway.
+  rig.upper.rotation.set(0.95 * t, 0, 0);
+  rig.upper.position.set(0, rig.legLen, 0).sub(T.v.set(0, rig.legLen, 0).applyQuaternion(rig.upper.quaternion));
+  rig.pelvis.rotation.set(0.45 * t, 0, 0);
+  rig.pelvis.position.set(0, rig.legLen, 0);
+
+  // The gun held close to the chest, muzzle down, both hands on it.
+  const h = HOLD[gun === 'fists' ? 'pistol' : gun];
+  rig.weapon.position.set(-h.x * (1 - 0.7 * t), rig.chestY + h.y - 0.1 * t, 0.2 * t);
+  rig.weapon.rotation.set(1.1 * t, 0, 0);
+  rig.weapon.visible = false;
+  rig.hand.position.set(0, 0, h.grip);
+  rig.weapon.updateMatrix();
+  tmpGrip.set(0, -0.02, h.grip).applyMatrix4(rig.weapon.matrix);
+  tmpSupport.set(h.support === 0 ? 0.05 : 0, h.support === 0 ? -0.04 : 0.03, h.grip + Math.min(h.support, 0.25)).applyMatrix4(rig.weapon.matrix);
+  reach(rig.armL, rig.foreL, rig.shoulderL, tmpGrip, rig.armLen, -1);
+  reach(rig.armR, rig.foreR, rig.shoulderR, tmpSupport, rig.armLen, 1);
+
+  // Turn over about the curled centre (stomach), then rest the lowest point on the ground.
+  const pivot = T.a.set(0, rig.legLen + sh.torsoH * 0.25, sh.torsoD * 0.3);
+  rig.body.rotation.set(reduced ? turn : wrapped, 0, 0);
+  rig.body.quaternion.normalize();
+  T.k.copy(pivot).applyQuaternion(rig.body.quaternion);
+  rig.body.position.set(0, pivot.y - T.k.y, pivot.z - T.k.z);
+  rig.body.updateMatrix();
+  rig.upper.updateMatrix();
+  rig.pelvis.updateMatrix();
+  let lowest = Infinity;
+  const probe = (chain: THREE.Object3D[], x: number, y: number, z: number, r: number) => {
+    T.t0.set(x, y, z);
+    for (let i = chain.length - 1; i >= 0; i--) {
+      chain[i].updateMatrix();
+      T.t0.applyMatrix4(chain[i].matrix);
+    }
+    lowest = Math.min(lowest, T.t0.y - r);
+  };
+  probe([rig.body, rig.upper, rig.head], 0, 0, 0, sh.headR * 1.05);
+  for (const sx of [-1, 1]) {
+    for (const y of [0, sh.torsoH]) for (const z of [-1, 1]) probe([rig.body, rig.upper, rig.upper.children[0]], sx * sh.torsoW * 0.5, y, z * sh.torsoD * 0.5, 0);
+    // The pack sticks out behind the back: it meets the ground first on the way over.
+    for (const y of [0.1, 0.95]) probe([rig.body, rig.upper, rig.upper.children[0]], sx * sh.torsoW * 0.3, y * sh.torsoH, -sh.torsoD * 0.5 - 0.26, 0);
+  }
+  for (const [arm, fore] of [[rig.armL, rig.foreL], [rig.armR, rig.foreR]] as const) {
+    probe([rig.body, rig.upper, arm, fore], 0, 0, 0, sh.armR);
+    probe([rig.body, rig.upper, arm, fore], 0, -rig.armLen / 2 - 0.02, 0, sh.armR * 1.2);
+  }
+  for (const [leg, shin, foot] of [[rig.legL, rig.shinL, rig.footL], [rig.legR, rig.shinR, rig.footR]] as const) {
+    probe([rig.body, leg, shin], 0, 0, 0, sh.legR * 1.05);
+    probe([rig.body, leg, shin, foot], 0, 0, sh.legR * 2.3, 0);
+    probe([rig.body, leg, shin, foot], 0, 0, -sh.legR * 0.9, 0);
+  }
+  rig.body.position.y -= lowest;
+};
+
 export interface TopDownPose {
   dt: number;
   time: number;
@@ -745,6 +956,7 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
 
   // ---- up a ladder: face the wall, hand over hand on the rungs, knees stepping up opposite; over the eave like a vault.
   if (climbing && p.climb! < 0.75) {
+    neutralStance(rig);
     const up = p.climb! / 0.75;
     // Three hand-over-hand pulls from the ground to the eave (~0.3 s each): one hand reaches up while the other pulls down,
     // eased at both ends so each grip reads.
@@ -775,27 +987,26 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
 
   // ---- the landing roll: curl up and turn over around the hips, then stand.
   if (p.roll !== null) {
-    const k = p.roll;
-    const turn = k * Math.PI * 2;
-    const hip = 0.55;
-    // Kept in (-PI, PI] so the body doesn't spin back a whole turn when the roll ends.
-    rig.body.rotation.set(turn > Math.PI ? turn - Math.PI * 2 : turn, 0, 0);
-    rig.body.position.set(0, hip - hip * Math.cos(turn) - 0.35 * Math.sin(k * Math.PI), -hip * Math.sin(turn) * 0.4);
-    const tuck = Math.sin(k * Math.PI);
-    rig.legL.rotation.set(-1.6 * tuck, 0, 0);
-    rig.legR.rotation.set(-1.4 * tuck, 0, 0);
-    rig.shinL.rotation.set(2.0 * tuck, 0, 0);
-    rig.shinR.rotation.set(1.8 * tuck, 0, 0);
-    rig.armL.quaternion.setFromEuler(tmpE.set(-1.2 * tuck, 0, 0.3));
-    rig.armR.quaternion.setFromEuler(tmpE.set(-1.2 * tuck, 0, -0.3));
-    rig.foreL.quaternion.setFromEuler(tmpE.set(-1.4 * tuck, 0, 0));
-    rig.foreR.quaternion.setFromEuler(tmpE.set(-1.4 * tuck, 0, 0));
-    rig.weapon.visible = false;
+    neutralStance(rig);
+    poseRoll(rig, p.roll, p.gun, !!p.reducedMotion);
     return;
   }
+  rig.stance.rollFrom = null;
   rig.body.rotation.y = damp(rig.body.rotation.y, running ? -swing * 0.12 * Math.abs(fwd) : 0, 12, dt); // torso twist
 
   // ---- legs: stride along the direction of travel; tucked during a vault.
+  // The legs are solved by IK at the end of the frame (below), which overwrites the joints: the gait eases from its own
+  // last angles, kept here, not from the solved pose.
+  const st = rig.stance;
+  const gait = st.gait;
+  if (st.ik) {
+    rig.legL.rotation.x = gait.lx;
+    rig.legL.rotation.z = gait.lz;
+    rig.legR.rotation.x = gait.rx;
+    rig.legR.rotation.z = gait.rz;
+    rig.shinL.rotation.x = gait.kl;
+    rig.shinR.rotation.x = gait.kr;
+  }
   const along = Math.max(Math.abs(fwd), 0.25);
   let kneeL: number;
   let kneeR: number;
@@ -841,10 +1052,20 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   rig.legL.rotation.y = -twist;
   rig.legR.rotation.y = -twist;
   if (stepping) {
-    const lift = Math.max(0, Math.sin(rig.phase)) * 0.5;
-    rig.shinL.rotation.x += lift;
-    rig.legL.rotation.x -= lift * 0.4;
+    // Each foot takes its turn off the ground.
+    const sw = Math.sin(rig.phase);
+    const lift = Math.max(0, Math.abs(sw)) * 0.5;
+    const shin = sw > 0 ? rig.shinL : rig.shinR;
+    const thigh = sw > 0 ? rig.legL : rig.legR;
+    shin.rotation.x += lift;
+    thigh.rotation.x -= lift * 0.4;
   }
+  gait.lx = rig.legL.rotation.x;
+  gait.lz = rig.legL.rotation.z;
+  gait.rx = rig.legR.rotation.x;
+  gait.rz = rig.legR.rotation.z;
+  gait.kl = rig.shinL.rotation.x;
+  gait.kr = rig.shinR.rotation.x;
   // Keep the lower foot on the ground: the body drops as far as the bent legs shorten it.
   const reachOf = (thigh: number, knee: number) => (Math.cos(thigh) + Math.cos(thigh + knee)) / 2;
   // (In the air the tucked legs lift the feet instead.)
@@ -864,7 +1085,7 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
     crouch * 0.3 + land * 0.32 + weight * Math.max(-0.16, Math.min(0.2, accF * 0.012)) + (airborne ? Math.max(-0.08, Math.min(0.12, -(p.airV ?? 0) * 0.025)) : 0);
   // The model faces +z, so its own right is -x: a lean to the right (E) moves the body to -x and
   // tips the top that way (positive z rotation).
-  let bank = Math.max(-0.18, Math.min(0.18, -p.yawRate * 0.035)) + 0.08 * side * amp + p.lean * 0.55 + weight * Math.max(-0.12, Math.min(0.12, accS * 0.01));
+  let bank = Math.max(-0.18, Math.min(0.18, -p.yawRate * 0.035)) + 0.08 * side * amp + weight * Math.max(-0.12, Math.min(0.12, accS * 0.01));
   if (vaultK !== null) {
     // Swing over sideways with the weight on the planted hand.
     leanX = 0.35 * Math.sin(vaultK * Math.PI);
@@ -872,12 +1093,43 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   }
   rig.body.rotation.x = damp(rig.body.rotation.x, leanX, bodyKick > 0 ? 80 : 14, dt);
   rig.body.rotation.z = damp(rig.body.rotation.z, bank, 10, dt);
-  const breathe = running ? 0 : Math.sin(p.time * 2.1) * 0.012;
-  rig.body.position.set(
-    damp(rig.body.position.x, -p.lean * 0.38, 10, dt),
-    (running ? bob * 0.06 * amp : breathe) - legDrop,
-    -kick * 0.05 - bodyKick * SNIPER_KICK.bodyBack,
-  );
+  // Standing on the ground: the lowest ankle, in the body's own tilt, rests exactly on it (no foot sinks into the floor
+  // or hangs above it, whatever the stride, the lean into the run or the crouch). Tucked legs (a vault, the air) keep
+  // the old rule.
+  let lift = -legDrop;
+  if (!airborne && vaultK === null) {
+    let low = Infinity;
+    for (const [thigh, shin, h0] of [[rig.legL, rig.shinL, rig.hipL0], [rig.legR, rig.shinR, rig.hipR0]] as const) {
+      low = Math.min(low, ankleOf(h0, thigh.quaternion, shin.quaternion, rig.legLen / 2, tmpA).applyQuaternion(rig.body.quaternion).y);
+    }
+    lift = -low;
+  }
+  rig.body.position.set(0, (running ? bob * 0.06 * amp : 0) + lift, 0);
+
+  // ---- the spine, pelvis and feet. Leaning (Q/E) bends the body at the hips: the spine tips, the pelvis tilts half as far
+  // and shifts towards the lean (the weight goes onto that leg), the knees give and the feet stay where they are. The
+  // recoil and the breath rock the upper body on the hips too instead of dragging the feet.
+  const leanTo = vaultK !== null || airborne ? 0 : p.lean;
+  const L = spring(st.lean, leanTo, LEAN_POSE.spring, dt);
+  const calm = p.reducedMotion ? 0 : (1 - Math.min(1, speed / 0.6)) * (1 - crouch) * (airborne ? 0 : 1);
+  const sc = Math.min(1, 0.5 + (0.55 * rig.legLen) / 0.9);
+  const idleSway = Math.sin(p.time * 0.8) * calm;
+  const breath = Math.sin(p.time * 2.1) * calm;
+  const rollUpper = LEAN_POSE.spine * L + idleSway * 0.012;
+  st.flat = damp(st.flat, airborne || vaultK !== null ? 0 : Math.max(0, Math.min(1, 1 - amp * 1.6)), 12, dt);
+  applyStance(rig, {
+    rollUpper,
+    rollPelvis: LEAN_POSE.pelvis * L - idleSway * 0.006,
+    sx: -LEAN_POSE.shift * sc * L + idleSway * 0.008,
+    sy: -LEAN_POSE.drop * sc * Math.abs(L),
+    sz: -kick * 0.05 - bodyKick * SNIPER_KICK.bodyBack,
+    breathe: breath * 0.012,
+    twist,
+    flat: st.flat,
+  });
+  st.ik = true;
+  // The head stays nearer level than the spine: the eyes keep the horizon.
+  rig.head.rotation.z = damp(rig.head.rotation.z, -rollUpper * 0.45, 14, dt);
 
   // ---- the gun: at the chest, stock at the right shoulder; bobs with the steps, kicks by its
   // weight, tilts and drops a little during a reload.
@@ -903,7 +1155,7 @@ export const poseTopDown = (rig: Rig, p: TopDownPose) => {
   rig.weapon.rotation.y = damp(rig.weapon.rotation.y, sway * 0.6, 10, dt);
   // Leaning, the body tips over but the rifle is held nearly level against it (only a little cant), so the sights stay
   // on the line the round will fly.
-  rig.weapon.rotation.z = damp(rig.weapon.rotation.z, reloadTilt * 0.6 - p.lean * 0.4 + bolt * SNIPER_KICK.boltRoll, bolt > 0 ? 40 : 12, dt);
+  rig.weapon.rotation.z = damp(rig.weapon.rotation.z, reloadTilt * 0.6 - rollUpper * 0.72 + bolt * SNIPER_KICK.boltRoll, bolt > 0 ? 40 : 12, dt);
   rig.hand.position.set(0, 0, h.grip);
 
   if (vaultK !== null) {
@@ -1081,6 +1333,7 @@ export interface FreefallPose {
  * torso, harder the faster you fall. Out of the door you tumble over from upright into the arch on the body's spring.
  */
 export const poseFreefall = (rig: Rig, p: FreefallPose) => {
+  neutralStance(rig);
   const { dt, time: t, seed } = p;
   const w = Math.min(1, 0.25 + p.speed);
   const fwd = Math.max(0, p.track);
@@ -1154,6 +1407,7 @@ export interface ChutePose {
  * With the gun out the right hand brings the pistol down and forward while the left keeps its toggle.
  */
 export const poseChute = (rig: Rig, p: ChutePose) => {
+  neutralStance(rig);
   const { dt, time: t, seed, canopy: k } = p;
   const stretched = k >= 0.5;
   // Body: flat (a little head-up as you look for the handle) until the lines stretch, then hanging, following the canopy.
@@ -1252,6 +1506,7 @@ export const leaveAir = (rig: Rig) => {
  * one knee up. `t` is seconds since the knock-out; `seed` varies which way it twists.
  */
 export const poseDeath = (rig: Rig, t: number, seed: number) => {
+  neutralStance(rig);
   const k = Math.min(1, t / 0.6);
   const e = k < 1 ? 1 - Math.pow(1 - k, 3) : 1;
   const bounce = k >= 1 ? 0 : Math.sin(k * Math.PI) * 0.05;
@@ -1280,6 +1535,7 @@ export const poseDeath = (rig: Rig, t: number, seed: number) => {
  * whatever is under it, so the body only has to sit at the right depth.
  */
 export const poseSwim = (rig: Rig, p: { dt: number; time: number; speed: number; seed: number }) => {
+  neutralStance(rig);
   const { dt, time } = p;
   const s = Math.min(1, p.speed / 1.6);
   rig.weapon.visible = false;
