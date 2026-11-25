@@ -1266,8 +1266,36 @@ export const NEWBIE = { human: 35, aimError: 1.35, spareSeconds: 8 };
 export const PLANT_REVEAL = 2.4;
 export const AUTO_AIM_RANGE = 28;
 export const REGEN = { after: 6, perSecond: 2.5 };
-/** Leaning out round a corner (Q / E): how far the shoulder and the muzzle move out, and the speed while leaning. */
-export const LEAN = { offset: 1.1, speed: 0.6, rate: 6 };
+/**
+ * Leaning out round a corner (Q / E): how far the shoulder and the muzzle move out (`offset * 0.7` m at a full lean, where
+ * the drawn body's chest and gun are: chest ~0.40 m, rifle muzzle ~0.45 m, head ~0.55 m), and the speed while leaning.
+ */
+export const LEAN = { offset: 0.64, speed: 0.6, rate: 6 };
+/**
+ * Where a round leaves the gun when the shooter's client does not say (bots, first person, old clients), measured off the
+ * drawn rigs at rest (render/muzzleLine.test.ts keeps them honest). Per fighter: the rifle muzzle's height standing (`up`,
+ * m over the feet), what a crouch takes off it and how much further out it pushes the gun, how far a full lean left / right
+ * moves it sideways and how much it lowers it. Per gun: its muzzle to the right of the body line, its height against the
+ * rifle's and how far out in front. A person's client sends its drawn muzzle instead (Input.muzzle), held to `reach` m.
+ */
+export const MUZZLE = {
+  fighter: {
+    hotfix: { up: 1.16, crouch: 0.32, crouchFwd: 0.34, leanL: 0.44, leanR: 0.39, dropL: 0.03, dropR: 0.14 },
+    legacy: { up: 1.05, crouch: 0.25, crouchFwd: 0.31, leanL: 0.43, leanR: 0.38, dropL: 0.04, dropR: 0.13 },
+    standup: { up: 0.77, crouch: 0.2, crouchFwd: 0.22, leanL: 0.33, leanR: 0.29, dropL: 0, dropR: 0.11 },
+    intern: { up: 1.08, crouch: 0.3, crouchFwd: 0.31, leanL: 0.39, leanR: 0.35, dropL: 0.02, dropR: 0.13 },
+  },
+  gun: {
+    fists: { side: 0.11, up: 0, fwd: 1.13 },
+    pistol: { side: 0.01, up: 0.03, fwd: 0.83 },
+    smg: { side: 0.12, up: -0.01, fwd: 0.88 },
+    shotgun: { side: 0.11, up: 0, fwd: 1.18 },
+    rifle: { side: 0.11, up: 0, fwd: 1.13 },
+    sniper: { side: 0.11, up: 0.01, fwd: 1.54 },
+    rockets: { side: 0.19, up: 0.13, fwd: 1.28 },
+  },
+  reach: 1.25,
+} as const;
 /**
  * Crouching (G, a toggle): lower and steadier. `drop` m off the chest (where rounds leave and are aimed), `bodyDrop` m off the
  * top of the body for rounds, `speed` of the walking speed, `rate` how fast you go down and up (1/s), `spread` of the gun's

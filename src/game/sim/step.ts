@@ -6,6 +6,7 @@ import {
   DT,
   fenceVertical,
   LEAN,
+  MUZZLE,
   CROUCH,
   ROCK_TOP,
   CRATE_TOP,
@@ -650,6 +651,7 @@ export const windOf = (state: GameState) => {
  * free fall pulls early; at `deployAlt` it opens by itself.
  */
 export const updateFall = (state: GameState, p: Player, input: Input) => {
+  const pose = poseOf(p);
   const out = DROP.height - p.alt;
   const pressed = input.jump && !p.prev.jump;
   // No firing in free fall (the first magazine used to be gone before landing): a fresh press tells the player why.
@@ -699,7 +701,7 @@ export const updateFall = (state: GameState, p: Player, input: Input) => {
     if (Math.hypot(input.aimX - p.x, input.aimY - p.y) > 0.05) p.heading = Math.atan2(input.aimY - p.y, input.aimX - p.x);
     // A fresh press under the open canopy arms the trigger, so a trigger held all the way from the plane spends nothing.
     if (input.fire && !p.prev.fire) p.chuteArmed = true;
-    if (input.fire && p.chuteArmed && !p.bot && p.cooldown <= 0 && p.weapon !== 'rockets' && p.weapon !== 'fists' && p.mag + p.ammo > 0) shoot(state, p, input);
+    if (input.fire && p.chuteArmed && !p.bot && p.cooldown <= 0 && p.weapon !== 'rockets' && p.weapon !== 'fists' && p.mag + p.ammo > 0) shoot(state, p, input, pose);
   } else if (Math.hypot(p.vx, p.vy) > 1) {
     // Falling, you face the way you are going (the body turns to track).
     p.heading = Math.atan2(p.vy, p.vx);
@@ -1077,32 +1079,49 @@ const gunDamage = (p: Player) => WEAPONS[p.weapon].damage * (p.weapon === 'fists
  */
 const INSTANT: ReadonlySet<WeaponKind> = new Set<WeaponKind>(['sniper']);
 
-/** Fires one round. Returns how far it flew if it was resolved at once (INSTANT), else undefined. */
 /**
- * Where a person's round leaves from. With a 3D aim (the crosshair's point) it is the camera's side line: over the shoulder
- * the camera sits ~0.6 m to the side, so what the crosshair clears round a corner the round clears too (Reis, 2026-11-24:
- * leaning out, the crosshair was past the corner but the round hit the wall in front). Never through a wall: if anything
- * solid stands between the body and that point, the round leaves from the body as before.
+ * Where a person's round leaves from: the gun's muzzle. A person's client sends where its drawn muzzle is (Input.muzzle,
+ * held within MUZZLE.reach of the modelled one), bots and old clients get the modelled muzzle: right of the (leaned)
+ * shoulder line, a little over the chest, out in front. The round then flies in a straight line from there through the
+ * crosshair's point, so the tracer you see leave the barrel is the line that hits (Reis, 2026-11-25: rounds swerved right
+ * out of the barrel because they left from the camera's side line, 0.5 m right of the gun). Never through a wall: if
+ * anything solid stands between the shoulder and the muzzle, the round leaves from the shoulder.
  */
-const muzzleOf = (state: GameState, p: Player, input?: Input) => {
+export const muzzleOf = (state: GameState, p: Player, input?: Input) => {
   const o = hitPoint(p);
-  if (!input || input.aimH === undefined || !input.camSide || p.bot) return o;
-  const side = Math.max(-0.8, Math.min(0.8, input.camSide));
-  const m = { x: o.x - Math.sin(p.heading) * side, y: o.y + Math.cos(p.heading) * side };
-  const h = chestHeight(p);
-  return lineOfSight(state, o.x, o.y, m.x, m.y, h, h) && !circleBlocked(state, m.x, m.y, 0.15, feetOf(p)) ? m : o;
+  const c = Math.cos(p.heading);
+  const sn = Math.sin(p.heading);
+  const chest = chestHeight(p);
+  // The modelled muzzle (each fighter's and gun's, crouched, leaned), relative to the body centre: [right, up from the feet, forward].
+  const g = MUZZLE.gun[p.weapon] ?? MUZZLE.gun.rifle;
+  const fm = MUZZLE.fighter[p.fighter] ?? MUZZLE.fighter.hotfix;
+  const crouch = p.crouch ?? 0;
+  let r = g.side + p.lean * (p.lean > 0 ? fm.leanR : fm.leanL);
+  let u = fm.up - fm.crouch * crouch + g.up - Math.abs(p.lean) * (p.lean > 0 ? fm.dropR : fm.dropL);
+  let f = g.fwd + fm.crouchFwd * crouch;
+  const m = input?.muzzle;
+  if (m && !p.bot && m.every((v) => Number.isFinite(v))) {
+    const dr = m[0] - r;
+    const du = m[1] - u;
+    const df = m[2] - f;
+    const k = Math.min(1, MUZZLE.reach / Math.max(1e-6, Math.hypot(dr, du, df)));
+    r += dr * k;
+    u += du * k;
+    f += df * k;
+  }
+  const at = { x: p.x + c * f - sn * r, y: p.y + sn * f + c * r, h: feetOf(p) + Math.max(0.2, u) };
+  const clear = lineOfSight(state, o.x, o.y, at.x, at.y, chest, at.h) && !solidAt(state, at.x, at.y, at.h);
+  return clear ? at : { x: o.x, y: o.y, h: chest };
 };
 
-const fireBullet = (state: GameState, p: Player, angle: number, aim?: { x: number; y: number; h?: number }, from?: { x: number; y: number }): number | undefined => {
+/** A round leaving `from` at `angle` towards `aim` (its line up or down included); not yet in flight. */
+const newBullet = (state: GameState, p: Player, angle: number, from: { x: number; y: number; h: number }, aim: { x: number; y: number; h?: number } | undefined, id: number): Projectile => {
   const w = WEAPONS[p.weapon];
-  // Leaning out, the muzzle is out past the corner too.
-  const o = from ?? hitPoint(p);
-  const x = o.x + Math.cos(angle) * 0.6;
-  const y = o.y + Math.sin(angle) * 0.6;
-  const h0 = chestHeight(p);
+  const { x, y } = from;
+  const h0 = from.h;
   const toAim = aim ? Math.max(1, Math.hypot(aim.x - x, aim.y - y)) : 1;
   const pr: Projectile = {
-    id: state.nextId++, owner: p.id, kind: 'bullet', weapon: p.weapon,
+    id, owner: p.id, kind: 'bullet', weapon: p.weapon,
     x, y,
     vx: Math.cos(angle) * w.speed, vy: Math.sin(angle) * w.speed,
     damage: gunDamage(p), life: w.range / w.speed,
@@ -1124,6 +1143,12 @@ const fireBullet = (state: GameState, p: Player, angle: number, aim?: { x: numbe
     pr.h1 = target ? chestHeight(target) : aim ? 1.1 : h0;
     if (target) pr.hd = Math.max(1, Math.hypot(target.x - x, target.y - y));
   }
+  return pr;
+};
+
+const fireBullet = (state: GameState, p: Player, angle: number, from: { x: number; y: number; h: number }, aim?: { x: number; y: number; h?: number }): number | undefined => {
+  const pr = newBullet(state, p, angle, from, aim, state.nextId++);
+  const h0 = from.h;
   state.projectiles.push(pr);
   if (!INSTANT.has(p.weapon)) return undefined;
   while (updateProjectile(state, pr)) {
@@ -1149,11 +1174,10 @@ export const falloffDamage = (weapon: WeaponKind, damage: number, distance: numb
  * level from the top-down view (sinking slowly over long distances), up or down with your view
  * in first person. It explodes on the first wall, tree or person it meets, or the ground.
  */
-const fireRocket = (state: GameState, p: Player, angle: number, pitch: number) => {
+const fireRocket = (state: GameState, p: Player, angle: number, pitch: number, from: { x: number; y: number; h: number }) => {
   const w = WEAPONS.rockets;
-  const o = hitPoint(p);
-  const x = o.x + Math.cos(angle) * 0.8;
-  const y = o.y + Math.sin(angle) * 0.8;
+  // From the launcher's muzzle (the one you see on the shoulder), then its own arc.
+  const { x, y } = from;
   const pt = Math.max(-0.6, Math.min(0.9, pitch));
   const flat = Math.cos(pt) * w.speed;
   state.projectiles.push({
@@ -1161,7 +1185,7 @@ const fireRocket = (state: GameState, p: Player, angle: number, pitch: number) =
     x, y, vx: Math.cos(angle) * flat, vy: Math.sin(angle) * flat,
     damage: gunDamage(p), life: w.range / w.speed,
     sx: x, sy: y, tx: 0, ty: 0, t: 0, duration: 0, radius: w.lob!.radius, rocket: true,
-    h: chestHeight(p) + (ROCKET.launchHeight - 1.1), vh: Math.sin(pt) * w.speed,
+    h: from.h, vh: Math.sin(pt) * w.speed,
   });
 };
 
@@ -1228,37 +1252,92 @@ const startReload = (state: GameState, p: Player) => {
 
 const pr3d = (input: Input) => input.aimH !== undefined;
 
-const shoot = (state: GameState, p: Player, input: Input) => {
+/** Where the shooter was when the tick began: what was on screen when the trigger was pulled (and what the HUD traced). */
+export interface ShotPose { x: number; y: number; lean: number; crouch: number }
+export const poseOf = (p: Player): ShotPose => ({ x: p.x, y: p.y, lean: p.lean, crouch: p.crouch });
+
+/**
+ * Everything about a shot before it is fired, for the round and for the HUD's obstruction trace alike: the shooter as the
+ * tick began (place, lean, crouch, turned to the aim), the gun (an empty one swings like fists), the muzzle, the bearing,
+ * the spread and the crosshair's point.
+ */
+export const planShot = (state: GameState, p: Player, input: Input, pose: ShotPose = p) => {
+  const empty = p.weapon !== 'fists' && p.mag <= 0 && p.ammo <= 0;
+  const kind: WeaponKind = empty ? 'fists' : p.weapon;
+  const toAim = Math.hypot(input.aimX - pose.x, input.aimY - pose.y);
+  const heading = input.snap && toAim > 0.05 ? Math.atan2(input.aimY - pose.y, input.aimX - pose.x) : p.heading;
+  const shooter: Player = { ...p, x: pose.x, y: pose.y, lean: pose.lean, crouch: pose.crouch, heading, weapon: kind };
+  // Bullets go straight at the aim point; the body catches up with its turn a moment later. They leave from the muzzle
+  // (out past the corner while leaning) and go to the aim point from there, so a leaned shot still lands on the crosshair.
+  // Fists (or an empty gun swung) reach from the body, as before.
+  const body = hitPoint(shooter);
+  const from = kind === 'fists' ? { x: body.x + Math.cos(heading) * 0.6, y: body.y + Math.sin(heading) * 0.6, h: chestHeight(shooter) } : muzzleOf(state, shooter, input);
+  const angle = Math.hypot(input.aimX - from.x, input.aimY - from.y) > 1.2
+    ? Math.atan2(input.aimY - from.y, input.aimX - from.x)
+    : Math.hypot(input.aimX - pose.x, input.aimY - pose.y) > 0.3 ? Math.atan2(input.aimY - pose.y, input.aimX - pose.x) : heading;
+  const w = WEAPONS[kind];
+  const spread = w.spread * (1 - (1 - CROUCH.spread) * pose.crouch);
+  const at = input.aimH === undefined ? { x: input.aimX, y: input.aimY } : { x: input.aimX, y: input.aimY, h: input.aimH };
+  return { shooter, kind, empty, from, angle, spread, at, bullets: w.bullets };
+};
+
+/** The bearings a shot's rounds can take: a shotgun's pellets exactly, a single round anywhere across its spread. */
+const shotBearings = (angle: number, spread: number, bullets: number) =>
+  bullets > 1
+    ? Array.from({ length: bullets }, (_, i) => angle - spread / 2 + (spread * i) / (bullets - 1))
+    : spread > 0 ? [0, -0.5, 0.5, -0.375, 0.375, -0.25, 0.25, -0.125, 0.125].map((k) => angle + k * spread) : [angle];
+
+/**
+ * The HUD's obstruction trace: would the wall take this shot? Plans it exactly as the sim will fire it (planShot, from the
+ * player as the state stands, which is how the next tick begins) and flies each possible round (every pellet, or the
+ * centre and the edges of the spread) through the same sub-steps and collision as a real one (advanceBullet), people
+ * aside. If any is stopped by the ground or something solid more than `slack` m short of the crosshair's point, returns
+ * where (the centre line's stop if it is blocked, else the first edge's), else null. Not for rockets (they arc) or fists.
+ */
+export const shotPreview = (state: GameState, p: Player, input: Input, slack = 0.5) => {
+  const plan = planShot(state, p, input);
+  if (plan.kind === 'fists' || plan.kind === 'rockets' || input.aimH === undefined) return null;
+  const reach = Math.hypot(plan.at.x - plan.from.x, plan.at.y - plan.from.y);
+  for (const a of shotBearings(plan.angle, plan.spread, plan.bullets)) {
+    const pr = newBullet(state, plan.shooter, a, plan.from, plan.at, -1);
+    while (pr.life > 0) {
+      pr.life -= DT;
+      const stop = advanceBullet(state, pr, false);
+      const d = Math.hypot(pr.x - pr.sx, pr.y - pr.sy);
+      if (stop === 'solid') {
+        if (d < reach - slack) return { x: pr.x, y: pr.y, h: Math.max(0, pr.h ?? plan.from.h), d };
+        break;
+      }
+      if (d > reach + 1) break;
+    }
+  }
+  return null;
+};
+
+const shoot = (state: GameState, p: Player, input: Input, pose?: ShotPose) => {
   if (p.reload > 0 || p.swapping > 0) return;
   // Out of rounds altogether: the empty gun stays in your hands and you hit with it.
-  const empty = p.weapon !== 'fists' && p.mag <= 0 && p.ammo <= 0;
-  if (p.weapon !== 'fists' && p.mag <= 0 && !empty) {
+  const plan = planShot(state, p, input, pose);
+  if (p.weapon !== 'fists' && p.mag <= 0 && !plan.empty) {
     startReload(state, p);
     return;
   }
-  if (empty && !p.prev.fire) state.events.push({ type: 'dryFire', player: p.id });
-  const kind: WeaponKind = empty ? 'fists' : p.weapon;
+  if (plan.empty && !p.prev.fire) state.events.push({ type: 'dryFire', player: p.id });
+  const { kind, from, spread, at } = plan;
+  const aim = plan.angle;
   const w = WEAPONS[kind];
   p.cooldown = w.rate;
   p.revealed = 1;
-  // Bullets go straight at the aim point; the body catches up with its turn a moment later. They leave from the shoulder
-  // (out past the corner while leaning) and go to the aim point from there, so a leaned shot still lands on the crosshair.
-  const from = muzzleOf(state, p, input);
-  const aim = Math.hypot(input.aimX - from.x, input.aimY - from.y) > 1.2
-    ? Math.atan2(input.aimY - from.y, input.aimX - from.x)
-    : Math.hypot(input.aimX - p.x, input.aimY - p.y) > 0.3 ? Math.atan2(input.aimY - p.y, input.aimX - p.x) : p.heading;
-  const spread = w.spread * (1 - (1 - CROUCH.spread) * p.crouch);
   const keep = p.weapon;
   p.weapon = kind; // fireBullet reads the weapon
-  const at = input.aimH === undefined ? { x: input.aimX, y: input.aimY } : { x: input.aimX, y: input.aimY, h: input.aimH };
   // The shot comes first in the event list, so a hit or a kill it causes this tick reads as its result.
-  const shot: GameEvent = { type: 'shot', owner: p.id, x: from.x, y: from.y, angle: aim, weapon: kind };
+  const shot: GameEvent = { type: 'shot', owner: p.id, x: from.x, y: from.y, h: from.h, angle: aim, weapon: kind };
   state.events.push(shot);
-  if (kind === 'rockets') fireRocket(state, p, aim, input.pitch ?? 0);
+  if (kind === 'rockets') fireRocket(state, p, aim, input.pitch ?? 0, from);
   else if (w.bullets > 1) {
-    for (let i = 0; i < w.bullets; i++) fireBullet(state, p, aim - spread / 2 + (spread * i) / (w.bullets - 1), at, from);
+    for (let i = 0; i < w.bullets; i++) fireBullet(state, p, aim - spread / 2 + (spread * i) / (w.bullets - 1), from, at);
   } else {
-    const len = fireBullet(state, p, aim + (nextRandom(state) - 0.5) * spread, at, from);
+    const len = fireBullet(state, p, aim + (nextRandom(state) - 0.5) * spread, from, at);
     if (len !== undefined && shot.type === 'shot') {
       shot.len = len;
       if (pr3d(input)) shot.endH = Math.round(lastEndH * 100) / 100;
@@ -1544,6 +1623,8 @@ const startClimb = (state: GameState, p: Player, l: NonNullable<ReturnType<typeo
 };
 
 const updatePlayer = (state: GameState, p: Player, input: Input) => {
+  // A shot fires from where you were when the tick began (what you saw, and what the HUD traced), not after this tick's step.
+  const pose = poseOf(p);
   const pressed = (k: 'super' | 'use' | 'reload' | 'roll') => input[k] && !p.prev[k];
   p.cooldown = Math.max(0, p.cooldown - DT);
   p.revealed = Math.max(0, p.revealed - DT);
@@ -1776,7 +1857,7 @@ const updatePlayer = (state: GameState, p: Player, input: Input) => {
   } else if (input.fire && p.using) {
     // Pulling the trigger puts the heal away (a fresh press, so holding fire through a heal you started does not).
     if (!p.prev.fire) p.using = null;
-  } else if (input.fire && p.cooldown <= 0) shoot(state, p, input);
+  } else if (input.fire && p.cooldown <= 0) shoot(state, p, input, pose);
   else if (input.fire && p.weapon !== 'fists' && p.mag <= 0 && p.ammo <= 0 && !p.prev.fire) state.events.push({ type: 'dryFire', player: p.id });
   if (p.charging === 'rockets') {
     p.charging = null;
@@ -1848,7 +1929,33 @@ const updateProjectile = (state: GameState, pr: Projectile) => {
   if (pr.kind === 'rocket') return updateRocket(state, pr);
   pr.life -= DT;
   if (pr.life <= 0) return false;
-  const steps = Math.max(1, Math.ceil((Math.hypot(pr.vx, pr.vy) * DT) / 0.4));
+  const stop = advanceBullet(state, pr, true);
+  if (stop === null) return true;
+  if (stop === 'solid') {
+    const ht = pr.h ?? 1.1;
+    hitRack(state, toTile(pr.x), toTile(pr.y), pr.damage);
+    state.events.push(ht === 1.1 ? { type: 'impact', x: pr.x, y: pr.y } : { type: 'impact', x: pr.x, y: pr.y, z: ht });
+  } else {
+    stop.lastHitWith = pr.weapon;
+    state.players[pr.owner].hits += 1;
+    hurt(state, stop, falloffDamage(pr.weapon, pr.damage, Math.hypot(pr.x - pr.sx, pr.y - pr.sy)), pr.owner);
+  }
+  return false;
+};
+
+/**
+ * A round's longest sub-step (m). Solids are tested at each sub-step's end, so a corner the line only clips for less than
+ * this can be missed: 0.2 m (was 0.4) keeps that to a sliver, for the round and the HUD's trace alike.
+ */
+const BULLET_STEP = 0.2;
+
+/**
+ * One tick of a round's flight, in the sub-steps every round takes (at most BULLET_STEP): returns null while it flies on, 'solid'
+ * when the ground, a wall, a roof, a trunk, a rock or a crate stops it, or the person it met (only with `people`). Shared by
+ * the real round and the HUD's obstruction trace (shotPreview), so the two can never disagree about walls.
+ */
+const advanceBullet = (state: GameState, pr: Projectile, people: boolean): 'solid' | Player | null => {
+  const steps = Math.max(1, Math.ceil((Math.hypot(pr.vx, pr.vy) * DT) / BULLET_STEP));
   for (let s = 0; s < steps; s++) {
     const px = pr.x;
     const py = pr.y;
@@ -1861,26 +1968,18 @@ const updateProjectile = (state: GameState, pr: Projectile) => {
       pr.h = pr.h0 + ((pr.h1 ?? pr.h0) - pr.h0) * (pr.ext ? k : Math.min(1, k));
     }
     const ht = pr.h ?? 1.1;
-    if (ht <= 0.02 || solidStep(state, px, py, ph, pr.x, pr.y, ht)) {
-      hitRack(state, toTile(pr.x), toTile(pr.y), pr.damage);
-      state.events.push(ht === 1.1 ? { type: 'impact', x: pr.x, y: pr.y } : { type: 'impact', x: pr.x, y: pr.y, z: ht });
-      return false;
-    }
+    if (ht <= 0.02 || solidStep(state, px, py, ph, pr.x, pr.y, ht)) return 'solid';
+    if (!people) continue;
     for (const o of state.players) {
       if (o.id === pr.owner || !targetable(o)) continue;
       const h = hitPoint(o);
       // The body runs from the feet to the top of the head: a round over or under it misses.
       const feet = feetOf(o);
       if (ht < feet - 0.1 || ht > feet + bodyTop(o)) continue;
-      if (Math.hypot(h.x - pr.x, h.y - pr.y) < PLAYER_RADIUS + 0.15) {
-        o.lastHitWith = pr.weapon;
-        state.players[pr.owner].hits += 1;
-        hurt(state, o, falloffDamage(pr.weapon, pr.damage, Math.hypot(pr.x - pr.sx, pr.y - pr.sy)), pr.owner);
-        return false;
-      }
+      if (Math.hypot(h.x - pr.x, h.y - pr.y) < PLAYER_RADIUS + 0.15) return o;
     }
   }
-  return true;
+  return null;
 };
 
 const updateRocket = (state: GameState, pr: Projectile) => {

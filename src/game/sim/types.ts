@@ -65,10 +65,11 @@ export interface Input {
    */
   aimH?: number;
   /**
-   * How far the camera sits to the right (+) or left (-) of the shooter's body line (m): the shoulder camera's side offset.
-   * With a 3D aim the round leaves from that line (as the crosshair sees), unless a wall stands between it and the body.
+   * Where the drawn gun's muzzle is, relative to the body (m): [right of the body centre, up from the feet, forward], in the
+   * body's heading frame. Rounds leave from there (clamped near the modelled muzzle, never through a wall) and fly straight
+   * through the aim point, so the line you see leave the barrel is the line that hits. Missing: the modelled muzzle (MUZZLE).
    */
-  camSide?: number;
+  muzzle?: [number, number, number];
 }
 
 export const NO_INPUT: Input = { mx: 0, my: 0, fire: false, super: false, use: false, reload: false, lean: 0, roll: false, jump: false, aimX: 0, aimY: 0 };
@@ -274,7 +275,7 @@ export interface Drone {
 
 export type GameEvent =
   /** `len`: for a round that lands the tick it is fired (the sniper), how far it flew before it stopped, so the contrail ends there. */
-  | { type: 'shot'; owner: number; x: number; y: number; angle: number; weapon: WeaponKind; len?: number; /** Instant rounds aimed up or down: the height where the line ends. */ endH?: number }
+  | { type: 'shot'; owner: number; x: number; y: number; /** Height the round left from (the muzzle). */ h?: number; angle: number; weapon: WeaponKind; len?: number; /** Instant rounds aimed up or down: the height where the line ends. */ endH?: number }
   | { type: 'hit'; target: number; by: number | null; x: number; y: number; damage: number; armor: boolean; ko: boolean }
   /** `z`: the height it happened at (absent = the old default height). */
   | { type: 'impact'; x: number; y: number; z?: number }

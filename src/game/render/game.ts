@@ -1,4 +1,6 @@
 import { CAM_WALL, clampSide, wallSideWant } from './camWall';
+import { createAimBlockOverlay } from './aimBlock';
+import { gunAim, toBodyFrame } from './muzzleLine';
 import * as THREE from 'three';
 
 import { COPY } from '../copy/studio';
@@ -10,7 +12,7 @@ import { actionFor, DEFAULT_SETTINGS, keyLabel, keyMap } from '../settings';
 import type { VolumeKind } from '../sfx';
 import type { Action, Settings } from '../settings';
 import { ARMOR, CROUCH, HEALS, LEAN, THROW, VEST, ROLL, BUILDINGS, DISTRICTS, DROP, DT, FIGHTERS, ITEMS, MAP, PLACE_TIER, placeAt, PLAYERS, PROPS, SIZE, SUPERS, TILE, tileAt, VAULT, WEAPONS, WORLD, ZONE_PHASES } from '../sim/constants';
-import { canSee, carryCap, chestHeight, feetOf, healChoice, inPlant, inWater, lineOfSight, lootUnder, reloadTime, solidAt, solidStep, superThrowTarget, throwDistance } from '../sim/step';
+import { canSee, carryCap, chestHeight, feetOf, healChoice, inPlant, inWater, lineOfSight, lootUnder, muzzleOf as simMuzzle, reloadTime, shotPreview, solidAt, solidStep, superThrowTarget, throwDistance } from '../sim/step';
 import { buildingAt, CLIMB, roofAt } from '../sim/roofs';
 import { createOfflineSession } from '../net/session';
 import { arrowTo, LOOT_HINT } from './hints';
@@ -144,6 +146,8 @@ export interface HudState {
   /** Over the shoulder: crosshair in the middle, mouse look. */
   shoulder: boolean;
   mouseLocked: boolean;
+  /** Your round's line meets a wall short of the crosshair's point: the crosshair dims (a marker shows where it hits). */
+  aimBlocked: boolean;
   /** The quality tier being drawn. */
   tier: Tier;
   /** Your latest elimination, while its banner shows (about 1.4 s): who, and how many are left. */
@@ -235,6 +239,12 @@ const beamGeometry = (() => {
 })();
 /** The lens through the sniper's scope (degrees), and the widest the over-the-shoulder view goes. */
 const SHOULDER_ARM_MIN = 2.2;
+/**
+ * The over-the-shoulder camera: arm length behind the pivot and side offset to the right (m), hip-fire and scoped. Reis,
+ * 2026-11-25: a little farther back than 3.2 / 0.62 / 1.4, so the aim does not feel cramped. Walls and trunks still pull the
+ * arm in (the march in renderFrame), and the crosshair ray starts wherever the arm ends.
+ */
+const SHOULDER_CAM = { arm: 3.6, side: 0.68, armScoped: 1.8, sideScoped: 0.45 } as const;
 const SCOPE_FOV = { first: 16, shoulder: 30 } as const;
 const SHOULDER_FOV_MAX = 78;
 
@@ -328,6 +338,12 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const smokeB = new THREE.Vector3();
   /** The hitmarker and the damage-direction arcs, on a DOM layer over the canvas. */
   const hitFx = canvas.parentElement ? createHitOverlay(canvas.parentElement) : null;
+  const aimBlockFx = canvas.parentElement ? createAimBlockOverlay(canvas.parentElement) : null;
+  /** The round's real line meets a wall short of the crosshair's point (HudState.aimBlocked: the crosshair dims). */
+  let aimBlocked = false;
+  /** The last input sent over the shoulder or in first person (held lean and crouch), for the obstruction trace. */
+  let lastInput: Input = { ...NO_INPUT };
+  const blockV = new THREE.Vector3();
 
   // ---------- light
   scene.add(new THREE.HemisphereLight(0xd2e6ff, 0x6a6848, 1.4));
@@ -726,10 +742,11 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   const cFrom = new THREE.Vector3();
   const cDir = new THREE.Vector3();
   const X_AXIS = new THREE.Vector3(1, 0, 0);
-  const contrail = (x: number, y: number, angle: number, h: number, len?: number, from?: THREE.Vector3, endH?: number) => {
+  const contrail = (x: number, y: number, angle: number, h: number, len?: number, from?: THREE.Vector3, endH?: number, atMuzzle = false) => {
     // The sim says where the round stopped (it lands the tick it is fired): the line ends exactly there. Without it (an old
-    // snapshot), march along the line until something solid or someone stops the round.
-    let d = len !== undefined ? Math.max(0.8, len + 0.6) : 0.8;
+    // snapshot), march along the line until something solid or someone stops the round. (x, y) is the muzzle; an old
+    // snapshot's is the body, the round leaving 0.6 m out.
+    let d = len !== undefined ? Math.max(0.2, len + (atMuzzle ? 0 : 0.6)) : 0.8;
     for (; len === undefined && d < WEAPONS.sniper.range; d += 0.5) {
       const px = x + Math.cos(angle) * d;
       const py = y + Math.sin(angle) * d;
@@ -1122,10 +1139,10 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   /** The mouse turns the view (first person or over the shoulder). */
   const mouseLook = () => firstPerson() || shoulderView();
   /** The shoulder camera's arm: how far out it is now (pulled in by walls, eased back out). */
-  let armNow = 3.2;
+  let armNow: number = SHOULDER_CAM.arm;
   /** The arm length the view is easing to (without walls), and the side offset: both ease with the scope. */
-  let armWant = 3.2;
-  let sideNow = 0.62;
+  let armWant: number = SHOULDER_CAM.arm;
+  let sideNow: number = SHOULDER_CAM.side;
   /** The shoulder camera's sideways ease off a wall beside the lens (m, + = further right; see CAM_WALL). */
   let wallSide = 0;
   /** The shoulder camera's small roll with a lean (eased). */
@@ -1421,9 +1438,9 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
         aimX: shoulder ? crossAim.x : fpAim.x,
         aimY: shoulder ? crossAim.y : fpAim.y,
         aimH: shoulder ? crossAim.h : fpAim.h,
-        // The camera's side line relative to the body's (the lean is in both): over the shoulder its side offset, in first
-        // person the eye's extra lean (0.72 m against the muzzle's 0.49 m).
-        camSide: shoulder ? clampSide(sideNow + wallSide) : p.lean * (0.72 - LEAN.offset * 0.7),
+        // Over the shoulder, rounds leave from the gun you see: its muzzle (last frame), relative to your body. In first
+        // person the sim's modelled muzzle (the view model's gun is drawn at the lens, not on the body).
+        muzzle: shoulder ? drawnMuzzle(me) : undefined,
       };
       // A bomb in hand goes where the crosshair meets the ground (look up to throw farther, up to its range).
       const bombAim = p.item === 'bomb';
@@ -1438,6 +1455,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       lastThrowAim = bombAim ? { x: input.aimX, y: input.aimY } : null;
       lastAim.x = input.aimX;
       lastAim.y = input.aimY;
+      lastInput = input;
       touchLatched.clear();
       tapped.clear();
       return input;
@@ -1580,6 +1598,15 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
   let elimId = 0;
   let hudNow = false;
   const camX = () => camera.position.x;
+  /**
+   * Where `i`'s drawn muzzle was last frame, relative to the drawn body ([right, up from the feet, forward] in its facing):
+   * what Input.muzzle carries to the sim, so the round's line starts at the barrel you see. Undefined when no gun is drawn.
+   */
+  const drawnMuzzle = (i: number): [number, number, number] | undefined => {
+    const m = muzzles[i];
+    const r = rigs[i]?.root;
+    return r && time - m.at <= 0.25 ? toBodyFrame(m.p, r.position, yaw[i].a) : undefined;
+  };
   /** Where a shot of `owner` leaves the barrel: their drawn gun's muzzle (last frame), else out front at chest height. */
   const muzzleOf = (owner: number, x: number, y: number, angle: number, out: THREE.Vector3) => {
     const m = muzzles[owner];
@@ -1626,7 +1653,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           trauma = Math.min(1, trauma + 0.45);
           sniperShotAt = time;
         }
-        if (e.weapon === 'sniper') contrail(e.x, e.y, e.angle, chestHeight(state.players[e.owner]) + 0.05, e.len, shotFrom, e.endH);
+        if (e.weapon === 'sniper') contrail(e.x, e.y, e.angle, e.h ?? chestHeight(state.players[e.owner]) + 0.05, e.len, shotFrom, e.endH, e.h !== undefined);
         break;
       }
       case 'hit':
@@ -2405,15 +2432,17 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
           fd.k = Math.min(1, -fd.jz / 10);
         }
         fd.jz = p.jz;
-        // Where the gun points up or down: at the aim point's chest height (or whoever is on it) from your chest.
-        const aimD = Math.hypot(p.prev.aimX - p.x, p.prev.aimY - p.y);
-        const aimPitch = aimD > 1.5 && p.z > 0.5 ? Math.atan2(1.1 - chestHeight(p), aimD) : 0;
+        // Where the gun points: from its muzzle (where the sim's rounds leave) at the aim point, up or down (the crosshair's
+        // height; without one, chest height over the point, as the round flies) and across (toe-in, and the body's turn
+        // trailing the aim). Up close (under 1.5 m) the gun just points ahead.
+        const { pitch: aimPitch, yaw: aimYaw } = gunAim(simMuzzle(state, p, p.prev), { x: p.prev.aimX, y: p.prev.aimY, h: p.prev.aimH ?? 1.1 }, yw.a);
         poseTopDown(rig, {
           crouch: p.crouch ?? 0,
           airV: p.jz,
           land: settings.reducedMotion ? fd.k * landCurve(time - fd.at) * 0.5 : fd.k * landCurve(time - fd.at),
           climb: p.climb > 0 ? 1 - p.climb / CLIMB.time : null,
           aimPitch,
+          aimYaw,
           item: p.item ?? null,
           using: p.using,
           useT: p.using ? 1 - p.useLeft / HEALS[p.using].time : 0,
@@ -3005,7 +3034,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const pivotY = selfH + (air ? 1.2 : 1.62 - CROUCH.drop * 1.15 * self.crouch);
       // Right of the shoulder, so you see past yourself; scoped the arm comes in and the lens narrows (aim down sights).
       // The side offset and the arm length ease to their scoped values (no pop when the right button goes down or up).
-      sideNow = air ? 0 : THREE.MathUtils.damp(sideNow, scoped ? 0.45 : 0.62, 20, dt);
+      sideNow = air ? 0 : THREE.MathUtils.damp(sideNow, scoped ? SHOULDER_CAM.sideScoped : SHOULDER_CAM.side, 20, dt);
       // Leaning (Q/E) takes the camera out with your shoulder, as far as the sim moves the muzzle (hitPoint), so the
       // crosshair, the rifle and the round all leave from round the same corner.
       const leanOut = air ? 0 : self.lean * LEAN.offset * 0.7;
@@ -3024,7 +3053,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       const side = (air ? sideNow : clampSide(sideNow + wallSide)) + leanOut;
       const px = selfX - sn * side;
       const pz = selfY + c * side;
-      armWant = air ? 7 : THREE.MathUtils.damp(armWant, scoped ? 1.4 : 3.2, 20, dt);
+      armWant = air ? 7 : THREE.MathUtils.damp(armWant, scoped ? SHOULDER_CAM.armScoped : SHOULDER_CAM.arm, 20, dt);
       const wantArm = armWant;
       // Walls, ceilings and roofs: march out along the arm and stop short of the first solid (walls to their tops, the roof
       // slab over a house from its ceiling to its roof surface, so indoors the camera stays under the ceiling and up on a
@@ -3095,6 +3124,28 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       camera.position.set(camPos.x + n(23, 1) * 0.5 * shake, camPos.y, camPos.z + n(19, 4) * 0.4 * shake);
       camera.lookAt(camLook);
       camFocus.set(camLook.x, 0, camLook.z);
+    }
+    // The obstruction marker: trace the round's real line (your muzzle to the crosshair's point, the sim's own collision)
+    // and, if a wall or the ground takes it more than 0.5 m short, mark where on screen and dim the crosshair. Your own
+    // aim only (not a bot's, not while spectating); guns that fly straight (rockets arc, bombs and heals are not shots).
+    {
+      const aimView = shoulderView() || firstPerson();
+      const gunUp = self.alive && self.stage === 'ground' && self.weapon !== 'fists' && self.weapon !== 'rockets' && !self.item && !self.using && self.vault <= 0 && self.climb <= 0;
+      let hit: ReturnType<typeof shotPreview> = null;
+      if (aimView && gunUp) {
+        // The next tick's input as it will be sent (lean and crouch held, this frame's crosshair point and drawn muzzle),
+        // planned and flown by the sim's own code (shotPreview): the marker and the round cannot disagree.
+        const aim = shoulderView() ? crossAim : fpAim;
+        hit = shotPreview(state, self, { ...lastInput, snap: true, aimX: aim.x, aimY: aim.y, aimH: aim.h, muzzle: shoulderView() ? drawnMuzzle(me) : undefined });
+      }
+      aimBlocked = !!hit;
+      if (hit && aimBlockFx) {
+        camera.updateMatrixWorld();
+        blockV.set(hit.x, hit.h, hit.y).project(camera);
+        if (blockV.z < 1 && Math.abs(blockV.x) <= 1 && Math.abs(blockV.y) <= 1) {
+          aimBlockFx.show(((blockV.x + 1) / 2) * canvas.clientWidth, ((1 - blockV.y) / 2) * canvas.clientHeight, settings.largeHud ? 1.25 : 1);
+        } else aimBlockFx.hide();
+      } else aimBlockFx?.hide();
     }
     // Tall landmarks (the HQ, cranes, water tower, mast, lookout) ghost when they stand between the camera and your chest.
     props.fade(camera.position, tmpV.set(selfX, selfH + 1.2, selfY), dt, tier === 'low', self.stage !== 'drone');
@@ -3303,6 +3354,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       canUse: self.stage === 'ground' && (!!k || self.bombs > 0),
       chute: self.canopy >= 0,
       mouseLocked: locked,
+      aimBlocked,
       tier,
       elim: elim && time - elim.at < 1.4 ? { id: elim.id, name: elim.name, left: elim.left } : null,
       place: placeBanner && self.alive && time - placeBanner.at < 1.6 ? { id: placeBanner.id, name: placeBanner.name } : null,
@@ -3594,6 +3646,7 @@ export const startMatch = (canvas: HTMLCanvasElement, opts: MatchOptions) => {
       cancelAnimationFrame(raf);
       dropSmoke.dispose();
       hitFx?.dispose();
+      aimBlockFx?.dispose();
       document.removeEventListener('pointerlockchange', onLockChange);
       document.removeEventListener('mousemove', onLook);
       canvas.removeEventListener('click', onLockClick);

@@ -9,6 +9,7 @@ import {
   decodeInput,
   decodeSnapshot,
   encodeInput,
+  isWireInput,
   encodeSnapshot,
 } from './protocol';
 import { MATCH_SEATS } from './lobby';
@@ -112,6 +113,11 @@ describe('online play', () => {
       aimX: 12.345,
       aimY: 99.999,
     };
+    // The 3D aim and the drawn muzzle (where the round leaves) travel too; without a muzzle the sim models one.
+    const aimed = encodeInput(8, { ...i, aimH: 3.456, muzzle: [0.114, 1.293, 1.135] });
+    expect(isWireInput(aimed)).toBe(true);
+    expect(decodeInput(aimed)).toMatchObject({ aimH: 3.46, muzzle: [0.11, 1.29, 1.14] });
+    expect(decodeInput(encodeInput(8, { ...i, aimH: 2 })).muzzle).toBeUndefined();
     const back = decodeInput(encodeInput(7, i));
     expect(back).toMatchObject({
       mx: 0.71,

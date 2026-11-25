@@ -17,7 +17,8 @@
     "build:web": "vite build --config vite.web.config.ts && node scripts/web-report.mjs",
     "preview:web": "vite preview --config vite.web.config.ts",
     "test:layout": "node scripts/layout-matrix.mjs",
-    "looks:sheet": "vite --config scripts/looks-sheet/vite.config.ts"
+    "looks:sheet": "vite --config scripts/looks-sheet/vite.config.ts",
+    "anim:sheet": "vite --config scripts/char-anim/vite.config.ts"
   },
   "dependencies": {
     "@colyseus/core": "^0.18.28",
