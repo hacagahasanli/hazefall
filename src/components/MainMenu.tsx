@@ -345,7 +345,8 @@ export const MainMenu = ({
         <div className="flex flex-col gap-1 [animation:slideIn_0.5s_ease-out] max-sm:mb-auto max-sm:mt-2 [@media(max-height:500px)]:gap-0 [@media(max-width:639px)_and_(max-height:760px)]:mt-0">
           <h1 className="m-0">
             {/* The wordmark (R-020 game-name-v1: HAZE white, FALL gold, Bungee), set as text in the display font. */}
-            <span aria-label={GAME_TITLE} className={`block font-display text-6xl leading-none sm:text-7xl [@media(max-height:640px)]:sm:text-5xl [@media(max-height:500px)]:text-4xl [@media(max-height:360px)]:text-3xl drop-shadow-[0_6px_28px_rgba(0,0,0,0.65)] ${settings.reducedMotion ? '' : 'lcs-glitch-in'}`}>
+            {/* Sized to the panel so the last L never clips: HAZEFALL in Bungee is ~5.5 em wide; capped by height too. */}
+            <span aria-label={GAME_TITLE} className={`block whitespace-nowrap font-display leading-none text-[length:min(3.75rem,9vh,calc((100vw_-_3rem)/5.8))] sm:text-[length:min(4.5rem,9vh,calc((max(340px,min(440px,38vw))_-_5rem)/5.8))] drop-shadow-[0_6px_28px_rgba(0,0,0,0.65)] ${settings.reducedMotion ? '' : 'lcs-glitch-in'}`}>
               HAZE<span className="text-gold">FALL</span>
             </span>
           </h1>
